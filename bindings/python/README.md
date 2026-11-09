@@ -23,3 +23,9 @@ mensagens redigidas do provider.
 O Rust da extensão fica em `native/`, e a API Python de ergonomia mínima em
 `python/vectora_engine/`. O build de wheels multi-plataforma e publicação no
 PyPI serão habilitados em um workflow de release separado.
+
+Anthropic Messages e Google Gemini usam `native_chat_complete` e
+`native_chat_stream` com o mesmo contrato Rust. `settings.provider` deve ser
+`anthropic` ou `google`; credenciais e configuração específica pertencem ao
+consumer. Campos como Gemini `safetySettings` podem ser passados em
+`request["extensions"]`, sem defaults de política de produto.

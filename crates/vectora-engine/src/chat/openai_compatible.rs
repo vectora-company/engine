@@ -415,7 +415,7 @@ fn validate_config(config: &OpenAiCompatibleConfig) -> Result<Url, ChatError> {
     Ok(endpoint)
 }
 
-fn validate_request(request: &ChatRequest) -> Result<(), ChatError> {
+pub(crate) fn validate_request(request: &ChatRequest) -> Result<(), ChatError> {
     if request.contract_version != CHAT_CONTRACT_VERSION {
         return Err(ChatError::UnsupportedContractVersion(
             request.contract_version,
@@ -918,6 +918,7 @@ mod tests {
                 tool_calls: Vec::new(),
                 tool_call_id: None,
                 name: None,
+                is_error: false,
             }],
         );
         request.tools.push(ToolDefinition {

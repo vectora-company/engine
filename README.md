@@ -15,11 +15,11 @@ mantêm motores nem regras de execução duplicados.
 
 ## Produtos consumidores
 
-| Consumidor | Pacote | Uso |
-| --- | --- | --- |
-| Vectora Backend | Python no PyPI | O backend Python delega chamadas ao runtime Rust. |
-| Vectora GH Bot | TypeScript/Node no npm | O bot TypeScript delega chamadas ao runtime Rust. |
-| Aplicações Rust | `vectora-engine` no crates.io | Integração direta com a API Rust canônica. |
+| Consumidor      | Pacote                        | Uso                                               |
+| --------------- | ----------------------------- | ------------------------------------------------- |
+| Vectora Backend | Python no PyPI                | O backend Python delega chamadas ao runtime Rust. |
+| Vectora GH Bot  | TypeScript/Node no npm        | O bot TypeScript delega chamadas ao runtime Rust. |
+| Aplicações Rust | `vectora-engine` no crates.io | Integração direta com a API Rust canônica.        |
 
 As bindings traduzem tipos, eventos, erros e cancelamento conforme contratos
 compartilhados e testes de conformidade. Publicar três pacotes não significa

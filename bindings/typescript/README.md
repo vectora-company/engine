@@ -16,3 +16,9 @@ Consuma `chatComplete(settings, request)` como `Promise` ou `chatStream` como
 `AsyncIterable`. Encerrar a iteração cancela a tarefa Rust e a requisição HTTP.
 Os objetos `settings`, `request` e eventos seguem
 `docs/specs/03-chat-openai-compatible.md`.
+
+Anthropic Messages e Google Gemini usam `nativeChatComplete` e
+`nativeChatStream` com o mesmo contrato Rust. `settings.provider` deve ser
+`anthropic` ou `google`; credenciais e configuração específica pertencem ao
+consumer. Campos como Gemini `safetySettings` podem ser passados em
+`request.extensions`, sem defaults de política de produto.

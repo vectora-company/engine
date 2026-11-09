@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
-import { chatComplete, chatContractVersion, chatStream } from "../dist/index.js";
+import {
+  chatComplete,
+  chatContractVersion,
+  chatStream,
+  nativeChatComplete,
+  nativeChatStream,
+} from "../dist/index.js";
 
 const settings = {
   base_url: "file:///invalid",
@@ -132,4 +138,110 @@ test("rate limits are classified without exposing provider response bodies", asy
     },
     429,
   );
+});
+
+test("Anthropic native completion and stream use the Messages protocol", async () => {
+  const response = JSON.stringify({
+    id: "msg_1",
+    stop_reason: "end_turn",
+    content: [{ type: "text", text: "hello" }],
+    usage: { input_tokens: 5, output_tokens: 2 },
+  });
+  const completion = await withFixtureServer(
+    response,
+    "application/json",
+    async (baseUrl, captured) => {
+      const result = await nativeChatComplete(
+        { provider: "anthropic", base_url: baseUrl, api_key: "fixture-secret" },
+        request,
+      );
+      assert.equal(captured.path, "/engines/v1/messages");
+      assert.equal(captured.headers["x-api-key"], "fixture-secret");
+      assert.equal(captured.headers["anthropic-version"], "2023-06-01");
+      assert.equal(captured.body.max_tokens, 4096);
+      return result;
+    },
+  );
+  assert.equal(completion.content, "hello");
+  assert.equal(completion.usage.total_tokens, 7);
+
+  const streamBody =
+    'data: {"type":"content_block_start","index":0,"content_block":{"type":"text"}}\n\n' +
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"streamed"}}\n\n' +
+    'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}\n\n' +
+    'data: {"type":"message_stop"}\n\n';
+  const events = await withFixtureServer(
+    streamBody,
+    "text/event-stream",
+    async (baseUrl, captured) => {
+      const collected = [];
+      for await (const event of nativeChatStream(
+        { provider: "anthropic", base_url: baseUrl, api_key: "fixture-secret" },
+        request,
+      )) collected.push(event);
+      assert.equal(captured.body.stream, true);
+      return collected;
+    },
+  );
+  assert.deepEqual(events.map((event) => event.type), ["text_delta", "usage", "completed"]);
+});
+
+test("Google native completion uses Gemini auth and request conversion", async () => {
+  const response = JSON.stringify({
+    candidates: [
+      {
+        content: { parts: [{ text: "hello Gemini" }] },
+        finishReason: "STOP",
+      },
+    ],
+    usageMetadata: {
+      promptTokenCount: 6,
+      candidatesTokenCount: 3,
+      totalTokenCount: 9,
+    },
+  });
+  const completion = await withFixtureServer(
+    response,
+    "application/json",
+    async (baseUrl, captured) => {
+      const result = await nativeChatComplete(
+        { provider: "google", base_url: baseUrl, api_key: "fixture-google-key" },
+        {
+          ...request,
+          messages: [
+            { role: "system", content: "system" },
+            { role: "user", content: "hello" },
+          ],
+        },
+      );
+      assert.match(captured.path, /^\/engines\/v1\/models\/test-model:generateContent\?/);
+      assert.match(captured.path, /key=fixture-google-key/);
+      assert.equal(captured.body.systemInstruction.parts[0].text, "system");
+      assert.equal(captured.body.contents[0].role, "user");
+      return result;
+    },
+  );
+  assert.equal(completion.content, "hello Gemini");
+  assert.equal(completion.usage.total_tokens, 9);
+
+  const streamBody =
+    'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{"q":"x"}}}]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":1,"totalTokenCount":3}}\n\n' +
+    'data: {"candidates":[{"finishReason":"STOP","content":{"parts":[]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":4,"totalTokenCount":6}}\n\n';
+  const events = await withFixtureServer(
+    streamBody,
+    "text/event-stream",
+    async (baseUrl, captured) => {
+      const collected = [];
+      for await (const event of nativeChatStream(
+        { provider: "google", base_url: baseUrl, api_key: "fixture-google-key" },
+        request,
+      )) collected.push(event);
+      assert.match(captured.path, /streamGenerateContent/);
+      assert.match(captured.path, /alt=sse/);
+      return collected;
+    },
+  );
+  assert.deepEqual(events.map((event) => event.type), ["tool_call_delta", "usage", "completed"]);
+  assert.equal(events[0].call.index, 0);
+  assert.equal(events[2].finish_reason, "tool_calls");
 });

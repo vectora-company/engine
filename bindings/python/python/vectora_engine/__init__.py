@@ -25,6 +25,17 @@ async def chat_complete(settings: JsonObject, request: JsonObject) -> dict[str, 
     return json.loads(result)
 
 
+async def native_chat_complete(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Call Anthropic Messages or Google Gemini through the Rust engine."""
+    result = await _native.native_chat_complete(
+        json.dumps(settings, separators=(",", ":")),
+        json.dumps(request, separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
 async def chat_stream(
     settings: JsonObject,
     request: JsonObject,
@@ -41,4 +52,26 @@ async def chat_stream(
         _native.chat_stream_cancel(stream_id)
 
 
-__all__ = ["chat_complete", "chat_contract_version", "chat_stream"]
+async def native_chat_stream(
+    settings: JsonObject,
+    request: JsonObject,
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield native-provider events; closing this iterator cancels the request."""
+    stream_id = await _native.native_chat_stream_start(
+        json.dumps(settings, separators=(",", ":")),
+        json.dumps(request, separators=(",", ":")),
+    )
+    try:
+        while event := await _native.chat_stream_next(stream_id):
+            yield json.loads(event)
+    finally:
+        _native.chat_stream_cancel(stream_id)
+
+
+__all__ = [
+    "chat_complete",
+    "chat_contract_version",
+    "chat_stream",
+    "native_chat_complete",
+    "native_chat_stream",
+]

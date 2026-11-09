@@ -7,7 +7,13 @@ from threading import Thread
 from typing import Any
 
 import pytest
-from vectora_engine import chat_complete, chat_contract_version, chat_stream
+from vectora_engine import (
+    chat_complete,
+    chat_contract_version,
+    chat_stream,
+    native_chat_complete,
+    native_chat_stream,
+)
 
 SETTINGS = {"base_url": "file:///invalid", "api_key": "secret-for-redaction-test"}
 REQUEST = {
@@ -157,3 +163,134 @@ def test_rate_limit_is_classified_without_exposing_provider_body() -> None:
 
     assert "rate limit" in str(error.value)
     assert "secret provider detail" not in str(error.value)
+
+
+def test_anthropic_native_completion_and_stream_use_messages_protocol() -> None:
+    body = json.dumps(
+        {
+            "id": "msg_1",
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "hello"}],
+            "usage": {"input_tokens": 5, "output_tokens": 2},
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {
+        "provider": "anthropic",
+        "base_url": endpoint(server),
+        "api_key": "fixture-secret",
+    }
+    try:
+        result = asyncio.run(native_chat_complete(settings, REQUEST))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert captured["path"] == "/engines/v1/messages"
+    assert captured["headers"]["x-api-key"] == "fixture-secret"
+    assert captured["headers"]["anthropic-version"] == "2023-06-01"
+    assert captured["body"]["max_tokens"] == 4096
+    assert result["content"] == "hello"
+    assert result["usage"]["total_tokens"] == 7
+
+    stream_body = (
+        b'data: {"type":"content_block_start","index":0,"content_block":{"type":"text"}}\n\n'
+        b'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"streamed"}}\n\n'
+        b'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}\n\n'
+        b'data: {"type":"message_stop"}\n\n'
+    )
+    server, thread, captured = serve(stream_body, "text/event-stream")
+
+    async def collect() -> list[dict[str, Any]]:
+        return [
+            event
+            async for event in native_chat_stream(
+                {**settings, "base_url": endpoint(server)}, REQUEST
+            )
+        ]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["body"]["stream"] is True
+    assert [event["type"] for event in events] == ["text_delta", "usage", "completed"]
+
+
+def test_google_native_completion_uses_api_key_query_and_gemini_wire_format() -> None:
+    body = json.dumps(
+        {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "hello Gemini"}]},
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 6,
+                "candidatesTokenCount": 3,
+                "totalTokenCount": 9,
+            },
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {
+        "provider": "google",
+        "base_url": endpoint(server),
+        "api_key": "fixture-google-key",
+    }
+    request = {
+        **REQUEST,
+        "messages": [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "hello"},
+        ],
+    }
+    try:
+        result = asyncio.run(native_chat_complete(settings, request))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert captured["path"].startswith("/engines/v1/models/test-model:generateContent?")
+    assert "key=fixture-google-key" in captured["path"]
+    assert captured["body"]["systemInstruction"]["parts"][0]["text"] == "system"
+    assert captured["body"]["contents"][0]["role"] == "user"
+    assert result["content"] == "hello Gemini"
+    assert result["usage"]["total_tokens"] == 9
+
+    stream_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{"q":"x"}}}]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":1,"totalTokenCount":3}}\n\n'
+        b'data: {"candidates":[{"finishReason":"STOP","content":{"parts":[]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":4,"totalTokenCount":6}}\n\n'
+    )
+    server, thread, captured = serve(stream_body, "text/event-stream")
+
+    async def collect() -> list[dict[str, Any]]:
+        return [
+            event
+            async for event in native_chat_stream(
+                {**settings, "base_url": endpoint(server)}, REQUEST
+            )
+        ]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["path"].startswith(
+        "/engines/v1/models/test-model:streamGenerateContent?"
+    )
+    assert "alt=sse" in captured["path"]
+    assert [event["type"] for event in events] == [
+        "tool_call_delta",
+        "usage",
+        "completed",
+    ]
+    assert events[0]["call"]["index"] == 0
+    assert events[2]["finish_reason"] == "tool_calls"
