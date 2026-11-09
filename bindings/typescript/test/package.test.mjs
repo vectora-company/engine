@@ -245,3 +245,36 @@ test("Google native completion uses Gemini auth and request conversion", async (
   assert.equal(events[0].call.index, 0);
   assert.equal(events[2].finish_reason, "tool_calls");
 });
+
+test("Cohere native chat uses v2 path, bearer auth, usage and SSE events", async () => {
+  const response = JSON.stringify({
+    id: "chat-1", finish_reason: "COMPLETE",
+    message: { content: [{ type: "text", text: "hello Cohere" }] },
+    usage: { tokens: { input_tokens: 4, output_tokens: 2 } },
+  });
+  const completion = await withFixtureServer(response, "application/json", async (baseUrl, captured) => {
+    const result = await nativeChatComplete(
+      { provider: "cohere", base_url: baseUrl, api_key: "fixture-cohere-key" }, request,
+    );
+    assert.equal(captured.path, "/engines/v1/chat");
+    assert.equal(captured.headers.authorization, "Bearer fixture-cohere-key");
+    assert.equal(captured.body.stream, false);
+    return result;
+  });
+  assert.equal(completion.content, "hello Cohere");
+  assert.equal(completion.usage.total_tokens, 6);
+
+  const streamBody =
+    'data: {"type":"content-delta","delta":{"message":{"content":{"text":"hello"}}}}\n\n' +
+    'data: {"type":"message-end","delta":{"finish_reason":"COMPLETE","usage":{"tokens":{"input_tokens":3,"output_tokens":2}}}}\n\n';
+  const events = await withFixtureServer(streamBody, "text/event-stream", async (baseUrl, captured) => {
+    const collected = [];
+    for await (const event of nativeChatStream(
+      { provider: "cohere", base_url: baseUrl, api_key: "fixture-cohere-key" }, request,
+    )) collected.push(event);
+    assert.equal(captured.body.stream, true);
+    return collected;
+  });
+  assert.deepEqual(events.map((event) => event.type), ["text_delta", "usage", "completed"]);
+  assert.equal(events[1].usage.total_tokens, 5);
+});
