@@ -11,10 +11,16 @@ from vectora_engine import (
     chat_complete,
     chat_contract_version,
     chat_stream,
+    embed,
+    embedding_contract_version,
     fallback_chat_complete,
     fallback_chat_stream,
+    fallback_embed,
+    fallback_rerank,
     native_chat_complete,
     native_chat_stream,
+    rerank,
+    rerank_contract_version,
 )
 
 SETTINGS = {"base_url": "file:///invalid", "api_key": "secret-for-redaction-test"}
@@ -58,6 +64,404 @@ def endpoint(server: ThreadingHTTPServer) -> str:
 
 def test_contract_version_matches_rust_core() -> None:
     assert chat_contract_version() == 1
+
+
+def test_embedding_and_rerank_contract_versions_match_rust_core() -> None:
+    assert embedding_contract_version() == 1
+    assert rerank_contract_version() == 1
+
+
+@pytest.mark.parametrize(
+    ("protocol", "response", "expected_path", "expected_payload"),
+    [
+        (
+            "open_ai_compatible",
+            {
+                "data": [
+                    {"index": 1, "embedding": [0.3, 0.4]},
+                    {"index": 0, "embedding": [0.1, 0.2]},
+                ]
+            },
+            "/engines/v1/embeddings",
+            {},
+        ),
+        (
+            "open_router",
+            {
+                "data": [{"index": 0, "embedding": [0.1, 0.2]}],
+                "usage": {"prompt_tokens": 2, "cost": 0.01},
+            },
+            "/engines/v1/embeddings",
+            {"input_type": "query"},
+        ),
+        (
+            "voyage",
+            {
+                "data": [{"index": 0, "embedding": [0.1, 0.2]}],
+                "usage": {"total_tokens": 2},
+            },
+            "/engines/v1/embeddings",
+            {
+                "input_type": "query",
+                "output_dtype": "float",
+                "truncation": True,
+                "output_dimension": 2,
+            },
+        ),
+        (
+            "cohere",
+            {
+                "embeddings": {"float": [[0.1, 0.2]]},
+                "meta": {"billed_units": {"input_tokens": 2}},
+            },
+            "/engines/v1/v2/embed",
+            {
+                "input_type": "search_query",
+                "embedding_types": ["float"],
+                "truncate": "END",
+                "output_dimension": 2,
+            },
+        ),
+        (
+            "ollama",
+            {"embeddings": [[0.1, 0.2]]},
+            "/engines/v1/api/embed",
+            {},
+        ),
+    ],
+)
+def test_embedding_protocol_adapters(
+    protocol: str,
+    response: dict[str, Any],
+    expected_path: str,
+    expected_payload: dict[str, Any],
+) -> None:
+    server, thread, captured = serve(json.dumps(response).encode(), "application/json")
+    settings = {
+        "protocol": protocol,
+        "settings": {"base_url": endpoint(server), "api_key": "fixture-token"},
+    }
+    request = {
+        "contract_version": 1,
+        "model": "fixture-model",
+        "input_type": "query",
+        "texts": ["hello"] if protocol != "open_ai_compatible" else ["first", "second"],
+        "dimensions": 2 if protocol in {"voyage", "cohere"} else None,
+    }
+    try:
+        result = asyncio.run(embed(settings, request))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert captured["path"] == expected_path
+    for key, value in expected_payload.items():
+        assert captured["body"][key] == value
+    assert result["embeddings"] == (
+        [[0.1, 0.2], [0.3, 0.4]] if protocol == "open_ai_compatible" else [[0.1, 0.2]]
+    )
+    assert result["dimensions"] == 2
+    if protocol == "open_router":
+        assert result["usage"] == {"input_tokens": 2, "cost": 0.01}
+
+
+@pytest.mark.parametrize(
+    ("protocol", "response", "expected_path", "expected_top_key"),
+    [
+        (
+            "cohere",
+            {"results": [{"index": 1, "relevance_score": 0.9}]},
+            "/engines/v1/v2/rerank",
+            "top_n",
+        ),
+        (
+            "voyage",
+            {"data": [{"index": 1, "relevance_score": 0.9}]},
+            "/engines/v1/rerank",
+            "top_k",
+        ),
+        (
+            "open_router",
+            {"results": [{"index": 1, "score": 0.9}]},
+            "/engines/v1/rerank",
+            "top_n",
+        ),
+    ],
+)
+def test_rerank_protocol_adapters(
+    protocol: str,
+    response: dict[str, Any],
+    expected_path: str,
+    expected_top_key: str,
+) -> None:
+    server, thread, captured = serve(json.dumps(response).encode(), "application/json")
+    settings = {
+        "protocol": protocol,
+        "settings": {"base_url": endpoint(server), "api_key": "fixture-token"},
+    }
+    request = {
+        "contract_version": 1,
+        "model": "fixture-model",
+        "query": "query",
+        "documents": ["first", "second"],
+        "top_n": 1,
+    }
+    try:
+        result = asyncio.run(rerank(settings, request))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert captured["path"] == expected_path
+    assert captured["body"][expected_top_key] == 1
+    assert result["results"] == [{"index": 1, "relevance_score": 0.9}]
+
+
+def test_embedding_fallback_occurs_only_for_quota_and_reports_switch() -> None:
+    quota_server, quota_thread, _ = serve(
+        b'{"error":{"message":"quota exceeded"}}',
+        "application/json",
+        status=402,
+    )
+    success_server, success_thread, _ = serve(
+        b'{"embeddings":{"float":[[0.2,0.8]]}}',
+        "application/json",
+    )
+    settings = {
+        "candidates": [
+            {
+                "model_id": "open_router:first",
+                "client": {
+                    "protocol": "open_router",
+                    "settings": {
+                        "base_url": endpoint(quota_server),
+                        "api_key": "first",
+                    },
+                },
+            },
+            {
+                "model_id": "cohere:second",
+                "client": {
+                    "protocol": "cohere",
+                    "settings": {
+                        "base_url": endpoint(success_server),
+                        "api_key": "second",
+                    },
+                },
+            },
+        ]
+    }
+    request = {
+        "contract_version": 1,
+        "model": "ignored-by-fallback",
+        "input_type": "document",
+        "texts": ["text"],
+    }
+    try:
+        result = asyncio.run(fallback_embed(settings, request))
+    finally:
+        for server, thread in (
+            (quota_server, quota_thread),
+            (success_server, success_thread),
+        ):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+    assert result["selected_model_id"] == "cohere:second"
+    assert result["model_switches"] == [
+        {"from_model_id": "open_router:first", "to_model_id": "cohere:second"}
+    ]
+
+
+def test_embedding_fallback_does_not_retry_authentication_errors() -> None:
+    auth_server, auth_thread, _ = serve(
+        b'{"error":{"message":"invalid credentials"}}',
+        "application/json",
+        status=401,
+    )
+    unused_server, unused_thread, unused_capture = serve(
+        b'{"embeddings":{"float":[[0.2,0.8]]}}',
+        "application/json",
+    )
+    settings = {
+        "candidates": [
+            {
+                "model_id": "cohere:first",
+                "client": {
+                    "protocol": "cohere",
+                    "settings": {"base_url": endpoint(auth_server), "api_key": "first"},
+                },
+            },
+            {
+                "model_id": "voyage:second",
+                "client": {
+                    "protocol": "voyage",
+                    "settings": {
+                        "base_url": endpoint(unused_server),
+                        "api_key": "second",
+                    },
+                },
+            },
+        ]
+    }
+    request = {
+        "contract_version": 1,
+        "model": "ignored-by-fallback",
+        "input_type": "document",
+        "texts": ["text"],
+    }
+    try:
+        with pytest.raises(RuntimeError, match="authentication failed"):
+            asyncio.run(fallback_embed(settings, request))
+    finally:
+        for server, thread in (
+            (auth_server, auth_thread),
+            (unused_server, unused_thread),
+        ):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+    assert unused_capture == {}
+
+
+def test_rerank_fallback_uses_explicit_order_and_reports_selected_model() -> None:
+    quota_server, quota_thread, _ = serve(
+        b'{"error":{"message":"rate limited"}}',
+        "application/json",
+        status=429,
+    )
+    success_server, success_thread, _ = serve(
+        b'{"data":[{"index":1,"relevance_score":0.91}]}',
+        "application/json",
+    )
+    settings = {
+        "candidates": [
+            {
+                "model_id": "cohere:first-reranker",
+                "client": {
+                    "protocol": "cohere",
+                    "settings": {
+                        "base_url": endpoint(quota_server),
+                        "api_key": "first",
+                    },
+                },
+            },
+            {
+                "model_id": "voyage:second-reranker",
+                "client": {
+                    "protocol": "voyage",
+                    "settings": {
+                        "base_url": endpoint(success_server),
+                        "api_key": "second",
+                    },
+                },
+            },
+        ]
+    }
+    request = {
+        "contract_version": 1,
+        "model": "ignored-by-fallback",
+        "query": "query",
+        "documents": ["first", "second"],
+        "top_n": 1,
+    }
+    try:
+        result = asyncio.run(fallback_rerank(settings, request))
+    finally:
+        for server, thread in (
+            (quota_server, quota_thread),
+            (success_server, success_thread),
+        ):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+    assert result["selected_model_id"] == "voyage:second-reranker"
+    assert result["model_switches"] == [
+        {
+            "from_model_id": "cohere:first-reranker",
+            "to_model_id": "voyage:second-reranker",
+        }
+    ]
+    assert result["results"] == [{"index": 1, "relevance_score": 0.91}]
+
+
+def test_empty_rerank_returns_without_network() -> None:
+    settings = {
+        "protocol": "cohere",
+        "settings": {"base_url": "http://127.0.0.1:1", "api_key": "fixture-token"},
+    }
+    request = {
+        "contract_version": 1,
+        "model": "fixture-model",
+        "query": "query",
+        "documents": [],
+    }
+    result = asyncio.run(rerank(settings, request))
+    assert result["results"] == []
+
+
+def test_empty_embedding_batch_returns_without_network() -> None:
+    settings = {
+        "protocol": "cohere",
+        "settings": {"base_url": "http://127.0.0.1:1", "api_key": "fixture-token"},
+    }
+    request = {
+        "contract_version": 1,
+        "model": "fixture-model",
+        "input_type": "document",
+        "texts": [],
+    }
+    result = asyncio.run(embed(settings, request))
+    assert result["embeddings"] == []
+    assert result["dimensions"] == 0
+
+
+def test_cohere_embedding_batches_at_provider_limit() -> None:
+    batch_sizes: list[int] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            length = int(self.headers.get("content-length", "0"))
+            payload = json.loads(self.rfile.read(length))
+            count = len(payload["texts"])
+            batch_sizes.append(count)
+            body = json.dumps(
+                {"embeddings": {"float": [[0.1, 0.2] for _ in range(count)]}}
+            ).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    settings = {
+        "protocol": "cohere",
+        "settings": {"base_url": endpoint(server), "api_key": "fixture-token"},
+    }
+    request = {
+        "contract_version": 1,
+        "model": "fixture-model",
+        "input_type": "document",
+        "texts": [f"text-{index}" for index in range(97)],
+    }
+    try:
+        result = asyncio.run(embed(settings, request))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert batch_sizes == [96, 1]
+    assert len(result["embeddings"]) == 97
+    assert result["dimensions"] == 2
 
 
 def test_completion_rejects_invalid_endpoint_without_leaking_credentials() -> None:

@@ -22,6 +22,7 @@ suportadas pelo contrato Rust versionado.
 | [04 — Conversas, streaming e threads](04-conversas-streaming-e-threads.md)          | `../../issues/04-chat-streaming-e-threads.md`                                   | Turnos, envelopes de evento, progresso, replay, cancelamento e adaptação a diferentes canais. |
 | [05 — Providers nativos de chat](05-native-chat-providers.md)                       | Backend Python de referência (`backend/llm/anthropic/`, `google/` e `cohere/`) | Anthropic Messages, Google Gemini e Cohere Chat v2, conversão multimodal/tool, streaming e usage. |
 | [06 — Fallback de chat](06-chat-fallback.md)                                         | Backend Python consumidor (`backend/llm/fallback_chat_client.py`)             | Seleção explícita e ordenada de providers, erros elegíveis e mudança segura durante streaming. |
+| [07 — Embeddings e rerank](07-embeddings-rerank.md)                                 | Backend Python consumidor (`backend/llm/*/embeddings.py`, `*/*rerank.py`)      | Embeddings, rerank, ordenação, dimensões, scores e fallback explícito por quota.              |
 
 ## Regras de leitura
 
