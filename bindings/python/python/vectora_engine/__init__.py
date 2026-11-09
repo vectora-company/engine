@@ -88,6 +88,48 @@ def tool_chat_definitions(contracts: Sequence[JsonObject]) -> list[dict[str, Any
     return json.loads(result)
 
 
+def model_tool_loop_contract_version() -> int:
+    """Return the version of the in-memory model/tool loop contract."""
+    return _native.model_tool_loop_contract_version()
+
+
+def start_model_tool_loop(
+    run_id: str,
+    turn_id: str,
+    settings: JsonObject | None = None,
+) -> dict[str, Any]:
+    """Create a validated model/tool loop snapshot; durability remains caller-owned."""
+    result = _native.model_tool_loop_start(
+        run_id,
+        turn_id,
+        json.dumps(settings or {}, separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
+def accept_model_turn(
+    state: JsonObject,
+    completion: JsonObject,
+    dispatch: JsonObject,
+) -> dict[str, Any]:
+    """Validate a model turn and produce the next adapter-facing loop action."""
+    result = _native.model_tool_loop_accept_model_turn(
+        json.dumps(state, separators=(",", ":")),
+        json.dumps(completion, separators=(",", ":")),
+        json.dumps(dispatch, separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
+def submit_tool_result(state: JsonObject, result: JsonObject) -> dict[str, Any]:
+    """Submit one correlated adapter result and advance the loop state."""
+    encoded = _native.model_tool_loop_submit_tool_result(
+        json.dumps(state, separators=(",", ":")),
+        json.dumps(result, separators=(",", ":")),
+    )
+    return json.loads(encoded)
+
+
 def chat_contract_version() -> int:
     """Return the version of the shared chat contract."""
     return _native.chat_contract_version()
@@ -218,6 +260,7 @@ async def fallback_chat_stream(
 
 
 __all__ = [
+    "accept_model_turn",
     "assemble_turn",
     "chat_complete",
     "chat_contract_version",
@@ -229,12 +272,15 @@ __all__ = [
     "fallback_chat_stream",
     "fallback_embed",
     "fallback_rerank",
+    "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_stream",
     "prepare_tool_dispatch",
     "rerank",
     "rerank_contract_version",
     "run_contract_version",
+    "start_model_tool_loop",
+    "submit_tool_result",
     "tool_chat_definitions",
     "tool_contract_version",
     "tool_dispatch_contract_version",

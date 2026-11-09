@@ -16,9 +16,10 @@ use vectora_engine::chat::{
     TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
+    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
     RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
-    TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDispatchSettings, prepare_tool_dispatch,
-    tool_chat_definitions,
+    TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult,
+    advance_model_turn, advance_tool_result, prepare_tool_dispatch, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -222,6 +223,46 @@ fn tool_chat_definitions_json(contracts_json: String) -> PyResult<String> {
         serde_json::from_str(&contracts_json).map_err(|_| py_error("invalid tool contracts"))?;
     let definitions = tool_chat_definitions(&contracts).map_err(py_error)?;
     encode_json(&definitions)
+}
+
+#[pyfunction]
+fn model_tool_loop_contract_version() -> u16 {
+    MODEL_TOOL_LOOP_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn model_tool_loop_start(
+    run_id: String,
+    turn_id: String,
+    settings_json: String,
+) -> PyResult<String> {
+    let settings: ModelToolLoopSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| py_error("invalid model-tool loop settings"))?;
+    encode_json(&ModelToolLoopState::new(run_id, turn_id, settings).map_err(py_error)?)
+}
+
+#[pyfunction]
+fn model_tool_loop_accept_model_turn(
+    state_json: String,
+    completion_json: String,
+    dispatch_json: String,
+) -> PyResult<String> {
+    let state: ModelToolLoopState =
+        serde_json::from_str(&state_json).map_err(|_| py_error("invalid model-tool loop state"))?;
+    let completion =
+        serde_json::from_str(&completion_json).map_err(|_| py_error("invalid chat completion"))?;
+    let dispatch: ToolDispatch =
+        serde_json::from_str(&dispatch_json).map_err(|_| py_error("invalid tool dispatch"))?;
+    encode_json(&advance_model_turn(&state, completion, dispatch).map_err(py_error)?)
+}
+
+#[pyfunction]
+fn model_tool_loop_submit_tool_result(state_json: String, result_json: String) -> PyResult<String> {
+    let state: ModelToolLoopState =
+        serde_json::from_str(&state_json).map_err(|_| py_error("invalid model-tool loop state"))?;
+    let result: ToolResult =
+        serde_json::from_str(&result_json).map_err(|_| py_error("invalid tool result"))?;
+    encode_json(&advance_tool_result(&state, result).map_err(py_error)?)
 }
 
 #[pyfunction]
@@ -477,6 +518,13 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(tool_dispatch_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_tool_dispatch_json, module)?)?;
     module.add_function(wrap_pyfunction!(tool_chat_definitions_json, module)?)?;
+    module.add_function(wrap_pyfunction!(model_tool_loop_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(model_tool_loop_start, module)?)?;
+    module.add_function(wrap_pyfunction!(model_tool_loop_accept_model_turn, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        model_tool_loop_submit_tool_result,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(embedding_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(rerank_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(embed, module)?)?;

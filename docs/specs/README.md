@@ -26,6 +26,7 @@ suportadas pelo contrato Rust versionado.
 | [08 — Ciclo de vida de execução](08-run-lifecycle.md)                               | `../../issues/01-loop-agentico-e-harness.md`                                    | Identidade versionada da execução e máquina de estados experimental, exposta em Rust, Python e TypeScript. |
 | [09 — Montagem de turno](09-turn-assembly.md)                                       | Backend consumidor (`backend/engine/conversation_loop.py`)                     | Acumulação Rust de eventos streaming em resposta canônica, com os mesmos bindings do bootstrap. |
 | [10 — Contratos de tools e dispatch](10-tool-contracts-e-dispatch.md)                | `../../issues/01-loop-agentico-e-harness.md` e `backend/tools/registry.py`      | Schemas validados, capabilities default-deny, decisões de invocação e modo de execução do lote. |
+| [11 — Rodadas de modelo e resultados de tools](11-model-tool-loop.md)                | `../../issues/01-loop-agentico-e-harness.md` e `backend/engine/conversation_loop.py` | Coordenação versionada entre respostas do modelo, adapters consumidores e resultados. |
 
 ## Regras de leitura
 

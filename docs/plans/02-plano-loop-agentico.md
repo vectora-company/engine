@@ -28,7 +28,10 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    modelo → dispatch → resultados. A parte (a) está implementada
    experimentalmente em `docs/specs/10-tool-contracts-e-dispatch.md`; ela
    propaga timeout e idempotência declarados, mas não os impõe nem executa tools.
-   Consumidor fornece adapters; o loop não contém integrações de produto.
+   A máquina de rodadas e o protocolo de resultados foram implementados
+   experimentalmente em `docs/specs/11-model-tool-loop.md`. Ambos os bindings
+   expõem o núcleo. O consumidor fornece adapters; persistência, aprovação e
+   recovery durável continuam pendentes.
 4. **Política e aprovação** — definir snapshot efetivo e decisão default-deny;
    vincular HITL a conteúdo, arguments normalizados, escopo e digest da policy.
    Revalidar antes de efeitos e retomar. Falha de policy interrompe o efeito.

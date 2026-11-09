@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createServer } from "node:http";
 import {
   assembleTurn,
+  acceptModelTurn,
   chatComplete,
   chatContractVersion,
   createRun,
@@ -14,6 +15,7 @@ import {
   fallbackChatStream,
   nativeChatComplete,
   nativeChatStream,
+  modelToolLoopContractVersion,
   rerank,
   rerankContractVersion,
   runContractVersion,
@@ -21,6 +23,8 @@ import {
   toolContractVersion,
   toolChatDefinitions,
   toolDispatchContractVersion,
+  startModelToolLoop,
+  submitToolResult,
 } from "../dist/index.js";
 
 const settings = {
@@ -122,6 +126,66 @@ test("tool dispatch validates schemas and trusted capabilities in Rust", () => {
     () => prepareToolDispatch({ ...run, status: "planned" }, completion, [contract]),
     /requires a running run/,
   );
+});
+
+test("model/tool loop round trip is exposed through the Node binding", () => {
+  assert.equal(modelToolLoopContractVersion(), 1);
+  const state = startModelToolLoop("run-1", "turn-1");
+  assert.equal(state.phase, "awaiting_model");
+  assert.equal(state.settings.max_model_turns, 50);
+  const run = transitionRun(
+    createRun({
+      contract_version: 1,
+      run_id: "run-1",
+      idempotency_key: "turn-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      capabilities: ["data.read"],
+    }),
+    "running",
+  );
+  const completion = {
+    contract_version: 1,
+    content: "checking",
+    reasoning: "must not be retained",
+    tool_calls: [{
+      id: "call-1",
+      name: "lookup",
+      arguments: { state: "object", value: { key: "alpha" } },
+    }],
+  };
+  const contract = {
+    contract_version: 1,
+    schema_version: "lookup.v1",
+    name: "lookup",
+    input_schema: {
+      type: "object",
+      properties: { key: { type: "string" } },
+      required: ["key"],
+    },
+    required_capability: "data.read",
+    timeout_ms: 5000,
+    effect: "read_only",
+    idempotency: "idempotent",
+  };
+  const dispatch = prepareToolDispatch(run, completion, [contract]);
+  const transition = acceptModelTurn(state, completion, dispatch);
+  assert.equal(transition.state.phase, "awaiting_tool_results");
+  assert.equal(transition.action.action, "execute_tools");
+  assert.equal(transition.action.assistant_completion.reasoning, undefined);
+  const next = submitToolResult(transition.state, {
+    contract_version: 1,
+    run_id: "run-1",
+    turn_id: "turn-1",
+    call_id: "call-1",
+    tool_name: "lookup",
+    status: "succeeded",
+    effect_state: "not_applicable",
+    output: "found",
+  });
+  assert.equal(next.state.phase, "awaiting_model");
+  assert.equal(next.action.action, "continue_with_tool_results");
+  assert.equal(next.action.results[0].output, "found");
 });
 
 test("streamed turn assembly reaches the Rust core through the Node binding", () => {

@@ -37,13 +37,11 @@ deve impor o timeout declarado, revalidar sua política imediatamente antes do
 efeito e persistir/reconciliar resultados conforme o plano de storage. A chave
 de idempotência só ajuda se o adapter/provedor a suportar.
 
-O loop em Rust ainda não está completo: esta entrega define e valida a fronteira
-de dispatch, mas o consumidor ainda coordena a chamada de modelo, a execução dos
-adapters e a próxima rodada. Persistência, aprovação e recovery não são
-prometidos por este contrato experimental.
+O coordenador experimental das rodadas está definido em
+[`11-model-tool-loop.md`](11-model-tool-loop.md). Persistência, aprovação e
+recovery durável não são prometidos por aquele contrato.
 
 ## Próxima parte do plano
 
-Implementar o protocolo de retorno de resultados de tools e a máquina de
-rodadas modelo → dispatch → resultados → modelo, mantendo os adapters de
-produto fora da engine e expondo o mesmo núcleo pelos dois bindings.
+Implementar política, aprovação e revisão de autorização antes de efeitos,
+conforme a etapa seguinte do plano.

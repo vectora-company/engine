@@ -209,6 +209,81 @@ export interface ToolDispatch {
   decisions: ToolDecision[];
 }
 
+export interface ModelToolLoopSettings {
+  max_model_turns?: number;
+  max_tool_calls?: number;
+  max_tool_result_bytes?: number;
+  max_tool_results_bytes_per_turn?: number;
+}
+export type ModelToolLoopPhase =
+  | "awaiting_model"
+  | "awaiting_tool_results"
+  | "completed"
+  | "stopped"
+  | "recovery_required";
+export type ToolResultStatus = "succeeded" | "failed" | "denied" | "cancelled" | "timed_out";
+export type ToolEffectState = "not_applicable" | "not_applied" | "applied" | "unknown";
+export interface ToolResult {
+  contract_version: number;
+  run_id: string;
+  turn_id: string;
+  call_id: string;
+  tool_name: string;
+  status: ToolResultStatus;
+  effect_state: ToolEffectState;
+  code?: string | null;
+  output: string;
+}
+export interface PendingToolResult {
+  call_id: string;
+  tool_name: string;
+  effect: ToolEffect;
+  result: ToolResult | null;
+}
+export interface ModelToolLoopState {
+  contract_version: number;
+  run_id: string;
+  turn_id: string;
+  phase: ModelToolLoopPhase;
+  settings: Required<ModelToolLoopSettings>;
+  model_turns: number;
+  tool_calls: number;
+  pending_completion: ChatCompletion | null;
+  pending_results: PendingToolResult[];
+}
+export type ModelToolLoopAction =
+  | {
+      action: "execute_tools";
+      assistant_completion: ChatCompletion;
+      execution_mode: "concurrent_read_only" | "sequential";
+      invocations: ToolDecision[];
+      immediate_results: ToolResult[];
+    }
+  | { action: "awaiting_tool_results"; remaining: number }
+  | {
+      action: "continue_with_tool_results";
+      assistant_completion: ChatCompletion;
+      results: ToolResult[];
+      next_model_turn: number;
+    }
+  | {
+      action: "complete";
+      assistant_completion: ChatCompletion;
+      model_turns: number;
+      tool_calls: number;
+    }
+  | {
+      action: "stopped";
+      reason: "model_turn_limit" | "tool_call_limit";
+      model_turns: number;
+      tool_calls: number;
+    }
+  | { action: "recovery_required"; call_id: string; tool_name: string };
+export interface ModelToolLoopTransition {
+  state: ModelToolLoopState;
+  action: ModelToolLoopAction;
+}
+
 export interface EmbeddingCandidateSettings {
   model_id: string;
   client: EmbeddingSettings;
@@ -235,6 +310,10 @@ interface NativeBinding {
   toolDispatchContractVersion(): number;
   prepareToolDispatchJson(lifecycleJson: string, completionJson: string, contractsJson: string, settingsJson: string): string;
   toolChatDefinitionsJson(contractsJson: string): string;
+  modelToolLoopContractVersion(): number;
+  modelToolLoopStart(runId: string, turnId: string, settingsJson: string): string;
+  modelToolLoopAcceptModelTurn(stateJson: string, completionJson: string, dispatchJson: string): string;
+  modelToolLoopSubmitToolResult(stateJson: string, resultJson: string): string;
   embeddingContractVersion(): number;
   rerankContractVersion(): number;
   embed(settingsJson: string, requestJson: string): Promise<string>;
@@ -304,6 +383,41 @@ export function toolChatDefinitions(contracts: ToolContract[]): ToolDefinition[]
   return JSON.parse(
     native.toolChatDefinitionsJson(JSON.stringify(contracts)),
   ) as ToolDefinition[];
+}
+
+export const modelToolLoopContractVersion = (): number => native.modelToolLoopContractVersion();
+
+export function startModelToolLoop(
+  runId: string,
+  turnId: string,
+  settings: ModelToolLoopSettings = {},
+): ModelToolLoopState {
+  return JSON.parse(
+    native.modelToolLoopStart(runId, turnId, JSON.stringify(settings)),
+  ) as ModelToolLoopState;
+}
+
+export function acceptModelTurn(
+  state: ModelToolLoopState,
+  completion: ChatCompletion,
+  dispatch: ToolDispatch,
+): ModelToolLoopTransition {
+  return JSON.parse(
+    native.modelToolLoopAcceptModelTurn(
+      JSON.stringify(state),
+      JSON.stringify(completion),
+      JSON.stringify(dispatch),
+    ),
+  ) as ModelToolLoopTransition;
+}
+
+export function submitToolResult(
+  state: ModelToolLoopState,
+  result: ToolResult,
+): ModelToolLoopTransition {
+  return JSON.parse(
+    native.modelToolLoopSubmitToolResult(JSON.stringify(state), JSON.stringify(result)),
+  ) as ModelToolLoopTransition;
 }
 
 export const embeddingContractVersion = (): number => native.embeddingContractVersion();
