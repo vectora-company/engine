@@ -24,6 +24,7 @@ use super::{
 
 const DEFAULT_ANTHROPIC_URL: &str = "https://api.anthropic.com/v1";
 const DEFAULT_GOOGLE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_COHERE_URL: &str = "https://api.cohere.com/v2";
 const MAX_ERROR_BODY_BYTES: usize = 8 * 1024;
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_EVENT_BYTES: usize = 1024 * 1024;
@@ -33,6 +34,7 @@ const MAX_EVENT_BYTES: usize = 1024 * 1024;
 pub enum NativeProvider {
     Anthropic,
     Google,
+    Cohere,
 }
 
 /// Settings for a native protocol provider. Credentials are supplied by the
@@ -84,6 +86,7 @@ impl fmt::Debug for NativeChatSettings {
 enum NativeProtocolClient {
     Anthropic(ProtocolClient),
     Google(ProtocolClient),
+    Cohere(ProtocolClient),
 }
 
 /// Unified native-protocol facade used by both language bindings.
@@ -99,6 +102,7 @@ impl fmt::Debug for NativeChatClient {
                 &match self.inner {
                     NativeProtocolClient::Anthropic(_) => NativeProvider::Anthropic,
                     NativeProtocolClient::Google(_) => NativeProvider::Google,
+                    NativeProtocolClient::Cohere(_) => NativeProvider::Cohere,
                 },
             )
             .finish_non_exhaustive()
@@ -120,6 +124,7 @@ impl NativeChatClient {
         let base = match settings.provider {
             NativeProvider::Anthropic => DEFAULT_ANTHROPIC_URL,
             NativeProvider::Google => DEFAULT_GOOGLE_URL,
+            NativeProvider::Cohere => DEFAULT_COHERE_URL,
         };
         let base_url = settings.base_url.as_deref().unwrap_or(base);
         if settings.api_key.trim().is_empty() {
@@ -166,6 +171,9 @@ impl NativeChatClient {
                     "x-api-key" | "anthropic-version" | "content-type" | "host"
                 ),
                 NativeProvider::Google => matches!(canonical, "content-type" | "host"),
+                NativeProvider::Cohere => {
+                    matches!(canonical, "authorization" | "content-type" | "host")
+                }
             };
             if reserved || !seen.insert(canonical.to_owned()) {
                 return Err(ChatError::InvalidConfiguration(
@@ -191,6 +199,7 @@ impl NativeChatClient {
             inner: match settings.provider {
                 NativeProvider::Anthropic => NativeProtocolClient::Anthropic(protocol),
                 NativeProvider::Google => NativeProtocolClient::Google(protocol),
+                NativeProvider::Cohere => NativeProtocolClient::Cohere(protocol),
             },
         })
     }
@@ -199,6 +208,7 @@ impl NativeChatClient {
         match &self.inner {
             NativeProtocolClient::Anthropic(client) => client.complete(request).await,
             NativeProtocolClient::Google(client) => client.complete(request).await,
+            NativeProtocolClient::Cohere(client) => client.complete(request).await,
         }
     }
 
@@ -206,6 +216,7 @@ impl NativeChatClient {
         match &self.inner {
             NativeProtocolClient::Anthropic(client) => client.stream(request).await,
             NativeProtocolClient::Google(client) => client.stream(request).await,
+            NativeProtocolClient::Cohere(client) => client.stream(request).await,
         }
     }
 }
@@ -214,6 +225,12 @@ impl ProtocolClient {
     fn endpoint_for(&self, model: &str, streaming: bool) -> Result<Url, ChatError> {
         if self.provider == NativeProvider::Anthropic {
             return Ok(self.endpoint.clone());
+        }
+        if self.provider == NativeProvider::Cohere {
+            let mut url = self.endpoint.clone();
+            let path = url.path().trim_end_matches('/');
+            url.set_path(&format!("{path}/chat"));
+            return Ok(url);
         }
         if model.contains('/') || model.trim().is_empty() {
             return Err(ChatError::InvalidConfiguration(
@@ -246,6 +263,9 @@ impl ProtocolClient {
                     .header("anthropic-version", "2023-06-01");
             }
             NativeProvider::Google => {}
+            NativeProvider::Cohere => {
+                builder = builder.header(header::AUTHORIZATION, format!("Bearer {}", self.api_key));
+            }
         }
         for (name, value) in &self.headers {
             builder = builder.header(name, value);
@@ -287,6 +307,7 @@ impl ProtocolClient {
         match self.provider {
             NativeProvider::Anthropic => parse_anthropic_completion(value),
             NativeProvider::Google => parse_google_completion(value),
+            NativeProvider::Cohere => parse_cohere_completion(value),
         }
     }
 
@@ -310,6 +331,8 @@ impl ProtocolClient {
             let mut usage = None;
             let mut finish_reason = None;
             let mut next_google_tool_index = 0u32;
+            let mut cohere_tool_indexes = HashMap::new();
+            let mut next_cohere_tool_index = 0u32;
             let mut completed = false;
             loop {
                 let Some(chunk) = next_chunk(&mut body, deadline, read_timeout).await? else { break; };
@@ -321,6 +344,7 @@ impl ProtocolClient {
                     let events = match provider {
                         NativeProvider::Anthropic => parse_anthropic_event(&value, &mut anthropic_blocks, &mut emitted_tool_names, &mut usage, &mut finish_reason)?,
                         NativeProvider::Google => parse_google_event(&value, &mut usage, &mut finish_reason, &mut next_google_tool_index)?,
+                        NativeProvider::Cohere => parse_cohere_event(&value, &mut usage, &mut finish_reason, &mut cohere_tool_indexes, &mut next_cohere_tool_index)?,
                     };
                     for event in events {
                         if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
@@ -337,6 +361,7 @@ impl ProtocolClient {
                     let events = match provider {
                         NativeProvider::Anthropic => parse_anthropic_event(&value, &mut anthropic_blocks, &mut emitted_tool_names, &mut usage, &mut finish_reason)?,
                         NativeProvider::Google => parse_google_event(&value, &mut usage, &mut finish_reason, &mut next_google_tool_index)?,
+                        NativeProvider::Cohere => parse_cohere_event(&value, &mut usage, &mut finish_reason, &mut cohere_tool_indexes, &mut next_cohere_tool_index)?,
                     };
                     for event in events {
                         if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
@@ -363,6 +388,7 @@ fn native_payload(
     match provider {
         NativeProvider::Anthropic => anthropic_payload(request, streaming),
         NativeProvider::Google => google_payload(request),
+        NativeProvider::Cohere => cohere_payload(request, streaming),
     }
 }
 
@@ -504,6 +530,265 @@ fn google_payload(request: &ChatRequest) -> Result<Value, ChatError> {
         &["contents", "systemInstruction", "generationConfig", "tools"],
     )?;
     Ok(body)
+}
+
+fn cohere_payload(request: &ChatRequest, streaming: bool) -> Result<Value, ChatError> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in &request.messages {
+        match message.role {
+            MessageRole::System | MessageRole::User | MessageRole::Assistant => {
+                let role = match message.role {
+                    MessageRole::System => "system",
+                    MessageRole::User => "user",
+                    _ => "assistant",
+                };
+                let content = cohere_content(&message.content);
+                if role == "assistant" && !message.tool_calls.is_empty() {
+                    let mut translated = json!({"role":"assistant","tool_calls":message.tool_calls.iter().map(|call| json!({"id":call.id,"type":"function","function":{"name":call.name,"arguments":call.arguments.wire_value()}})).collect::<Vec<_>>()});
+                    if let Some(text) = content.as_str().filter(|text| !text.is_empty()) {
+                        translated["tool_plan"] = json!(text);
+                    }
+                    messages.push(translated);
+                } else {
+                    messages.push(json!({"role":role,"content":content}));
+                }
+            }
+            MessageRole::Tool => {
+                let id = message
+                    .tool_call_id
+                    .as_deref()
+                    .filter(|id| !id.is_empty())
+                    .ok_or(ChatError::InvalidConfiguration(
+                        "Cohere tool result requires tool_call_id",
+                    ))?;
+                messages.push(json!({"role":"tool","tool_call_id":id,"content":[{"type":"document","document":{"data":{"result":message_text(message)}}}]}));
+            }
+        }
+    }
+    let mut body = json!({"model":request.model,"messages":messages,"stream":streaming});
+    if let Some(value) = request.options.temperature {
+        body["temperature"] = json!(value);
+    }
+    if let Some(value) = request.options.max_tokens {
+        body["max_tokens"] = json!(value);
+    }
+    if !request.tools.is_empty() {
+        body["tools"] = Value::Array(request.tools.iter().map(|tool| json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.parameters}})).collect());
+    }
+    merge_extensions(
+        &mut body,
+        &request.extensions,
+        &[
+            "model",
+            "messages",
+            "stream",
+            "temperature",
+            "max_tokens",
+            "tools",
+        ],
+    )?;
+    Ok(body)
+}
+
+fn cohere_content(content: &MessageContent) -> Value {
+    let parts = match content {
+        MessageContent::Text(text) => return json!(text),
+        MessageContent::Parts(parts) => parts,
+    };
+    if !parts
+        .iter()
+        .any(|part| matches!(part, super::ContentPart::ImageUrl { .. }))
+    {
+        return json!(
+            parts
+                .iter()
+                .filter_map(|part| match part {
+                    super::ContentPart::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<String>()
+        );
+    }
+    Value::Array(
+        parts
+            .iter()
+            .map(|part| match part {
+                super::ContentPart::Text { text } => json!({"type":"text","text":text}),
+                super::ContentPart::ImageUrl { image_url } => {
+                    json!({"type":"image_url","image_url":{"url":image_url.url}})
+                }
+            })
+            .collect(),
+    )
+}
+
+fn parse_cohere_completion(value: Value) -> Result<ChatCompletion, ChatError> {
+    let message = value
+        .get("message")
+        .and_then(Value::as_object)
+        .ok_or(ChatError::InvalidResponse)?;
+    let content = message
+        .get("content")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|part| part.get("text").and_then(Value::as_str))
+        .collect::<String>();
+    let mut calls = Vec::new();
+    for call in message
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let function = call.get("function").unwrap_or(&Value::Null);
+        let raw = function
+            .get("arguments")
+            .and_then(Value::as_str)
+            .unwrap_or("{}");
+        calls.push(ToolCall {
+            id: call
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            name: function
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            arguments: ToolArguments::from_json(raw),
+        });
+    }
+    let usage = value.pointer("/usage/tokens").and_then(|tokens| {
+        let input = tokens.get("input_tokens")?.as_u64().unwrap_or(0);
+        let output = tokens.get("output_tokens")?.as_u64().unwrap_or(0);
+        Some(Usage {
+            input_tokens: input,
+            output_tokens: output,
+            total_tokens: input.saturating_add(output),
+            cost: None,
+        })
+    });
+    let finish_reason = if !calls.is_empty() {
+        Some(FinishReason::ToolCalls)
+    } else {
+        value
+            .get("finish_reason")
+            .and_then(Value::as_str)
+            .map(|reason| match reason {
+                "COMPLETE" => FinishReason::Stop,
+                "MAX_TOKENS" => FinishReason::Length,
+                other => FinishReason::Other(other.to_owned()),
+            })
+    };
+    Ok(ChatCompletion {
+        contract_version: CHAT_CONTRACT_VERSION,
+        id: value.get("id").and_then(Value::as_str).map(str::to_owned),
+        content,
+        reasoning: None,
+        tool_calls: calls,
+        finish_reason,
+        usage,
+    })
+}
+
+fn parse_cohere_event(
+    value: &Value,
+    usage: &mut Option<Usage>,
+    finish: &mut Option<FinishReason>,
+    indexes: &mut HashMap<String, u32>,
+    next_index: &mut u32,
+) -> Result<Vec<ChatEvent>, ChatError> {
+    let kind = value.get("type").and_then(Value::as_str).unwrap_or("");
+    let delta = value.get("delta").unwrap_or(&Value::Null);
+    let message = delta.get("message").unwrap_or(&Value::Null);
+    let mut events = Vec::new();
+    match kind {
+        "content-delta" => {
+            if let Some(text) = message
+                .pointer("/content/text")
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty())
+            {
+                events.push(ChatEvent::new(ChatEventKind::TextDelta {
+                    text: text.to_owned(),
+                }));
+            }
+        }
+        "tool-call-start" | "tool-call-delta" => {
+            let id = message
+                .pointer("/tool_calls/id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned();
+            let index = if let Some(index) = indexes.get(&id) {
+                *index
+            } else {
+                let explicit = value.get("index").and_then(Value::as_u64).map(|n| n as u32);
+                let index = explicit.unwrap_or(*next_index);
+                *next_index = (*next_index).max(index.saturating_add(1));
+                indexes.insert(id.clone(), index);
+                index
+            };
+            let function = message
+                .pointer("/tool_calls/function")
+                .unwrap_or(&Value::Null);
+            events.push(ChatEvent::new(ChatEventKind::ToolCallDelta {
+                call: ToolCallDelta {
+                    index,
+                    id: (!id.is_empty()).then_some(id),
+                    name: function
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                    arguments_fragment: function
+                        .get("arguments")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_owned(),
+                },
+            }));
+        }
+        "message-end" => {
+            if let Some(reason) = delta.get("finish_reason").and_then(Value::as_str) {
+                *finish = Some(match reason {
+                    "COMPLETE" => FinishReason::Stop,
+                    "MAX_TOKENS" => FinishReason::Length,
+                    "TOOL_CALL" => FinishReason::ToolCalls,
+                    other => FinishReason::Other(other.to_owned()),
+                });
+            }
+            if let Some(tokens) = delta.pointer("/usage/tokens") {
+                let input = tokens
+                    .get("input_tokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let output = tokens
+                    .get("output_tokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let latest = Usage {
+                    input_tokens: input,
+                    output_tokens: output,
+                    total_tokens: input.saturating_add(output),
+                    cost: None,
+                };
+                *usage = Some(latest.clone());
+                events.push(ChatEvent::new(ChatEventKind::Usage { usage: latest }));
+            }
+            events.push(ChatEvent::new(ChatEventKind::Completed {
+                finish_reason: finish.clone(),
+            }));
+        }
+        "error" => {
+            return Err(ChatError::Protocol(
+                "Cohere signaled an error during streaming",
+            ));
+        }
+        _ => {}
+    }
+    Ok(events)
 }
 
 fn merge_extensions(
@@ -1207,6 +1492,76 @@ mod tests {
         let google = parse_google_completion(json!({"candidates":[{"finishReason":"MAX_TOKENS","content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":5,"totalTokenCount":9}})).unwrap();
         assert_eq!(google.finish_reason, Some(FinishReason::Length));
         assert_eq!(google.usage.unwrap().total_tokens, 9);
+        let cohere = parse_cohere_completion(json!({"id":"c1","finish_reason":"TOOL_CALL","message":{"content":[{"type":"text","text":"plan"}],"tool_calls":[{"id":"call-1","function":{"name":"lookup","arguments":"{\"q\":\"x\"}"}}]},"usage":{"tokens":{"input_tokens":3,"output_tokens":2}}})).unwrap();
+        assert_eq!(cohere.content, "plan");
+        assert_eq!(cohere.finish_reason, Some(FinishReason::ToolCalls));
+        assert_eq!(cohere.usage.unwrap().total_tokens, 5);
+        assert_eq!(cohere.tool_calls[0].name, "lookup");
+    }
+
+    #[test]
+    fn cohere_request_and_stream_events_preserve_tools_usage_and_extensions() {
+        let mut request = ChatRequest::new(
+            "command-a",
+            vec![
+                Message::text(MessageRole::System, "rules"),
+                Message::text(MessageRole::User, "find it"),
+                Message {
+                    role: MessageRole::Assistant,
+                    content: MessageContent::Text("plan".into()),
+                    tool_calls: vec![ToolCall {
+                        id: "call-1".into(),
+                        name: "lookup".into(),
+                        arguments: ToolArguments::from_json("{\"q\":\"x\"}"),
+                    }],
+                    tool_call_id: None,
+                    name: None,
+                    is_error: false,
+                },
+                Message {
+                    role: MessageRole::Tool,
+                    content: MessageContent::Text("found".into()),
+                    tool_calls: vec![],
+                    tool_call_id: Some("call-1".into()),
+                    name: Some("lookup".into()),
+                    is_error: false,
+                },
+            ],
+        );
+        request.tools.push(super::super::ToolDefinition {
+            name: "lookup".into(),
+            description: Some("search".into()),
+            parameters: json!({"type":"object"}),
+        });
+        request
+            .extensions
+            .insert("thinking".into(), json!({"type":"enabled"}));
+        let body = cohere_payload(&request, true).unwrap();
+        assert_eq!(body["stream"], true);
+        assert_eq!(body["messages"][2]["tool_plan"], "plan");
+        assert_eq!(
+            body["messages"][2]["tool_calls"][0]["function"]["arguments"],
+            "{\"q\":\"x\"}"
+        );
+        assert_eq!(body["messages"][3]["content"][0]["type"], "document");
+        assert_eq!(body["tools"][0]["function"]["name"], "lookup");
+        assert_eq!(body["thinking"]["type"], "enabled");
+
+        let mut usage = None;
+        let mut finish = None;
+        let mut indexes = HashMap::new();
+        let mut next = 0;
+        let events = parse_cohere_event(&json!({"type":"tool-call-start","index":4,"delta":{"message":{"tool_calls":{"id":"call-1","function":{"name":"lookup","arguments":""}}}}}), &mut usage, &mut finish, &mut indexes, &mut next).unwrap();
+        let ChatEventKind::ToolCallDelta { call } = &events[0].event else {
+            panic!("expected tool call")
+        };
+        assert_eq!(call.index, 4);
+        assert_eq!(call.name.as_deref(), Some("lookup"));
+        let events = parse_cohere_event(&json!({"type":"message-end","delta":{"finish_reason":"TOOL_CALL","usage":{"tokens":{"input_tokens":3,"output_tokens":2}}}}), &mut usage, &mut finish, &mut indexes, &mut next).unwrap();
+        assert!(matches!(events[0].event, ChatEventKind::Usage { .. }));
+        assert!(matches!(events[1].event, ChatEventKind::Completed { .. }));
+        assert_eq!(finish, Some(FinishReason::ToolCalls));
+        assert_eq!(usage.unwrap().total_tokens, 5);
     }
 
     #[test]

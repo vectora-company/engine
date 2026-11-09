@@ -3,7 +3,7 @@
 **Estado:** experimental, contrato de chat `1`.
 
 Este documento registra a primeira fatia de adapters nativos Anthropic Messages
-e Google Gemini. As implementações vivem no núcleo Rust; Python e TypeScript
+Google Gemini e Cohere Chat v2. As implementações vivem no núcleo Rust; Python e TypeScript
 encaminham a mesma requisição e os mesmos eventos pelos bindings já incluídos
 no bootstrap.
 
@@ -12,7 +12,7 @@ no bootstrap.
 - O consumidor escolhe provider, modelo, endpoint, credenciais, headers e
   configuração específica. A Engine não lê arquivos `.env`, não seleciona
   modelos, não executa tool calls e não faz fallback.
-- `NativeChatSettings` aceita `provider` (`anthropic` ou `google`), chave,
+- `NativeChatSettings` aceita `provider` (`anthropic`, `google` ou `cohere`), chave,
   endpoint opcional, headers adicionais e timeouts. O endpoint padrão é o
   endpoint público oficial de cada protocolo; um endpoint configurado pode
   incluir um prefixo de path.
@@ -63,6 +63,22 @@ no bootstrap.
 - `STOP`, `MAX_TOKENS` e razões de bloqueio são preservadas como razões de
   término tipadas. Stream sem candidates é erro de protocolo, inclusive quando
   há `promptFeedback` de bloqueio.
+
+## Cohere Chat v2
+
+- `POST /chat` sob o endpoint base `/v2`; autenticação `Authorization: Bearer`
+  e `Accept: text/event-stream` em streaming.
+- Mensagens system/user/assistant preservam o texto; mensagens assistant com
+  tools preservam `tool_plan` e serializam argumentos como string JSON.
+  Resultados de tool usam blocos `document` contendo o resultado, conforme o
+  protocolo v2. Imagens e schemas de tools mantêm a representação compatível
+  com o cliente de referência.
+- Eventos `content-delta`, `tool-call-start` e `tool-call-delta` são convertidos
+  para eventos comuns. O índice explícito é respeitado; quando não existe, a
+  Engine atribui índice estável por ID da chamada. `message-end` fornece o
+  finish reason e o snapshot de usage.
+- `COMPLETE`, `MAX_TOKENS` e `TOOL_CALL` são mapeados para os finish reasons
+  comuns. Outros valores permanecem em `other`.
 
 ## Limites e conformidade
 

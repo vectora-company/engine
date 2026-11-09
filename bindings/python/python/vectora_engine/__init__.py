@@ -28,7 +28,7 @@ async def chat_complete(settings: JsonObject, request: JsonObject) -> dict[str, 
 async def native_chat_complete(
     settings: JsonObject, request: JsonObject
 ) -> dict[str, Any]:
-    """Call Anthropic Messages or Google Gemini through the Rust engine."""
+    """Call Anthropic Messages, Google Gemini, or Cohere Chat through Rust."""
     result = await _native.native_chat_complete(
         json.dumps(settings, separators=(",", ":")),
         json.dumps(request, separators=(",", ":")),

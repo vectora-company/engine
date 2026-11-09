@@ -294,3 +294,54 @@ def test_google_native_completion_uses_api_key_query_and_gemini_wire_format() ->
     ]
     assert events[0]["call"]["index"] == 0
     assert events[2]["finish_reason"] == "tool_calls"
+
+
+def test_cohere_native_chat_completion_and_stream_use_v2_protocol() -> None:
+    body = json.dumps(
+        {
+            "id": "chat-1",
+            "finish_reason": "COMPLETE",
+            "message": {"content": [{"type": "text", "text": "hello Cohere"}]},
+            "usage": {"tokens": {"input_tokens": 4, "output_tokens": 2}},
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {
+        "provider": "cohere",
+        "base_url": endpoint(server),
+        "api_key": "fixture-cohere-key",
+    }
+    try:
+        result = asyncio.run(native_chat_complete(settings, REQUEST))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["path"] == "/engines/v1/chat"
+    assert captured["headers"]["authorization"] == "Bearer fixture-cohere-key"
+    assert captured["body"]["stream"] is False
+    assert result["content"] == "hello Cohere"
+    assert result["usage"]["total_tokens"] == 6
+
+    stream_body = (
+        b'data: {"type":"content-delta","delta":{"message":{"content":{"text":"hello"}}}}\n\n'
+        b'data: {"type":"message-end","delta":{"finish_reason":"COMPLETE","usage":{"tokens":{"input_tokens":3,"output_tokens":2}}}}\n\n'
+    )
+    server, thread, captured = serve(stream_body, "text/event-stream")
+
+    async def collect() -> list[dict[str, Any]]:
+        return [
+            event
+            async for event in native_chat_stream(
+                {**settings, "base_url": endpoint(server)}, REQUEST
+            )
+        ]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["body"]["stream"] is True
+    assert [event["type"] for event in events] == ["text_delta", "usage", "completed"]

@@ -14,7 +14,7 @@ export interface OpenAiCompatibleSettings {
 }
 
 export interface NativeChatSettings {
-  provider: "anthropic" | "google";
+  provider: "anthropic" | "google" | "cohere";
   base_url?: string;
   api_key: string;
   headers?: Record<string, string>;
@@ -74,7 +74,7 @@ const native = (await import("../native/index.js")) as NativeBinding;
 /** Version of the canonical Rust chat contract. */
 export const chatContractVersion = (): number => native.chatContractVersion();
 
-/** Complete a request using Anthropic Messages or Google Gemini via Rust. */
+/** Complete a request using a native provider protocol via the Rust core. */
 export async function nativeChatComplete(
   settings: NativeChatSettings,
   request: ChatRequest,
