@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::chat::{
     ChatError, ContentPart,
-    error::classify_status,
+    error::classify_provider_error,
     sse::SseDecoder,
     types::{
         CHAT_CONTRACT_VERSION, ChatCompletion, ChatEvent, ChatEventKind, ChatRequest, FinishReason,
@@ -600,15 +600,17 @@ async fn http_error(response: Response, deadline: Instant, max_bytes: usize) -> 
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok())
         .map(Duration::from_secs);
-    // Consume a bounded amount to release the connection; never surface provider response text.
-    let _ = read_body(
+    // Inspect only bounded known markers for fallback classification. The body
+    // itself is never returned, logged, or included in Debug output.
+    let body = read_body(
         response,
         deadline,
         Duration::from_secs(2),
         MAX_ERROR_BODY_BYTES.min(max_bytes),
     )
-    .await;
-    classify_status(status.as_u16(), retry_after)
+    .await
+    .unwrap_or_default();
+    classify_provider_error(status.as_u16(), retry_after, &body)
 }
 
 async fn read_body(
@@ -673,6 +675,7 @@ fn parse_completion(value: Value) -> Result<ChatCompletion, ChatError> {
     Ok(ChatCompletion {
         contract_version: CHAT_CONTRACT_VERSION,
         id,
+        selected_model_id: None,
         content,
         reasoning: message
             .get("reasoning")

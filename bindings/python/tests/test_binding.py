@@ -11,6 +11,8 @@ from vectora_engine import (
     chat_complete,
     chat_contract_version,
     chat_stream,
+    fallback_chat_complete,
+    fallback_chat_stream,
     native_chat_complete,
     native_chat_stream,
 )
@@ -345,3 +347,117 @@ def test_cohere_native_chat_completion_and_stream_use_v2_protocol() -> None:
         server.server_close()
     assert captured["body"]["stream"] is True
     assert [event["type"] for event in events] == ["text_delta", "usage", "completed"]
+
+
+def test_fallback_uses_explicit_order_and_returns_selected_model() -> None:
+    rejected, rejected_thread, first = serve(
+        b'{"error":{"message":"rate limited"}}', "application/json", status=429
+    )
+    accepted_body = json.dumps(
+        {
+            "message": {"content": [{"type": "text", "text": "fallback answer"}]},
+            "usage": {"tokens": {"input_tokens": 2, "output_tokens": 3}},
+        }
+    ).encode()
+    accepted, accepted_thread, second = serve(accepted_body, "application/json")
+    settings = {
+        "candidates": [
+            {
+                "model_id": "openrouter:first-model",
+                "client": {
+                    "protocol": "open_ai_compatible",
+                    "settings": {
+                        "base_url": endpoint(rejected),
+                        "api_key": "first-key",
+                    },
+                },
+            },
+            {
+                "model_id": "cohere:command-a",
+                "client": {
+                    "protocol": "native",
+                    "settings": {
+                        "provider": "cohere",
+                        "base_url": endpoint(accepted),
+                        "api_key": "second-key",
+                    },
+                },
+            },
+        ]
+    }
+    try:
+        result = asyncio.run(fallback_chat_complete(settings, REQUEST))
+    finally:
+        for server, thread in (
+            (rejected, rejected_thread),
+            (accepted, accepted_thread),
+        ):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert first["body"]["model"] == "first-model"
+    assert second["body"]["model"] == "command-a"
+    assert result["content"] == "fallback answer"
+    assert result["selected_model_id"] == "cohere:command-a"
+
+
+def test_fallback_stream_switches_before_output_and_never_replays_partial_chunks() -> (
+    None
+):
+    rejected, rejected_thread, first = serve(
+        b'{"error":{"message":"rate limited"}}', "application/json", status=429
+    )
+    stream_body = (
+        b'data: {"type":"content-delta","delta":{"message":{"content":{"text":"ok"}}}}\n\n'
+        b'data: {"type":"message-end","delta":{"finish_reason":"COMPLETE","usage":{"tokens":{"input_tokens":1,"output_tokens":1}}}}\n\n'
+    )
+    accepted, accepted_thread, second = serve(stream_body, "text/event-stream")
+    settings = {
+        "candidates": [
+            {
+                "model_id": "openrouter:first-model",
+                "client": {
+                    "protocol": "open_ai_compatible",
+                    "settings": {
+                        "base_url": endpoint(rejected),
+                        "api_key": "first-key",
+                    },
+                },
+            },
+            {
+                "model_id": "cohere:command-a",
+                "client": {
+                    "protocol": "native",
+                    "settings": {
+                        "provider": "cohere",
+                        "base_url": endpoint(accepted),
+                        "api_key": "second-key",
+                    },
+                },
+            },
+        ]
+    }
+
+    async def collect() -> list[dict[str, Any]]:
+        return [event async for event in fallback_chat_stream(settings, REQUEST)]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        for server, thread in (
+            (rejected, rejected_thread),
+            (accepted, accepted_thread),
+        ):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert first["body"]["stream"] is True
+    assert second["body"]["stream"] is True
+    assert [event["type"] for event in events] == [
+        "model_switched",
+        "text_delta",
+        "usage",
+        "completed",
+    ]
+    assert events[0]["from_model_id"] == "openrouter:first-model"
+    assert events[0]["to_model_id"] == "cohere:command-a"

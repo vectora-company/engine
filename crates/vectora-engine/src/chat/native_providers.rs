@@ -16,7 +16,7 @@ use url::Url;
 use super::{
     ChatError, ChatEvent, ChatEventKind, ChatRequest, FinishReason, Message, MessageContent,
     MessageRole, ToolArguments, ToolCall, ToolCallDelta, Usage,
-    error::classify_status,
+    error::classify_provider_error,
     openai_compatible::{ChatStream, validate_request},
     sse::SseDecoder,
     types::{CHAT_CONTRACT_VERSION, ChatCompletion},
@@ -685,6 +685,7 @@ fn parse_cohere_completion(value: Value) -> Result<ChatCompletion, ChatError> {
     Ok(ChatCompletion {
         contract_version: CHAT_CONTRACT_VERSION,
         id: value.get("id").and_then(Value::as_str).map(str::to_owned),
+        selected_model_id: None,
         content,
         reasoning: None,
         tool_calls: calls,
@@ -1011,6 +1012,7 @@ fn parse_anthropic_completion(value: Value) -> Result<ChatCompletion, ChatError>
     Ok(ChatCompletion {
         contract_version: CHAT_CONTRACT_VERSION,
         id: value.get("id").and_then(Value::as_str).map(str::to_owned),
+        selected_model_id: None,
         content,
         reasoning: None,
         tool_calls: calls,
@@ -1045,6 +1047,7 @@ fn parse_google_completion(value: Value) -> Result<ChatCompletion, ChatError> {
     Ok(ChatCompletion {
         contract_version: CHAT_CONTRACT_VERSION,
         id: None,
+        selected_model_id: None,
         content,
         reasoning: None,
         tool_calls: calls,
@@ -1338,20 +1341,21 @@ async fn http_error(response: Response, deadline: Instant, provider: NativeProvi
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok())
         .map(Duration::from_secs);
-    let _ = read_body(
+    let body = read_body(
         response,
         deadline,
         Duration::from_secs(2),
         MAX_ERROR_BODY_BYTES,
     )
-    .await;
+    .await
+    .unwrap_or_default();
     let code = status.as_u16();
     if code == 529 {
         ChatError::RateLimited { retry_after }
     } else if code == 403 && provider == NativeProvider::Google {
         ChatError::Authentication
     } else {
-        classify_status(code, retry_after)
+        classify_provider_error(code, retry_after, &body)
     }
 }
 

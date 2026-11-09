@@ -23,6 +23,20 @@ export interface NativeChatSettings {
   total_timeout_ms?: number;
 }
 
+export type FallbackClientSettings =
+  | { protocol: "open_ai_compatible"; settings: OpenAiCompatibleSettings }
+  | { protocol: "native"; settings: NativeChatSettings };
+
+export interface FallbackCandidateSettings {
+  model_id: string;
+  client: FallbackClientSettings;
+}
+
+export interface FallbackChatSettings {
+  /** Caller-ordered candidates; include only configured and eligible providers. */
+  candidates: FallbackCandidateSettings[];
+}
+
 export interface ChatRequest {
   contract_version: number;
   model: string;
@@ -38,6 +52,7 @@ export interface ChatEvent {
     | "text_delta"
     | "reasoning_delta"
     | "tool_call_delta"
+    | "model_switched"
     | "usage"
     | "completed";
   [key: string]: JsonValue;
@@ -46,6 +61,7 @@ export interface ChatEvent {
 export interface ChatCompletion {
   contract_version: number;
   id: string | null;
+  selected_model_id?: string;
   content: string;
   reasoning?: string;
   tool_calls: JsonValue[];
@@ -67,6 +83,8 @@ interface NativeBinding {
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
+  fallbackChatComplete(settingsJson: string, requestJson: string): Promise<string>;
+  fallbackChatStreamStart(settingsJson: string, requestJson: string): Promise<string>;
 }
 
 const native = (await import("../native/index.js")) as NativeBinding;
@@ -80,6 +98,18 @@ export async function nativeChatComplete(
   request: ChatRequest,
 ): Promise<ChatCompletion> {
   const result = await native.nativeChatComplete(
+    JSON.stringify(settings),
+    JSON.stringify(request),
+  );
+  return JSON.parse(result) as ChatCompletion;
+}
+
+/** Complete with an explicit ordered fallback list implemented by Rust. */
+export async function fallbackChatComplete(
+  settings: FallbackChatSettings,
+  request: ChatRequest,
+): Promise<ChatCompletion> {
+  const result = await native.fallbackChatComplete(
     JSON.stringify(settings),
     JSON.stringify(request),
   );
@@ -127,6 +157,26 @@ export async function* nativeChatStream(
   request: ChatRequest,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.nativeChatStreamStart(
+    JSON.stringify(settings),
+    JSON.stringify(request),
+  );
+  try {
+    for (;;) {
+      const event = await native.chatStreamNext(id);
+      if (event === null) return;
+      yield JSON.parse(event) as ChatEvent;
+    }
+  } finally {
+    native.chatStreamCancel(id);
+  }
+}
+
+/** Stream from an explicit fallback list; partial provider output is not replayed. */
+export async function* fallbackChatStream(
+  settings: FallbackChatSettings,
+  request: ChatRequest,
+): AsyncGenerator<ChatEvent> {
+  const id = await native.fallbackChatStreamStart(
     JSON.stringify(settings),
     JSON.stringify(request),
   );

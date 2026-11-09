@@ -21,6 +21,7 @@ suportadas pelo contrato Rust versionado.
 | [03 — Contrato de chat OpenAI-compatible](03-chat-openai-compatible.md)             | `../plans/01-plano-portabilidade-llm-rust.md` e o backend Python consumidor     | Contrato versionado de chat, transporte inicial, streaming SSE, erros e conformidade.         |
 | [04 — Conversas, streaming e threads](04-conversas-streaming-e-threads.md)          | `../../issues/04-chat-streaming-e-threads.md`                                   | Turnos, envelopes de evento, progresso, replay, cancelamento e adaptação a diferentes canais. |
 | [05 — Providers nativos de chat](05-native-chat-providers.md)                       | Backend Python de referência (`backend/llm/anthropic/`, `google/` e `cohere/`) | Anthropic Messages, Google Gemini e Cohere Chat v2, conversão multimodal/tool, streaming e usage. |
+| [06 — Fallback de chat](06-chat-fallback.md)                                         | Backend Python consumidor (`backend/llm/fallback_chat_client.py`)             | Seleção explícita e ordenada de providers, erros elegíveis e mudança segura durante streaming. |
 
 ## Regras de leitura
 

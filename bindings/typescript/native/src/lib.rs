@@ -11,8 +11,8 @@ use napi::{Error, Result};
 use napi_derive::napi;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
-    CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, NativeChatClient, NativeChatSettings,
-    OpenAiCompatibleClient, OpenAiCompatibleSettings,
+    CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
+    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
 };
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String>>>>;
@@ -52,6 +52,19 @@ fn parse_native_inputs(
         .map_err(|_| Error::from_reason("invalid chat request"))?;
     let client =
         NativeChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok((client, request))
+}
+
+fn parse_fallback_inputs(
+    settings_json: &str,
+    request_json: &str,
+) -> Result<(FallbackChatClient, ChatRequest)> {
+    let settings: FallbackChatSettings = serde_json::from_str(settings_json)
+        .map_err(|_| Error::from_reason("invalid fallback settings"))?;
+    let request: ChatRequest = serde_json::from_str(request_json)
+        .map_err(|_| Error::from_reason("invalid chat request"))?;
+    let client =
+        FallbackChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
     Ok((client, request))
 }
 
@@ -182,5 +195,54 @@ pub async fn native_chat_stream_start(
         .lock()
         .map_err(|_| Error::from_reason("stream registry unavailable"))?
         .insert(id.clone(), state);
+    Ok(id)
+}
+
+#[napi]
+pub async fn fallback_chat_complete(settings_json: String, request_json: String) -> Result<String> {
+    let (client, request) = parse_fallback_inputs(&settings_json, &request_json)?;
+    let completion = client
+        .complete(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    serde_json::to_string(&completion).map_err(|_| Error::from_reason("could not encode response"))
+}
+
+#[napi]
+pub async fn fallback_chat_stream_start(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request) = parse_fallback_inputs(&settings_json, &request_json)?;
+    let stream = client
+        .stream(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        let mut stream = stream;
+        while let Some(item) = stream.next().await {
+            let serialized = item
+                .map_err(|error| Error::from_reason(error.to_string()))
+                .and_then(|event| {
+                    serde_json::to_string(&event)
+                        .map_err(|_| Error::from_reason("could not encode stream event"))
+                });
+            if sender.send(serialized).await.is_err() {
+                break;
+            }
+        }
+    });
+    streams()
+        .lock()
+        .map_err(|_| Error::from_reason("stream registry unavailable"))?
+        .insert(
+            id.clone(),
+            StreamState {
+                receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+                abort: task.abort_handle(),
+            },
+        );
     Ok(id)
 }

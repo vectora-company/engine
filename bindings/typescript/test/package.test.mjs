@@ -5,6 +5,8 @@ import {
   chatComplete,
   chatContractVersion,
   chatStream,
+  fallbackChatComplete,
+  fallbackChatStream,
   nativeChatComplete,
   nativeChatStream,
 } from "../dist/index.js";
@@ -64,6 +66,31 @@ async function withFixtureServer(body, contentType, run, status = 200) {
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
+}
+
+async function startFixtureServer(body, contentType, status = 200) {
+  const captured = {};
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    captured.path = request.url;
+    captured.headers = request.headers;
+    captured.body = JSON.parse(Buffer.concat(chunks).toString());
+    response.writeHead(status, {
+      "content-type": contentType,
+      "content-length": Buffer.byteLength(body),
+    });
+    response.end(body);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  return {
+    baseUrl: `http://127.0.0.1:${port}/engines/v1`,
+    captured,
+    close: () => new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    ),
+  };
 }
 
 test("completion uses endpoint prefixes, gateway headers and extensions", async () => {
@@ -277,4 +304,109 @@ test("Cohere native chat uses v2 path, bearer auth, usage and SSE events", async
   });
   assert.deepEqual(events.map((event) => event.type), ["text_delta", "usage", "completed"]);
   assert.equal(events[1].usage.total_tokens, 5);
+});
+
+test("fallback follows explicit order through Rust and identifies the selected model", async () => {
+  const first = await startFixtureServer(
+    JSON.stringify({ error: { message: "rate limited" } }), "application/json", 429,
+  );
+  const second = await startFixtureServer(
+    JSON.stringify({
+      message: { content: [{ type: "text", text: "fallback answer" }] },
+      usage: { tokens: { input_tokens: 2, output_tokens: 3 } },
+    }),
+    "application/json",
+  );
+  const settings = {
+    candidates: [
+      { model_id: "openrouter:first-model", client: {
+        protocol: "open_ai_compatible",
+        settings: { base_url: first.baseUrl, api_key: "first-key" },
+      } },
+      { model_id: "cohere:command-a", client: {
+        protocol: "native",
+        settings: { provider: "cohere", base_url: second.baseUrl, api_key: "second-key" },
+      } },
+    ],
+  };
+  try {
+    const result = await fallbackChatComplete(settings, request);
+    assert.equal(first.captured.body.model, "first-model");
+    assert.equal(second.captured.body.model, "command-a");
+    assert.equal(result.content, "fallback answer");
+    assert.equal(result.selected_model_id, "cohere:command-a");
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+  }
+});
+
+test("fallback streaming switches before the first response event", async () => {
+  const first = await startFixtureServer(
+    JSON.stringify({ error: { message: "rate limited" } }), "application/json", 429,
+  );
+  const second = await startFixtureServer(
+    'data: {"type":"content-delta","delta":{"message":{"content":{"text":"ok"}}}}\n\n' +
+      'data: {"type":"message-end","delta":{"finish_reason":"COMPLETE","usage":{"tokens":{"input_tokens":1,"output_tokens":1}}}}\n\n',
+    "text/event-stream",
+  );
+  const settings = {
+    candidates: [
+      { model_id: "openrouter:first-model", client: {
+        protocol: "open_ai_compatible",
+        settings: { base_url: first.baseUrl, api_key: "first-key" },
+      } },
+      { model_id: "cohere:command-a", client: {
+        protocol: "native",
+        settings: { provider: "cohere", base_url: second.baseUrl, api_key: "second-key" },
+      } },
+    ],
+  };
+  try {
+    const events = [];
+    for await (const event of fallbackChatStream(settings, request)) events.push(event);
+    assert.equal(first.captured.body.stream, true);
+    assert.equal(second.captured.body.stream, true);
+    assert.deepEqual(events.map((event) => event.type), [
+      "model_switched", "text_delta", "usage", "completed",
+    ]);
+    assert.equal(events[0].from_model_id, "openrouter:first-model");
+    assert.equal(events[0].to_model_id, "cohere:command-a");
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+  }
+});
+
+test("fallback never retries after partial provider output", async () => {
+  const first = await startFixtureServer(
+    'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n' +
+      "data: not-json\n\n",
+    "text/event-stream",
+  );
+  const second = await startFixtureServer(
+    JSON.stringify({ choices: [{ message: { content: "must not run" } }] }),
+    "application/json",
+  );
+  const settings = {
+    candidates: [
+      { model_id: "openrouter:first-model", client: {
+        protocol: "open_ai_compatible",
+        settings: { base_url: first.baseUrl, api_key: "first-key" },
+      } },
+      { model_id: "cohere:command-a", client: {
+        protocol: "open_ai_compatible",
+        settings: { base_url: second.baseUrl, api_key: "second-key" },
+      } },
+    ],
+  };
+  const received = [];
+  try {
+    await assert.rejects(async () => {
+      for await (const event of fallbackChatStream(settings, request)) received.push(event);
+    });
+    assert.deepEqual(received.map((event) => event.type), ["text_delta"]);
+    assert.equal(received[0].text, "partial");
+    assert.equal(second.captured.body, undefined);
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+  }
 });
