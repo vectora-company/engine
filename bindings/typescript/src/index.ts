@@ -42,8 +42,14 @@ export interface ChatRequest {
   model: string;
   messages: JsonValue[];
   options?: JsonValue;
-  tools?: JsonValue[];
+  tools?: ToolDefinition[];
   extensions?: Record<string, JsonValue>;
+}
+
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  parameters: JsonValue;
 }
 
 export interface ChatEvent {
@@ -167,6 +173,42 @@ export interface RunLifecycle {
   sequence: number;
 }
 
+export type ToolEffect = "read_only" | "external_effect" | "destructive";
+export type ToolIdempotency = "not_guaranteed" | "idempotent" | "requires_key";
+export interface ToolContract {
+  contract_version: number;
+  schema_version: string;
+  name: string;
+  description?: string;
+  input_schema: JsonValue;
+  required_capability: string;
+  timeout_ms: number;
+  effect: ToolEffect;
+  idempotency: ToolIdempotency;
+}
+export interface ToolDispatchSettings {
+  max_calls_per_turn?: number;
+}
+export type ToolDecision =
+  | {
+      decision: "invoke";
+      call: JsonValue;
+      schema_version: string;
+      required_capability: string;
+      timeout_ms: number;
+      effect: ToolEffect;
+      idempotency: ToolIdempotency;
+      idempotency_key?: string;
+    }
+  | { decision: "deny"; call_id: string; tool_name: string; code: string };
+export interface ToolDispatch {
+  contract_version: number;
+  run_id: string;
+  turn_id: string;
+  execution_mode: "concurrent_read_only" | "sequential";
+  decisions: ToolDecision[];
+}
+
 export interface EmbeddingCandidateSettings {
   model_id: string;
   client: EmbeddingSettings;
@@ -189,6 +231,10 @@ interface NativeBinding {
   runContractVersion(): number;
   runCreate(identityJson: string): string;
   runTransition(lifecycleJson: string, nextStatus: string): string;
+  toolContractVersion(): number;
+  toolDispatchContractVersion(): number;
+  prepareToolDispatchJson(lifecycleJson: string, completionJson: string, contractsJson: string, settingsJson: string): string;
+  toolChatDefinitionsJson(contractsJson: string): string;
   embeddingContractVersion(): number;
   rerankContractVersion(): number;
   embed(settingsJson: string, requestJson: string): Promise<string>;
@@ -231,6 +277,33 @@ export function transitionRun(
   return JSON.parse(
     native.runTransition(JSON.stringify(lifecycle), nextStatus),
   ) as RunLifecycle;
+}
+
+export const toolContractVersion = (): number => native.toolContractVersion();
+export const toolDispatchContractVersion = (): number => native.toolDispatchContractVersion();
+
+/** Validate a model turn and prepare default-deny tool decisions in Rust. */
+export function prepareToolDispatch(
+  lifecycle: RunLifecycle,
+  completion: ChatCompletion,
+  contracts: ToolContract[],
+  settings: ToolDispatchSettings = {},
+): ToolDispatch {
+  return JSON.parse(
+    native.prepareToolDispatchJson(
+      JSON.stringify(lifecycle),
+      JSON.stringify(completion),
+      JSON.stringify(contracts),
+      JSON.stringify({ max_calls_per_turn: settings.max_calls_per_turn ?? 32 }),
+    ),
+  ) as ToolDispatch;
+}
+
+/** Build provider-visible tool schemas from the validated Rust contracts. */
+export function toolChatDefinitions(contracts: ToolContract[]): ToolDefinition[] {
+  return JSON.parse(
+    native.toolChatDefinitionsJson(JSON.stringify(contracts)),
+  ) as ToolDefinition[];
 }
 
 export const embeddingContractVersion = (): number => native.embeddingContractVersion();

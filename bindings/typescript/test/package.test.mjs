@@ -6,6 +6,7 @@ import {
   chatComplete,
   chatContractVersion,
   createRun,
+  prepareToolDispatch,
   chatStream,
   embed,
   embeddingContractVersion,
@@ -17,6 +18,9 @@ import {
   rerankContractVersion,
   runContractVersion,
   transitionRun,
+  toolContractVersion,
+  toolChatDefinitions,
+  toolDispatchContractVersion,
 } from "../dist/index.js";
 
 const settings = {
@@ -53,6 +57,71 @@ test("run lifecycle contract is exposed through the Node binding", () => {
   assert.equal(transitionRun(started, "running").sequence, 1);
   assert.throws(() => transitionRun(run, "completed"), /invalid run transition/);
   assert.throws(() => transitionRun(run, "not-a-status"), /unknown run status/);
+});
+
+test("tool dispatch validates schemas and trusted capabilities in Rust", () => {
+  assert.equal(toolContractVersion(), 1);
+  assert.equal(toolDispatchContractVersion(), 1);
+  const run = transitionRun(
+    createRun({
+      contract_version: 1,
+      run_id: "run-1",
+      idempotency_key: "turn-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      capabilities: ["data.read"],
+    }),
+    "running",
+  );
+  const completion = {
+    contract_version: 1,
+    content: "",
+    tool_calls: [
+      {
+        id: "call-1",
+        name: "lookup",
+        arguments: { state: "object", value: { key: "alpha" } },
+      },
+    ],
+  };
+  const contract = {
+    contract_version: 1,
+    schema_version: "lookup.v1",
+    name: "lookup",
+    input_schema: {
+      type: "object",
+      properties: { key: { type: "string", minLength: 1 } },
+      required: ["key"],
+      additionalProperties: false,
+    },
+    required_capability: "data.read",
+    timeout_ms: 5000,
+    effect: "read_only",
+    idempotency: "idempotent",
+  };
+  const dispatch = prepareToolDispatch(run, completion, [contract]);
+  assert.equal(dispatch.execution_mode, "concurrent_read_only");
+  assert.equal(dispatch.decisions[0].decision, "invoke");
+  assert.equal(dispatch.decisions[0].schema_version, "lookup.v1");
+  assert.deepEqual(toolChatDefinitions([contract]), [
+    { name: "lookup", parameters: contract.input_schema },
+  ]);
+
+  const denied = prepareToolDispatch(
+    { ...run, identity: { ...run.identity, capabilities: [] } },
+    completion,
+    [contract],
+  );
+  assert.deepEqual(denied.decisions[0], {
+    decision: "deny",
+    call_id: "call-1",
+    tool_name: "lookup",
+    code: "capability_not_granted",
+  });
+  assert.throws(
+    () => prepareToolDispatch({ ...run, status: "planned" }, completion, [contract]),
+    /requires a running run/,
+  );
 });
 
 test("streamed turn assembly reaches the Rust core through the Node binding", () => {

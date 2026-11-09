@@ -52,6 +52,42 @@ def transition_run(lifecycle: JsonObject, next_status: str) -> dict[str, Any]:
     return json.loads(result)
 
 
+def tool_contract_version() -> int:
+    """Return the version of the consumer-provided tool contract."""
+    return _native.tool_contract_version()
+
+
+def tool_dispatch_contract_version() -> int:
+    """Return the version of the prepared tool-dispatch batch contract."""
+    return _native.tool_dispatch_contract_version()
+
+
+def prepare_tool_dispatch(
+    lifecycle: JsonObject,
+    completion: JsonObject,
+    contracts: Sequence[JsonObject],
+    *,
+    max_calls_per_turn: int = 32,
+) -> dict[str, Any]:
+    """Validate tool calls against Rust contracts and trusted run capabilities."""
+    settings = {"max_calls_per_turn": max_calls_per_turn}
+    result = _native.prepare_tool_dispatch_json(
+        json.dumps(lifecycle, separators=(",", ":")),
+        json.dumps(completion, separators=(",", ":")),
+        json.dumps(contracts, separators=(",", ":")),
+        json.dumps(settings, separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
+def tool_chat_definitions(contracts: Sequence[JsonObject]) -> list[dict[str, Any]]:
+    """Build provider-visible tool schemas from validated Rust contracts."""
+    result = _native.tool_chat_definitions_json(
+        json.dumps(contracts, separators=(",", ":"))
+    )
+    return json.loads(result)
+
+
 def chat_contract_version() -> int:
     """Return the version of the shared chat contract."""
     return _native.chat_contract_version()
@@ -195,8 +231,12 @@ __all__ = [
     "fallback_rerank",
     "native_chat_complete",
     "native_chat_stream",
+    "prepare_tool_dispatch",
     "rerank",
     "rerank_contract_version",
     "run_contract_version",
+    "tool_chat_definitions",
+    "tool_contract_version",
+    "tool_dispatch_contract_version",
     "transition_run",
 ]

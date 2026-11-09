@@ -15,7 +15,11 @@ use vectora_engine::chat::{
     NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
     TurnAccumulatorSettings, assemble_turn,
 };
-use vectora_engine::harness::{RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus};
+use vectora_engine::harness::{
+    RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
+    TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDispatchSettings, prepare_tool_dispatch,
+    tool_chat_definitions,
+};
 use vectora_engine::llm::{
     embeddings::{
         EmbeddingClient, EmbeddingClientSettings, EmbeddingRequest, FallbackEmbeddingClient,
@@ -184,6 +188,45 @@ pub fn run_transition(lifecycle_json: String, next_status: String) -> Result<Str
     run.transition(next_status)
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&run)
+}
+
+#[napi]
+pub fn tool_contract_version() -> u32 {
+    u32::from(TOOL_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn tool_dispatch_contract_version() -> u32 {
+    u32::from(TOOL_DISPATCH_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn prepare_tool_dispatch_json(
+    lifecycle_json: String,
+    completion_json: String,
+    contracts_json: String,
+    settings_json: String,
+) -> Result<String> {
+    let lifecycle: RunLifecycle = serde_json::from_str(&lifecycle_json)
+        .map_err(|_| Error::from_reason("invalid run lifecycle"))?;
+    let completion = serde_json::from_str(&completion_json)
+        .map_err(|_| Error::from_reason("invalid chat completion"))?;
+    let contracts: Vec<ToolContract> = serde_json::from_str(&contracts_json)
+        .map_err(|_| Error::from_reason("invalid tool contracts"))?;
+    let settings: ToolDispatchSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid dispatch settings"))?;
+    let dispatch = prepare_tool_dispatch(&lifecycle, &completion, &contracts, settings)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&dispatch)
+}
+
+#[napi]
+pub fn tool_chat_definitions_json(contracts_json: String) -> Result<String> {
+    let contracts: Vec<ToolContract> = serde_json::from_str(&contracts_json)
+        .map_err(|_| Error::from_reason("invalid tool contracts"))?;
+    let definitions =
+        tool_chat_definitions(&contracts).map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&definitions)
 }
 
 #[napi]
