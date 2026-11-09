@@ -1,11 +1,25 @@
-# Python bindings
+# Binding Python
 
-This directory contains the Python binding planned for PyPI and consumption by
-the Vectora Backend. It delegates execution to the canonical Rust
-implementation; Python code here is limited to the API/FFI boundary, Python
-ergonomics, packaging, and compatibility tests.
+O pacote `vectora-engine` no PyPI é uma fachada PyO3 para o núcleo Rust. A API
+Python serializa o contrato JSON versionado e delega configuração, transporte,
+streaming, parsing e erros ao Rust. Não implementa política de provider.
 
-Define and test ownership, error mapping, cancellation, async streaming, and
-shutdown behavior against the shared engine contracts. Do not reimplement
-provider, runtime, or storage policy in Python. Keep PyPI metadata, wheel/source
-build configuration, and binding-specific tests here.
+## Desenvolvimento
+
+Na raiz do repositório, instale o tooling com `scons install`. Para compilar e
+instalar a extensão no ambiente Python ativo:
+
+```bash
+cd bindings/python
+uv run --project ../.. maturin develop
+```
+
+Use `chat_complete(settings, request)` como coroutine ou consuma
+`chat_stream(settings, request)` com `async for`. O fechamento do iterador
+cancela o stream nativo e sua requisição HTTP. `settings` e `request` seguem os
+schemas de `docs/specs/03-chat-openai-compatible.md`; erros são exceções com
+mensagens redigidas do provider.
+
+O Rust da extensão fica em `native/`, e a API Python de ergonomia mínima em
+`python/vectora_engine/`. O build de wheels multi-plataforma e publicação no
+PyPI serão habilitados em um workflow de release separado.

@@ -50,16 +50,18 @@ scons install
 ```
 
 Esse alvo instala os componentes Rust selecionados, baixa as dependências
-Cargo conforme o `Cargo.lock` e prepara o ambiente Python do tooling. Ele não
-instala dependências dos apps consumidores, Node.js, navegadores Playwright ou
-sidecars de produto.
+Cargo conforme o `Cargo.lock`, prepara o ambiente Python do tooling, compila e
+instala a extensão Python no ambiente virtual do projeto e instala as
+dependências Node do binding TypeScript. Node.js e pnpm precisam estar
+instalados. Ele não instala dependências dos apps consumidores, navegadores
+Playwright ou sidecars de produto.
 
 ## Comandos
 
 ```bash
 scons                 # mostra os alvos disponíveis
 scons lint            # Rust: rustfmt + Clippy; Python: Ruff + ty + Bandit
-scons tests           # testes Cargo e pytest (tooling; bindings quando presentes)
+scons tests           # testes Cargo, pytest e pacote Node nativo
 scons ci              # install, lint e tests
 scons update          # atualiza Cargo e uv.lock; revise os lockfiles
 scons clean           # remove artefatos de build
@@ -75,10 +77,9 @@ cargo test --workspace --all-features --locked
 cargo doc --workspace --all-features --no-deps --locked
 ```
 
-O pre-commit e o CI também mantêm verificações de sintaxe, lint, formatação,
-tipos, segurança e testes Python. Quando o pacote TypeScript em
-`bindings/typescript/` receber código e manifestos, Prettier, oxlint, `tsc` e
-seus testes entram nos hooks e no CI.
+O pre-commit e o CI verificam sintaxe, lint, formatação, tipos, segurança e
+testes Python e TypeScript. CI também compila os addons nativos e executa os
+checks Rust em Linux, macOS e Windows.
 
 ## Organização do repositório
 

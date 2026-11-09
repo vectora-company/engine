@@ -52,11 +52,11 @@ Entregar uma fatia vertical estreita, mas utilizável:
 3. Transporte HTTP assíncrono com connect/read/total timeout definidos, limites de resposta, encerramento explícito e política de retry restrita à conexão antes da entrega do primeiro evento.
 4. Adaptador do protocolo Chat Completions compatível com OpenAI, escolhido como primeiro alvo por fornecer a menor fatia que cobre gateway e runtime local sem confundir isso com suporte universal a todos os providers.
 5. Cobertura de conformidade usando respostas e streams sintéticos para: texto, tool calls fragmentadas, usage, erro HTTP, SSE malformado, timeout, disconnect e cancelamento pelo consumidor.
-6. Binding Python mínimo para o Vectora Backend e binding TypeScript/Node mínimo para o Vectora GH Bot, ambos expondo a mesma API Rust de chat/stream e passando pela mesma suíte de conformidade. Cada consumidor mantém somente sua camada de adaptação local.
+6. Bindings Python e TypeScript/Node compiláveis fazem parte do bootstrap da engine, não de fases futuras. Neste primeiro PR, cada binding expõe ao menos a versão do contrato e a capacidade de chat/stream implementada aqui, com chamadas encaminhadas ao mesmo núcleo Rust. Os consumidores mantêm somente sua camada de adaptação local.
 7. Fixture de compatibilidade por endpoint/base URL para testar OpenAI-compatible. Incluir os perfis atualmente necessários de OpenRouter, 9Router, OmniRouter, llama.cpp e DMR somente onde seus caminhos, headers e payloads estejam confirmados; Ollama permanece no adaptador/protocolo Ollama próprio.
 8. Harness de comparação local com respostas determinísticas e gravação de metadados (SHA, Rust/Python, configuração e duração), sem chamar serviços reais nem executar efeitos externos duplicados.
 
-A estratégia de FFI/empacotamento deve ser fechada antes da implementação, incluindo PyO3/maturin para avaliar wheels Python e N-API/napi-rs para o pacote Node, com justificativa de suporte, manutenção, cancelamento assíncrono e matriz de artefatos. O CI deve compilar/testar crate e bindings; a publicação em crates.io, PyPI e npm deve ser um workflow de release separado, versionado e baseado no mesmo SHA/tag, com credenciais e publicação condicionadas a release aprovada. O PR de capacidade não publica automaticamente nem inclui builds dos produtos consumidores.
+A estratégia de FFI/empacotamento deve ser fechada no bootstrap, incluindo PyO3/maturin para wheels Python e N-API/napi-rs para o pacote Node, com justificativa de suporte, manutenção, cancelamento assíncrono e matriz de artefatos. O CI deve compilar e testar crate e bindings desde o bootstrap; a publicação em crates.io, PyPI e npm permanece em workflow de release separado, versionado e baseado no mesmo SHA/tag, com credenciais e publicação condicionadas a release aprovada. O PR de capacidade não publica automaticamente nem inclui builds dos produtos consumidores.
 
 ## Fora do PR 1
 
@@ -70,21 +70,18 @@ A estratégia de FFI/empacotamento deve ser fechada antes da implementação, in
 
 ## Sequência de PRs da migração
 
-A stack de LLM depende do contrato Rust introduzido no PR 1; cada pacote de binding depende também do contrato FFI e da matriz de artefatos estabelecidos para sua linguagem. Em paralelo como uma trilha da engine, haverá uma migração dedicada de storage baseada na issue local `02-storage-memoria-contexto-rag.md`. Essa issue foi escrita para o backend Python atual; ela é fonte de comportamento e requisitos, não uma especificação Rust pronta. Antes do primeiro PR de storage, sua intenção deve ser adaptada para um contrato da engine em `docs/`, mantendo a cópia original em `../issues/` intacta.
+A stack de LLM depende do contrato Rust introduzido no PR 1. Os bindings e sua infraestrutura de build/conformidade fazem parte do bootstrap; cada capability nova deve atravessar as três entradas na mesma stack, sem recriar a FFI. Em paralelo como uma trilha da engine, haverá uma migração dedicada de storage baseada na issue local `02-storage-memoria-contexto-rag.md`. Essa issue foi escrita para o backend Python atual; ela é fonte de comportamento e requisitos, não uma especificação Rust pronta. Antes do primeiro PR de storage, sua intenção deve ser adaptada para um contrato da engine em `docs/`, mantendo a cópia original em `../issues/` intacta.
 
 ### Trilha de LLM
 
-1. **PR 1 — contrato e chat Rust base:** API canônica, transporte, primeiro protocolo OpenAI-compatible e conformidade independente de linguagem. Não declarar adoção por produto ainda.
-2. **PR 2 — binding Python/PyPI:** API Python assíncrona, wheel/source build, testes da binding e integração opt-in com um caminho do Vectora Backend.
-3. **PR 3 — binding TypeScript/npm:** API Node assíncrona, artefatos nativos por plataforma suportada, declarações TypeScript, testes da binding e integração do Vectora GH Bot sem dependência do app.
-4. **PR 4 — release coordenada da engine:** automatizar publicação de crate, PyPI e npm a partir de versão/tag e SHA comuns; só publicar formatos/capacidades aprovados e artefatos validados.
-5. **PR 5 — gateways e runtimes compatíveis:** completar diferenças de endpoints, autenticação, headers, catálogo e erros para OpenRouter, 9Router/OmniRouter e backends locais OpenAI-compatible; adicionar Ollama conforme seu protocolo próprio.
-6. **PR 6 — providers com protocolos nativos:** Anthropic e Google, incluindo conversão de mensagens multimodais, tools, safety/configuração e seus formatos de stream.
-7. **PR 7 — Cohere chat e normalização de compatibilidade:** serialização de histórico/tool plan, respostas e erros específicos.
-8. **PR 8 — fallback de chat:** migrar a política apenas após os erros tipados estarem estáveis; preservar ordem explícita, elegibilidade por credencial, limites de retry e a regra de não trocar provider depois de emitir chunks.
-9. **PR 9 — embeddings e rerank:** contratos próprios, diferenças query/document, dimensões, ordenação, scores e fallback; cada consumidor mantém seu RAG e decide adoção pela binding correspondente.
-10. **PR 10 — mídia e capacidades auxiliares:** STT/transcription, geração de imagem, TTS, vídeo e web search, agrupados por contrato/protocolo comum, não apenas por diretório.
-11. **PRs posteriores — adoção por consumidor:** trocar gradualmente chamadas selecionadas no Vectora Backend/Python e no GH Bot/TypeScript para suas bindings, medir operação e rollback, e só então discutir desativar caminhos antigos.
+1. **PR 1 — contrato, bindings bootstrap e chat base:** API canônica, transporte, primeiro protocolo OpenAI-compatible, bindings Python/TypeScript compiláveis e conformidade comum nas três entradas. Não declarar adoção por produto ainda.
+2. **PR 2 — completar o perfil OpenAI-compatible:** gateways e runtimes compatíveis, incluindo diferenças de endpoints, autenticação, headers, catálogo e erros para OpenRouter, 9Router/OmniRouter e backends locais; adicionar Ollama conforme seu protocolo próprio. A suíte deve rodar pelas três entradas (Rust, Python e TypeScript).
+3. **PR 3 — providers com protocolos nativos:** Anthropic e Google, incluindo conversão de mensagens multimodais, tools, safety/configuração e seus formatos de stream, expostos pelos bindings existentes.
+4. **PR 4 — Cohere chat e normalização de compatibilidade:** serialização de histórico/tool plan, respostas e erros específicos, mantendo paridade de contrato nos bindings.
+5. **PR 5 — fallback de chat:** migrar a política apenas após os erros tipados estarem estáveis; preservar ordem explícita, elegibilidade por credencial, limites de retry e a regra de não trocar provider depois de emitir chunks.
+6. **PR 6 — embeddings e rerank:** contratos próprios, diferenças query/document, dimensões, ordenação, scores e fallback; cada consumidor mantém seu RAG e decide adoção pela binding correspondente.
+7. **PR 7 — mídia e capacidades auxiliares:** STT/transcription, geração de imagem, TTS, vídeo e web search, agrupados por contrato/protocolo comum, não apenas por diretório.
+8. **PRs posteriores — adoção por consumidor:** trocar gradualmente chamadas selecionadas no Vectora Backend/Python e no GH Bot/TypeScript para suas bindings, medir operação e rollback, e só então discutir desativar caminhos antigos.
 
 ### Trilha de storage da engine
 
@@ -108,10 +105,10 @@ S1–S3 podem ser empilhados sobre S0; dependências entre APIs de storage e con
 
 1. **Caracterizar contratos.** Mapear `VMessage`, `VMessageChunk`, `ToolSpec`, usage, callbacks, headers e parâmetros; registrar campos obrigatórios, opcionais e invariantes. Extrair casos observáveis dos testes Python, sem copiar detalhes internos sem necessidade.
 2. **Fechar matriz de compatibilidade.** Registrar método, rota, auth, headers, formato request/response, stream protocol, timeout, retry e classificação de erro por perfil OpenAI-compatible que será aceito no PR.
-3. **Definir schema canônico.** Preferir structs versionados e explícitos a mapas sem tipo; garantir que chamadas/tool args continuem objetos JSON e que dados desconhecidos não desapareçam silenciosamente. Registrar as conversões requeridas pelos bindings Python e TypeScript, sem implementá-los neste PR.
+3. **Definir schema canônico e FFI.** Preferir structs versionados e explícitos a mapas sem tipo; garantir que chamadas/tool args continuem objetos JSON e que dados desconhecidos não desapareçam silenciosamente. Definir conversões, ownership, cancelamento e erros para Python e TypeScript junto com a implementação dos bindings mínimos.
 4. **Implementar transporte e parsers.** Separar SSE framing, JSON decoding, provider error mapping e mapeamento de eventos de chat; impor limites e cancelamento propagado.
 5. **Implementar a API Rust.** Async end-to-end, backpressure, ownership claro do cliente e do stream, fechamento determinístico e mensagens de erro sem segredo.
-6. **Adicionar conformidade Rust.** Fixtures determinísticas verificam eventos/resultados do núcleo; preparar vetores de conformidade reutilizáveis pelas futuras bindings. Nenhum chat de produção muda de implementação por padrão neste PR.
+6. **Adicionar conformidade nas três entradas.** Fixtures determinísticas verificam eventos/resultados do núcleo Rust e os mesmos vetores exercitam os bindings Python e TypeScript. Nenhum chat de produção muda de implementação por padrão neste PR.
 7. **Documentar e medir.** Publicar tabela de cobertura, gaps por provider e baseline reproduzível de latência/CPU/memória do transporte sintético; não usar resultado sintético para afirmar vantagem em chamadas remotas.
 
 ## Critérios de aceite do PR 1
@@ -123,6 +120,7 @@ S1–S3 podem ser empilhados sobre S0; dependências entre APIs de storage e con
 - Chaves e headers sensíveis não aparecem em logs, exceptions, snapshots ou fixtures.
 - Configuração/provider inválidos falham antes de enviar a requisição.
 - A API Rust fornece streaming cancelável e os tipos necessários para os bindings preservarem o contrato atual de `ChatClient`.
+- Os bindings Python e TypeScript são compilados no bootstrap, expõem completion e streaming sobre o mesmo núcleo e passam por testes próprios de contrato/erros; nenhum binding contém transporte ou política de provider duplicada.
 - Fallback continua em um único lugar no consumidor Vectora e o caminho Python segue utilizável sem alteração de comportamento quando Rust estiver desligado.
 - Casos comuns e de falha OpenAI-compatible têm paridade definida para os perfis incluídos; gaps conhecidos aparecem explicitamente na matriz.
 - CI roda formatação, Clippy, testes Rust e conformidade sem credenciais ou APIs pagas.
@@ -134,6 +132,7 @@ S1–S3 podem ser empilhados sobre S0; dependências entre APIs de storage e con
 - Compatibilidade de esquemas de tools e JSON inválido nos argumentos; a chamada deve sobreviver como erro tipado, não sumir silenciosamente.
 - Semântica de retry e fallback com entrega parcial de texto.
 - Cancelamento Python → binding → HTTP e descarte do iterador durante shutdown.
+- Cancelamento TypeScript → binding → HTTP e descarte do `AsyncIterator` durante shutdown.
 - Proteção de credenciais, logs de endpoint e cabeçalhos de atribuição de gateway.
 - IPv6, TLS/proxies configurados pelo ambiente, endpoints customizados e limites de payload.
 - ABI/empacotamento da extensão Python em Linux, Windows e macOS, inclusive arquiteturas suportadas.
@@ -142,8 +141,8 @@ S1–S3 podem ser empilhados sobre S0; dependências entre APIs de storage e con
 ## Decisões abertas antes de iniciar implementação
 
 - Versões de Python e sistemas/arquiteturas mínimas suportadas pelo binding.
-- PyO3/maturin ou outra estratégia de integração e publicação da extensão.
-- Versões de Node e sistemas/arquiteturas mínimas suportadas pelo pacote npm; avaliar N-API/napi-rs ou alternativa com matriz de publicação.
+- Matriz de wheels e empacotamento da extensão Python para os sistemas e arquiteturas suportados.
+- Versões de Node e sistemas/arquiteturas mínimas suportadas pelo pacote npm e matriz de publicação dos binários N-API.
 - Política de versão entre crate Rust, pacote PyPI e pacote npm, com release rastreável ao mesmo SHA/tag e compatibilidade explícita.
 - Forma de selecionar o backend Rust em runtime: configuração local de desenvolvimento, feature flag ou ambas; default permanece Python.
 - Perfis exatos de endpoints compatíveis que entrarão no primeiro PR e suas diferenças observadas.

@@ -108,13 +108,13 @@ repos:
         types_or: [text]
       - id: typescript-lint
         name: TypeScript lint (oxlint)
-        entry: pnpm --dir bindings/typescript exec oxlint --deny-warnings
+        entry: python utils/run_pnpm.py --dir bindings/typescript exec oxlint --deny-warnings src test
         language: system
         files: ^bindings/typescript/.*\.(ts|tsx|js|jsx|mts|cjs)$
         pass_filenames: false
       - id: typescript-types
         name: TypeScript type check
-        entry: pnpm --dir bindings/typescript exec tsc --noEmit
+        entry: python utils/run_pnpm.py --dir bindings/typescript typecheck
         language: system
         files: ^bindings/typescript/.*\.(ts|tsx|mts)$
         pass_filenames: false

@@ -3,12 +3,13 @@
 import os
 import shutil
 import subprocess
+import sys
 
 
 ROOT = Dir(".").abspath
 
 
-def _run(*command: str) -> None:
+def _run(*command: str, cwd: str = ROOT) -> None:
     """Run a tool from the repository root and fail with its exit status."""
     executable = shutil.which(command[0])
     if executable is None:
@@ -18,12 +19,22 @@ def _run(*command: str) -> None:
         )
     result = subprocess.run(
         [executable, *command[1:]],
-        cwd=ROOT,
+        cwd=cwd,
         stdin=subprocess.DEVNULL,
         check=False,
     )
     if result.returncode:
         raise SystemExit(result.returncode)
+
+
+def _pnpm(*arguments: str, cwd: str = ROOT) -> None:
+    """Run pnpm through the portable shim used by pre-commit."""
+    _run(
+        sys.executable,
+        os.path.join(ROOT, "utils", "run_pnpm.py"),
+        *arguments,
+        cwd=cwd,
+    )
 
 
 def _install(target, source, env):
@@ -35,6 +46,20 @@ def _install(target, source, env):
     _run("rustup", "component", "add", "rustfmt", "clippy")
     _run("cargo", "fetch", "--locked")
     _run("uv", "sync", "--locked", "--all-groups")
+    _run(
+        "uv",
+        "run",
+        "--project",
+        ROOT,
+        "maturin",
+        "develop",
+        cwd=os.path.join(ROOT, "bindings", "python"),
+    )
+    _pnpm(
+        "install",
+        "--frozen-lockfile",
+        cwd=os.path.join(ROOT, "bindings", "typescript"),
+    )
 
 
 def _lint(target, source, env):
@@ -62,11 +87,22 @@ def _lint(target, source, env):
     _run("uv", "run", "ruff", "format", "--check", "utils", "bindings/python")
     _run("uv", "run", "ty", "check", "utils", "bindings/python")
     _run("uv", "run", "bandit", "-s", "B101", "-r", "utils", "bindings/python")
+    _pnpm(
+        "exec",
+        "oxlint",
+        "--deny-warnings",
+        "src",
+        "test",
+        cwd=os.path.join(ROOT, "bindings", "typescript"),
+    )
+    _pnpm("typecheck", cwd=os.path.join(ROOT, "bindings", "typescript"))
 
 
 def _tests(target, source, env):
     _run("cargo", "test", "--workspace", "--all-features", "--locked")
     _run("uv", "run", "pytest")
+    _pnpm("build", cwd=os.path.join(ROOT, "bindings", "typescript"))
+    _pnpm("test", cwd=os.path.join(ROOT, "bindings", "typescript"))
 
 
 def _update(target, source, env):
@@ -87,11 +123,11 @@ def _help(target, source, env):
 Vectora Engine — alvos SCons (rodar da raiz do repositório)
 
 Setup
-  scons install    prepara rustfmt/clippy, dependências Cargo e tooling Python
+  scons install    prepara Rust, tooling Python e bindings nativas TypeScript/Python
 
 Qualidade
   scons lint       Rust (rustfmt + Clippy) e Python (Ruff + ty + Bandit)
-  scons tests      Cargo e pytest (tooling e bindings Python)
+  scons tests      Cargo, pytest e testes do pacote Node nativo
   scons ci         install + lint + tests
 
 Manutenção

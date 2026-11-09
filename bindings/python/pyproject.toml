@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "vectora-engine"
+version = "0.1.0"
+description = "Python bindings for the Vectora Engine Rust core"
+requires-python = ">=3.13"
+license = "AGPL-3.0-only"
+readme = "README.md"
+
+[tool.maturin]
+manifest-path = "native/Cargo.toml"
+python-source = "python"
+module-name = "vectora_engine._native"
