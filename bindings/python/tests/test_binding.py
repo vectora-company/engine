@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from vectora_engine import (
+    assemble_turn,
     chat_complete,
     chat_contract_version,
     chat_stream,
@@ -108,6 +109,49 @@ def test_run_lifecycle_rejects_invalid_transition_and_unknown_status() -> None:
         transition_run(run, "completed")
     with pytest.raises(RuntimeError, match="unknown run status"):
         transition_run(run, "not-a-status")
+
+
+def test_streamed_turn_assembly_uses_rust_core_and_preserves_tool_arguments() -> None:
+    completion = assemble_turn(
+        "turn-42",
+        [
+            {"contract_version": 1, "type": "text_delta", "text": "hello"},
+            {
+                "contract_version": 1,
+                "type": "tool_call_delta",
+                "call": {
+                    "index": 0,
+                    "id": "call-1",
+                    "name": "read_file",
+                    "arguments_fragment": '{"path":',
+                },
+            },
+            {
+                "contract_version": 1,
+                "type": "tool_call_delta",
+                "call": {
+                    "index": 0,
+                    "arguments_fragment": '"src/main.rs"}',
+                },
+            },
+            {
+                "contract_version": 1,
+                "type": "completed",
+                "finish_reason": "tool_calls",
+            },
+        ],
+    )
+    assert completion["content"] == "hello"
+    assert completion["tool_calls"][0]["id"] == "call-1"
+    assert completion["tool_calls"][0]["arguments"]["value"] == {"path": "src/main.rs"}
+
+
+def test_streamed_turn_assembly_rejects_missing_terminal_event() -> None:
+    with pytest.raises(RuntimeError, match="without a completion event"):
+        assemble_turn(
+            "turn-42",
+            [{"contract_version": 1, "type": "text_delta", "text": "partial"}],
+        )
 
 
 @pytest.mark.parametrize(

@@ -13,6 +13,7 @@ use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
     NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
+    TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus};
 use vectora_engine::llm::{
@@ -136,6 +137,16 @@ fn parse_fallback_rerank_inputs(
 #[pyfunction]
 fn chat_contract_version() -> u16 {
     CHAT_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn chat_assemble_turn(settings_json: String, events_json: String) -> PyResult<String> {
+    let settings: TurnAccumulatorSettings =
+        serde_json::from_str(&settings_json).map_err(|_| py_error("invalid turn settings"))?;
+    let events: Vec<ChatEvent> =
+        serde_json::from_str(&events_json).map_err(|_| py_error("invalid chat events"))?;
+    let completion = assemble_turn(settings, events).map_err(py_error)?;
+    encode_json(&completion)
 }
 
 #[pyfunction]
@@ -427,6 +438,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(rerank, module)?)?;
     module.add_function(wrap_pyfunction!(fallback_rerank, module)?)?;
     module.add_function(wrap_pyfunction!(chat_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(chat_assemble_turn, module)?)?;
     module.add_function(wrap_pyfunction!(chat_complete, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_start, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_next, module)?)?;

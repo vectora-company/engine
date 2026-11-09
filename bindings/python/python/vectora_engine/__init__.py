@@ -3,12 +3,34 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from . import _native
 
 JsonObject = Mapping[str, Any]
+
+
+def assemble_turn(
+    turn_id: str,
+    events: Sequence[JsonObject],
+    *,
+    max_text_bytes: int = 4 * 1024 * 1024,
+    max_tool_calls: int = 128,
+    max_tool_argument_bytes: int = 1024 * 1024,
+) -> dict[str, Any]:
+    """Assemble a provider event sequence through the canonical Rust core."""
+    settings = {
+        "turn_id": turn_id,
+        "max_text_bytes": max_text_bytes,
+        "max_tool_calls": max_tool_calls,
+        "max_tool_argument_bytes": max_tool_argument_bytes,
+    }
+    result = _native.chat_assemble_turn(
+        json.dumps(settings, separators=(",", ":")),
+        json.dumps(events, separators=(",", ":")),
+    )
+    return json.loads(result)
 
 
 def run_contract_version() -> int:
@@ -160,6 +182,7 @@ async def fallback_chat_stream(
 
 
 __all__ = [
+    "assemble_turn",
     "chat_complete",
     "chat_contract_version",
     "chat_stream",

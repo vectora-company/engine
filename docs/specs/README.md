@@ -24,6 +24,7 @@ suportadas pelo contrato Rust versionado.
 | [06 — Fallback de chat](06-chat-fallback.md)                                         | Backend Python consumidor (`backend/llm/fallback_chat_client.py`)             | Seleção explícita e ordenada de providers, erros elegíveis e mudança segura durante streaming. |
 | [07 — Embeddings e rerank](07-embeddings-rerank.md)                                 | Backend Python consumidor (`backend/llm/*/embeddings.py`, `*/*rerank.py`)      | Embeddings, rerank, ordenação, dimensões, scores e fallback explícito por quota.              |
 | [08 — Ciclo de vida de execução](08-run-lifecycle.md)                               | `../../issues/01-loop-agentico-e-harness.md`                                    | Identidade versionada da execução e máquina de estados experimental, exposta em Rust, Python e TypeScript. |
+| [09 — Montagem de turno](09-turn-assembly.md)                                       | Backend consumidor (`backend/engine/conversation_loop.py`)                     | Acumulação Rust de eventos streaming em resposta canônica, com os mesmos bindings do bootstrap. |
 
 ## Regras de leitura
 

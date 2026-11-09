@@ -5,6 +5,7 @@ mod fallback;
 mod native_providers;
 mod openai_compatible;
 mod sse;
+mod turn;
 mod types;
 
 pub use error::ChatError;
@@ -15,6 +16,7 @@ pub use native_providers::{NativeChatClient, NativeChatSettings, NativeProvider}
 pub use openai_compatible::{
     ChatStream, OpenAiCompatibleClient, OpenAiCompatibleConfig, OpenAiCompatibleSettings,
 };
+pub use turn::{TurnAccumulator, TurnAccumulatorSettings, TurnError, assemble_turn};
 pub use types::{
     CHAT_CONTRACT_VERSION, ChatCompletion, ChatEvent, ChatEventKind, ChatRequest, ContentPart,
     FinishReason, GenerationOptions, ImageUrl, Message, MessageContent, MessageRole, ToolArguments,

@@ -13,6 +13,7 @@ use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
     NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
+    TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus};
 use vectora_engine::llm::{
@@ -138,6 +139,17 @@ fn encode_json<T: serde::Serialize>(value: &T) -> Result<String> {
 #[napi]
 pub fn chat_contract_version() -> u32 {
     u32::from(CHAT_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn chat_assemble_turn(settings_json: String, events_json: String) -> Result<String> {
+    let settings: TurnAccumulatorSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid turn settings"))?;
+    let events: Vec<ChatEvent> = serde_json::from_str(&events_json)
+        .map_err(|_| Error::from_reason("invalid chat events"))?;
+    let completion =
+        assemble_turn(settings, events).map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&completion)
 }
 
 #[napi]

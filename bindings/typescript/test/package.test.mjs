@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
 import {
+  assembleTurn,
   chatComplete,
   chatContractVersion,
   createRun,
@@ -52,6 +53,37 @@ test("run lifecycle contract is exposed through the Node binding", () => {
   assert.equal(transitionRun(started, "running").sequence, 1);
   assert.throws(() => transitionRun(run, "completed"), /invalid run transition/);
   assert.throws(() => transitionRun(run, "not-a-status"), /unknown run status/);
+});
+
+test("streamed turn assembly reaches the Rust core through the Node binding", () => {
+  const completion = assembleTurn(
+    { turn_id: "turn-42" },
+    [
+      { contract_version: 1, type: "text_delta", text: "hello" },
+      {
+        contract_version: 1,
+        type: "tool_call_delta",
+        call: {
+          index: 0,
+          id: "call-1",
+          name: "read_file",
+          arguments_fragment: '{"path":',
+        },
+      },
+      {
+        contract_version: 1,
+        type: "tool_call_delta",
+        call: { index: 0, arguments_fragment: '"src/main.rs"}' },
+      },
+      { contract_version: 1, type: "completed", finish_reason: "tool_calls" },
+    ],
+  );
+  assert.equal(completion.content, "hello");
+  assert.equal(completion.tool_calls[0].id, "call-1");
+  assert.deepEqual(completion.tool_calls[0].arguments.value, {
+    path: "src/main.rs",
+  });
+  assert.throws(() => assembleTurn({ turn_id: "turn-42" }, []), /without a completion event/);
 });
 
 test("embedding and rerank APIs reach Rust through the Node binding", async () => {
