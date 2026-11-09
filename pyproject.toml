@@ -5,13 +5,18 @@ requires-python = ">=3.13"
 dependencies = []
 
 [dependency-groups]
-dev = ["pytest>=9.1.1", "ruff>=0.15.18"]
+dev = [
+  "bandit>=1.9.4",
+  "pytest>=9.1.1",
+  "ruff>=0.15.18",
+  "ty>=0.0.51",
+]
 
 [tool.uv]
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["utils"]
+testpaths = ["utils", "bindings/python"]
 addopts = "-q"
 
 [tool.ruff]

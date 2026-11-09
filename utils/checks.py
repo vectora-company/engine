@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """Verificações do repositório usadas pelo pre-commit e pelos checks de PR.
 
 Uso: `python utils/checks.py <comando> [args...]`. Só depende da stdlib, para
@@ -14,13 +16,15 @@ from __future__ import annotations
 import argparse
 import io
 import os
+import platform
 import re
+import shutil
 import subprocess  # nosec B404
 import sys
 import tokenize
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 # ── no-plan: Rejeita COMENTÁRIOS de código-fonte com proveniência de processo:
 # referência de planejamento (Sprint/Bloco/Fase) ou menção a ferramenta/revisor
@@ -33,13 +37,9 @@ from pathlib import PurePosixPath
 # strings/identificadores legítimos citando os mesmos nomes (ex.: ID de modelo
 # `"claude-3-5-sonnet"`, detecção de harness `"claude_code"`); tratar string
 # como comentário reintroduziria falso positivo em código de produção real.
-
-
-#!/usr/bin/env python3
-
-
 reconfigure = getattr(sys.stdout, "reconfigure", None)
-if reconfigure is not None and sys.stdout.encoding.lower() != "utf-8":
+encoding = getattr(sys.stdout, "encoding", None)
+if reconfigure is not None and encoding and encoding.lower() != "utf-8":
     reconfigure(encoding="utf-8")
 
 # Três formas usadas neste repo pra numerar etapas de plano: a primeira
@@ -258,7 +258,7 @@ def _rust_comments(text: str) -> list[tuple[int, str]]:
 def _find_violations(path: str) -> list[tuple[int, str]]:
     """Executa a operação find violations."""
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
+        with Path(path).open(encoding="utf-8", errors="replace") as f:
             text = f.read()
     except OSError:
         return []
@@ -287,10 +287,13 @@ def _changed_diff_ref() -> str:
 def no_plan_main(argv: list[str]) -> int:
     """Executa a operação main."""
     if "--changed" in argv:
+        git_executable = shutil.which("git")
+        if git_executable is None:
+            return 1
         try:
-            result = subprocess.run(  # nosec B603, B607
+            result = subprocess.run(  # nosec B603, B607  # noqa: S603
                 [
-                    "git",
+                    git_executable,
                     "diff",
                     "--name-only",
                     "--diff-filter=AM",
@@ -349,11 +352,6 @@ def no_plan_main(argv: list[str]) -> int:
 # proveniência de processo escrita por um humano, são o rodapé do bot. Esses
 # blocos são delimitados por marcadores HTML fixos e removidos antes da
 # varredura, senão todo PR revisado pelo CodeRabbit falharia sempre.
-
-
-#!/usr/bin/env python3
-
-
 # Blocos que o próprio CodeRabbit insere no corpo do PR (resumo de review,
 # "Summary by CodeRabbit") — sempre delimitados por um comentário HTML de
 # abertura "<!-- This is an auto-generated comment ... -->" e um de
@@ -394,12 +392,14 @@ def pr_metadata_main() -> int:
     title = os.environ.get("PR_TITLE", "")
     body = _strip_issue_links(_strip_bot_blocks(os.environ.get("PR_BODY", "") or ""))
 
-    violations: list[tuple[str, str]] = []
-    if _PR_METADATA_PATTERN.search(title):
-        violations.append(("título", title.strip()))
-    for line in body.splitlines():
-        if _PR_METADATA_PATTERN.search(line):
-            violations.append(("descrição", line.strip()))
+    violations = (
+        [("título", title.strip())] if _PR_METADATA_PATTERN.search(title) else []
+    )
+    violations.extend(
+        ("descrição", line.strip())
+        for line in body.splitlines()
+        if _PR_METADATA_PATTERN.search(line)
+    )
 
     if not violations:
         return 0
@@ -422,11 +422,6 @@ def pr_metadata_main() -> int:
 # The check reads the Git index so it validates the exact snapshot that will be
 # committed, including staged edits and renames.  It intentionally reports path
 # mentions rather than trying to infer every language's import semantics.
-
-
-#!/usr/bin/env python3
-
-
 @dataclass(frozen=True)
 class RemovedPath:
     """A path that will no longer exist after the staged commit."""
@@ -436,11 +431,13 @@ class RemovedPath:
 
 
 def _git_output(*args: str) -> bytes:
-    result = subprocess.run(  # nosec B603, B607
-        ["git", *args],
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        raise FileNotFoundError("git executable not found")
+    result = subprocess.run(  # nosec B603, B607  # noqa: S603
+        [git_executable, *args],
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     return result.stdout
 
@@ -495,9 +492,11 @@ def _find_references(
             continue
         for line_number, line in enumerate(text.splitlines(), start=1):
             normalised_line = line.replace("\\", "/")
-            for path in removed_paths:
-                if path in normalised_line:
-                    references.append((filename, line_number, path, line.strip()))
+            references.extend(
+                (filename, line_number, path, line.strip())
+                for path in removed_paths
+                if path in normalised_line
+            )
     return references
 
 
@@ -555,10 +554,45 @@ def removed_paths_main() -> int:
     return 1
 
 
+def environment_main(_: list[str]) -> int:
+    """Report host details and tools that the repository hooks use."""
+    system = platform.system()
+    print(
+        "Pre-commit environment: "
+        f"OS={system} ({platform.release()}), arch={platform.machine()}, "
+        f"Python={platform.python_version()}"
+    )
+    if system not in {"Linux", "Windows", "Darwin"}:
+        print("Supported hosts are Linux, Windows, and macOS.", file=sys.stderr)
+        return 2
+
+    for name in ("git", "rustup", "cargo", "rustc", "uv", "node", "pnpm"):
+        executable = shutil.which(name)
+        if executable is None:
+            print(f"  {name}: not found on PATH")
+            continue
+        if name in {"git", "pnpm"}:
+            print(f"  {name}: found ({executable})")
+            continue
+        try:
+            result = subprocess.run(  # noqa: S603  # nosec B603
+                [executable, "--version"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            version = (result.stdout or result.stderr).strip().splitlines()
+            print(f"  {name}: {version[0] if version else 'available'} ({executable})")
+        except OSError as exc:
+            print(f"  {name}: found but not executable ({exc})")
+    return 0
+
+
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 
 _COMMANDS: dict[str, tuple[Callable[..., int], bool]] = {
+    "environment": (environment_main, True),
     "no-plan": (no_plan_main, True),
     "pr-metadata": (pr_metadata_main, False),
     "removed-paths": (removed_paths_main, False),

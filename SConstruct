@@ -39,13 +39,33 @@ def _install(target, source, env):
 
 def _lint(target, source, env):
     _run("cargo", "fmt", "--all", "--", "--check")
-    _run("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")
-    _run("uv", "run", "ruff", "check", "utils")
-    _run("uv", "run", "ruff", "format", "--check", "utils")
+    _run(
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings",
+    )
+    _run(
+        "cargo",
+        "doc",
+        "--workspace",
+        "--all-features",
+        "--no-deps",
+        "--locked",
+    )
+    _run("uv", "run", "ruff", "check", "utils", "bindings/python")
+    _run("uv", "run", "ruff", "format", "--check", "utils", "bindings/python")
+    _run("uv", "run", "ty", "check", "utils", "bindings/python")
+    _run("uv", "run", "bandit", "-s", "B101", "-r", "utils", "bindings/python")
 
 
 def _tests(target, source, env):
-    _run("cargo", "test", "--workspace")
+    _run("cargo", "test", "--workspace", "--all-features", "--locked")
     _run("uv", "run", "pytest")
 
 
@@ -70,8 +90,8 @@ Setup
   scons install    prepara rustfmt/clippy, dependências Cargo e tooling Python
 
 Qualidade
-  scons lint       rustfmt + Clippy + Ruff
-  scons tests      testes Cargo + testes de utils/
+  scons lint       Rust (rustfmt + Clippy) e Python (Ruff + ty + Bandit)
+  scons tests      Cargo e pytest (tooling e bindings Python)
   scons ci         install + lint + tests
 
 Manutenção

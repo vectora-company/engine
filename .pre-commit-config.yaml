@@ -1,9 +1,38 @@
 default_language_version:
   python: python3
+  node: "24"
 default_stages: [pre-commit]
 minimum_pre_commit_version: 4.0.0
 
+exclude: |
+  (?x)^(
+    .*\.lock$|
+    .*pnpm-lock\.yaml$|
+    \.env.*|
+    \.venv/.*|
+    (^|/)target/.*|
+    (^|/)node_modules/.*|
+    (^|/)dist/.*|
+    (^|/)coverage/.*|
+    (^|/)\.pytest_cache/.*|
+    (^|/)__pycache__/.*
+  )$
+
 repos:
+  - repo: local
+    hooks:
+      - id: environment
+        name: Detect host OS and development tools
+        entry: python utils/checks.py environment
+        language: system
+        always_run: true
+        pass_filenames: false
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.27
+    hooks:
+      - id: uv-lock
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -12,20 +41,83 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
         args: [--allow-multiple-documents, --unsafe]
+      - id: check-json
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=5000]
       - id: detect-private-key
 
+  - repo: local
+    hooks:
+      - id: compileall
+        name: Python syntax
+        entry: uv run --no-project python -m compileall -q -j0
+        language: system
+        types: [python]
+      - id: no-process-metadata
+        name: Check comments for process metadata
+        entry: uv run --no-project python utils/checks.py no-plan --changed
+        language: system
+        files: \.(py|ts|tsx|js|jsx|mts|rs)$
+        exclude: ^utils/(checks|test_checks)\.py$
+        pass_filenames: false
+      - id: removed-path-references
+        name: Check references to removed or renamed paths
+        entry: uv run --no-project python utils/checks.py removed-paths
+        language: system
+        always_run: true
+        pass_filenames: false
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: [--redact]
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.20
     hooks:
       - id: ruff
         args: [--fix]
-        files: ^utils/.*\.py$
+        files: \.py$
       - id: ruff-format
-        files: ^utils/.*\.py$
+        files: \.py$
+
+  - repo: local
+    hooks:
+      - id: python-security
+        name: Bandit security scan
+        entry: uv run --no-sync bandit -s B101 -r utils bindings/python
+        language: system
+        files: ^(utils|bindings/python)/.*\.py$
+      - id: python-types
+        name: Python type check (ty)
+        entry: uv run --no-sync ty check utils bindings/python
+        language: system
+        files: ^(utils|bindings/python)/.*\.py$
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: Prettier (TypeScript, JSON, Markdown)
+        entry: prettier --write
+        language: node
+        additional_dependencies: [prettier@3.9.9]
+        files: \.(ts|tsx|js|jsx|mts|cjs|json|md|yaml|yml)$
+        types_or: [text]
+      - id: typescript-lint
+        name: TypeScript lint (oxlint)
+        entry: pnpm --dir bindings/typescript exec oxlint --deny-warnings
+        language: system
+        files: ^bindings/typescript/.*\.(ts|tsx|js|jsx|mts|cjs)$
+        pass_filenames: false
+      - id: typescript-types
+        name: TypeScript type check
+        entry: pnpm --dir bindings/typescript exec tsc --noEmit
+        language: system
+        files: ^bindings/typescript/.*\.(ts|tsx|mts)$
+        pass_filenames: false
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
@@ -36,21 +128,26 @@ repos:
   - repo: local
     hooks:
       - id: rustfmt
-        name: rustfmt
+        name: Rust formatting
         entry: cargo fmt --all -- --check
         language: system
         pass_filenames: false
-        files: \.rs$
-      - id: no-process-metadata
-        name: Check code comments for planning and reviewer metadata
-        entry: python utils/checks.py no-plan --changed
+        files: \.rs$|Cargo\.toml$
+      - id: rust-clippy
+        name: Rust Clippy
+        entry: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
         language: system
         pass_filenames: false
-        files: \.(rs|py|ts|tsx|js|jsx|mts)$
-        exclude: ^utils/(checks|test_checks)\.py$
-      - id: removed-path-references
-        name: Check staged references to removed paths
-        entry: python utils/checks.py removed-paths
+        files: \.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$
+      - id: rust-tests
+        name: Rust tests
+        entry: cargo test --workspace --all-features --locked
         language: system
         pass_filenames: false
-        always_run: true
+        files: \.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$
+      - id: rust-docs
+        name: Rust documentation
+        entry: cargo doc --workspace --all-features --no-deps --locked
+        language: system
+        pass_filenames: false
+        files: \.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$

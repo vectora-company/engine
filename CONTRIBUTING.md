@@ -10,7 +10,9 @@ capability correspondente demonstrar conformidade e rollback.
 - Rust stable via `rustup`, com `rustfmt` e `clippy` (selecionados por
   `rust-toolchain.toml`).
 - `scons` para os alvos de desenvolvimento.
-- `uv` e Python 3.13 para checks do tooling compartilhado em `utils/`.
+- `uv` e Python 3.13 para tooling e verificações dos bindings Python.
+- `pnpm` e Node.js 24 quando o pacote TypeScript em `bindings/typescript/`
+  estiver inicializado.
 
 ## Preparar o ambiente
 
@@ -29,9 +31,11 @@ scons lint
 scons tests
 ```
 
-Os comandos diretos são `cargo fmt --all -- --check`,
-`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`,
-`uv run ruff check utils` e `uv run pytest`.
+Os checks diretos de Rust são `cargo fmt`, Clippy com todos os targets e
+features, testes com todas as features e geração de documentação sem
+dependências. Para Python, o fluxo executa syntax check, Ruff, ty, Bandit e
+pytest em `utils/` e `bindings/python/`. O CI roda os checks Rust em Linux,
+macOS e Windows.
 
 ## Pull requests
 

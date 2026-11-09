@@ -44,8 +44,8 @@ sidecars de produto.
 
 ```bash
 scons                 # mostra os alvos disponíveis
-scons lint            # rustfmt, Clippy e Ruff
-scons tests           # testes Cargo e do tooling em utils/
+scons lint            # Rust: rustfmt + Clippy; Python: Ruff + ty + Bandit
+scons tests           # testes Cargo e pytest (tooling e bindings Python)
 scons ci              # install, lint e tests
 scons update          # atualiza Cargo e uv.lock; revise os lockfiles
 scons clean           # remove artefatos de build
@@ -55,9 +55,16 @@ Comandos Rust equivalentes:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo check --workspace --all-targets --all-features --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-features --locked
+cargo doc --workspace --all-features --no-deps --locked
 ```
+
+O pre-commit e o CI também mantêm verificações de sintaxe, lint, formatação,
+tipos, segurança e testes Python. Quando o pacote TypeScript em
+`bindings/typescript/` for criado, Prettier, oxlint, `tsc` e seus testes entram
+automaticamente nos hooks e no CI.
 
 ## Organização do repositório
 
