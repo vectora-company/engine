@@ -27,12 +27,12 @@ O fato de o Vectora usar hoje determinadas tabelas ou diretórios não os torna 
 
 ## Capabilities e adapters
 
-| Interface | Backends candidatos | Contrato comum | Diferenças que precisam continuar explícitas |
-|---|---|---|---|
-| SQL durável | SQLite, PostgreSQL | Transações, consultas tipadas/limitadas, migrações, paginação, health e fechamento de pool. | Locks, concorrência, JSON, precisão/datas, isolamento, conflitos, constraints e comportamento de migration. |
-| Vector store | LanceDB, Qdrant | Coleções, upsert/delete idempotente, busca, filtros/metadata, top-k e health. | Operadores/filtros suportados, métrica e direção do score, lexical/hybrid search, consistência, limites de payload e criação de índice. |
-| KV/cache | Redis; SQLite ou memória só se explicitamente selecionados | get/set/delete, TTL, namespace e operação atômica quando suportada. | Durabilidade, atomicidade, eviction, TTL e escopo multi-processo. Memória nunca é apresentada como durável. |
-| Event bus/queue | NATS JetStream, Redis Streams | Envelope versionado, idempotency/task ID, publish/consume, timeout, cancelamento, estado de entrega e health. | ACK, consumer/group, redelivery, retenção, replay, ordenação, DLQ, deduplicação e semântica de shutdown. |
+| Interface       | Backends candidatos                                        | Contrato comum                                                                                                | Diferenças que precisam continuar explícitas                                                                                            |
+| --------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| SQL durável     | SQLite, PostgreSQL                                         | Transações, consultas tipadas/limitadas, migrações, paginação, health e fechamento de pool.                   | Locks, concorrência, JSON, precisão/datas, isolamento, conflitos, constraints e comportamento de migration.                             |
+| Vector store    | LanceDB, Qdrant                                            | Coleções, upsert/delete idempotente, busca, filtros/metadata, top-k e health.                                 | Operadores/filtros suportados, métrica e direção do score, lexical/hybrid search, consistência, limites de payload e criação de índice. |
+| KV/cache        | Redis; SQLite ou memória só se explicitamente selecionados | get/set/delete, TTL, namespace e operação atômica quando suportada.                                           | Durabilidade, atomicidade, eviction, TTL e escopo multi-processo. Memória nunca é apresentada como durável.                             |
+| Event bus/queue | NATS JetStream, Redis Streams                              | Envelope versionado, idempotency/task ID, publish/consume, timeout, cancelamento, estado de entrega e health. | ACK, consumer/group, redelivery, retenção, replay, ordenação, DLQ, deduplicação e semântica de shutdown.                                |
 
 A interface comum expõe somente o menor denominador seguro. Recursos próprios são capabilities opcionais verificáveis. Um adapter não simula uma capacidade ausente e não substitui automaticamente uma store durável por memória.
 

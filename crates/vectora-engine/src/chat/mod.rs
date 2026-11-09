@@ -1,11 +1,13 @@
 //! Versioned provider-neutral chat contracts and first provider transport.
 
 mod error;
+mod native_providers;
 mod openai_compatible;
 mod sse;
 mod types;
 
 pub use error::ChatError;
+pub use native_providers::{NativeChatClient, NativeChatSettings, NativeProvider};
 pub use openai_compatible::{
     ChatStream, OpenAiCompatibleClient, OpenAiCompatibleConfig, OpenAiCompatibleSettings,
 };

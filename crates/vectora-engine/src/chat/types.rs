@@ -45,6 +45,13 @@ pub struct Message {
     pub tool_call_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Marks a tool result as an error for providers that preserve this bit.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_error: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 impl Message {
@@ -55,6 +62,7 @@ impl Message {
             tool_calls: Vec::new(),
             tool_call_id: None,
             name: None,
+            is_error: false,
         }
     }
 }
@@ -124,8 +132,8 @@ pub struct ChatRequest {
     pub options: GenerationOptions,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<ToolDefinition>,
-    /// Provider-specific OpenAI-compatible request fields. Reserved canonical
-    /// fields are rejected so extensions cannot replace engine-owned values.
+    /// Provider-specific request fields. Reserved canonical fields are
+    /// rejected so extensions cannot replace engine-owned values.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extensions: BTreeMap<String, Value>,
 }

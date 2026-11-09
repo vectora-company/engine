@@ -13,6 +13,16 @@ export interface OpenAiCompatibleSettings {
   max_event_bytes?: number;
 }
 
+export interface NativeChatSettings {
+  provider: "anthropic" | "google";
+  base_url?: string;
+  api_key: string;
+  headers?: Record<string, string>;
+  connect_timeout_ms?: number;
+  read_timeout_ms?: number;
+  total_timeout_ms?: number;
+}
+
 export interface ChatRequest {
   contract_version: number;
   model: string;
@@ -49,12 +59,32 @@ interface NativeBinding {
   chatStreamStart(settingsJson: string, requestJson: string): Promise<string>;
   chatStreamNext(id: string): Promise<string | null>;
   chatStreamCancel(id: string): void;
+  nativeChatComplete(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  nativeChatStreamStart(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
 }
 
 const native = (await import("../native/index.js")) as NativeBinding;
 
 /** Version of the canonical Rust chat contract. */
 export const chatContractVersion = (): number => native.chatContractVersion();
+
+/** Complete a request using Anthropic Messages or Google Gemini via Rust. */
+export async function nativeChatComplete(
+  settings: NativeChatSettings,
+  request: ChatRequest,
+): Promise<ChatCompletion> {
+  const result = await native.nativeChatComplete(
+    JSON.stringify(settings),
+    JSON.stringify(request),
+  );
+  return JSON.parse(result) as ChatCompletion;
+}
 
 /** Execute one chat completion in the canonical Rust implementation. */
 export async function chatComplete(
@@ -77,6 +107,26 @@ export async function* chatStream(
   request: ChatRequest,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.chatStreamStart(
+    JSON.stringify(settings),
+    JSON.stringify(request),
+  );
+  try {
+    for (;;) {
+      const event = await native.chatStreamNext(id);
+      if (event === null) return;
+      yield JSON.parse(event) as ChatEvent;
+    }
+  } finally {
+    native.chatStreamCancel(id);
+  }
+}
+
+/** Stream a native provider; stopping iteration cancels the Rust HTTP request. */
+export async function* nativeChatStream(
+  settings: NativeChatSettings,
+  request: ChatRequest,
+): AsyncGenerator<ChatEvent> {
+  const id = await native.nativeChatStreamStart(
     JSON.stringify(settings),
     JSON.stringify(request),
   );

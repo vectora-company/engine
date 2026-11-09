@@ -41,12 +41,13 @@ provider. Campos opcionais ausentes permanecem ausentes. `max_tokens` deve ser
 positivo; temperatura finita e não negativa; nome de modelo e nomes de tools
 não podem ser vazios.
 
-`extensions` é um mapa opcional de campos específicos do endpoint, mesclado no
-top-level da requisição de wire. A engine rejeita campos vazios ou campos
-reservados (`model`, `messages`, `tools`, `stream`, `temperature`, `max_tokens`)
-para não permitir que extensões sobrescrevam partes controladas pelo contrato.
-O consumidor é responsável por fornecer extensões suportadas pelo endpoint
-configurado.
+`extensions` é um mapa opcional de campos específicos do provider, mesclado no
+top-level da requisição de wire por cada adapter. A engine rejeita campos
+canônicos reservados para evitar que extensões sobrescrevam partes controladas
+pelo contrato. Cada adapter também protege os campos reservados próprios do
+protocolo. O consumidor fornece somente extensões suportadas pelo endpoint
+configurado; em Gemini, por exemplo, `safetySettings` é configuração explícita
+do consumidor e não recebe defaults de política de um produto específico.
 
 ## Eventos de streaming
 
