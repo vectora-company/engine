@@ -11,6 +11,25 @@ from . import _native
 JsonObject = Mapping[str, Any]
 
 
+def run_contract_version() -> int:
+    """Return the version of the experimental run lifecycle contract."""
+    return _native.run_contract_version()
+
+
+def create_run(identity: JsonObject) -> dict[str, Any]:
+    """Create a validated planned run snapshot; persistence remains caller-owned."""
+    result = _native.run_create(json.dumps(identity, separators=(",", ":")))
+    return json.loads(result)
+
+
+def transition_run(lifecycle: JsonObject, next_status: str) -> dict[str, Any]:
+    """Apply a deterministic lifecycle transition to a run snapshot."""
+    result = _native.run_transition(
+        json.dumps(lifecycle, separators=(",", ":")), next_status
+    )
+    return json.loads(result)
+
+
 def chat_contract_version() -> int:
     """Return the version of the shared chat contract."""
     return _native.chat_contract_version()
@@ -144,6 +163,7 @@ __all__ = [
     "chat_complete",
     "chat_contract_version",
     "chat_stream",
+    "create_run",
     "embed",
     "embedding_contract_version",
     "fallback_chat_complete",
@@ -154,4 +174,6 @@ __all__ = [
     "native_chat_stream",
     "rerank",
     "rerank_contract_version",
+    "run_contract_version",
+    "transition_run",
 ]

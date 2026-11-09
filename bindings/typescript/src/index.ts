@@ -127,6 +127,39 @@ export interface RerankResponse {
   model_switches: { from_model_id: string; to_model_id: string }[];
 }
 
+export type RunStatus =
+  | "planned"
+  | "running"
+  | "waiting_approval"
+  | "waiting_provider"
+  | "tool_running"
+  | "verifying"
+  | "completed"
+  | "degraded"
+  | "failed"
+  | "cancelled"
+  | "recovery_required";
+
+export interface RunIdentity {
+  contract_version: number;
+  run_id: string;
+  idempotency_key: string;
+  thread_id: string;
+  turn_id: string;
+  actor_id?: string | null;
+  scope_id?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  capabilities?: string[];
+}
+
+export interface RunLifecycle {
+  contract_version: number;
+  identity: RunIdentity;
+  status: RunStatus;
+  sequence: number;
+}
+
 export interface EmbeddingCandidateSettings {
   model_id: string;
   client: EmbeddingSettings;
@@ -146,6 +179,9 @@ export interface FallbackRerankSettings {
 }
 
 interface NativeBinding {
+  runContractVersion(): number;
+  runCreate(identityJson: string): string;
+  runTransition(lifecycleJson: string, nextStatus: string): string;
   embeddingContractVersion(): number;
   rerankContractVersion(): number;
   embed(settingsJson: string, requestJson: string): Promise<string>;
@@ -170,6 +206,24 @@ interface NativeBinding {
 }
 
 const native = (await import("../native/index.js")) as NativeBinding;
+
+/** Version of the experimental run lifecycle contract. */
+export const runContractVersion = (): number => native.runContractVersion();
+
+/** Create a validated planned run snapshot; durability is caller-owned. */
+export function createRun(identity: RunIdentity): RunLifecycle {
+  return JSON.parse(native.runCreate(JSON.stringify(identity))) as RunLifecycle;
+}
+
+/** Apply a deterministic lifecycle transition to the supplied snapshot. */
+export function transitionRun(
+  lifecycle: RunLifecycle,
+  nextStatus: RunStatus,
+): RunLifecycle {
+  return JSON.parse(
+    native.runTransition(JSON.stringify(lifecycle), nextStatus),
+  ) as RunLifecycle;
+}
 
 export const embeddingContractVersion = (): number => native.embeddingContractVersion();
 export const rerankContractVersion = (): number => native.rerankContractVersion();

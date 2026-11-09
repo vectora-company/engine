@@ -11,6 +11,7 @@ from vectora_engine import (
     chat_complete,
     chat_contract_version,
     chat_stream,
+    create_run,
     embed,
     embedding_contract_version,
     fallback_chat_complete,
@@ -21,6 +22,8 @@ from vectora_engine import (
     native_chat_stream,
     rerank,
     rerank_contract_version,
+    run_contract_version,
+    transition_run,
 )
 
 SETTINGS = {"base_url": "file:///invalid", "api_key": "secret-for-redaction-test"}
@@ -69,6 +72,42 @@ def test_contract_version_matches_rust_core() -> None:
 def test_embedding_and_rerank_contract_versions_match_rust_core() -> None:
     assert embedding_contract_version() == 1
     assert rerank_contract_version() == 1
+
+
+def test_run_lifecycle_contract_is_exposed_through_python_binding() -> None:
+    assert run_contract_version() == 1
+    run = create_run(
+        {
+            "contract_version": 1,
+            "run_id": "run-1",
+            "idempotency_key": "turn-1",
+            "thread_id": "thread-1",
+            "turn_id": "turn-1",
+            "capabilities": ["chat"],
+        }
+    )
+    assert run["status"] == "planned"
+    assert run["sequence"] == 0
+    started = transition_run(run, "running")
+    assert started["status"] == "running"
+    assert started["sequence"] == 1
+    assert transition_run(started, "running")["sequence"] == 1
+
+
+def test_run_lifecycle_rejects_invalid_transition_and_unknown_status() -> None:
+    run = create_run(
+        {
+            "contract_version": 1,
+            "run_id": "run-1",
+            "idempotency_key": "turn-1",
+            "thread_id": "thread-1",
+            "turn_id": "turn-1",
+        }
+    )
+    with pytest.raises(RuntimeError, match="invalid run transition"):
+        transition_run(run, "completed")
+    with pytest.raises(RuntimeError, match="unknown run status"):
+        transition_run(run, "not-a-status")
 
 
 @pytest.mark.parametrize(
