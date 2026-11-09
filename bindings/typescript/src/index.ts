@@ -69,7 +69,89 @@ export interface ChatCompletion {
   usage: JsonValue;
 }
 
+export type EmbeddingProtocol = "open_ai_compatible" | "open_router" | "cohere" | "voyage" | "ollama";
+export type RerankProtocol = "cohere" | "voyage" | "open_router";
+
+export interface ProviderHttpSettings {
+  base_url?: string;
+  api_key?: string;
+  headers?: Record<string, string>;
+  connect_timeout_ms?: number;
+  read_timeout_ms?: number;
+  total_timeout_ms?: number;
+  max_response_bytes?: number;
+}
+
+export interface EmbeddingSettings {
+  protocol: EmbeddingProtocol;
+  settings: ProviderHttpSettings;
+}
+
+export interface RerankSettings {
+  protocol: RerankProtocol;
+  settings: ProviderHttpSettings;
+}
+
+export interface EmbeddingRequest {
+  contract_version: number;
+  model: string;
+  input_type: "document" | "query";
+  texts: string[];
+  dimensions?: number;
+}
+
+export interface EmbeddingResponse {
+  contract_version: number;
+  embeddings: number[][];
+  dimensions: number;
+  usage?: { input_tokens: number; cost?: number };
+  selected_model_id?: string;
+  model_switches: { from_model_id: string; to_model_id: string }[];
+}
+
+export interface RerankRequest {
+  contract_version: number;
+  model: string;
+  query: string;
+  documents: string[];
+  top_n?: number;
+  max_tokens_per_doc?: number;
+  truncation?: boolean;
+}
+
+export interface RerankResponse {
+  contract_version: number;
+  results: { index: number; relevance_score: number }[];
+  usage?: { input_tokens: number; cost?: number };
+  selected_model_id?: string;
+  model_switches: { from_model_id: string; to_model_id: string }[];
+}
+
+export interface EmbeddingCandidateSettings {
+  model_id: string;
+  client: EmbeddingSettings;
+}
+
+export interface RerankCandidateSettings {
+  model_id: string;
+  client: RerankSettings;
+}
+
+export interface FallbackEmbeddingSettings {
+  candidates: EmbeddingCandidateSettings[];
+}
+
+export interface FallbackRerankSettings {
+  candidates: RerankCandidateSettings[];
+}
+
 interface NativeBinding {
+  embeddingContractVersion(): number;
+  rerankContractVersion(): number;
+  embed(settingsJson: string, requestJson: string): Promise<string>;
+  fallbackEmbed(settingsJson: string, requestJson: string): Promise<string>;
+  rerank(settingsJson: string, requestJson: string): Promise<string>;
+  fallbackRerank(settingsJson: string, requestJson: string): Promise<string>;
   chatContractVersion(): number;
   chatComplete(settingsJson: string, requestJson: string): Promise<string>;
   chatStreamStart(settingsJson: string, requestJson: string): Promise<string>;
@@ -88,6 +170,37 @@ interface NativeBinding {
 }
 
 const native = (await import("../native/index.js")) as NativeBinding;
+
+export const embeddingContractVersion = (): number => native.embeddingContractVersion();
+export const rerankContractVersion = (): number => native.rerankContractVersion();
+
+export async function embed(
+  settings: EmbeddingSettings,
+  request: EmbeddingRequest,
+): Promise<EmbeddingResponse> {
+  return JSON.parse(await native.embed(JSON.stringify(settings), JSON.stringify(request))) as EmbeddingResponse;
+}
+
+export async function fallbackEmbed(
+  settings: FallbackEmbeddingSettings,
+  request: EmbeddingRequest,
+): Promise<EmbeddingResponse> {
+  return JSON.parse(await native.fallbackEmbed(JSON.stringify(settings), JSON.stringify(request))) as EmbeddingResponse;
+}
+
+export async function rerank(
+  settings: RerankSettings,
+  request: RerankRequest,
+): Promise<RerankResponse> {
+  return JSON.parse(await native.rerank(JSON.stringify(settings), JSON.stringify(request))) as RerankResponse;
+}
+
+export async function fallbackRerank(
+  settings: FallbackRerankSettings,
+  request: RerankRequest,
+): Promise<RerankResponse> {
+  return JSON.parse(await native.fallbackRerank(JSON.stringify(settings), JSON.stringify(request))) as RerankResponse;
+}
 
 /** Version of the canonical Rust chat contract. */
 export const chatContractVersion = (): number => native.chatContractVersion();

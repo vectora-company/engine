@@ -5,10 +5,14 @@ import {
   chatComplete,
   chatContractVersion,
   chatStream,
+  embed,
+  embeddingContractVersion,
   fallbackChatComplete,
   fallbackChatStream,
   nativeChatComplete,
   nativeChatStream,
+  rerank,
+  rerankContractVersion,
 } from "../dist/index.js";
 
 const settings = {
@@ -23,6 +27,58 @@ const request = {
 
 test("exports the Rust chat contract version", () => {
   assert.equal(chatContractVersion(), 1);
+  assert.equal(embeddingContractVersion(), 1);
+  assert.equal(rerankContractVersion(), 1);
+});
+
+test("embedding and rerank APIs reach Rust through the Node binding", async () => {
+  const embedding = await withFixtureServer(
+    JSON.stringify({
+      data: [
+        { index: 1, embedding: [0.3, 0.4] },
+        { index: 0, embedding: [0.1, 0.2] },
+      ],
+      usage: { prompt_tokens: 4, cost: 0.001 },
+    }),
+    "application/json",
+    async (baseUrl, captured) => {
+      const result = await embed(
+        { protocol: "open_router", settings: { base_url: baseUrl, api_key: "fixture" } },
+        {
+          contract_version: 1,
+          model: "fixture-model",
+          input_type: "query",
+          texts: ["first", "second"],
+        },
+      );
+      assert.equal(captured.path, "/engines/v1/embeddings");
+      assert.equal(captured.body.input_type, "query");
+      return result;
+    },
+  );
+  assert.deepEqual(embedding.embeddings, [[0.1, 0.2], [0.3, 0.4]]);
+  assert.equal(embedding.usage.cost, 0.001);
+
+  const reranked = await withFixtureServer(
+    JSON.stringify({ results: [{ index: 1, relevance_score: 0.93 }] }),
+    "application/json",
+    async (baseUrl, captured) => {
+      const result = await rerank(
+        { protocol: "cohere", settings: { base_url: baseUrl, api_key: "fixture" } },
+        {
+          contract_version: 1,
+          model: "fixture-reranker",
+          query: "query",
+          documents: ["first", "second"],
+          top_n: 1,
+        },
+      );
+      assert.equal(captured.path, "/engines/v1/v2/rerank");
+      assert.equal(captured.body.top_n, 1);
+      return result;
+    },
+  );
+  assert.deepEqual(reranked.results, [{ index: 1, relevance_score: 0.93 }]);
 });
 
 test("completion rejects invalid endpoints without leaking credentials", async () => {

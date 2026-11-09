@@ -14,6 +14,16 @@ use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
     NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
 };
+use vectora_engine::llm::{
+    embeddings::{
+        EmbeddingClient, EmbeddingClientSettings, EmbeddingRequest, FallbackEmbeddingClient,
+        FallbackEmbeddingSettings,
+    },
+    rerank::{
+        FallbackRerankClient, FallbackRerankSettings, RerankClient, RerankClientSettings,
+        RerankRequest,
+    },
+};
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String>>>>;
 
@@ -68,9 +78,115 @@ fn parse_fallback_inputs(
     Ok((client, request))
 }
 
+fn parse_embedding_inputs(
+    settings_json: &str,
+    request_json: &str,
+) -> Result<(EmbeddingClient, EmbeddingRequest)> {
+    let settings: EmbeddingClientSettings = serde_json::from_str(settings_json)
+        .map_err(|_| Error::from_reason("invalid embedding settings"))?;
+    let request: EmbeddingRequest = serde_json::from_str(request_json)
+        .map_err(|_| Error::from_reason("invalid embedding request"))?;
+    let client =
+        EmbeddingClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok((client, request))
+}
+
+fn parse_fallback_embedding_inputs(
+    settings_json: &str,
+    request_json: &str,
+) -> Result<(FallbackEmbeddingClient, EmbeddingRequest)> {
+    let settings: FallbackEmbeddingSettings = serde_json::from_str(settings_json)
+        .map_err(|_| Error::from_reason("invalid fallback settings"))?;
+    let request: EmbeddingRequest = serde_json::from_str(request_json)
+        .map_err(|_| Error::from_reason("invalid embedding request"))?;
+    let client = FallbackEmbeddingClient::new(settings)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok((client, request))
+}
+
+fn parse_rerank_inputs(
+    settings_json: &str,
+    request_json: &str,
+) -> Result<(RerankClient, RerankRequest)> {
+    let settings: RerankClientSettings = serde_json::from_str(settings_json)
+        .map_err(|_| Error::from_reason("invalid rerank settings"))?;
+    let request: RerankRequest = serde_json::from_str(request_json)
+        .map_err(|_| Error::from_reason("invalid rerank request"))?;
+    let client =
+        RerankClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok((client, request))
+}
+
+fn parse_fallback_rerank_inputs(
+    settings_json: &str,
+    request_json: &str,
+) -> Result<(FallbackRerankClient, RerankRequest)> {
+    let settings: FallbackRerankSettings = serde_json::from_str(settings_json)
+        .map_err(|_| Error::from_reason("invalid fallback settings"))?;
+    let request: RerankRequest = serde_json::from_str(request_json)
+        .map_err(|_| Error::from_reason("invalid rerank request"))?;
+    let client = FallbackRerankClient::new(settings)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok((client, request))
+}
+
+fn encode_json<T: serde::Serialize>(value: &T) -> Result<String> {
+    serde_json::to_string(value).map_err(|_| Error::from_reason("could not encode response"))
+}
+
 #[napi]
 pub fn chat_contract_version() -> u32 {
     u32::from(CHAT_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn embedding_contract_version() -> u32 {
+    u32::from(vectora_engine::llm::embeddings::EMBEDDING_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn rerank_contract_version() -> u32 {
+    u32::from(vectora_engine::llm::rerank::RERANK_CONTRACT_VERSION)
+}
+
+#[napi]
+pub async fn embed(settings_json: String, request_json: String) -> Result<String> {
+    let (client, request) = parse_embedding_inputs(&settings_json, &request_json)?;
+    let response = client
+        .embed(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
+pub async fn fallback_embed(settings_json: String, request_json: String) -> Result<String> {
+    let (client, request) = parse_fallback_embedding_inputs(&settings_json, &request_json)?;
+    let response = client
+        .embed(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
+pub async fn rerank(settings_json: String, request_json: String) -> Result<String> {
+    let (client, request) = parse_rerank_inputs(&settings_json, &request_json)?;
+    let response = client
+        .rerank(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
+pub async fn fallback_rerank(settings_json: String, request_json: String) -> Result<String> {
+    let (client, request) = parse_fallback_rerank_inputs(&settings_json, &request_json)?;
+    let response = client
+        .rerank(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
 }
 
 #[napi]
