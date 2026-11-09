@@ -14,6 +14,7 @@ use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
     NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
 };
+use vectora_engine::harness::{RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus};
 use vectora_engine::llm::{
     embeddings::{
         EmbeddingClient, EmbeddingClientSettings, EmbeddingRequest, FallbackEmbeddingClient,
@@ -145,6 +146,29 @@ fn embedding_contract_version() -> u16 {
 #[pyfunction]
 fn rerank_contract_version() -> u16 {
     vectora_engine::llm::rerank::RERANK_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn run_contract_version() -> u16 {
+    RUN_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn run_create(identity_json: String) -> PyResult<String> {
+    let identity: RunIdentity =
+        serde_json::from_str(&identity_json).map_err(|_| py_error("invalid run identity"))?;
+    let run = RunLifecycle::new(identity).map_err(py_error)?;
+    encode_json(&run)
+}
+
+#[pyfunction]
+fn run_transition(lifecycle_json: String, next_status: String) -> PyResult<String> {
+    let mut run: RunLifecycle = serde_json::from_str(&lifecycle_json)
+        .map_err(|_| py_error("invalid run lifecycle snapshot"))?;
+    let next_status: RunStatus = serde_json::from_value(serde_json::Value::String(next_status))
+        .map_err(|_| py_error("unknown run status"))?;
+    run.transition(next_status).map_err(py_error)?;
+    encode_json(&run)
 }
 
 #[pyfunction]
@@ -393,6 +417,9 @@ fn fallback_chat_stream_start<'py>(
 
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(run_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(run_create, module)?)?;
+    module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(embedding_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(rerank_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(embed, module)?)?;

@@ -14,6 +14,7 @@ use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
     NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
 };
+use vectora_engine::harness::{RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus};
 use vectora_engine::llm::{
     embeddings::{
         EmbeddingClient, EmbeddingClientSettings, EmbeddingRequest, FallbackEmbeddingClient,
@@ -147,6 +148,30 @@ pub fn embedding_contract_version() -> u32 {
 #[napi]
 pub fn rerank_contract_version() -> u32 {
     u32::from(vectora_engine::llm::rerank::RERANK_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn run_contract_version() -> u32 {
+    u32::from(RUN_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn run_create(identity_json: String) -> Result<String> {
+    let identity: RunIdentity = serde_json::from_str(&identity_json)
+        .map_err(|_| Error::from_reason("invalid run identity"))?;
+    let run = RunLifecycle::new(identity).map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&run)
+}
+
+#[napi]
+pub fn run_transition(lifecycle_json: String, next_status: String) -> Result<String> {
+    let mut run: RunLifecycle = serde_json::from_str(&lifecycle_json)
+        .map_err(|_| Error::from_reason("invalid run lifecycle snapshot"))?;
+    let next_status: RunStatus = serde_json::from_value(serde_json::Value::String(next_status))
+        .map_err(|_| Error::from_reason("unknown run status"))?;
+    run.transition(next_status)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&run)
 }
 
 #[napi]

@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import {
   chatComplete,
   chatContractVersion,
+  createRun,
   chatStream,
   embed,
   embeddingContractVersion,
@@ -13,6 +14,8 @@ import {
   nativeChatStream,
   rerank,
   rerankContractVersion,
+  runContractVersion,
+  transitionRun,
 } from "../dist/index.js";
 
 const settings = {
@@ -29,6 +32,26 @@ test("exports the Rust chat contract version", () => {
   assert.equal(chatContractVersion(), 1);
   assert.equal(embeddingContractVersion(), 1);
   assert.equal(rerankContractVersion(), 1);
+});
+
+test("run lifecycle contract is exposed through the Node binding", () => {
+  assert.equal(runContractVersion(), 1);
+  const run = createRun({
+    contract_version: 1,
+    run_id: "run-1",
+    idempotency_key: "turn-1",
+    thread_id: "thread-1",
+    turn_id: "turn-1",
+    capabilities: ["chat"],
+  });
+  assert.equal(run.status, "planned");
+  assert.equal(run.sequence, 0);
+  const started = transitionRun(run, "running");
+  assert.equal(started.status, "running");
+  assert.equal(started.sequence, 1);
+  assert.equal(transitionRun(started, "running").sequence, 1);
+  assert.throws(() => transitionRun(run, "completed"), /invalid run transition/);
+  assert.throws(() => transitionRun(run, "not-a-status"), /unknown run status/);
 });
 
 test("embedding and rerank APIs reach Rust through the Node binding", async () => {
