@@ -1,5 +1,12 @@
 # Runtime agêntico e harness compartilhado
 
+## Maturidade da implementação
+
+O ciclo de vida de execução e a montagem de turno estão implementados como
+fundação experimental; persistência, reserva idempotente, tools, policy,
+aprovação, recovery e verificação ainda não estão implementados. A sequência
+incremental está em [`docs/plans/02-plano-loop-agentico.md`](../plans/02-plano-loop-agentico.md).
+
 ## Objetivo
 
 Definir o runtime comum de execução de agentes para produtos diferentes. A engine recebe uma tarefa com contexto confiável, orçamento e capacidades explicitamente concedidas; controla o loop do modelo, chamadas de tools, decisões, estado, eventos, checkpoints, cancelamento e verificação. O produto consumidor continua dono da experiência, identidade, política de negócio e adapters que realizam efeitos externos.

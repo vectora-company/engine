@@ -69,6 +69,13 @@ export interface ChatCompletion {
   usage: JsonValue;
 }
 
+export interface TurnAccumulatorSettings {
+  turn_id: string;
+  max_text_bytes?: number;
+  max_tool_calls?: number;
+  max_tool_argument_bytes?: number;
+}
+
 export type EmbeddingProtocol = "open_ai_compatible" | "open_router" | "cohere" | "voyage" | "ollama";
 export type RerankProtocol = "cohere" | "voyage" | "open_router";
 
@@ -189,6 +196,7 @@ interface NativeBinding {
   rerank(settingsJson: string, requestJson: string): Promise<string>;
   fallbackRerank(settingsJson: string, requestJson: string): Promise<string>;
   chatContractVersion(): number;
+  chatAssembleTurn(settingsJson: string, eventsJson: string): string;
   chatComplete(settingsJson: string, requestJson: string): Promise<string>;
   chatStreamStart(settingsJson: string, requestJson: string): Promise<string>;
   chatStreamNext(id: string): Promise<string | null>;
@@ -258,6 +266,16 @@ export async function fallbackRerank(
 
 /** Version of the canonical Rust chat contract. */
 export const chatContractVersion = (): number => native.chatContractVersion();
+
+/** Assemble a complete provider event sequence using the canonical Rust core. */
+export function assembleTurn(
+  settings: TurnAccumulatorSettings,
+  events: ChatEvent[],
+): ChatCompletion {
+  return JSON.parse(
+    native.chatAssembleTurn(JSON.stringify(settings), JSON.stringify(events)),
+  ) as ChatCompletion;
+}
 
 /** Complete a request using a native provider protocol via the Rust core. */
 export async function nativeChatComplete(
