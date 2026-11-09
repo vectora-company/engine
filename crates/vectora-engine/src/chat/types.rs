@@ -124,6 +124,10 @@ pub struct ChatRequest {
     pub options: GenerationOptions,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<ToolDefinition>,
+    /// Provider-specific OpenAI-compatible request fields. Reserved canonical
+    /// fields are rejected so extensions cannot replace engine-owned values.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extensions: BTreeMap<String, Value>,
 }
 
 impl ChatRequest {
@@ -134,6 +138,7 @@ impl ChatRequest {
             messages,
             options: GenerationOptions::default(),
             tools: Vec::new(),
+            extensions: BTreeMap::new(),
         }
     }
 }
@@ -160,11 +165,13 @@ impl FinishReason {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct Usage {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub total_tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -172,6 +179,9 @@ pub struct ChatCompletion {
     pub contract_version: u16,
     pub id: Option<String>,
     pub content: String,
+    /// Reasoning-channel content, kept separate from user-facing text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
     pub tool_calls: Vec<ToolCall>,
     pub finish_reason: Option<FinishReason>,
     pub usage: Option<Usage>,
@@ -191,6 +201,7 @@ pub struct ToolCallDelta {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatEventKind {
     TextDelta { text: String },
+    ReasoningDelta { text: String },
     ToolCallDelta { call: ToolCallDelta },
     Usage { usage: Usage },
     Completed { finish_reason: Option<FinishReason> },
