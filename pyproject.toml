@@ -1,0 +1,42 @@
+[project]
+name = "vectora-engine-tooling"
+version = "0.0.0"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "bandit>=1.9.4",
+  "pytest>=9.1.1",
+  "ruff>=0.15.18",
+  "ty>=0.0.51",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["utils", "bindings/python"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+indent-width = 4
+extend-exclude = ["target", "node_modules", "coverage"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "T201", "COM812", "INP001", "D", "ANN401", "ERA001", "PLW0603",
+  "RUF012", "TRY300", "TRY301", "SIM117", "SIM102", "ARG001", "ARG002",
+  "BLE001", "RUF001", "PGH003", "SLF001", "S110", "PLR2004", "E501",
+  "TRY004", "PLC0415", "F841", "F401", "PT011", "PT017", "FBT001",
+  "G004", "TRY401", "TRY002", "ARG005", "C901", "A004", "PLR0913",
+  "E402", "TRY003", "EM101", "EM102", "TD002", "TD003", "TD004",
+  "FIX002", "FBT002", "FBT003", "PLR0912", "PLR0915", "ANN204",
+  "TC001", "TC002", "TC003", "CPY001", "PLR0917",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"utils/test_*.py" = ["ANN001", "ANN201", "ANN202", "S101", "S108", "PT018"]

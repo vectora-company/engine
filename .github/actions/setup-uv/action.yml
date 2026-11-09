@@ -1,0 +1,31 @@
+name: Setup Python and uv
+description: Prepare the pinned Python tooling environment.
+
+inputs:
+  python-version:
+    description: Python used by repository tooling.
+    required: false
+    default: "3.13"
+  uv-version:
+    description: uv version used to resolve the locked tool environment.
+    required: false
+    default: "0.13.7"
+  sync:
+    description: Set to false when the caller will synchronize dependencies itself.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+    - uses: astral-sh/setup-uv@v10.3.3
+      with:
+        version: ${{ inputs.uv-version }}
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - if: inputs.sync == 'true'
+      shell: bash
+      run: uv sync --locked --all-groups
