@@ -18,6 +18,14 @@ pub enum ChatError {
     Provider { status: u16 },
     #[error("provider failed (HTTP {status})")]
     Server { status: u16 },
+    #[error("provider is temporarily overloaded")]
+    Overloaded,
+    #[error("provider rejected a request because its model is incompatible with the payload")]
+    ProviderIncompatible,
+    #[error("provider model does not support the requested image input")]
+    MultimodalIncompatible,
+    #[error("all configured chat fallback candidates failed (last: {model_id})")]
+    FallbackExhausted { model_id: String },
     #[error("connection to the provider failed")]
     Connection,
     #[error("provider request timed out")]
@@ -32,6 +40,52 @@ pub enum ChatError {
     Cancelled,
 }
 
+pub(crate) fn classify_provider_error(
+    status: u16,
+    retry_after: Option<Duration>,
+    body: &[u8],
+) -> ChatError {
+    let message = String::from_utf8_lossy(body).to_ascii_lowercase();
+    if (500..=599).contains(&status)
+        && [
+            "overloaded_error",
+            "overloaded",
+            "high demand",
+            "service unavailable",
+        ]
+        .iter()
+        .any(|marker| message.contains(marker))
+    {
+        return ChatError::Overloaded;
+    }
+    if status == 400
+        && [
+            "tool_plan",
+            "tool plan` cannot be used",
+            "tool plan cannot be used",
+        ]
+        .iter()
+        .any(|marker| message.contains(marker))
+    {
+        return ChatError::ProviderIncompatible;
+    }
+    if status == 400
+        && [
+            "image content is not supported",
+            "image input is not supported",
+            "image_url is not supported",
+            "unsupported content type: image",
+            "does not support image",
+            "model does not support vision",
+        ]
+        .iter()
+        .any(|marker| message.contains(marker))
+    {
+        return ChatError::MultimodalIncompatible;
+    }
+    classify_status(status, retry_after)
+}
+
 pub(crate) fn classify_status(status: u16, retry_after: Option<Duration>) -> ChatError {
     match status {
         401 => ChatError::Authentication,
@@ -39,5 +93,30 @@ pub(crate) fn classify_status(status: u16, retry_after: Option<Duration>) -> Cha
         429 => ChatError::RateLimited { retry_after },
         500..=599 => ChatError::Server { status },
         _ => ChatError::Provider { status },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classifies_known_provider_fallback_reasons_without_exposing_body() {
+        assert!(matches!(
+            classify_provider_error(529, None, br#"{"type":"overloaded_error"}"#),
+            ChatError::Overloaded
+        ));
+        assert!(matches!(
+            classify_provider_error(400, None, b"tool_plan cannot be used with this model"),
+            ChatError::ProviderIncompatible
+        ));
+        assert!(matches!(
+            classify_provider_error(400, None, b"model does not support vision"),
+            ChatError::MultimodalIncompatible
+        ));
+        assert!(matches!(
+            classify_provider_error(500, None, b"internal error"),
+            ChatError::Server { status: 500 }
+        ));
     }
 }

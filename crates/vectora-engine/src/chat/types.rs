@@ -186,6 +186,9 @@ pub struct Usage {
 pub struct ChatCompletion {
     pub contract_version: u16,
     pub id: Option<String>,
+    /// Selected provider/model identifier when fallback chose a candidate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_model_id: Option<String>,
     pub content: String,
     /// Reasoning-channel content, kept separate from user-facing text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -208,11 +211,25 @@ pub struct ToolCallDelta {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatEventKind {
-    TextDelta { text: String },
-    ReasoningDelta { text: String },
-    ToolCallDelta { call: ToolCallDelta },
-    Usage { usage: Usage },
-    Completed { finish_reason: Option<FinishReason> },
+    ModelSwitched {
+        from_model_id: String,
+        to_model_id: String,
+    },
+    TextDelta {
+        text: String,
+    },
+    ReasoningDelta {
+        text: String,
+    },
+    ToolCallDelta {
+        call: ToolCallDelta,
+    },
+    Usage {
+        usage: Usage,
+    },
+    Completed {
+        finish_reason: Option<FinishReason>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

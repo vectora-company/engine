@@ -68,10 +68,38 @@ async def native_chat_stream(
         _native.chat_stream_cancel(stream_id)
 
 
+async def fallback_chat_complete(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Try caller-ordered eligible candidates using the Rust fallback policy."""
+    result = await _native.fallback_chat_complete(
+        json.dumps(settings, separators=(",", ":")),
+        json.dumps(request, separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
+async def fallback_chat_stream(
+    settings: JsonObject, request: JsonObject
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield fallback stream events; partial output is never replayed."""
+    stream_id = await _native.fallback_chat_stream_start(
+        json.dumps(settings, separators=(",", ":")),
+        json.dumps(request, separators=(",", ":")),
+    )
+    try:
+        while event := await _native.chat_stream_next(stream_id):
+            yield json.loads(event)
+    finally:
+        _native.chat_stream_cancel(stream_id)
+
+
 __all__ = [
     "chat_complete",
     "chat_contract_version",
     "chat_stream",
+    "fallback_chat_complete",
+    "fallback_chat_stream",
     "native_chat_complete",
     "native_chat_stream",
 ]
