@@ -11,8 +11,7 @@ capability correspondente demonstrar conformidade e rollback.
   `rust-toolchain.toml`).
 - `scons` para os alvos de desenvolvimento.
 - `uv` e Python 3.13 para tooling e verificações dos bindings Python.
-- `pnpm` e Node.js 24 quando o pacote TypeScript em `bindings/typescript/`
-  estiver inicializado.
+- `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
 
 ## Preparar o ambiente
 
@@ -21,8 +20,9 @@ scons install
 ```
 
 O comando instala os componentes Rust selecionados, baixa dependências Cargo
-conforme `Cargo.lock` e sincroniza o ambiente Python de tooling. Não instala
-dependências do app Vectora nem sidecars de produto.
+conforme `Cargo.lock`, sincroniza o tooling Python, compila a extensão Python
+local e instala as dependências pnpm do binding Node. Não instala dependências
+do app Vectora nem sidecars de produto.
 
 ## Verificações
 
@@ -34,8 +34,9 @@ scons tests
 Os checks diretos de Rust são `cargo fmt`, Clippy com todos os targets e
 features, testes com todas as features e geração de documentação sem
 dependências. Para Python, o fluxo executa syntax check, Ruff, ty, Bandit e
-pytest em `utils/` e `bindings/python/`. O CI roda os checks Rust em Linux,
-macOS e Windows.
+pytest em `utils/` e `bindings/python/`. Para TypeScript, executa oxlint, `tsc`,
+build do addon e testes Node. O CI roda os checks Rust em Linux, macOS e
+Windows.
 
 ## Pull requests
 

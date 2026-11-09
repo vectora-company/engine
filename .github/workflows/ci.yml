@@ -53,6 +53,11 @@ jobs:
           python-version: "3.13"
           sync: "false"
       - run: uv sync --locked --all-groups
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and install Python binding
+        working-directory: bindings/python
+        run: uv run --project ../.. maturin develop
       - name: Python syntax
         run: uv run --no-project python -m compileall -q -j0 utils bindings/python
       - name: Ruff lint
@@ -66,27 +71,7 @@ jobs:
       - name: Python tests
         run: uv run pytest
 
-  detect-typescript-bindings:
-    name: Detect TypeScript bindings
-    runs-on: ubuntu-24.04
-    outputs:
-      present: ${{ steps.detect.outputs.present }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - id: detect
-        shell: bash
-        run: |
-          if [[ -f bindings/typescript/package.json ]]; then
-            echo 'present=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'present=false' >> "$GITHUB_OUTPUT"
-          fi
-
   typescript-bindings:
-    needs: detect-typescript-bindings
-    if: needs.detect-typescript-bindings.outputs.present == 'true'
     name: TypeScript bindings
     runs-on: ubuntu-24.04
     steps:
@@ -99,14 +84,18 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 11.5.0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install locked dependencies
         run: pnpm --dir bindings/typescript install --frozen-lockfile
+      - name: Build native addon and TypeScript package
+        run: pnpm --dir bindings/typescript build
       - name: TypeScript lint
-        run: pnpm --dir bindings/typescript exec oxlint --deny-warnings
+        run: pnpm --dir bindings/typescript exec oxlint --deny-warnings src test
       - name: Type check
-        run: pnpm --dir bindings/typescript exec tsc --noEmit
+        run: pnpm --dir bindings/typescript typecheck
       - name: Tests
-        run: pnpm --dir bindings/typescript run test --if-present
+        run: pnpm --dir bindings/typescript test
 
   pull-request-metadata:
     if: github.event_name == 'pull_request'

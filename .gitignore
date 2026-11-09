@@ -28,10 +28,14 @@ rustc-ice-*.txt
 .scons-logs/
 .venv/
 __pycache__/
+*.so
 .pytest_cache/
 .ruff_cache/
 
-# Node-based language bindings, when introduced
+# Node-based language bindings
 node_modules/
 coverage/
 dist/
+bindings/typescript/native/index.js
+bindings/typescript/native/index.d.ts
+bindings/typescript/native/*.node

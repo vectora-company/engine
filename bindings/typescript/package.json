@@ -1,0 +1,41 @@
+{
+  "name": "@vectora/engine",
+  "version": "0.1.0",
+  "description": "TypeScript bindings for the Vectora Engine Rust core",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "native/index.js",
+    "native/index.d.ts",
+    "native/*.node"
+  ],
+  "scripts": {
+    "build": "napi build --platform --release --esm --manifest-path native/Cargo.toml && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.0.0",
+    "@types/node": "24.10.0",
+    "oxlint": "1.25.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "packageManager": "pnpm@11.5.0",
+  "napi": {
+    "binaryName": "vectora_engine",
+    "packageName": "@vectora/engine",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin"
+    ]
+  }
+}

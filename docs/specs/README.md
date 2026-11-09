@@ -18,6 +18,7 @@ suportadas pelo contrato Rust versionado.
 |---|---|---|
 | [01 — Runtime agêntico e harness](01-runtime-agentico-e-harness.md) | `../../issues/01-loop-agentico-e-harness.md` | Execuções, loop, tools, políticas, aprovações, subagentes, verificação e decisões tipadas. |
 | [02 — Storage, memória, contexto e recuperação](02-storage-memoria-contexto-rag.md) | `../../issues/02-storage-memoria-contexto-rag.md` | Contratos SQL, vetoriais, KV, filas/eventos, ledger, contexto e RAG. |
+| [03 — Contrato de chat OpenAI-compatible](03-chat-openai-compatible.md) | `../plans/01-plano-portabilidade-llm-rust.md` e o backend Python consumidor | Contrato versionado de chat, transporte inicial, streaming SSE, erros e conformidade. |
 | [04 — Conversas, streaming e threads](04-conversas-streaming-e-threads.md) | `../../issues/04-chat-streaming-e-threads.md` | Turnos, envelopes de evento, progresso, replay, cancelamento e adaptação a diferentes canais. |
 
 ## Regras de leitura
