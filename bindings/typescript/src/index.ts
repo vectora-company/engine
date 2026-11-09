@@ -1,10 +1,5 @@
 export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export interface OpenAiCompatibleSettings {
   base_url: string;
@@ -24,11 +19,17 @@ export interface ChatRequest {
   messages: JsonValue[];
   options?: JsonValue;
   tools?: JsonValue[];
+  extensions?: Record<string, JsonValue>;
 }
 
 export interface ChatEvent {
   contract_version: number;
-  type: "text_delta" | "tool_call_delta" | "usage" | "completed";
+  type:
+    | "text_delta"
+    | "reasoning_delta"
+    | "tool_call_delta"
+    | "usage"
+    | "completed";
   [key: string]: JsonValue;
 }
 
@@ -36,6 +37,7 @@ export interface ChatCompletion {
   contract_version: number;
   id: string | null;
   content: string;
+  reasoning?: string;
   tool_calls: JsonValue[];
   finish_reason: JsonValue;
   usage: JsonValue;

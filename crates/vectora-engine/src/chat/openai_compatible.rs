@@ -438,6 +438,23 @@ fn validate_request(request: &ChatRequest) -> Result<(), ChatError> {
             "max_tokens must be positive",
         ));
     }
+    const RESERVED_EXTENSION_FIELDS: [&str; 6] = [
+        "model",
+        "messages",
+        "tools",
+        "stream",
+        "temperature",
+        "max_tokens",
+    ];
+    if request
+        .extensions
+        .iter()
+        .any(|(key, _)| key.trim().is_empty() || RESERVED_EXTENSION_FIELDS.contains(&key.as_str()))
+    {
+        return Err(ChatError::InvalidConfiguration(
+            "provider extension uses an empty or reserved field",
+        ));
+    }
     let mut names = HashSet::new();
     for tool in &request.tools {
         if tool.name.trim().is_empty() || !names.insert(tool.name.as_str()) {
@@ -507,6 +524,9 @@ fn request_payload(request: &ChatRequest, stream: bool) -> Value {
                 })
                 .collect(),
         );
+    }
+    for (key, value) in &request.extensions {
+        payload[key] = value.clone();
     }
     if stream {
         payload["stream"] = Value::Bool(true);
@@ -654,6 +674,11 @@ fn parse_completion(value: Value) -> Result<ChatCompletion, ChatError> {
         contract_version: CHAT_CONTRACT_VERSION,
         id,
         content,
+        reasoning: message
+            .get("reasoning")
+            .or_else(|| message.get("reasoning_content"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         tool_calls,
         finish_reason,
         usage,
@@ -700,6 +725,20 @@ fn parse_stream_event(frame: &str) -> Result<Vec<ChatEvent>, ChatError> {
                     }
                 }
                 _ => return Err(ChatError::Protocol("text delta has an unsupported shape")),
+            }
+        }
+        if let Some(reasoning) = delta
+            .get("reasoning")
+            .or_else(|| delta.get("reasoning_content"))
+        {
+            match reasoning {
+                Value::String(text) if !text.is_empty() => {
+                    events.push(ChatEvent::new(ChatEventKind::ReasoningDelta {
+                        text: text.clone(),
+                    }));
+                }
+                Value::Null => {}
+                _ => return Err(ChatError::Protocol("reasoning delta is not a string")),
             }
         }
         if let Some(calls) = delta.get("tool_calls") {
@@ -800,10 +839,20 @@ fn parse_usage(value: Option<&Value>) -> Result<Option<Usage>, ChatError> {
         .get("total_tokens")
         .and_then(Value::as_u64)
         .unwrap_or(input.saturating_add(output));
+    let cost = match value.get("cost") {
+        Some(Value::Number(number)) => Some(
+            number
+                .as_f64()
+                .ok_or(ChatError::Protocol("usage has invalid cost"))?,
+        ),
+        Some(Value::Null) | None => None,
+        Some(_) => return Err(ChatError::Protocol("usage has invalid cost")),
+    };
     Ok(Some(Usage {
         input_tokens: input,
         output_tokens: output,
         total_tokens: total,
+        cost,
     }))
 }
 
@@ -901,5 +950,64 @@ mod tests {
             }
         );
         assert_eq!(arguments.wire_value(), "{not-json");
+    }
+
+    #[test]
+    fn provider_extensions_keep_canonical_fields_owned_by_the_engine() {
+        let mut request = ChatRequest::new("model", Vec::new());
+        request
+            .extensions
+            .insert("reasoning".into(), json!({"effort": "high"}));
+        assert_eq!(
+            request_payload(&request, false)["reasoning"]["effort"],
+            "high"
+        );
+
+        request
+            .extensions
+            .insert("model".into(), json!("replacement-model"));
+        assert!(matches!(
+            validate_request(&request),
+            Err(ChatError::InvalidConfiguration(_))
+        ));
+    }
+
+    #[test]
+    fn reasoning_and_cost_are_preserved_outside_response_text() {
+        let completion = parse_completion(json!({
+            "choices": [{
+                "message": {"content": "visible", "reasoning": "private analysis"},
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 7,
+                "completion_tokens": 3,
+                "total_tokens": 10,
+                "cost": 0.00042
+            }
+        }))
+        .unwrap();
+        assert_eq!(completion.content, "visible");
+        assert_eq!(completion.reasoning.as_deref(), Some("private analysis"));
+        assert_eq!(completion.usage.unwrap().cost, Some(0.00042));
+
+        let events = parse_stream_event(
+            r#"{"choices":[{"delta":{"content":"visible","reasoning_content":"analysis"}}]}"#,
+        )
+        .unwrap();
+        assert!(matches!(events[0].event, ChatEventKind::TextDelta { .. }));
+        assert!(matches!(
+            events[1].event,
+            ChatEventKind::ReasoningDelta { .. }
+        ));
+    }
+
+    #[test]
+    fn endpoint_prefix_is_preserved_for_local_runtime_profiles() {
+        let endpoint = validate_config(&OpenAiCompatibleConfig::new(
+            "http://127.0.0.1:12434/engines/v1",
+        ))
+        .unwrap();
+        assert_eq!(endpoint.path(), "/engines/v1/chat/completions");
     }
 }

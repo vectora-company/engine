@@ -23,11 +23,10 @@ cancelamento e redaction. Não devem reimplementar transporte ou protocolo.
 {
   "contract_version": 1,
   "model": "example-model",
-  "messages": [
-    {"role": "user", "content": "Explique este trecho."}
-  ],
-  "options": {"temperature": 0.2, "max_tokens": 512},
-  "tools": []
+  "messages": [{ "role": "user", "content": "Explique este trecho." }],
+  "options": { "temperature": 0.2, "max_tokens": 512 },
+  "tools": [],
+  "extensions": { "reasoning": { "effort": "high" } }
 }
 ```
 
@@ -42,12 +41,20 @@ provider. Campos opcionais ausentes permanecem ausentes. `max_tokens` deve ser
 positivo; temperatura finita e não negativa; nome de modelo e nomes de tools
 não podem ser vazios.
 
+`extensions` é um mapa opcional de campos específicos do endpoint, mesclado no
+top-level da requisição de wire. A engine rejeita campos vazios ou campos
+reservados (`model`, `messages`, `tools`, `stream`, `temperature`, `max_tokens`)
+para não permitir que extensões sobrescrevam partes controladas pelo contrato.
+O consumidor é responsável por fornecer extensões suportadas pelo endpoint
+configurado.
+
 ## Eventos de streaming
 
 O consumidor recebe eventos discriminados, cada qual com `contract_version`:
 
 ```json
 {"contract_version":1,"type":"text_delta","text":"Olá"}
+{"contract_version":1,"type":"reasoning_delta","text":"análise"}
 {"contract_version":1,"type":"tool_call_delta","call":{"index":0,"id":"call-1","name":"search","arguments_fragment":"{\"q\":"}}
 {"contract_version":1,"type":"usage","usage":{"input_tokens":12,"output_tokens":3,"total_tokens":15}}
 {"contract_version":1,"type":"completed","finish_reason":"stop"}
@@ -58,6 +65,10 @@ consumidor usando `index`; um fragmento pode conter somente parte do nome ou
 dos argumentos. A engine emite `completed` uma única vez, incluindo no EOF sem
 marcador terminal. O marcador SSE `[DONE]` encerra o stream sem duplicar esse
 evento. O stream aplica backpressure; descartá-lo cancela a leitura HTTP.
+Campos de reasoning recebidos em `reasoning` ou `reasoning_content` são eventos
+separados e nunca são concatenados ao texto. Em resposta não-stream, o campo
+`reasoning` é preservado separadamente quando fornecido. `usage.cost`, quando
+numérico, é preservado como metadado opcional junto aos contadores de tokens.
 
 ## Erros e segurança
 
@@ -75,15 +86,36 @@ registra request/response nem segredos.
 ## Limites desta fatia
 
 - O transporte usa `POST {base_url}/chat/completions`, bearer auth opcional,
-  headers adicionais não reservados e SSE para stream.
+  headers adicionais não reservados e SSE para stream. O path prefixo do
+  `base_url` é preservado, permitindo endpoints como `/v1` e `/engines/v1`; o
+  consumidor escolhe autenticação opcional e headers específicos por endpoint.
 - Não há matriz de paridade aprovada para OmniRouter, 9Router, OpenRouter,
   llama.cpp, DMR ou Ollama. Só fixtures verificadas podem adicionar um perfil;
   Ollama exige seu protocolo próprio.
-- Modelos de reasoning, conteúdo de reasoning, formatos multimodais além de
-  `image_url`, tool choice, JSON mode, logprobs, usage final em trailers e
-  extensões proprietárias não são prometidos até serem caracterizados.
+- Formatos multimodais além de `image_url`, tool choice, JSON mode, logprobs e
+  usage final em trailers não são prometidos até serem caracterizados.
 - Fallback, seleção de provider, telemetria e integração de produto continuam
   sob responsabilidade dos consumidores.
+
+## Perfis observados no backend de referência
+
+Os perfis abaixo orientam a configuração do contrato comum. A matriz descreve
+o que o backend Python configura hoje; fixtures locais verificam as regras de
+path, headers e payload sem afirmar disponibilidade ou paridade de serviços
+remotos.
+
+| Perfil     | `base_url` configurável                     | Autenticação                       | Detalhe preservado                                                               |
+| ---------- | ------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| OpenRouter | `https://openrouter.ai/api/v1`              | Bearer                             | Headers de atribuição são enviados pelo consumidor, nunca inseridos pela engine. |
+| 9Router    | Endpoint definido pelo usuário              | Bearer                             | A engine acrescenta `/chat/completions` ao prefixo informado.                    |
+| OmniRouter | Endpoint definido pelo usuário              | Configuração do consumidor         | Usa o mesmo contrato OpenAI-compatible, sem URL ou identidade codificada.        |
+| llama.cpp  | Endpoint externo ou local com prefixo `/v1` | Opcional                           | Sem attribution headers; prefixo do path continua intacto.                       |
+| DMR        | Endpoint com prefixo `/engines/v1`          | Ausente no perfil atual do Vectora | O consumidor passa o prefixo completo, que a engine preserva.                    |
+
+Reasoning de resposta e `usage.cost` são mantidos em campos/eventos separados.
+As extensões de requisição permitem ao consumidor enviar opções específicas
+do modelo, como configuração de reasoning, sem colocar essa política dentro da
+engine.
 
 ## Conformidade
 
