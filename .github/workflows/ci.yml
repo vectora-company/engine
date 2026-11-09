@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace
+
+  repository-tooling:
+    name: Shared repository tooling
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: "3.13"
+          sync: "false"
+      - run: uv sync --locked --all-groups
+      - run: uv run pytest
+      - run: uv run ruff check utils
+      - run: uv run ruff format --check utils
+
+  pull-request-metadata:
+    if: github.event_name == 'pull_request'
+    name: Pull request metadata
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Check title and description
+        run: python utils/checks.py pr-metadata
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Install commit title validator
+        run: npm install --no-save --no-audit --no-fund @commitlint/cli@21.2.4 @commitlint/config-conventional@21.2.4
+      - name: Validate Conventional Commit title
+        run: |
+          printf '%s\n' 'module.exports = { extends: ["@commitlint/config-conventional"] };' > .commitlintrc.cjs
+          printf '%s\n' "$PR_TITLE" | npx commitlint --verbose
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}

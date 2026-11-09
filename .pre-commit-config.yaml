@@ -1,0 +1,56 @@
+default_language_version:
+  python: python3
+default_stages: [pre-commit]
+minimum_pre_commit_version: 4.0.0
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents, --unsafe]
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=5000]
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^utils/.*\.py$
+      - id: ruff-format
+        files: ^utils/.*\.py$
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+        files: ^\.github/workflows/.*\.ya?ml$
+
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        entry: cargo fmt --all -- --check
+        language: system
+        pass_filenames: false
+        files: \.rs$
+      - id: no-process-metadata
+        name: Check code comments for planning and reviewer metadata
+        entry: python utils/checks.py no-plan --changed
+        language: system
+        pass_filenames: false
+        files: \.(rs|py|ts|tsx|js|jsx|mts)$
+        exclude: ^utils/(checks|test_checks)\.py$
+      - id: removed-path-references
+        name: Check staged references to removed paths
+        entry: python utils/checks.py removed-paths
+        language: system
+        pass_filenames: false
+        always_run: true

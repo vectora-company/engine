@@ -1,0 +1,11 @@
+[package]
+name = "vectora-engine"
+version = "0.1.0"
+description = "Rust engine core for reusable Vectora agent capabilities"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
