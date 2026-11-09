@@ -1,0 +1,957 @@
+//! In-memory model/tool round state machine shared by engine consumers.
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::chat::{CHAT_CONTRACT_VERSION, ChatCompletion};
+
+use super::{
+    TOOL_DISPATCH_CONTRACT_VERSION, ToolDecision, ToolDenialCode, ToolDispatch, ToolEffect,
+    ToolExecutionMode,
+};
+
+/// Version of the model/tool round state machine.
+pub const MODEL_TOOL_LOOP_CONTRACT_VERSION: u16 = 1;
+const DEFAULT_MAX_MODEL_TURNS: u32 = 50;
+const DEFAULT_MAX_TOOL_CALLS: u32 = 128;
+const DEFAULT_MAX_RESULT_BYTES: usize = 1024 * 1024;
+const DEFAULT_MAX_RESULTS_BYTES_PER_TURN: usize = 4 * 1024 * 1024;
+const MAX_RESULT_BYTES: usize = 16 * 1024 * 1024;
+
+/// Budgets for one non-durable model/tool loop.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ModelToolLoopSettings {
+    #[serde(default = "default_max_model_turns")]
+    pub max_model_turns: u32,
+    #[serde(default = "default_max_tool_calls")]
+    pub max_tool_calls: u32,
+    #[serde(default = "default_max_result_bytes")]
+    pub max_tool_result_bytes: usize,
+    #[serde(default = "default_max_results_bytes_per_turn")]
+    pub max_tool_results_bytes_per_turn: usize,
+}
+
+const fn default_max_model_turns() -> u32 {
+    DEFAULT_MAX_MODEL_TURNS
+}
+
+const fn default_max_tool_calls() -> u32 {
+    DEFAULT_MAX_TOOL_CALLS
+}
+
+const fn default_max_result_bytes() -> usize {
+    DEFAULT_MAX_RESULT_BYTES
+}
+
+const fn default_max_results_bytes_per_turn() -> usize {
+    DEFAULT_MAX_RESULTS_BYTES_PER_TURN
+}
+
+impl Default for ModelToolLoopSettings {
+    fn default() -> Self {
+        Self {
+            max_model_turns: default_max_model_turns(),
+            max_tool_calls: default_max_tool_calls(),
+            max_tool_result_bytes: default_max_result_bytes(),
+            max_tool_results_bytes_per_turn: default_max_results_bytes_per_turn(),
+        }
+    }
+}
+
+impl ModelToolLoopSettings {
+    fn validate(&self) -> Result<(), ModelToolLoopError> {
+        if self.max_model_turns == 0 {
+            return Err(ModelToolLoopError::InvalidLimit("max_model_turns"));
+        }
+        if self.max_tool_calls == 0 {
+            return Err(ModelToolLoopError::InvalidLimit("max_tool_calls"));
+        }
+        if self.max_tool_result_bytes == 0 || self.max_tool_result_bytes > MAX_RESULT_BYTES {
+            return Err(ModelToolLoopError::InvalidLimit("max_tool_result_bytes"));
+        }
+        if self.max_tool_results_bytes_per_turn == 0
+            || self.max_tool_results_bytes_per_turn > MAX_RESULT_BYTES
+        {
+            return Err(ModelToolLoopError::InvalidLimit(
+                "max_tool_results_bytes_per_turn",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Current in-memory phase of one model/tool loop.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelToolLoopPhase {
+    AwaitingModel,
+    AwaitingToolResults,
+    Completed,
+    Stopped,
+    RecoveryRequired,
+}
+
+/// Typed status reported by a tool adapter.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolResultStatus {
+    Succeeded,
+    Failed,
+    Denied,
+    Cancelled,
+    TimedOut,
+}
+
+/// What the adapter knows about an external effect when it returns.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolEffectState {
+    NotApplicable,
+    NotApplied,
+    Applied,
+    Unknown,
+}
+
+/// Correlated, size-bounded result returned by a consumer tool adapter.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ToolResult {
+    pub contract_version: u16,
+    pub run_id: String,
+    pub turn_id: String,
+    pub call_id: String,
+    pub tool_name: String,
+    pub status: ToolResultStatus,
+    pub effect_state: ToolEffectState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Consumer-redacted output supplied to the next model turn.
+    pub output: String,
+}
+
+/// Expected invocation and optional result kept while adapters are running.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PendingToolResult {
+    pub call_id: String,
+    pub tool_name: String,
+    pub effect: ToolEffect,
+    pub result: Option<ToolResult>,
+}
+
+/// Serializable state snapshot. It is not durable or safe to trust after reload.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ModelToolLoopState {
+    pub contract_version: u16,
+    pub run_id: String,
+    pub turn_id: String,
+    pub settings: ModelToolLoopSettings,
+    pub phase: ModelToolLoopPhase,
+    pub model_turns: u32,
+    pub tool_calls: u32,
+    pub pending_completion: Option<ChatCompletion>,
+    pub pending_results: Vec<PendingToolResult>,
+}
+
+/// New state and host action produced by one loop input.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ModelToolLoopTransition {
+    pub state: ModelToolLoopState,
+    pub action: ModelToolLoopAction,
+}
+
+impl ModelToolLoopState {
+    /// Begin a loop associated with the host's existing run and turn IDs.
+    pub fn new(
+        run_id: impl Into<String>,
+        turn_id: impl Into<String>,
+        settings: ModelToolLoopSettings,
+    ) -> Result<Self, ModelToolLoopError> {
+        settings.validate()?;
+        let run_id = run_id.into();
+        let turn_id = turn_id.into();
+        if run_id.trim().is_empty() || turn_id.trim().is_empty() {
+            return Err(ModelToolLoopError::EmptyIdentity);
+        }
+        Ok(Self {
+            contract_version: MODEL_TOOL_LOOP_CONTRACT_VERSION,
+            run_id,
+            turn_id,
+            settings,
+            phase: ModelToolLoopPhase::AwaitingModel,
+            model_turns: 0,
+            tool_calls: 0,
+            pending_completion: None,
+            pending_results: Vec::new(),
+        })
+    }
+}
+
+/// Action for the consumer after advancing the shared loop.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum ModelToolLoopAction {
+    ExecuteTools {
+        assistant_completion: ChatCompletion,
+        execution_mode: ToolExecutionMode,
+        invocations: Vec<ToolDecision>,
+        immediate_results: Vec<ToolResult>,
+    },
+    AwaitingToolResults {
+        remaining: usize,
+    },
+    ContinueWithToolResults {
+        assistant_completion: ChatCompletion,
+        results: Vec<ToolResult>,
+        next_model_turn: u32,
+    },
+    Complete {
+        assistant_completion: ChatCompletion,
+        model_turns: u32,
+        tool_calls: u32,
+    },
+    Stopped {
+        reason: ModelToolLoopStopReason,
+        model_turns: u32,
+        tool_calls: u32,
+    },
+    RecoveryRequired {
+        call_id: String,
+        tool_name: String,
+    },
+}
+
+/// Stable terminal reason when a loop budget is reached.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelToolLoopStopReason {
+    ModelTurnLimit,
+    ToolCallLimit,
+}
+
+/// Validation errors that leave the supplied loop snapshot unchanged.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum ModelToolLoopError {
+    #[error("run and turn identifiers are required")]
+    EmptyIdentity,
+    #[error("invalid loop limit {0}")]
+    InvalidLimit(&'static str),
+    #[error("unsupported model/tool loop contract version {received}")]
+    UnsupportedLoopContractVersion { received: u16 },
+    #[error("model/tool loop is not awaiting a model turn")]
+    NotAwaitingModel,
+    #[error("model/tool loop is not awaiting tool results")]
+    NotAwaitingToolResults,
+    #[error("unsupported chat contract version {received}")]
+    UnsupportedChatContractVersion { received: u16 },
+    #[error("unsupported tool dispatch contract version {received}")]
+    UnsupportedDispatchContractVersion { received: u16 },
+    #[error("dispatch identity does not match the active run and turn")]
+    DispatchIdentityMismatch,
+    #[error("tool dispatch does not exactly match the model tool calls")]
+    DispatchMismatch,
+    #[error("tool result contract version {received} is unsupported")]
+    UnsupportedToolResultContractVersion { received: u16 },
+    #[error("tool result identity does not match the active run and turn")]
+    ResultIdentityMismatch,
+    #[error("tool result call ID is unknown or already completed")]
+    UnexpectedToolResult,
+    #[error("tool result name does not match its invocation")]
+    ResultToolMismatch,
+    #[error("tool result output exceeds configured byte limit")]
+    ToolResultTooLarge,
+    #[error("tool result has inconsistent status, code, or effect state")]
+    InvalidToolResult,
+    #[error("tool results exceed the configured turn byte limit")]
+    ToolResultsTooLarge,
+    #[error("loop snapshot contains inconsistent pending state")]
+    InvalidState,
+}
+
+/// Consume a model completion and an already-authorized dispatch decision.
+pub fn accept_model_turn(
+    state: &ModelToolLoopState,
+    completion: ChatCompletion,
+    dispatch: ToolDispatch,
+) -> Result<(ModelToolLoopState, ModelToolLoopAction), ModelToolLoopError> {
+    validate_state(state)?;
+    if state.phase != ModelToolLoopPhase::AwaitingModel {
+        return Err(ModelToolLoopError::NotAwaitingModel);
+    }
+    if completion.contract_version != CHAT_CONTRACT_VERSION {
+        return Err(ModelToolLoopError::UnsupportedChatContractVersion {
+            received: completion.contract_version,
+        });
+    }
+    if dispatch.contract_version != TOOL_DISPATCH_CONTRACT_VERSION {
+        return Err(ModelToolLoopError::UnsupportedDispatchContractVersion {
+            received: dispatch.contract_version,
+        });
+    }
+    if dispatch.run_id != state.run_id
+        || dispatch.turn_id != state.turn_id
+        || dispatch.decisions.len() != completion.tool_calls.len()
+    {
+        return Err(ModelToolLoopError::DispatchIdentityMismatch);
+    }
+    for (call, decision) in completion.tool_calls.iter().zip(&dispatch.decisions) {
+        let matches = match decision {
+            ToolDecision::Invoke {
+                call: authorized, ..
+            } => authorized == call,
+            ToolDecision::Deny {
+                call_id, tool_name, ..
+            } => call_id == &call.id && tool_name == &call.name,
+        };
+        if !matches {
+            return Err(ModelToolLoopError::DispatchMismatch);
+        }
+    }
+    let expected_mode = if dispatch.decisions.iter().any(|decision| {
+        matches!(
+            decision,
+            ToolDecision::Invoke {
+                effect: ToolEffect::ExternalEffect | ToolEffect::Destructive,
+                ..
+            }
+        )
+    }) {
+        ToolExecutionMode::Sequential
+    } else {
+        ToolExecutionMode::ConcurrentReadOnly
+    };
+    if !dispatch.decisions.is_empty() && dispatch.execution_mode != expected_mode {
+        return Err(ModelToolLoopError::DispatchMismatch);
+    }
+
+    let mut next = state.clone();
+    next.model_turns = next
+        .model_turns
+        .checked_add(1)
+        .ok_or(ModelToolLoopError::InvalidState)?;
+    let mut assistant_completion = completion;
+    // Reasoning is internal provider output and never enters loop state/events.
+    assistant_completion.reasoning = None;
+
+    if assistant_completion.tool_calls.is_empty() {
+        next.phase = ModelToolLoopPhase::Completed;
+        return Ok((
+            next.clone(),
+            ModelToolLoopAction::Complete {
+                assistant_completion,
+                model_turns: next.model_turns,
+                tool_calls: next.tool_calls,
+            },
+        ));
+    }
+
+    if next.model_turns >= next.settings.max_model_turns {
+        next.phase = ModelToolLoopPhase::Stopped;
+        return Ok((
+            next.clone(),
+            ModelToolLoopAction::Stopped {
+                reason: ModelToolLoopStopReason::ModelTurnLimit,
+                model_turns: next.model_turns,
+                tool_calls: next.tool_calls,
+            },
+        ));
+    }
+    let call_count = u32::try_from(assistant_completion.tool_calls.len())
+        .map_err(|_| ModelToolLoopError::InvalidState)?;
+    let total_calls = next
+        .tool_calls
+        .checked_add(call_count)
+        .ok_or(ModelToolLoopError::InvalidState)?;
+    if total_calls > next.settings.max_tool_calls {
+        next.phase = ModelToolLoopPhase::Stopped;
+        return Ok((
+            next.clone(),
+            ModelToolLoopAction::Stopped {
+                reason: ModelToolLoopStopReason::ToolCallLimit,
+                model_turns: next.model_turns,
+                tool_calls: next.tool_calls,
+            },
+        ));
+    }
+    next.tool_calls = total_calls;
+
+    let mut invocations = Vec::new();
+    let mut immediate_results = Vec::new();
+    next.pending_results.clear();
+    for decision in dispatch.decisions {
+        match decision {
+            ToolDecision::Invoke {
+                call,
+                schema_version,
+                required_capability,
+                timeout_ms,
+                effect,
+                idempotency,
+                idempotency_key,
+            } => {
+                next.pending_results.push(PendingToolResult {
+                    call_id: call.id.clone(),
+                    tool_name: call.name.clone(),
+                    effect,
+                    result: None,
+                });
+                invocations.push(ToolDecision::Invoke {
+                    call,
+                    schema_version,
+                    required_capability,
+                    timeout_ms,
+                    effect,
+                    idempotency,
+                    idempotency_key,
+                });
+            }
+            ToolDecision::Deny {
+                call_id,
+                tool_name,
+                code,
+            } => {
+                let result = denied_result(&next.run_id, &next.turn_id, call_id, tool_name, code);
+                next.pending_results.push(PendingToolResult {
+                    call_id: result.call_id.clone(),
+                    tool_name: result.tool_name.clone(),
+                    effect: ToolEffect::ReadOnly,
+                    result: Some(result.clone()),
+                });
+                immediate_results.push(result);
+            }
+        }
+    }
+
+    if invocations.is_empty() {
+        let results = ordered_results(&next.pending_results)?;
+        next.pending_results.clear();
+        next.phase = ModelToolLoopPhase::AwaitingModel;
+        return Ok((
+            next.clone(),
+            ModelToolLoopAction::ContinueWithToolResults {
+                assistant_completion,
+                results,
+                next_model_turn: next.model_turns + 1,
+            },
+        ));
+    }
+
+    next.pending_completion = Some(assistant_completion.clone());
+    next.phase = ModelToolLoopPhase::AwaitingToolResults;
+    Ok((
+        next,
+        ModelToolLoopAction::ExecuteTools {
+            assistant_completion,
+            execution_mode: dispatch.execution_mode,
+            invocations,
+            immediate_results,
+        },
+    ))
+}
+
+/// Accept one adapter result; emit ordered results when the batch is complete.
+pub fn submit_tool_result(
+    state: &ModelToolLoopState,
+    result: ToolResult,
+) -> Result<(ModelToolLoopState, ModelToolLoopAction), ModelToolLoopError> {
+    validate_state(state)?;
+    if state.phase != ModelToolLoopPhase::AwaitingToolResults {
+        return Err(ModelToolLoopError::NotAwaitingToolResults);
+    }
+    if result.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
+        return Err(ModelToolLoopError::UnsupportedToolResultContractVersion {
+            received: result.contract_version,
+        });
+    }
+    if result.run_id != state.run_id || result.turn_id != state.turn_id {
+        return Err(ModelToolLoopError::ResultIdentityMismatch);
+    }
+    if result.output.len() > state.settings.max_tool_result_bytes {
+        return Err(ModelToolLoopError::ToolResultTooLarge);
+    }
+    validate_result_shape(&result)?;
+
+    let mut next = state.clone();
+    let pending = next
+        .pending_results
+        .iter_mut()
+        .find(|pending| pending.call_id == result.call_id)
+        .ok_or(ModelToolLoopError::UnexpectedToolResult)?;
+    if pending.result.is_some() {
+        return Err(ModelToolLoopError::UnexpectedToolResult);
+    }
+    if pending.tool_name != result.tool_name {
+        return Err(ModelToolLoopError::ResultToolMismatch);
+    }
+    validate_effect_state(pending.effect, result.status, result.effect_state)?;
+    pending.result = Some(result.clone());
+
+    if result.effect_state == ToolEffectState::Unknown {
+        next.phase = ModelToolLoopPhase::RecoveryRequired;
+        return Ok((
+            next,
+            ModelToolLoopAction::RecoveryRequired {
+                call_id: result.call_id,
+                tool_name: result.tool_name,
+            },
+        ));
+    }
+    let all_results_present = next
+        .pending_results
+        .iter()
+        .all(|item| item.result.is_some());
+    if !all_results_present {
+        let remaining = next
+            .pending_results
+            .iter()
+            .filter(|item| item.result.is_none())
+            .count();
+        return Ok((next, ModelToolLoopAction::AwaitingToolResults { remaining }));
+    }
+
+    let result_bytes = next
+        .pending_results
+        .iter()
+        .filter_map(|item| item.result.as_ref())
+        .map(|item| item.output.len())
+        .try_fold(0usize, usize::checked_add)
+        .ok_or(ModelToolLoopError::ToolResultsTooLarge)?;
+    if result_bytes > next.settings.max_tool_results_bytes_per_turn {
+        return Err(ModelToolLoopError::ToolResultsTooLarge);
+    }
+    let results = ordered_results(&next.pending_results)?;
+    let assistant_completion = next
+        .pending_completion
+        .take()
+        .ok_or(ModelToolLoopError::InvalidState)?;
+    next.pending_results.clear();
+    next.phase = ModelToolLoopPhase::AwaitingModel;
+    Ok((
+        next.clone(),
+        ModelToolLoopAction::ContinueWithToolResults {
+            assistant_completion,
+            results,
+            next_model_turn: next.model_turns + 1,
+        },
+    ))
+}
+
+/// Convenience wrapper that packages the new state with its next action.
+pub fn advance_model_turn(
+    state: &ModelToolLoopState,
+    completion: ChatCompletion,
+    dispatch: ToolDispatch,
+) -> Result<ModelToolLoopTransition, ModelToolLoopError> {
+    let (state, action) = accept_model_turn(state, completion, dispatch)?;
+    Ok(ModelToolLoopTransition { state, action })
+}
+
+/// Convenience wrapper that packages the new state with its next action.
+pub fn advance_tool_result(
+    state: &ModelToolLoopState,
+    result: ToolResult,
+) -> Result<ModelToolLoopTransition, ModelToolLoopError> {
+    let (state, action) = submit_tool_result(state, result)?;
+    Ok(ModelToolLoopTransition { state, action })
+}
+
+fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> {
+    if state.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
+        return Err(ModelToolLoopError::UnsupportedLoopContractVersion {
+            received: state.contract_version,
+        });
+    }
+    state.settings.validate()?;
+    if state.run_id.trim().is_empty() || state.turn_id.trim().is_empty() {
+        return Err(ModelToolLoopError::EmptyIdentity);
+    }
+    if state.model_turns > state.settings.max_model_turns
+        || state.tool_calls > state.settings.max_tool_calls
+    {
+        return Err(ModelToolLoopError::InvalidState);
+    }
+    match state.phase {
+        ModelToolLoopPhase::AwaitingModel | ModelToolLoopPhase::Completed => {
+            if state.pending_completion.is_some() || !state.pending_results.is_empty() {
+                return Err(ModelToolLoopError::InvalidState);
+            }
+        }
+        ModelToolLoopPhase::AwaitingToolResults => {
+            if state.pending_completion.is_none()
+                || state.pending_results.is_empty()
+                || state
+                    .pending_results
+                    .iter()
+                    .all(|pending| pending.result.is_some())
+            {
+                return Err(ModelToolLoopError::InvalidState);
+            }
+            validate_pending(state)?;
+        }
+        ModelToolLoopPhase::RecoveryRequired => validate_pending(state)?,
+        ModelToolLoopPhase::Stopped => {
+            if state.pending_completion.is_some() || !state.pending_results.is_empty() {
+                return Err(ModelToolLoopError::InvalidState);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_pending(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> {
+    let completion = state
+        .pending_completion
+        .as_ref()
+        .ok_or(ModelToolLoopError::InvalidState)?;
+    if completion.contract_version != CHAT_CONTRACT_VERSION
+        || completion.tool_calls.len() != state.pending_results.len()
+    {
+        return Err(ModelToolLoopError::InvalidState);
+    }
+    let mut seen = std::collections::HashSet::with_capacity(state.pending_results.len());
+    let mut result_bytes = 0usize;
+    let mut has_unknown_effect = false;
+    for (call, pending) in completion.tool_calls.iter().zip(&state.pending_results) {
+        if call.id != pending.call_id
+            || call.name != pending.tool_name
+            || !seen.insert(pending.call_id.as_str())
+        {
+            return Err(ModelToolLoopError::InvalidState);
+        }
+        if let Some(result) = &pending.result
+            && (result.run_id != state.run_id
+                || result.turn_id != state.turn_id
+                || result.call_id != pending.call_id
+                || result.tool_name != pending.tool_name
+                || result.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION
+                || result.output.len() > state.settings.max_tool_result_bytes)
+        {
+            return Err(ModelToolLoopError::InvalidState);
+        }
+        if let Some(result) = &pending.result {
+            validate_result_shape(result).map_err(|_| ModelToolLoopError::InvalidState)?;
+            validate_effect_state(pending.effect, result.status, result.effect_state)
+                .map_err(|_| ModelToolLoopError::InvalidState)?;
+            result_bytes = result_bytes
+                .checked_add(result.output.len())
+                .ok_or(ModelToolLoopError::InvalidState)?;
+            has_unknown_effect |= result.effect_state == ToolEffectState::Unknown;
+        }
+    }
+    if result_bytes > state.settings.max_tool_results_bytes_per_turn
+        || (state.phase == ModelToolLoopPhase::AwaitingToolResults && has_unknown_effect)
+        || (state.phase == ModelToolLoopPhase::RecoveryRequired && !has_unknown_effect)
+    {
+        return Err(ModelToolLoopError::InvalidState);
+    }
+    Ok(())
+}
+
+fn validate_result_shape(result: &ToolResult) -> Result<(), ModelToolLoopError> {
+    if result.call_id.trim().is_empty() || result.tool_name.trim().is_empty() {
+        return Err(ModelToolLoopError::InvalidToolResult);
+    }
+    match result.status {
+        ToolResultStatus::Denied if result.effect_state != ToolEffectState::NotApplied => {
+            Err(ModelToolLoopError::InvalidToolResult)
+        }
+        ToolResultStatus::Denied if result.code.as_deref().is_none_or(|code| !valid_code(code)) => {
+            Err(ModelToolLoopError::InvalidToolResult)
+        }
+        _ if result.code.as_deref().is_some_and(|code| !valid_code(code)) => {
+            Err(ModelToolLoopError::InvalidToolResult)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn valid_code(code: &str) -> bool {
+    !code.is_empty()
+        && code.len() <= 128
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':'))
+}
+
+fn validate_effect_state(
+    effect: ToolEffect,
+    status: ToolResultStatus,
+    effect_state: ToolEffectState,
+) -> Result<(), ModelToolLoopError> {
+    match (effect, status, effect_state) {
+        (_, ToolResultStatus::Denied, ToolEffectState::NotApplied) => Ok(()),
+        (ToolEffect::ReadOnly, _, ToolEffectState::NotApplicable) => Ok(()),
+        (ToolEffect::ReadOnly, _, ToolEffectState::NotApplied) => Ok(()),
+        (
+            ToolEffect::ExternalEffect | ToolEffect::Destructive,
+            ToolResultStatus::Succeeded,
+            ToolEffectState::Applied,
+        ) => Ok(()),
+        (ToolEffect::ExternalEffect | ToolEffect::Destructive, ToolResultStatus::Succeeded, _) => {
+            Err(ModelToolLoopError::InvalidToolResult)
+        }
+        (
+            ToolEffect::ExternalEffect | ToolEffect::Destructive,
+            _,
+            ToolEffectState::NotApplied | ToolEffectState::Applied | ToolEffectState::Unknown,
+        ) => Ok(()),
+        _ => Err(ModelToolLoopError::InvalidToolResult),
+    }
+}
+
+fn denied_result(
+    run_id: &str,
+    turn_id: &str,
+    call_id: String,
+    tool_name: String,
+    code: ToolDenialCode,
+) -> ToolResult {
+    let code = denial_code(code);
+    ToolResult {
+        contract_version: MODEL_TOOL_LOOP_CONTRACT_VERSION,
+        run_id: run_id.into(),
+        turn_id: turn_id.into(),
+        call_id,
+        tool_name,
+        status: ToolResultStatus::Denied,
+        effect_state: ToolEffectState::NotApplied,
+        output: format!("tool_denied:{code}"),
+        code: Some(code.into()),
+    }
+}
+
+fn denial_code(code: ToolDenialCode) -> &'static str {
+    match code {
+        ToolDenialCode::UnknownTool => "unknown_tool",
+        ToolDenialCode::CapabilityNotGranted => "capability_not_granted",
+        ToolDenialCode::InvalidArguments => "invalid_arguments",
+        ToolDenialCode::SchemaMismatch => "schema_mismatch",
+        ToolDenialCode::TurnCallLimitExceeded => "turn_call_limit_exceeded",
+    }
+}
+
+fn ordered_results(pending: &[PendingToolResult]) -> Result<Vec<ToolResult>, ModelToolLoopError> {
+    pending
+        .iter()
+        .map(|item| item.result.clone().ok_or(ModelToolLoopError::InvalidState))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chat::{CHAT_CONTRACT_VERSION, FinishReason, ToolArguments, ToolCall};
+    use crate::harness::{
+        TOOL_DISPATCH_CONTRACT_VERSION, ToolDecision, ToolDispatch, ToolExecutionMode,
+        ToolIdempotency,
+    };
+
+    fn state(max_model_turns: u32, max_tool_calls: u32) -> ModelToolLoopState {
+        ModelToolLoopState::new(
+            "run-1",
+            "turn-1",
+            ModelToolLoopSettings {
+                max_model_turns,
+                max_tool_calls,
+                ..ModelToolLoopSettings::default()
+            },
+        )
+        .unwrap()
+    }
+
+    fn completion(calls: Vec<ToolCall>) -> ChatCompletion {
+        ChatCompletion {
+            contract_version: CHAT_CONTRACT_VERSION,
+            id: None,
+            selected_model_id: None,
+            content: "answer".into(),
+            reasoning: Some("private reasoning".into()),
+            finish_reason: Some(if calls.is_empty() {
+                FinishReason::Stop
+            } else {
+                FinishReason::ToolCalls
+            }),
+            tool_calls: calls,
+            usage: None,
+        }
+    }
+
+    fn call(id: &str, name: &str) -> ToolCall {
+        ToolCall {
+            id: id.into(),
+            name: name.into(),
+            arguments: ToolArguments::from_json("{}"),
+        }
+    }
+
+    fn dispatch(calls: &[ToolCall], run_id: &str, turn_id: &str) -> ToolDispatch {
+        ToolDispatch {
+            contract_version: TOOL_DISPATCH_CONTRACT_VERSION,
+            run_id: run_id.into(),
+            turn_id: turn_id.into(),
+            execution_mode: ToolExecutionMode::Sequential,
+            decisions: calls
+                .iter()
+                .cloned()
+                .map(|call| ToolDecision::Invoke {
+                    call,
+                    schema_version: "test.v1".into(),
+                    required_capability: "test.execute".into(),
+                    timeout_ms: 1000,
+                    effect: ToolEffect::ExternalEffect,
+                    idempotency: ToolIdempotency::RequiresKey,
+                    idempotency_key: Some("key".into()),
+                })
+                .collect(),
+        }
+    }
+
+    fn result(call_id: &str, tool_name: &str) -> ToolResult {
+        ToolResult {
+            contract_version: MODEL_TOOL_LOOP_CONTRACT_VERSION,
+            run_id: "run-1".into(),
+            turn_id: "turn-1".into(),
+            call_id: call_id.into(),
+            tool_name: tool_name.into(),
+            status: ToolResultStatus::Succeeded,
+            effect_state: ToolEffectState::Applied,
+            code: None,
+            output: format!("result-{call_id}"),
+        }
+    }
+
+    #[test]
+    fn empty_model_turn_completes_and_strips_reasoning() {
+        let state = state(5, 10);
+        let (state, action) = accept_model_turn(
+            &state,
+            completion(Vec::new()),
+            dispatch(&[], "run-1", "turn-1"),
+        )
+        .unwrap();
+        assert_eq!(state.phase, ModelToolLoopPhase::Completed);
+        assert!(matches!(
+            action,
+            ModelToolLoopAction::Complete {
+                assistant_completion: ChatCompletion {
+                    reasoning: None,
+                    ..
+                },
+                model_turns: 1,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn adapter_results_are_correlated_and_returned_in_call_order() {
+        let calls = vec![call("call-1", "write"), call("call-2", "read")];
+        let (state, action) = accept_model_turn(
+            &state(5, 10),
+            completion(calls.clone()),
+            dispatch(&calls, "run-1", "turn-1"),
+        )
+        .unwrap();
+        assert!(matches!(action, ModelToolLoopAction::ExecuteTools { .. }));
+        let (state, action) = submit_tool_result(&state, result("call-2", "read")).unwrap();
+        assert_eq!(state.phase, ModelToolLoopPhase::AwaitingToolResults);
+        assert_eq!(
+            action,
+            ModelToolLoopAction::AwaitingToolResults { remaining: 1 }
+        );
+        let (_, action) = submit_tool_result(&state, result("call-1", "write")).unwrap();
+        assert!(matches!(
+            action,
+            ModelToolLoopAction::ContinueWithToolResults { results, .. }
+                if results.iter().map(|result| result.call_id.as_str()).collect::<Vec<_>>() == ["call-1", "call-2"]
+        ));
+    }
+
+    #[test]
+    fn denied_calls_become_non_effecting_results_without_adapter_execution() {
+        let call = call("call-1", "danger");
+        let dispatch = ToolDispatch {
+            contract_version: TOOL_DISPATCH_CONTRACT_VERSION,
+            run_id: "run-1".into(),
+            turn_id: "turn-1".into(),
+            execution_mode: ToolExecutionMode::ConcurrentReadOnly,
+            decisions: vec![ToolDecision::Deny {
+                call_id: call.id.clone(),
+                tool_name: call.name.clone(),
+                code: ToolDenialCode::CapabilityNotGranted,
+            }],
+        };
+        let (state, action) =
+            accept_model_turn(&state(4, 10), completion(vec![call]), dispatch).unwrap();
+        assert_eq!(state.phase, ModelToolLoopPhase::AwaitingModel);
+        assert!(matches!(
+            action,
+            ModelToolLoopAction::ContinueWithToolResults { results, .. }
+                if results[0].status == ToolResultStatus::Denied
+                    && results[0].effect_state == ToolEffectState::NotApplied
+                    && results[0].output == "tool_denied:capability_not_granted"
+        ));
+    }
+
+    #[test]
+    fn unknown_effect_outcome_stops_loop_for_reconciliation() {
+        let tool_call = call("call-1", "publish");
+        let (state, _) = accept_model_turn(
+            &state(5, 10),
+            completion(vec![tool_call]),
+            dispatch(&[call("call-1", "publish")], "run-1", "turn-1"),
+        )
+        .unwrap();
+        let uncertain = ToolResult {
+            effect_state: ToolEffectState::Unknown,
+            status: ToolResultStatus::TimedOut,
+            ..result("call-1", "publish")
+        };
+        let (state, action) = submit_tool_result(&state, uncertain).unwrap();
+        assert_eq!(state.phase, ModelToolLoopPhase::RecoveryRequired);
+        assert!(matches!(
+            action,
+            ModelToolLoopAction::RecoveryRequired { .. }
+        ));
+    }
+
+    #[test]
+    fn budgets_stop_before_tool_effects_when_no_model_round_remains() {
+        let call = call("call-1", "write");
+        let (state, action) = accept_model_turn(
+            &state(1, 10),
+            completion(vec![call.clone()]),
+            dispatch(&[call], "run-1", "turn-1"),
+        )
+        .unwrap();
+        assert_eq!(state.phase, ModelToolLoopPhase::Stopped);
+        assert!(matches!(
+            action,
+            ModelToolLoopAction::Stopped {
+                reason: ModelToolLoopStopReason::ModelTurnLimit,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn mismatched_dispatch_and_stale_results_are_rejected() {
+        let call = call("call-1", "read");
+        let mut wrong_dispatch = dispatch(std::slice::from_ref(&call), "other-run", "turn-1");
+        assert_eq!(
+            accept_model_turn(
+                &state(5, 10),
+                completion(vec![call.clone()]),
+                wrong_dispatch.clone()
+            )
+            .unwrap_err(),
+            ModelToolLoopError::DispatchIdentityMismatch
+        );
+        wrong_dispatch.run_id = "run-1".into();
+        let (state, _) =
+            accept_model_turn(&state(5, 10), completion(vec![call]), wrong_dispatch).unwrap();
+        let (state, _) = submit_tool_result(&state, result("call-1", "read")).unwrap();
+        assert_eq!(
+            submit_tool_result(&state, result("call-1", "read")).unwrap_err(),
+            ModelToolLoopError::NotAwaitingToolResults
+        );
+    }
+}

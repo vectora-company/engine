@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from vectora_engine import (
+    accept_model_turn,
     assemble_turn,
     chat_complete,
     chat_contract_version,
@@ -19,12 +20,15 @@ from vectora_engine import (
     fallback_chat_stream,
     fallback_embed,
     fallback_rerank,
+    model_tool_loop_contract_version,
     native_chat_complete,
     native_chat_stream,
     prepare_tool_dispatch,
     rerank,
     rerank_contract_version,
     run_contract_version,
+    start_model_tool_loop,
+    submit_tool_result,
     tool_chat_definitions,
     tool_contract_version,
     tool_dispatch_contract_version,
@@ -224,6 +228,75 @@ def test_tool_dispatch_rejects_bad_schema_arguments_and_non_running_run() -> Non
     assert result["decisions"][0]["code"] == "schema_mismatch"
     with pytest.raises(RuntimeError, match="requires a running run"):
         prepare_tool_dispatch({**run, "status": "planned"}, completion, [contract])
+
+
+def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:
+    assert model_tool_loop_contract_version() == 1
+    state = start_model_tool_loop("run-1", "turn-1")
+    assert state["phase"] == "awaiting_model"
+    assert state["settings"]["max_model_turns"] == 50
+
+    run = transition_run(
+        create_run(
+            {
+                "contract_version": 1,
+                "run_id": "run-1",
+                "idempotency_key": "turn-1",
+                "thread_id": "thread-1",
+                "turn_id": "turn-1",
+                "capabilities": ["data.read"],
+            }
+        ),
+        "running",
+    )
+    completion = {
+        "contract_version": 1,
+        "content": "checking",
+        "reasoning": "must not be retained",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": {"state": "object", "value": {"key": "alpha"}},
+            }
+        ],
+    }
+    contract = {
+        "contract_version": 1,
+        "schema_version": "lookup.v1",
+        "name": "lookup",
+        "input_schema": {
+            "type": "object",
+            "properties": {"key": {"type": "string"}},
+            "required": ["key"],
+        },
+        "required_capability": "data.read",
+        "timeout_ms": 5000,
+        "effect": "read_only",
+        "idempotency": "idempotent",
+    }
+    dispatch = prepare_tool_dispatch(run, completion, [contract])
+    transition = accept_model_turn(state, completion, dispatch)
+    assert transition["state"]["phase"] == "awaiting_tool_results"
+    assert transition["action"]["action"] == "execute_tools"
+    assert "reasoning" not in transition["action"]["assistant_completion"]
+
+    result = submit_tool_result(
+        transition["state"],
+        {
+            "contract_version": 1,
+            "run_id": "run-1",
+            "turn_id": "turn-1",
+            "call_id": "call-1",
+            "tool_name": "lookup",
+            "status": "succeeded",
+            "effect_state": "not_applicable",
+            "output": "found",
+        },
+    )
+    assert result["state"]["phase"] == "awaiting_model"
+    assert result["action"]["action"] == "continue_with_tool_results"
+    assert result["action"]["results"][0]["output"] == "found"
 
 
 def test_streamed_turn_assembly_uses_rust_core_and_preserves_tool_arguments() -> None:

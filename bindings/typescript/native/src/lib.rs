@@ -16,9 +16,10 @@ use vectora_engine::chat::{
     TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
+    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
     RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
-    TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDispatchSettings, prepare_tool_dispatch,
-    tool_chat_definitions,
+    TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult,
+    advance_model_turn, advance_tool_result, prepare_tool_dispatch, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -227,6 +228,55 @@ pub fn tool_chat_definitions_json(contracts_json: String) -> Result<String> {
     let definitions =
         tool_chat_definitions(&contracts).map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&definitions)
+}
+
+#[napi]
+pub fn model_tool_loop_contract_version() -> u32 {
+    u32::from(MODEL_TOOL_LOOP_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn model_tool_loop_start(
+    run_id: String,
+    turn_id: String,
+    settings_json: String,
+) -> Result<String> {
+    let settings: ModelToolLoopSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid model-tool loop settings"))?;
+    let state = ModelToolLoopState::new(run_id, turn_id, settings)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&state)
+}
+
+#[napi]
+pub fn model_tool_loop_accept_model_turn(
+    state_json: String,
+    completion_json: String,
+    dispatch_json: String,
+) -> Result<String> {
+    let state: ModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid model-tool loop state"))?;
+    let completion = serde_json::from_str(&completion_json)
+        .map_err(|_| Error::from_reason("invalid chat completion"))?;
+    let dispatch: ToolDispatch = serde_json::from_str(&dispatch_json)
+        .map_err(|_| Error::from_reason("invalid tool dispatch"))?;
+    let transition = advance_model_turn(&state, completion, dispatch)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub fn model_tool_loop_submit_tool_result(
+    state_json: String,
+    result_json: String,
+) -> Result<String> {
+    let state: ModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid model-tool loop state"))?;
+    let result: ToolResult = serde_json::from_str(&result_json)
+        .map_err(|_| Error::from_reason("invalid tool result"))?;
+    let transition = advance_tool_result(&state, result)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&transition)
 }
 
 #[napi]
