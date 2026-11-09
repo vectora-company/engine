@@ -22,10 +22,13 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    término em resposta canônica; validar ordem e impor limites. API incremental
    no Rust e API equivalente de conformidade nos dois bindings. Não executar
    tools nesta fase.
-3. **Contrato de tools e loop de modelo** — definir schemas/versões, capabilities
-   requeridas, erros, timeout, cancelamento, budgets e protocolo genérico de
-   invocação. Consumidor fornece adapters; o loop controla rodadas do modelo e
-   não contém integrações de produto.
+3. **Contrato de tools e loop de modelo** — dividido em entregas empilhadas:
+   (a) contrato versionado, schemas, capabilities, erros tipados e decisões
+   default-deny de dispatch; (b) resultados de adapters e máquina de rodadas
+   modelo → dispatch → resultados. A parte (a) está implementada
+   experimentalmente em `docs/specs/10-tool-contracts-e-dispatch.md`; ela
+   propaga timeout e idempotência declarados, mas não os impõe nem executa tools.
+   Consumidor fornece adapters; o loop não contém integrações de produto.
 4. **Política e aprovação** — definir snapshot efetivo e decisão default-deny;
    vincular HITL a conteúdo, arguments normalizados, escopo e digest da policy.
    Revalidar antes de efeitos e retomar. Falha de policy interrompe o efeito.
@@ -37,9 +40,10 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    do gate; verificar replay, cancelamento, redaction, restart e dois perfis de
    consumidor antes de qualquer alegação de paridade ou adoção.
 
-Fases 3–6 devem ser divididas em PRs menores se contratos independentes puderem
-ser validados isoladamente. Cada PR continua empilhado sobre o anterior e deixa
-explícito o que ainda não é durável nem seguro para produção.
+Cada parte do plano deve ser entregue em PR próprio empilhado sobre o anterior.
+Todo contrato público é implementado uma vez no Rust e coberto pelos bindings
+Python/PyPI e TypeScript/npm no mesmo PR. Cada PR deixa explícito o que ainda
+não é durável nem seguro para produção.
 
 ## Evidência de referência no backend Python
 

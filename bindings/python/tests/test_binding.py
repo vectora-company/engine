@@ -21,9 +21,13 @@ from vectora_engine import (
     fallback_rerank,
     native_chat_complete,
     native_chat_stream,
+    prepare_tool_dispatch,
     rerank,
     rerank_contract_version,
     run_contract_version,
+    tool_chat_definitions,
+    tool_contract_version,
+    tool_dispatch_contract_version,
     transition_run,
 )
 
@@ -109,6 +113,117 @@ def test_run_lifecycle_rejects_invalid_transition_and_unknown_status() -> None:
         transition_run(run, "completed")
     with pytest.raises(RuntimeError, match="unknown run status"):
         transition_run(run, "not-a-status")
+
+
+def test_tool_dispatch_uses_rust_core_and_denies_by_default() -> None:
+    assert tool_contract_version() == 1
+    assert tool_dispatch_contract_version() == 1
+    run = create_run(
+        {
+            "contract_version": 1,
+            "run_id": "run-1",
+            "idempotency_key": "turn-1",
+            "thread_id": "thread-1",
+            "turn_id": "turn-1",
+            "capabilities": ["data.read"],
+        }
+    )
+    run = transition_run(run, "running")
+    completion = {
+        "contract_version": 1,
+        "content": "",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": {"state": "object", "value": {"key": "alpha"}},
+            }
+        ],
+    }
+    contract = {
+        "contract_version": 1,
+        "schema_version": "lookup.v1",
+        "name": "lookup",
+        "input_schema": {
+            "type": "object",
+            "properties": {"key": {"type": "string", "minLength": 1}},
+            "required": ["key"],
+            "additionalProperties": False,
+        },
+        "required_capability": "data.read",
+        "timeout_ms": 5000,
+        "effect": "read_only",
+        "idempotency": "idempotent",
+    }
+
+    dispatch = prepare_tool_dispatch(run, completion, [contract])
+    assert dispatch["execution_mode"] == "concurrent_read_only"
+    assert dispatch["decisions"][0]["decision"] == "invoke"
+    assert dispatch["decisions"][0]["schema_version"] == "lookup.v1"
+    assert tool_chat_definitions([contract]) == [
+        {
+            "name": "lookup",
+            "parameters": contract["input_schema"],
+        }
+    ]
+
+    denied = prepare_tool_dispatch(
+        {**run, "identity": {**run["identity"], "capabilities": []}},
+        completion,
+        [contract],
+    )
+    assert denied["decisions"][0] == {
+        "decision": "deny",
+        "call_id": "call-1",
+        "tool_name": "lookup",
+        "code": "capability_not_granted",
+    }
+
+
+def test_tool_dispatch_rejects_bad_schema_arguments_and_non_running_run() -> None:
+    run = transition_run(
+        create_run(
+            {
+                "contract_version": 1,
+                "run_id": "run-1",
+                "idempotency_key": "turn-1",
+                "thread_id": "thread-1",
+                "turn_id": "turn-1",
+                "capabilities": ["data.read"],
+            }
+        ),
+        "running",
+    )
+    completion = {
+        "contract_version": 1,
+        "content": "",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": {"state": "object", "value": {"key": ""}},
+            }
+        ],
+    }
+    contract = {
+        "contract_version": 1,
+        "schema_version": "lookup.v1",
+        "name": "lookup",
+        "input_schema": {
+            "type": "object",
+            "properties": {"key": {"type": "string", "minLength": 1}},
+            "required": ["key"],
+            "additionalProperties": False,
+        },
+        "required_capability": "data.read",
+        "timeout_ms": 5000,
+        "effect": "read_only",
+        "idempotency": "idempotent",
+    }
+    result = prepare_tool_dispatch(run, completion, [contract])
+    assert result["decisions"][0]["code"] == "schema_mismatch"
+    with pytest.raises(RuntimeError, match="requires a running run"):
+        prepare_tool_dispatch({**run, "status": "planned"}, completion, [contract])
 
 
 def test_streamed_turn_assembly_uses_rust_core_and_preserves_tool_arguments() -> None:

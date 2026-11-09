@@ -6,6 +6,14 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+mod tool_dispatch;
+
+pub use tool_dispatch::{
+    TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDecision,
+    ToolDispatch, ToolDispatchError, ToolDispatchSettings, ToolEffect, ToolExecutionMode,
+    ToolIdempotency, prepare_tool_dispatch, tool_chat_definitions,
+};
+
 /// Version of the public run lifecycle contract.
 pub const RUN_CONTRACT_VERSION: u16 = 1;
 
@@ -142,14 +150,18 @@ impl RunLifecycle {
         })
     }
 
-    /// Apply a valid state transition; repeating the current state is a no-op.
-    pub fn transition(&mut self, next: RunStatus) -> Result<Option<RunTransition>, RunError> {
+    pub(crate) fn validate(&self) -> Result<(), RunError> {
         if self.contract_version != RUN_CONTRACT_VERSION {
             return Err(RunError::UnsupportedContractVersion {
                 received: self.contract_version,
             });
         }
-        self.identity.validate()?;
+        self.identity.validate()
+    }
+
+    /// Apply a valid state transition; repeating the current state is a no-op.
+    pub fn transition(&mut self, next: RunStatus) -> Result<Option<RunTransition>, RunError> {
+        self.validate()?;
         if next == self.status {
             return Ok(None);
         }

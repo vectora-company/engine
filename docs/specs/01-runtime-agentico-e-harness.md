@@ -2,8 +2,9 @@
 
 ## Maturidade da implementação
 
-O ciclo de vida de execução e a montagem de turno estão implementados como
-fundação experimental; persistência, reserva idempotente, tools, policy,
+O ciclo de vida de execução, a montagem de turno e a preparação de dispatch de
+tools estão implementados como fundação experimental; o loop de rodadas,
+execução de adapters, persistência, reserva idempotente, policy completa,
 aprovação, recovery e verificação ainda não estão implementados. A sequência
 incremental está em [`docs/plans/02-plano-loop-agentico.md`](../plans/02-plano-loop-agentico.md).
 
