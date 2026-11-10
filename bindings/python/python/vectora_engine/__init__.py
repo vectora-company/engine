@@ -16,13 +16,21 @@ def validate_storage_selection(selection: JsonObject) -> dict[str, Any]:
     return json.loads(_native.storage_validate_selection(json.dumps(selection)))
 
 
-async def vector_store_upsert(config: JsonObject, collection: str, record: JsonObject) -> None:
+async def vector_store_upsert(
+    config: JsonObject, collection: str, record: JsonObject
+) -> None:
     """Upsert a scoped vector record in the selected LanceDB or Qdrant adapter."""
-    await _native.vector_store_upsert(json.dumps(config), collection, json.dumps(record))
+    await _native.vector_store_upsert(
+        json.dumps(config), collection, json.dumps(record)
+    )
 
 
 async def vector_store_search(
-    config: JsonObject, collection: str, scope: str, vector: Sequence[float], limit: int = 10
+    config: JsonObject,
+    collection: str,
+    scope: str,
+    vector: Sequence[float],
+    limit: int = 10,
 ) -> list[dict[str, Any]]:
     """Search vectors inside the exact supplied scope."""
     return json.loads(
@@ -36,18 +44,14 @@ async def vector_store_delete(
     config: JsonObject, collection: str, scope: str, record_id: int
 ) -> None:
     """Delete one vector record without crossing its scope."""
-    await _native.vector_store_delete(
-        json.dumps(config), collection, scope, record_id
-    )
+    await _native.vector_store_delete(json.dumps(config), collection, scope, record_id)
 
 
 async def kv_store_put(
     config: JsonObject, key: str, value: Any, ttl_seconds: int | None = None
 ) -> None:
     """Persist JSON in Redis or NATS KV; NATS rejects per-key TTL."""
-    await _native.kv_store_put(
-        json.dumps(config), key, json.dumps(value), ttl_seconds
-    )
+    await _native.kv_store_put(json.dumps(config), key, json.dumps(value), ttl_seconds)
 
 
 async def kv_store_get(config: JsonObject, key: str) -> Any:
@@ -57,9 +61,7 @@ async def kv_store_get(config: JsonObject, key: str) -> Any:
 
 async def queue_enqueue(config: JsonObject, payload: bytes) -> str:
     """Enqueue bytes using the configured durable queue adapter."""
-    return await _native.queue_enqueue(
-        json.dumps(config), json.dumps(list(payload))
-    )
+    return await _native.queue_enqueue(json.dumps(config), json.dumps(list(payload)))
 
 
 async def queue_receive(
@@ -67,9 +69,7 @@ async def queue_receive(
 ) -> dict[str, Any] | None:
     """Receive one durable delivery; call queue_ack after processing it."""
     result = json.loads(
-        await _native.queue_receive(
-            json.dumps(config), consumer, group, timeout_ms
-        )
+        await _native.queue_receive(json.dumps(config), consumer, group, timeout_ms)
     )
     if result is not None:
         result["payload"] = bytes(result["payload"])
@@ -88,9 +88,7 @@ def queue_release(delivery_id: str) -> None:
 
 async def pubsub_publish(config: JsonObject, topic: str, payload: bytes) -> None:
     """Publish an ephemeral byte message."""
-    await _native.pubsub_publish(
-        json.dumps(config), topic, json.dumps(list(payload))
-    )
+    await _native.pubsub_publish(json.dumps(config), topic, json.dumps(list(payload)))
 
 
 async def pubsub_subscribe(config: JsonObject, topic: str) -> str:
@@ -98,7 +96,9 @@ async def pubsub_subscribe(config: JsonObject, topic: str) -> str:
     return await _native.pubsub_subscribe(json.dumps(config), topic)
 
 
-async def pubsub_receive(subscription_id: str, timeout_ms: int = 30_000) -> bytes | None:
+async def pubsub_receive(
+    subscription_id: str, timeout_ms: int = 30_000
+) -> bytes | None:
     """Receive one ephemeral message, or return None when the timeout expires."""
     result = json.loads(await _native.pubsub_receive(subscription_id, timeout_ms))
     return bytes(result) if result is not None else None
@@ -119,9 +119,7 @@ async def resilient_ledger_append(
 ) -> dict[str, Any]:
     """Commit to SQLite first and mirror to PostgreSQL when configured/available."""
     return json.loads(
-        await _native.resilient_ledger_append(
-            path, postgres_url, json.dumps(event)
-        )
+        await _native.resilient_ledger_append(path, postgres_url, json.dumps(event))
     )
 
 
@@ -423,17 +421,27 @@ __all__ = [
     "fallback_chat_stream",
     "fallback_embed",
     "fallback_rerank",
+    "kv_store_get",
+    "kv_store_put",
     "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_stream",
     "prepare_tool_dispatch",
+    "pubsub_publish",
+    "pubsub_receive",
+    "pubsub_subscribe",
+    "pubsub_unsubscribe",
+    "queue_ack",
+    "queue_enqueue",
+    "queue_receive",
+    "queue_release",
     "rerank",
     "rerank_contract_version",
+    "resilient_ledger_append",
     "run_contract_version",
     "sqlite_admit_run",
     "sqlite_latest_checkpoint",
     "sqlite_ledger_append",
-    "resilient_ledger_append",
     "sqlite_ledger_read",
     "sqlite_reserve_run",
     "sqlite_save_checkpoint",
@@ -444,17 +452,7 @@ __all__ = [
     "tool_dispatch_contract_version",
     "transition_run",
     "validate_storage_selection",
-    "vector_store_upsert",
-    "vector_store_search",
     "vector_store_delete",
-    "kv_store_put",
-    "kv_store_get",
-    "queue_enqueue",
-    "queue_receive",
-    "queue_ack",
-    "queue_release",
-    "pubsub_publish",
-    "pubsub_subscribe",
-    "pubsub_receive",
-    "pubsub_unsubscribe",
+    "vector_store_search",
+    "vector_store_upsert",
 ]

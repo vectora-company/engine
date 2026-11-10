@@ -41,13 +41,13 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 
 ## Matriz de capacidades
 
-| Capacidade | Adapters | Diferenças a declarar |
-| --- | --- | --- |
-| Relacional e ledger | SQLite autoritativo; PostgreSQL selecionável e espelhado | Transações, isolamento, locks, conflitos, migrations, tipos e paginação. |
-| Vetorial | LanceDB, Qdrant | Filtros, distância/score, índices, busca lexical/híbrida, consistência e limites. |
-| KV/cache | Redis, NATS JetStream KV | TTL, atomicidade, revisões, eviction, limites e persistência configurada. |
-| Fila/stream durável | NATS JetStream, Redis Streams | Grupos/consumidores, ACK, redelivery, retenção, replay, ordenação e DLQ. |
-| Pub/sub | NATS Core, Redis Pub/Sub | Entrega efêmera, reconexão, assinaturas e comportamento sem assinante. |
+| Capacidade          | Adapters                                                 | Diferenças a declarar                                                             |
+| ------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Relacional e ledger | SQLite autoritativo; PostgreSQL selecionável e espelhado | Transações, isolamento, locks, conflitos, migrations, tipos e paginação.          |
+| Vetorial            | LanceDB, Qdrant                                          | Filtros, distância/score, índices, busca lexical/híbrida, consistência e limites. |
+| KV/cache            | Redis, NATS JetStream KV                                 | TTL, atomicidade, revisões, eviction, limites e persistência configurada.         |
+| Fila/stream durável | NATS JetStream, Redis Streams                            | Grupos/consumidores, ACK, redelivery, retenção, replay, ordenação e DLQ.          |
+| Pub/sub             | NATS Core, Redis Pub/Sub                                 | Entrega efêmera, reconexão, assinaturas e comportamento sem assinante.            |
 
 Adapters em memória podem apoiar testes e modo local explicitamente escolhido,
 sem reivindicar durabilidade ou semântica distribuída. Garantias dependem da
