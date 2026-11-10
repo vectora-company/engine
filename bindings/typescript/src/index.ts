@@ -463,6 +463,11 @@ interface NativeBinding {
     dispatchJson: string,
   ): string;
   modelToolLoopSubmitToolResult(stateJson: string, resultJson: string): string;
+  modelToolLoopRecover(stateJson: string): string;
+  modelToolLoopReconcileToolResult(
+    stateJson: string,
+    resultJson: string,
+  ): string;
   embeddingContractVersion(): number;
   rerankContractVersion(): number;
   embed(settingsJson: string, requestJson: string): Promise<string>;
@@ -917,6 +922,28 @@ export function submitToolResult(
 ): ModelToolLoopTransition {
   return JSON.parse(
     native.modelToolLoopSubmitToolResult(
+      JSON.stringify(state),
+      JSON.stringify(result),
+    ),
+  ) as ModelToolLoopTransition;
+}
+
+/** Require host reconciliation for pending calls after restart; never replays tools. */
+export function recoverModelToolLoop(
+  state: ModelToolLoopState,
+): ModelToolLoopTransition {
+  return JSON.parse(
+    native.modelToolLoopRecover(JSON.stringify(state)),
+  ) as ModelToolLoopTransition;
+}
+
+/** Record a host-confirmed outcome for one interrupted invocation. */
+export function reconcileToolResult(
+  state: ModelToolLoopState,
+  result: ToolResult,
+): ModelToolLoopTransition {
+  return JSON.parse(
+    native.modelToolLoopReconcileToolResult(
       JSON.stringify(state),
       JSON.stringify(result),
     ),

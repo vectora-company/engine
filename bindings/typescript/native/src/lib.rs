@@ -20,7 +20,8 @@ use vectora_engine::harness::{
     PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
     TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
     ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, advance_model_turn,
-    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, tool_chat_definitions,
+    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, reconcile_tool_result,
+    recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -751,6 +752,29 @@ pub fn model_tool_loop_submit_tool_result(
     let result: ToolResult = serde_json::from_str(&result_json)
         .map_err(|_| Error::from_reason("invalid tool result"))?;
     let transition = advance_tool_result(&state, result)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub fn model_tool_loop_recover(state_json: String) -> Result<String> {
+    let state: ModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid model/tool loop state"))?;
+    let transition =
+        recover_model_tool_loop(&state).map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub fn model_tool_loop_reconcile_tool_result(
+    state_json: String,
+    result_json: String,
+) -> Result<String> {
+    let state: ModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid model/tool loop state"))?;
+    let result: ToolResult = serde_json::from_str(&result_json)
+        .map_err(|_| Error::from_reason("invalid tool result"))?;
+    let transition = reconcile_tool_result(&state, result)
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&transition)
 }

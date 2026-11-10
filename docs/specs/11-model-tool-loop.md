@@ -2,9 +2,9 @@
 
 ## Estado
 
-Experimental e em memória. O mesmo coordenador é implementado em Rust e
-exposto pelos bindings Python/PyPI e TypeScript/npm. O consumidor continua
-responsável por chamar o provider e executar os adapters.
+Experimental. O mesmo coordenador é implementado em Rust e exposto pelos
+bindings Python/PyPI e TypeScript/npm. O consumidor continua responsável por
+chamar o provider, executar adapters e persistir snapshots/ledger.
 
 ## Contrato
 
@@ -29,7 +29,17 @@ responsável por chamar o provider e executar os adapters.
   16 MiB quando representa bytes. A engine mede bytes UTF-8.
 - Um efeito externo com resultado `unknown` move o loop para
   `recovery_required`; o host não deve solicitar uma nova rodada que possa
-  repetir cegamente esse efeito. Reconciliação e retomada são trabalho futuro.
+  repetir cegamente esse efeito.
+- `recover_model_tool_loop` converte um snapshot em `awaiting_tool_results` para
+  `recovery_required` depois de um restart. A operação nunca retorna ação de
+  execução de tools: o host deve reconciliar explicitamente cada chamada ainda
+  sem resultado, inclusive chamadas de leitura, pois a engine não sabe se o
+  adapter chegou a iniciá-las.
+- `reconcile_tool_result` aceita somente um resultado com efeito conhecido
+  (`not_applied`, `applied` ou `not_applicable`) para uma chamada ausente ou
+  previamente marcada `unknown`. Quando todas as chamadas têm resultado
+  conhecido, devolve os resultados na ordem original para a próxima rodada do
+  modelo. Um resultado ainda `unknown` permanece bloqueado.
 - Se o limite de rodadas for atingido numa resposta que pede tools, o loop para
   antes de pedir sua execução. Assim, não inicia efeitos sem espaço orçado para
   consultar o modelo depois.
@@ -39,16 +49,21 @@ responsável por chamar o provider e executar os adapters.
 O consumidor impõe timeout e cancelamento, redige outputs, chama o gate de
 [`12-policy-and-approval.md`](12-policy-and-approval.md) imediatamente antes
 de executar adapters e persiste estado/ledger de forma durável quando
-necessário. Esta máquina de loop não chama providers ou adapters, não faz
-retry, não garante exactly-once e não invoca o gate automaticamente. Snapshots
-fornecidos pelo consumidor podem ser forjados; isto não é por si só uma
-fronteira de segurança ou autorização.
+necessário. O host precisa autenticar quem reconcilia e confirmar o resultado
+com a fonte de verdade do adapter; a engine valida formato e correlação, mas
+não consegue provar que a afirmação do host é verdadeira. O host também deve
+persistir cada transição antes de executar efeitos. Esta máquina de loop não
+chama providers ou adapters, não faz retry, não garante exactly-once e não
+invoca o gate automaticamente. Snapshots fornecidos pelo consumidor podem ser
+forjados; isto não é por si só uma fronteira de segurança ou autorização.
 
 ## APIs
 
 - Rust: `ModelToolLoopState::new`, `advance_model_turn` e
-  `advance_tool_result`.
-- Python: `start_model_tool_loop`, `accept_model_turn` e `submit_tool_result`.
-- TypeScript: `startModelToolLoop`, `acceptModelTurn` e `submitToolResult`.
+  `advance_tool_result`, `recover_model_tool_loop` e `reconcile_tool_result`.
+- Python: `start_model_tool_loop`, `accept_model_turn`, `submit_tool_result`,
+  `recover_model_tool_loop` e `reconcile_tool_result`.
+- TypeScript: `startModelToolLoop`, `acceptModelTurn`, `submitToolResult`,
+  `recoverModelToolLoop` e `reconcileToolResult`.
 
 Os dois bindings chamam o mesmo núcleo Rust e têm testes do ciclo completo.
