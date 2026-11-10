@@ -225,6 +225,28 @@ pub async fn sqlite_ledger_append(path: String, draft_json: String) -> Result<St
 }
 
 #[napi]
+pub async fn sqlite_ledger_append_checkpointed(
+    path: String,
+    draft_json: String,
+    checkpoint_id: String,
+    state_json: String,
+) -> Result<String> {
+    let draft = serde_json::from_str(&draft_json)
+        .map_err(|_| Error::from_reason("invalid ledger event"))?;
+    let state = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid checkpoint state"))?;
+    let saved =
+        tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+                .append_checkpointed(draft, checkpoint_id, state)
+        })
+        .await
+        .map_err(|_| Error::from_reason("ledger worker failed"))?
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&saved)
+}
+
+#[napi]
 pub async fn resilient_ledger_append(
     path: String,
     draft_json: String,

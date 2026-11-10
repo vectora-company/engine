@@ -225,6 +225,30 @@ fn sqlite_ledger_append<'py>(
 }
 
 #[pyfunction]
+fn sqlite_ledger_append_checkpointed<'py>(
+    py: Python<'py>,
+    path: String,
+    draft_json: String,
+    checkpoint_id: String,
+    state_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let draft =
+            serde_json::from_str(&draft_json).map_err(|_| py_error("invalid ledger event"))?;
+        let state =
+            serde_json::from_str(&state_json).map_err(|_| py_error("invalid checkpoint state"))?;
+        let saved = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+                .append_checkpointed(draft, checkpoint_id, state)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&saved)
+    })
+}
+
+#[pyfunction]
 fn resilient_ledger_append<'py>(
     py: Python<'py>,
     path: String,
@@ -1014,6 +1038,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_ledger_append_checkpointed, module)?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_upsert, module)?)?;

@@ -114,6 +114,17 @@ async def sqlite_ledger_append(path: str, event: JsonObject) -> dict[str, Any]:
     return json.loads(await _native.sqlite_ledger_append(path, json.dumps(event)))
 
 
+async def sqlite_ledger_append_checkpointed(
+    path: str, event: JsonObject, checkpoint_id: str, state: JsonObject
+) -> dict[str, Any]:
+    """Atomically append an event and an immutable recovery snapshot."""
+    return json.loads(
+        await _native.sqlite_ledger_append_checkpointed(
+            path, json.dumps(event), checkpoint_id, json.dumps(state)
+        )
+    )
+
+
 async def resilient_ledger_append(
     path: str, event: JsonObject, postgres_url: str | None = None
 ) -> dict[str, Any]:
@@ -474,6 +485,7 @@ __all__ = [
     "sqlite_admit_run",
     "sqlite_latest_checkpoint",
     "sqlite_ledger_append",
+    "sqlite_ledger_append_checkpointed",
     "sqlite_ledger_read",
     "sqlite_reserve_run",
     "sqlite_save_checkpoint",

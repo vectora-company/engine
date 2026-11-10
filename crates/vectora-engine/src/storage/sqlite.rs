@@ -83,6 +83,12 @@ pub struct Checkpoint {
     pub state: Value,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct CheckpointedEvent {
+    pub event: LedgerEvent,
+    pub checkpoint: Checkpoint,
+}
+
 pub struct SqliteLedger {
     connection: Connection,
 }
@@ -180,6 +186,33 @@ impl SqliteLedger {
         let event = Self::append_in(&tx, draft)?;
         tx.commit()?;
         Ok(event)
+    }
+
+    /// Appends an event and stores its recovery snapshot in the same transaction.
+    pub fn append_checkpointed(
+        &mut self,
+        draft: EventDraft,
+        checkpoint_id: String,
+        state: Value,
+    ) -> Result<CheckpointedEvent, LedgerError> {
+        if checkpoint_id.trim().is_empty() {
+            return Err(LedgerError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let event = Self::append_in(&tx, draft)?;
+        let checkpoint = Checkpoint {
+            contract_version: CHECKPOINT_VERSION,
+            scope: event.scope.clone(),
+            aggregate: event.aggregate.clone(),
+            checkpoint_id,
+            sequence: event.sequence,
+            state,
+        };
+        Self::save_checkpoint_in(&tx, &checkpoint)?;
+        tx.commit()?;
+        Ok(CheckpointedEvent { event, checkpoint })
     }
 
     /// Appends locally and queues a durable mirror record in the same transaction.
@@ -414,6 +447,18 @@ impl SqliteLedger {
 
     /// Save an immutable checkpoint for an existing event sequence.
     pub fn save_checkpoint(&mut self, checkpoint: Checkpoint) -> Result<Checkpoint, LedgerError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        Self::save_checkpoint_in(&tx, &checkpoint)?;
+        tx.commit()?;
+        Ok(checkpoint)
+    }
+
+    fn save_checkpoint_in(
+        tx: &Transaction<'_>,
+        checkpoint: &Checkpoint,
+    ) -> Result<(), LedgerError> {
         if checkpoint.contract_version != CHECKPOINT_VERSION {
             return Err(LedgerError::SchemaVersion);
         }
@@ -434,9 +479,6 @@ impl SqliteLedger {
         if state.len() > MAX_PAYLOAD_BYTES {
             return Err(LedgerError::InvalidInput);
         }
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM ve_ledger_events WHERE scope=?1 AND aggregate_id=?2 AND sequence=?3)", params![checkpoint.scope,checkpoint.aggregate,checkpoint.sequence as i64], |row| row.get(0))?;
         if !exists {
             return Err(LedgerError::VersionConflict);
@@ -454,8 +496,7 @@ impl SqliteLedger {
         } else {
             tx.execute("INSERT INTO ve_ledger_checkpoints(scope,aggregate_id,checkpoint_id,sequence,contract_version,state) VALUES(?1,?2,?3,?4,?5,?6)", params![checkpoint.scope,checkpoint.aggregate,checkpoint.checkpoint_id,checkpoint.sequence as i64,checkpoint.contract_version,state])?;
         }
-        tx.commit()?;
-        Ok(checkpoint)
+        Ok(())
     }
 
     pub fn latest_checkpoint(
@@ -584,6 +625,69 @@ mod tests {
             ledger.save_checkpoint(changed),
             Err(LedgerError::IdempotencyConflict)
         ));
+    }
+
+    #[test]
+    fn checkpointed_append_commits_event_and_snapshot_atomically() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let draft = EventDraft {
+            scope: "scope".into(),
+            aggregate: "thread".into(),
+            event_id: "event-1".into(),
+            idempotency_key: "effect-started-1".into(),
+            event_type: "tool_effect_started".into(),
+            payload: json!({"call_id":"call-1"}),
+            expected_version: 0,
+        };
+        let saved = ledger
+            .append_checkpointed(
+                draft.clone(),
+                "checkpoint-1".into(),
+                json!({"phase":"effect_started","call_id":"call-1"}),
+            )
+            .unwrap();
+        assert_eq!(saved.event.sequence, 1);
+        assert_eq!(saved.checkpoint.sequence, saved.event.sequence);
+        assert_eq!(
+            ledger.latest_checkpoint("scope", "thread").unwrap(),
+            Some(saved.checkpoint.clone())
+        );
+        assert_eq!(
+            ledger
+                .append_checkpointed(
+                    draft,
+                    "checkpoint-1".into(),
+                    json!({"phase":"effect_started","call_id":"call-1"})
+                )
+                .unwrap(),
+            saved
+        );
+    }
+
+    #[test]
+    fn checkpointed_append_rolls_back_event_when_snapshot_is_invalid() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let draft = EventDraft {
+            scope: "scope".into(),
+            aggregate: "thread".into(),
+            event_id: "event-1".into(),
+            idempotency_key: "effect-started-1".into(),
+            event_type: "tool_effect_started".into(),
+            payload: json!({}),
+            expected_version: 0,
+        };
+        let oversized_state = json!({"state":"x".repeat(MAX_PAYLOAD_BYTES + 1)});
+        assert!(matches!(
+            ledger.append_checkpointed(draft, "checkpoint-1".into(), oversized_state),
+            Err(LedgerError::InvalidInput)
+        ));
+        assert!(ledger.read("scope", "thread", 0, 10).unwrap().is_empty());
+        assert!(
+            ledger
+                .latest_checkpoint("scope", "thread")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

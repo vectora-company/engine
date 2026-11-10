@@ -40,3 +40,14 @@ indisponíveis nesta etapa.
   versões, redaction e política de retenção antes de alegar retomada segura.
 - Separar estado terminal da execução, resultado da verificação e veredito do
   gate no contrato de conformidade.
+
+## Checkpoints atômicos
+
+O adapter SQLite também expõe `append_checkpointed`: evento e snapshot
+versionado são gravados na mesma transação. Consumers devem gravar o estado
+`effect_started` e a invocação pendente antes de chamar um adapter externo e
+gravar o resultado em novo evento/checkpoint depois. Se o processo parar entre
+essas gravações, o snapshot precisa manter a invocação como incerta para que o
+host exija reconciliação explícita; não se deve repetir a chamada
+automaticamente. Esta API atômica é experimental e não coordena por conta
+própria o loop, o policy gate ou os adapters.
