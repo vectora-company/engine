@@ -304,7 +304,21 @@ export interface FallbackRerankSettings {
 
 interface NativeBinding {
   storageValidateSelection(selectionJson: string): string;
+  vectorStoreUpsert(configJson: string, collection: string, recordJson: string): Promise<void>;
+  vectorStoreDelete(configJson: string, collection: string, scope: string, recordId: number): Promise<void>;
+  vectorStoreSearch(configJson: string, collection: string, scope: string, vector: number[], limit: number): Promise<string>;
+  kvStorePut(configJson: string, key: string, valueJson: string, ttlSeconds?: number): Promise<void>;
+  kvStoreGet(configJson: string, key: string): Promise<string>;
+  queueEnqueue(configJson: string, payloadJson: string): Promise<string>;
+  queueReceive(configJson: string, consumer: string, group: string, timeoutMs: number): Promise<string>;
+  queueAck(deliveryId: string): Promise<void>;
+  queueRelease(deliveryId: string): void;
+  pubsubPublish(configJson: string, topic: string, payloadJson: string): Promise<void>;
+  pubsubSubscribe(configJson: string, topic: string): Promise<string>;
+  pubsubReceive(subscriptionId: string, timeoutMs: number): Promise<string>;
+  pubsubUnsubscribe(subscriptionId: string): void;
   sqliteLedgerAppend(path: string, draftJson: string): Promise<string>;
+  resilientLedgerAppend(path: string, draftJson: string, postgresUrl?: string): Promise<string>;
   sqliteLedgerRead(path: string, scope: string, aggregate: string, after: number, limit: number): Promise<string>;
   sqliteReserveRun(path: string, inputJson: string): Promise<string>;
   sqliteAdmitRun(path: string, reservationJson: string, eventJson: string): Promise<string>;
@@ -356,6 +370,52 @@ export interface StorageSelection {
   pubsub?: "redis" | "nats_core" | "memory" | null;
 }
 
+export interface VectorStoreConfig { backend: "lance_db" | "qdrant"; endpoint: string; api_key?: string | null }
+export interface KvStoreConfig { backend: "redis" | "nats_jetstream"; endpoint: string; namespace: string }
+export interface QueueConfig { backend: "redis_streams" | "nats_jetstream"; endpoint: string; namespace: string; visibility_timeout_seconds?: number }
+export interface PubSubConfig { backend: "redis" | "nats_core"; endpoint: string; namespace: string }
+export interface VectorRecord { id: number; scope: string; vector: number[]; metadata: JsonValue }
+export interface VectorHit { id: number; score: number; metadata: JsonValue }
+
+export async function vectorStoreUpsert(config: VectorStoreConfig, collection: string, record: VectorRecord): Promise<void> {
+  await native.vectorStoreUpsert(JSON.stringify(config), collection, JSON.stringify(record));
+}
+export async function vectorStoreSearch(config: VectorStoreConfig, collection: string, scope: string, vector: number[], limit = 10): Promise<VectorHit[]> {
+  return JSON.parse(await native.vectorStoreSearch(JSON.stringify(config), collection, scope, vector, limit)) as VectorHit[];
+}
+export async function vectorStoreDelete(config: VectorStoreConfig, collection: string, scope: string, recordId: number): Promise<void> {
+  await native.vectorStoreDelete(JSON.stringify(config), collection, scope, recordId);
+}
+export async function kvStorePut(config: KvStoreConfig, key: string, value: JsonValue, ttlSeconds?: number): Promise<void> {
+  await native.kvStorePut(JSON.stringify(config), key, JSON.stringify(value), ttlSeconds);
+}
+export async function kvStoreGet(config: KvStoreConfig, key: string): Promise<JsonValue | null> {
+  return JSON.parse(await native.kvStoreGet(JSON.stringify(config), key)) as JsonValue | null;
+}
+
+export interface QueueDelivery { delivery_id: string; payload: Uint8Array }
+export async function queueEnqueue(config: QueueConfig, payload: Uint8Array): Promise<string> {
+  return native.queueEnqueue(JSON.stringify(config), JSON.stringify(Array.from(payload)));
+}
+export async function queueReceive(config: QueueConfig, consumer: string, group: string, timeoutMs = 30_000): Promise<QueueDelivery | null> {
+  const result = JSON.parse(await native.queueReceive(JSON.stringify(config), consumer, group, timeoutMs)) as { delivery_id: string; payload: number[] } | null;
+  return result ? { delivery_id: result.delivery_id, payload: Uint8Array.from(result.payload) } : null;
+}
+export async function queueAck(deliveryId: string): Promise<void> { await native.queueAck(deliveryId); }
+/** Drop a handle without ACK so the provider may redeliver after its visibility timeout. */
+export function queueRelease(deliveryId: string): void { native.queueRelease(deliveryId); }
+export async function pubsubPublish(config: PubSubConfig, topic: string, payload: Uint8Array): Promise<void> {
+  await native.pubsubPublish(JSON.stringify(config), topic, JSON.stringify(Array.from(payload)));
+}
+export async function pubsubSubscribe(config: PubSubConfig, topic: string): Promise<string> {
+  return native.pubsubSubscribe(JSON.stringify(config), topic);
+}
+export async function pubsubReceive(subscriptionId: string, timeoutMs = 30_000): Promise<Uint8Array | null> {
+  const result = JSON.parse(await native.pubsubReceive(subscriptionId, timeoutMs)) as number[] | null;
+  return result ? Uint8Array.from(result) : null;
+}
+export function pubsubUnsubscribe(subscriptionId: string): void { native.pubsubUnsubscribe(subscriptionId); }
+
 /** Validate selections without opening a connection or claiming availability. */
 export function validateStorageSelection(selection: StorageSelection): StorageSelection {
   return JSON.parse(native.storageValidateSelection(JSON.stringify(selection))) as StorageSelection;
@@ -390,6 +450,12 @@ export async function sqliteLatestCheckpoint(path: string, scope: string, aggreg
 /** The host must authorize the scope and redact payloads before persistence. */
 export async function sqliteLedgerAppend(path: string, event: LedgerDraft): Promise<LedgerEvent> {
   return JSON.parse(await native.sqliteLedgerAppend(path, JSON.stringify(event))) as LedgerEvent;
+}
+
+export interface DurableLedgerAppend { event: LedgerEvent; mirror: "synchronized" | "pending" | "conflict" }
+/** SQLite is committed first; PostgreSQL is a retryable projection. */
+export async function resilientLedgerAppend(path: string, event: LedgerDraft, postgresUrl?: string): Promise<DurableLedgerAppend> {
+  return JSON.parse(await native.resilientLedgerAppend(path, JSON.stringify(event), postgresUrl)) as DurableLedgerAppend;
 }
 
 export async function sqliteLedgerRead(path: string, scope: string, aggregate: string, after = 0, limit = 100): Promise<LedgerEvent[]> {

@@ -25,9 +25,13 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 - O host fornece identidade e escopo confiáveis, política, credenciais,
   configuração, autorização e ciclo de vida; a Engine valida e aplica o escopo
   às operações. Dados de produto e billing não viram schema universal.
-- Ledger é a autoridade persistida do runtime quando configurado; índices,
-  filas e notificações podem ser projeções ou transporte. Pub/sub efêmero e
-  filas duráveis são contratos distintos.
+- O ledger tem uma autoridade local SQLite obrigatória, mesmo quando PostgreSQL
+  estiver selecionado para consultas ou projeção remota. Cada append confirma
+  primeiro no SQLite e grava na mesma transação um item de outbox; PostgreSQL
+  recebe a projeção de forma recuperável. Indisponibilidade ou conflito remoto
+  nunca apaga nem desfaz o evento local. Índices, filas e notificações são
+  projeções ou transporte. Pub/sub efêmero e filas duráveis são contratos
+  distintos.
 - Especificar capabilities e diferenças reais de consistência, ordenação,
   concorrência, retenção, TTL, ACK e replay. Memória é opt-in, identificada
   como não durável; indisponibilidade nunca troca silenciosamente o backend.
@@ -39,7 +43,7 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 
 | Capacidade | Adapters | Diferenças a declarar |
 | --- | --- | --- |
-| Relacional e ledger | SQLite, PostgreSQL | Transações, isolamento, locks, conflitos, migrations, tipos e paginação. |
+| Relacional e ledger | SQLite autoritativo; PostgreSQL selecionável e espelhado | Transações, isolamento, locks, conflitos, migrations, tipos e paginação. |
 | Vetorial | LanceDB, Qdrant | Filtros, distância/score, índices, busca lexical/híbrida, consistência e limites. |
 | KV/cache | Redis, NATS JetStream KV | TTL, atomicidade, revisões, eviction, limites e persistência configurada. |
 | Fila/stream durável | NATS JetStream, Redis Streams | Grupos/consumidores, ACK, redelivery, retenção, replay, ordenação e DLQ. |
@@ -48,6 +52,28 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 Adapters em memória podem apoiar testes e modo local explicitamente escolhido,
 sem reivindicar durabilidade ou semântica distribuída. Garantias dependem da
 configuração do serviço; não inferir durabilidade apenas pelo nome do backend.
+
+Os contratos de vetores (`VectorStore`) e KV (`KvStore`) têm adapters que
+selecionam uma implementação por configuração. Filas duráveis e pub/sub também
+possuem APIs distintas (`DurableQueue` e `EphemeralPubSub`): a fila entrega um
+handle que deve receber ACK após o processamento; liberar o handle sem ACK
+mantém a possibilidade de redelivery conforme o visibility timeout. O binding
+retorna bytes sem reinterpretar o payload. Handles de entrega e assinaturas são
+locais ao processo e não devem ser persistidos em configuração.
+
+Redis Streams recupera entregas pendentes com `XAUTOCLAIM`; NATS JetStream usa
+consumidores duráveis e `ack_wait`. KV Redis aceita TTL por chave; JetStream KV
+não implementa o mesmo contrato de TTL e retorna erro `Unsupported` quando ele
+é solicitado. LanceDB reporta distância (_menor é mais próximo_); Qdrant reporta
+similaridade cosseno (_maior é mais próximo_). Não comparar os scores entre
+adapters sem normalização explícita.
+
+No ledger, `ResilientLedger` grava evento e outbox atomicamente em SQLite antes
+de tentar a projeção PostgreSQL. O resultado informa `synchronized`, `pending`
+ou `conflict`; um conflito de projeção não desfaz o evento local. Retentativas
+devem reutilizar a mesma chave de idempotência. O append do binding usa esse
+contrato SQLite-first; não abrir um ledger PostgreSQL isolado para substituir a
+autoridade local.
 
 ## Contrato do ledger
 
@@ -104,15 +130,19 @@ idempotência é detectado; falha transacional não deixa estado parcial; cursor
 e checkpoints inválidos falham explicitamente. Testar locks, migrations,
 backup/restore quando suportados, redação e isolamento de escopo.
 
-### 3. S2 — PostgreSQL e conformidade SQL
+### 3. S2 — PostgreSQL como adapter selecionável e projeção
 
-Implementar o contrato de S1 com transações, pool e migrations próprios de
-PostgreSQL. Reutilizar fixtures de contrato e acrescentar testes concorrentes
-com serviço real, inclusive conflito de versão, locks, falha e restart. Expor
+Implementar o contrato relacional com transações, pool e migrations próprios
+de PostgreSQL, mantendo SQLite como autoridade local obrigatória do ledger.
+Adicionar uma outbox local transacional e projeção idempotente, retomável após
+restart. Reutilizar fixtures de contrato e acrescentar testes concorrentes com
+serviço real, inclusive conflito de versão, locks, falha e restart. Expor
 configuração e lifecycle nos dois bindings.
 
-**Aceite:** mesmas garantias obrigatórias de ledger que SQLite; divergências
-de isolamento e operação documentadas. Paridade é limitada aos casos medidos.
+**Aceite:** append continua disponível com PostgreSQL fora do ar e é confirmado
+no SQLite; a projeção pode ser retomada sem duplicar eventos após restart;
+divergências de isolamento e operação documentadas. Paridade é limitada aos
+casos medidos.
 
 ### 4. S3 — Redis e NATS: KV, filas e pub/sub
 

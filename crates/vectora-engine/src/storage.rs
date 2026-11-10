@@ -6,7 +6,11 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod messaging;
+pub mod postgres;
+pub mod resilient_ledger;
 pub mod sqlite;
+pub mod vector;
 
 pub const STORAGE_CONTRACT_VERSION: u16 = 1;
 

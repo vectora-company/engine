@@ -31,6 +31,7 @@ use vectora_engine::llm::{
         RerankRequest,
     },
 };
+use vectora_engine::storage::{messaging::KvStore, vector::VectorStore};
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String, String>>>>;
 
@@ -41,9 +42,35 @@ struct StreamState {
 
 static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
 static STREAMS: OnceLock<Mutex<HashMap<String, StreamState>>> = OnceLock::new();
+static STORAGE_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
+static QUEUE_DELIVERIES: OnceLock<
+    Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>>,
+> = OnceLock::new();
+static PUBSUB_SUBSCRIPTIONS: OnceLock<
+    Mutex<
+        HashMap<
+            String,
+            Arc<tokio::sync::Mutex<vectora_engine::storage::messaging::PubSubSubscription>>,
+        >,
+    >,
+> = OnceLock::new();
 
 fn streams() -> &'static Mutex<HashMap<String, StreamState>> {
     STREAMS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn queue_deliveries()
+-> &'static Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>> {
+    QUEUE_DELIVERIES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn pubsub_subscriptions() -> &'static Mutex<
+    HashMap<
+        String,
+        Arc<tokio::sync::Mutex<vectora_engine::storage::messaging::PubSubSubscription>>,
+    >,
+> {
+    PUBSUB_SUBSCRIPTIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn parse_inputs(
@@ -197,6 +224,31 @@ fn sqlite_ledger_append<'py>(
 }
 
 #[pyfunction]
+fn resilient_ledger_append<'py>(
+    py: Python<'py>,
+    path: String,
+    postgres_url: Option<String>,
+    draft_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let draft =
+            serde_json::from_str(&draft_json).map_err(|_| py_error("invalid ledger event"))?;
+        let runtime = tokio::runtime::Handle::current();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut ledger = vectora_engine::storage::resilient_ledger::ResilientLedger::open(
+                path,
+                postgres_url,
+            )?;
+            runtime.block_on(ledger.append(draft))
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
 fn sqlite_ledger_read<'py>(
     py: Python<'py>,
     path: String,
@@ -215,6 +267,284 @@ fn sqlite_ledger_read<'py>(
         .map_err(py_error)?;
         encode_json(&events)
     })
+}
+
+#[pyfunction]
+fn vector_store_upsert<'py>(
+    py: Python<'py>,
+    config_json: String,
+    collection: String,
+    record_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config = serde_json::from_str(&config_json)
+            .map_err(|_| py_error("invalid vector-store config"))?;
+        let record =
+            serde_json::from_str(&record_json).map_err(|_| py_error("invalid vector record"))?;
+        let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        store.upsert(&collection, record).await.map_err(py_error)?;
+        Ok(())
+    })
+}
+
+#[pyfunction]
+fn vector_store_search<'py>(
+    py: Python<'py>,
+    config_json: String,
+    collection: String,
+    scope: String,
+    vector: Vec<f32>,
+    limit: u32,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config = serde_json::from_str(&config_json)
+            .map_err(|_| py_error("invalid vector-store config"))?;
+        let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        let hits = store
+            .search(&collection, &scope, vector, limit)
+            .await
+            .map_err(py_error)?;
+        encode_json(&hits)
+    })
+}
+
+#[pyfunction]
+fn vector_store_delete<'py>(
+    py: Python<'py>,
+    config_json: String,
+    collection: String,
+    scope: String,
+    record_id: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config = serde_json::from_str(&config_json)
+            .map_err(|_| py_error("invalid vector-store config"))?;
+        let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        store
+            .delete(&collection, &scope, record_id)
+            .await
+            .map_err(py_error)?;
+        Ok(())
+    })
+}
+
+#[pyfunction]
+fn kv_store_put<'py>(
+    py: Python<'py>,
+    config_json: String,
+    key: String,
+    value_json: String,
+    ttl_seconds: Option<u64>,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid KV config"))?;
+        let value: serde_json::Value =
+            serde_json::from_str(&value_json).map_err(|_| py_error("invalid KV value"))?;
+        let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        store
+            .put(
+                &key,
+                serde_json::to_vec(&value).map_err(|_| py_error("invalid KV value"))?,
+                ttl_seconds.map(std::time::Duration::from_secs),
+            )
+            .await
+            .map_err(py_error)?;
+        Ok(())
+    })
+}
+
+#[pyfunction]
+fn kv_store_get<'py>(
+    py: Python<'py>,
+    config_json: String,
+    key: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid KV config"))?;
+        let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        match store.get(&key).await.map_err(py_error)? {
+            Some(value) => {
+                let parsed: serde_json::Value = serde_json::from_slice(&value)
+                    .map_err(|_| py_error("stored KV value is invalid"))?;
+                encode_json(&parsed)
+            }
+            None => Ok("null".to_owned()),
+        }
+    })
+}
+
+#[pyfunction]
+fn queue_enqueue<'py>(
+    py: Python<'py>,
+    config_json: String,
+    payload_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid queue config"))?;
+        let payload: Vec<u8> =
+            serde_json::from_str(&payload_json).map_err(|_| py_error("invalid queue payload"))?;
+        let queue = vectora_engine::storage::messaging::QueueAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        queue.enqueue(payload).await.map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn queue_receive<'py>(
+    py: Python<'py>,
+    config_json: String,
+    consumer: String,
+    group: String,
+    timeout_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid queue config"))?;
+        let queue = vectora_engine::storage::messaging::QueueAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        let Some(delivery) = queue
+            .receive(
+                &consumer,
+                &group,
+                std::time::Duration::from_millis(timeout_ms),
+            )
+            .await
+            .map_err(py_error)?
+        else {
+            return Ok("null".to_owned());
+        };
+        let payload = delivery.payload().to_vec();
+        let handle = format!(
+            "queue-{}",
+            STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        queue_deliveries()
+            .lock()
+            .map_err(|_| py_error("queue handle lock failed"))?
+            .insert(handle.clone(), delivery);
+        encode_json(&serde_json::json!({"delivery_id": handle, "payload": payload}))
+    })
+}
+
+#[pyfunction]
+fn queue_ack<'py>(py: Python<'py>, delivery_id: String) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let delivery = queue_deliveries()
+            .lock()
+            .map_err(|_| py_error("queue handle lock failed"))?
+            .remove(&delivery_id)
+            .ok_or_else(|| py_error("unknown queue delivery"))?;
+        delivery.ack().await.map_err(py_error)?;
+        Ok(())
+    })
+}
+
+#[pyfunction]
+fn queue_release(delivery_id: String) -> PyResult<()> {
+    queue_deliveries()
+        .lock()
+        .map_err(|_| py_error("queue handle lock failed"))?
+        .remove(&delivery_id)
+        .ok_or_else(|| py_error("unknown queue delivery"))?;
+    Ok(())
+}
+
+#[pyfunction]
+fn pubsub_publish<'py>(
+    py: Python<'py>,
+    config_json: String,
+    topic: String,
+    payload_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid pub/sub config"))?;
+        let payload: Vec<u8> =
+            serde_json::from_str(&payload_json).map_err(|_| py_error("invalid pub/sub payload"))?;
+        let pubsub = vectora_engine::storage::messaging::PubSubAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        pubsub.publish(&topic, payload).await.map_err(py_error)?;
+        Ok(())
+    })
+}
+
+#[pyfunction]
+fn pubsub_subscribe<'py>(
+    py: Python<'py>,
+    config_json: String,
+    topic: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid pub/sub config"))?;
+        let pubsub = vectora_engine::storage::messaging::PubSubAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        let subscription = Arc::new(tokio::sync::Mutex::new(
+            pubsub.subscribe(&topic).await.map_err(py_error)?,
+        ));
+        let handle = format!(
+            "pubsub-{}",
+            STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        pubsub_subscriptions()
+            .lock()
+            .map_err(|_| py_error("pub/sub handle lock failed"))?
+            .insert(handle.clone(), subscription);
+        Ok(handle)
+    })
+}
+
+#[pyfunction]
+fn pubsub_receive<'py>(
+    py: Python<'py>,
+    subscription_id: String,
+    timeout_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let subscription = pubsub_subscriptions()
+            .lock()
+            .map_err(|_| py_error("pub/sub handle lock failed"))?
+            .get(&subscription_id)
+            .cloned()
+            .ok_or_else(|| py_error("unknown pub/sub subscription"))?;
+        match subscription
+            .lock()
+            .await
+            .receive(std::time::Duration::from_millis(timeout_ms))
+            .await
+            .map_err(py_error)?
+        {
+            Some(payload) => encode_json(&payload),
+            None => Ok("null".to_owned()),
+        }
+    })
+}
+
+#[pyfunction]
+fn pubsub_unsubscribe(subscription_id: String) -> PyResult<()> {
+    pubsub_subscriptions()
+        .lock()
+        .map_err(|_| py_error("pub/sub handle lock failed"))?
+        .remove(&subscription_id)
+        .ok_or_else(|| py_error("unknown pub/sub subscription"))?;
+    Ok(())
 }
 
 #[pyfunction]
@@ -643,7 +973,21 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
+    module.add_function(wrap_pyfunction!(resilient_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
+    module.add_function(wrap_pyfunction!(vector_store_upsert, module)?)?;
+    module.add_function(wrap_pyfunction!(vector_store_search, module)?)?;
+    module.add_function(wrap_pyfunction!(vector_store_delete, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_store_put, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_store_get, module)?)?;
+    module.add_function(wrap_pyfunction!(queue_enqueue, module)?)?;
+    module.add_function(wrap_pyfunction!(queue_receive, module)?)?;
+    module.add_function(wrap_pyfunction!(queue_ack, module)?)?;
+    module.add_function(wrap_pyfunction!(queue_release, module)?)?;
+    module.add_function(wrap_pyfunction!(pubsub_publish, module)?)?;
+    module.add_function(wrap_pyfunction!(pubsub_subscribe, module)?)?;
+    module.add_function(wrap_pyfunction!(pubsub_receive, module)?)?;
+    module.add_function(wrap_pyfunction!(pubsub_unsubscribe, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_reserve_run, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_admit_run, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_save_checkpoint, module)?)?;

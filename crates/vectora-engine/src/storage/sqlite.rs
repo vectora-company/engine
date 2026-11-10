@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 pub const CHECKPOINT_VERSION: u16 = 1;
 const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
 
@@ -117,8 +117,8 @@ impl SqliteLedger {
             })
             .optional()?;
         match version {
-            Some(1 | 2 | SCHEMA_VERSION) => {}
-            Some(_) => return Err(LedgerError::SchemaVersion),
+            Some(v) if v > SCHEMA_VERSION || v < 1 => return Err(LedgerError::SchemaVersion),
+            Some(_) => {}
             None => {
                 tx.execute_batch(
                     "CREATE TABLE ve_ledger_events (
@@ -131,7 +131,11 @@ impl SqliteLedger {
                 )?;
             }
         }
-        if matches!(version, None | Some(1)) {
+        let mut current = version.unwrap_or(1);
+        if version.is_none() {
+            current = 1;
+        }
+        if current < 2 {
             tx.execute_batch("CREATE TABLE ve_run_reservations (
                 scope TEXT NOT NULL, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL,
                 run_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, request TEXT NOT NULL,
@@ -143,14 +147,24 @@ impl SqliteLedger {
                 PRIMARY KEY(scope,aggregate_id,checkpoint_id), UNIQUE(scope,aggregate_id,sequence)
             );
             UPDATE ve_ledger_meta SET version=2 WHERE id=1;")?;
+            current = 2;
         }
-        if version != Some(SCHEMA_VERSION) {
+        if current < 3 {
             tx.execute_batch(
                 "CREATE TABLE ve_run_admissions (
                 scope TEXT NOT NULL, run_id TEXT NOT NULL, event_id TEXT NOT NULL,
                 PRIMARY KEY(scope,run_id), UNIQUE(scope,event_id)
             ); UPDATE ve_ledger_meta SET version=3 WHERE id=1;",
             )?;
+            current = 3;
+        }
+        if current < 4 {
+            tx.execute_batch("CREATE TABLE ve_ledger_outbox (
+                scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+                event_json TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0 CHECK(delivered IN (0,1)),
+                PRIMARY KEY(scope,aggregate_id,sequence)
+            ); CREATE INDEX ve_ledger_outbox_pending ON ve_ledger_outbox(delivered,scope,aggregate_id,sequence);
+            UPDATE ve_ledger_meta SET version=4 WHERE id=1;")?;
         }
         tx.commit()?;
         Ok(())
@@ -164,6 +178,51 @@ impl SqliteLedger {
         let event = Self::append_in(&tx, draft)?;
         tx.commit()?;
         Ok(event)
+    }
+
+    /// Appends locally and queues a durable mirror record in the same transaction.
+    pub fn append_with_outbox(&mut self, draft: EventDraft) -> Result<LedgerEvent, LedgerError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let event = Self::append_in(&tx, draft)?;
+        let serialized = serde_json::to_string(&event).map_err(|_| LedgerError::InvalidInput)?;
+        tx.execute("INSERT INTO ve_ledger_outbox(scope,aggregate_id,sequence,event_json) VALUES(?1,?2,?3,?4) ON CONFLICT(scope,aggregate_id,sequence) DO NOTHING", params![event.scope,event.aggregate,event.sequence as i64,serialized])?;
+        tx.commit()?;
+        Ok(event)
+    }
+
+    pub fn pending_outbox(&self, limit: u32) -> Result<Vec<LedgerEvent>, LedgerError> {
+        if !(1..=1000).contains(&limit) {
+            return Err(LedgerError::InvalidInput);
+        }
+        let mut stmt = self.connection.prepare("SELECT event_json FROM ve_ledger_outbox WHERE delivered=0 ORDER BY scope,aggregate_id,sequence LIMIT ?1")?;
+        let rows = stmt.query_map([limit], |row| row.get::<_, String>(0))?;
+        rows.map(|row| serde_json::from_str(&row?).map_err(|_| LedgerError::Storage))
+            .collect()
+    }
+
+    pub fn pending_outbox_count(&self) -> Result<u64, LedgerError> {
+        self.connection
+            .query_row(
+                "SELECT COUNT(*) FROM ve_ledger_outbox WHERE delivered=0",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub fn mark_outbox_delivered(
+        &mut self,
+        scope: &str,
+        aggregate: &str,
+        sequence: u64,
+    ) -> Result<(), LedgerError> {
+        if scope.trim().is_empty() || aggregate.trim().is_empty() || sequence > i64::MAX as u64 {
+            return Err(LedgerError::InvalidInput);
+        }
+        self.connection.execute("UPDATE ve_ledger_outbox SET delivered=1 WHERE scope=?1 AND aggregate_id=?2 AND sequence=?3", params![scope,aggregate,sequence as i64])?;
+        Ok(())
     }
 
     fn append_in(tx: &Transaction<'_>, draft: EventDraft) -> Result<LedgerEvent, LedgerError> {
@@ -539,13 +598,13 @@ mod tests {
                 expected_version: 0,
             })
             .unwrap();
-        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; DROP TABLE ve_run_admissions; UPDATE ve_ledger_meta SET version=1;").unwrap();
+        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; DROP TABLE ve_run_admissions; DROP TABLE ve_ledger_outbox; UPDATE ve_ledger_meta SET version=1;").unwrap();
         ledger.migrate().unwrap();
         let version: i64 = ledger
             .connection
             .query_row("SELECT version FROM ve_ledger_meta", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, SCHEMA_VERSION);
         assert_eq!(ledger.read("a", "run", 0, 10).unwrap().len(), 1);
         assert!(ledger.latest_checkpoint("a", "run").unwrap().is_none());
     }
@@ -649,5 +708,26 @@ mod tests {
             1
         );
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn outbox_is_atomic_with_ledger_and_delivery_is_idempotent() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let draft = EventDraft {
+            scope: "s".into(),
+            aggregate: "a".into(),
+            event_id: "e".into(),
+            idempotency_key: "k".into(),
+            event_type: "accepted".into(),
+            payload: json!({"v":1}),
+            expected_version: 0,
+        };
+        let event = ledger.append_with_outbox(draft.clone()).unwrap();
+        assert_eq!(ledger.pending_outbox(10).unwrap(), vec![event.clone()]);
+        assert_eq!(ledger.append_with_outbox(draft).unwrap(), event);
+        assert_eq!(ledger.pending_outbox(10).unwrap().len(), 1);
+        ledger.mark_outbox_delivered("s", "a", 1).unwrap();
+        assert!(ledger.pending_outbox(10).unwrap().is_empty());
+        assert_eq!(ledger.read("s", "a", 0, 10).unwrap().len(), 1);
     }
 }

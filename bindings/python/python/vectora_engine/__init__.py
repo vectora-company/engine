@@ -16,9 +16,113 @@ def validate_storage_selection(selection: JsonObject) -> dict[str, Any]:
     return json.loads(_native.storage_validate_selection(json.dumps(selection)))
 
 
+async def vector_store_upsert(config: JsonObject, collection: str, record: JsonObject) -> None:
+    """Upsert a scoped vector record in the selected LanceDB or Qdrant adapter."""
+    await _native.vector_store_upsert(json.dumps(config), collection, json.dumps(record))
+
+
+async def vector_store_search(
+    config: JsonObject, collection: str, scope: str, vector: Sequence[float], limit: int = 10
+) -> list[dict[str, Any]]:
+    """Search vectors inside the exact supplied scope."""
+    return json.loads(
+        await _native.vector_store_search(
+            json.dumps(config), collection, scope, list(vector), limit
+        )
+    )
+
+
+async def vector_store_delete(
+    config: JsonObject, collection: str, scope: str, record_id: int
+) -> None:
+    """Delete one vector record without crossing its scope."""
+    await _native.vector_store_delete(
+        json.dumps(config), collection, scope, record_id
+    )
+
+
+async def kv_store_put(
+    config: JsonObject, key: str, value: Any, ttl_seconds: int | None = None
+) -> None:
+    """Persist JSON in Redis or NATS KV; NATS rejects per-key TTL."""
+    await _native.kv_store_put(
+        json.dumps(config), key, json.dumps(value), ttl_seconds
+    )
+
+
+async def kv_store_get(config: JsonObject, key: str) -> Any:
+    """Read JSON from the selected KV adapter, returning None when absent."""
+    return json.loads(await _native.kv_store_get(json.dumps(config), key))
+
+
+async def queue_enqueue(config: JsonObject, payload: bytes) -> str:
+    """Enqueue bytes using the configured durable queue adapter."""
+    return await _native.queue_enqueue(
+        json.dumps(config), json.dumps(list(payload))
+    )
+
+
+async def queue_receive(
+    config: JsonObject, consumer: str, group: str, timeout_ms: int = 30_000
+) -> dict[str, Any] | None:
+    """Receive one durable delivery; call queue_ack after processing it."""
+    result = json.loads(
+        await _native.queue_receive(
+            json.dumps(config), consumer, group, timeout_ms
+        )
+    )
+    if result is not None:
+        result["payload"] = bytes(result["payload"])
+    return result
+
+
+async def queue_ack(delivery_id: str) -> None:
+    """Acknowledge a delivery previously returned by queue_receive."""
+    await _native.queue_ack(delivery_id)
+
+
+def queue_release(delivery_id: str) -> None:
+    """Drop the local delivery handle without ACK; provider redelivery follows its visibility timeout."""
+    _native.queue_release(delivery_id)
+
+
+async def pubsub_publish(config: JsonObject, topic: str, payload: bytes) -> None:
+    """Publish an ephemeral byte message."""
+    await _native.pubsub_publish(
+        json.dumps(config), topic, json.dumps(list(payload))
+    )
+
+
+async def pubsub_subscribe(config: JsonObject, topic: str) -> str:
+    """Create a process-local subscription and return its handle."""
+    return await _native.pubsub_subscribe(json.dumps(config), topic)
+
+
+async def pubsub_receive(subscription_id: str, timeout_ms: int = 30_000) -> bytes | None:
+    """Receive one ephemeral message, or return None when the timeout expires."""
+    result = json.loads(await _native.pubsub_receive(subscription_id, timeout_ms))
+    return bytes(result) if result is not None else None
+
+
+def pubsub_unsubscribe(subscription_id: str) -> None:
+    """Drop and close a process-local pub/sub subscription."""
+    _native.pubsub_unsubscribe(subscription_id)
+
+
 async def sqlite_ledger_append(path: str, event: JsonObject) -> dict[str, Any]:
     """Append an event; the caller must authorize scope and redact payloads."""
     return json.loads(await _native.sqlite_ledger_append(path, json.dumps(event)))
+
+
+async def resilient_ledger_append(
+    path: str, event: JsonObject, postgres_url: str | None = None
+) -> dict[str, Any]:
+    """Commit to SQLite first and mirror to PostgreSQL when configured/available."""
+    return json.loads(
+        await _native.resilient_ledger_append(
+            path, postgres_url, json.dumps(event)
+        )
+    )
 
 
 async def sqlite_reserve_run(path: str, reservation: JsonObject) -> dict[str, Any]:
@@ -329,6 +433,7 @@ __all__ = [
     "sqlite_admit_run",
     "sqlite_latest_checkpoint",
     "sqlite_ledger_append",
+    "resilient_ledger_append",
     "sqlite_ledger_read",
     "sqlite_reserve_run",
     "sqlite_save_checkpoint",
@@ -339,4 +444,17 @@ __all__ = [
     "tool_dispatch_contract_version",
     "transition_run",
     "validate_storage_selection",
+    "vector_store_upsert",
+    "vector_store_search",
+    "vector_store_delete",
+    "kv_store_put",
+    "kv_store_get",
+    "queue_enqueue",
+    "queue_receive",
+    "queue_ack",
+    "queue_release",
+    "pubsub_publish",
+    "pubsub_subscribe",
+    "pubsub_receive",
+    "pubsub_unsubscribe",
 ]
