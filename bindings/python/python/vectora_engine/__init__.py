@@ -26,6 +26,15 @@ async def sqlite_reserve_run(path: str, reservation: JsonObject) -> dict[str, An
     return json.loads(await _native.sqlite_reserve_run(path, json.dumps(reservation)))
 
 
+async def sqlite_admit_run(
+    path: str, reservation: JsonObject, event: JsonObject
+) -> dict[str, Any]:
+    """Atomically reserve a run and append an event to its thread ledger."""
+    return json.loads(
+        await _native.sqlite_admit_run(path, json.dumps(reservation), json.dumps(event))
+    )
+
+
 async def sqlite_save_checkpoint(path: str, checkpoint: JsonObject) -> dict[str, Any]:
     """Persist an immutable versioned checkpoint for an existing event."""
     return json.loads(
@@ -317,6 +326,7 @@ __all__ = [
     "rerank",
     "rerank_contract_version",
     "run_contract_version",
+    "sqlite_admit_run",
     "sqlite_latest_checkpoint",
     "sqlite_ledger_append",
     "sqlite_ledger_read",

@@ -307,6 +307,7 @@ interface NativeBinding {
   sqliteLedgerAppend(path: string, draftJson: string): Promise<string>;
   sqliteLedgerRead(path: string, scope: string, aggregate: string, after: number, limit: number): Promise<string>;
   sqliteReserveRun(path: string, inputJson: string): Promise<string>;
+  sqliteAdmitRun(path: string, reservationJson: string, eventJson: string): Promise<string>;
   sqliteSaveCheckpoint(path: string, inputJson: string): Promise<string>;
   sqliteLatestCheckpoint(path: string, scope: string, aggregate: string): Promise<string>;
   runContractVersion(): number;
@@ -370,6 +371,10 @@ export interface RunReservation {
 }
 export interface LedgerCheckpoint {
   contract_version: number; scope: string; aggregate: string; checkpoint_id: string; sequence: number; state: JsonValue;
+}
+
+export async function sqliteAdmitRun(path: string, reservation: RunReservation, event: LedgerDraft): Promise<{ reservation: RunReservation; event: LedgerEvent }> {
+  return JSON.parse(await native.sqliteAdmitRun(path, JSON.stringify(reservation), JSON.stringify(event))) as { reservation: RunReservation; event: LedgerEvent };
 }
 
 export async function sqliteReserveRun(path: string, reservation: RunReservation): Promise<RunReservation> {

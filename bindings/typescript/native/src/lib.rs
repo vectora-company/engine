@@ -219,6 +219,26 @@ pub async fn sqlite_ledger_read(
 }
 
 #[napi]
+pub async fn sqlite_admit_run(
+    path: String,
+    reservation_json: String,
+    event_json: String,
+) -> Result<String> {
+    let reservation = serde_json::from_str(&reservation_json)
+        .map_err(|_| Error::from_reason("invalid run reservation"))?;
+    let event = serde_json::from_str(&event_json)
+        .map_err(|_| Error::from_reason("invalid ledger event"))?;
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+            .admit_run(reservation, event)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
 pub async fn sqlite_reserve_run(path: String, input_json: String) -> Result<String> {
     let input = serde_json::from_str(&input_json)
         .map_err(|_| Error::from_reason("invalid run reservation"))?;

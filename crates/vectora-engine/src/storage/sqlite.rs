@@ -2,12 +2,12 @@
 
 use std::{path::Path, time::Duration};
 
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 pub const CHECKPOINT_VERSION: u16 = 1;
 const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
 
@@ -67,6 +67,12 @@ pub struct RunReservation {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct Admission {
+    pub reservation: RunReservation,
+    pub event: LedgerEvent,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Checkpoint {
     pub contract_version: u16,
@@ -111,7 +117,7 @@ impl SqliteLedger {
             })
             .optional()?;
         match version {
-            Some(1 | SCHEMA_VERSION) => {}
+            Some(1 | 2 | SCHEMA_VERSION) => {}
             Some(_) => return Err(LedgerError::SchemaVersion),
             None => {
                 tx.execute_batch(
@@ -125,7 +131,7 @@ impl SqliteLedger {
                 )?;
             }
         }
-        if version != Some(SCHEMA_VERSION) {
+        if matches!(version, None | Some(1)) {
             tx.execute_batch("CREATE TABLE ve_run_reservations (
                 scope TEXT NOT NULL, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL,
                 run_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, request TEXT NOT NULL,
@@ -138,12 +144,29 @@ impl SqliteLedger {
             );
             UPDATE ve_ledger_meta SET version=2 WHERE id=1;")?;
         }
+        if version != Some(SCHEMA_VERSION) {
+            tx.execute_batch(
+                "CREATE TABLE ve_run_admissions (
+                scope TEXT NOT NULL, run_id TEXT NOT NULL, event_id TEXT NOT NULL,
+                PRIMARY KEY(scope,run_id), UNIQUE(scope,event_id)
+            ); UPDATE ve_ledger_meta SET version=3 WHERE id=1;",
+            )?;
+        }
         tx.commit()?;
         Ok(())
     }
 
     /// Appends exactly once for an aggregate/idempotency key within SQLite.
     pub fn append(&mut self, draft: EventDraft) -> Result<LedgerEvent, LedgerError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let event = Self::append_in(&tx, draft)?;
+        tx.commit()?;
+        Ok(event)
+    }
+
+    fn append_in(tx: &Transaction<'_>, draft: EventDraft) -> Result<LedgerEvent, LedgerError> {
         if [
             &draft.scope,
             &draft.aggregate,
@@ -162,9 +185,6 @@ impl SqliteLedger {
         if payload.len() > MAX_PAYLOAD_BYTES {
             return Err(LedgerError::InvalidInput);
         }
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let existing: Option<(i64, String, String, String)> = tx.query_row(
             "SELECT sequence,event_id,event_type,payload FROM ve_ledger_events WHERE scope=?1 AND aggregate_id=?2 AND idempotency_key=?3",
             params![draft.scope, draft.aggregate, draft.idempotency_key],
@@ -194,7 +214,6 @@ impl SqliteLedger {
             tx.execute("INSERT INTO ve_ledger_events(scope,aggregate_id,sequence,event_id,idempotency_key,event_type,payload) VALUES(?1,?2,?3,?4,?5,?6,?7)", params![draft.scope,draft.aggregate,next,draft.event_id,draft.idempotency_key,draft.event_type,payload])?;
             next as u64
         };
-        tx.commit()?;
         Ok(LedgerEvent {
             scope: draft.scope,
             aggregate: draft.aggregate,
@@ -248,6 +267,52 @@ impl SqliteLedger {
 
     /// Atomically admit a run or return its identical earlier reservation.
     pub fn reserve_run(&mut self, input: RunReservation) -> Result<RunReservation, LedgerError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let result = Self::reserve_run_in(&tx, input)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
+    /// Reserve a run and append its admission event in one SQLite transaction.
+    pub fn admit_run(
+        &mut self,
+        reservation: RunReservation,
+        event: EventDraft,
+    ) -> Result<Admission, LedgerError> {
+        if reservation.scope != event.scope || reservation.thread_id != event.aggregate {
+            return Err(LedgerError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let reservation = Self::reserve_run_in(&tx, reservation)?;
+        let prior: Option<(String, String)> = tx.query_row(
+            "SELECT run_id,event_id FROM ve_run_admissions WHERE scope=?1 AND (run_id=?2 OR event_id=?3) LIMIT 1",
+            params![reservation.scope, reservation.run_id, event.event_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+        if prior.as_ref().is_some_and(|(run_id, event_id)| {
+            run_id != &reservation.run_id || event_id != &event.event_id
+        }) {
+            return Err(LedgerError::IdempotencyConflict);
+        }
+        let event = Self::append_in(&tx, event)?;
+        if prior.is_none() {
+            tx.execute(
+                "INSERT INTO ve_run_admissions(scope,run_id,event_id) VALUES(?1,?2,?3)",
+                params![reservation.scope, reservation.run_id, event.event_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(Admission { reservation, event })
+    }
+
+    fn reserve_run_in(
+        tx: &Transaction<'_>,
+        input: RunReservation,
+    ) -> Result<RunReservation, LedgerError> {
         if [
             &input.scope,
             &input.thread_id,
@@ -265,9 +330,6 @@ impl SqliteLedger {
         if request.len() > MAX_PAYLOAD_BYTES {
             return Err(LedgerError::InvalidInput);
         }
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let existing: Option<(String, String, String, String, String)> = tx.query_row(
             "SELECT thread_id,turn_id,run_id,idempotency_key,request FROM ve_run_reservations WHERE scope=?1 AND (idempotency_key=?2 OR (thread_id=?3 AND turn_id=?4) OR run_id=?5) LIMIT 1",
             params![input.scope, input.idempotency_key, input.thread_id, input.turn_id, input.run_id],
@@ -286,7 +348,6 @@ impl SqliteLedger {
         } else {
             tx.execute("INSERT INTO ve_run_reservations(scope,thread_id,turn_id,run_id,idempotency_key,request) VALUES(?1,?2,?3,?4,?5,?6)", params![input.scope,input.thread_id,input.turn_id,input.run_id,input.idempotency_key,request])?;
         }
-        tx.commit()?;
         Ok(input)
     }
 
@@ -478,15 +539,68 @@ mod tests {
                 expected_version: 0,
             })
             .unwrap();
-        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; UPDATE ve_ledger_meta SET version=1;").unwrap();
+        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; DROP TABLE ve_run_admissions; UPDATE ve_ledger_meta SET version=1;").unwrap();
         ledger.migrate().unwrap();
         let version: i64 = ledger
             .connection
             .query_row("SELECT version FROM ve_ledger_meta", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         assert_eq!(ledger.read("a", "run", 0, 10).unwrap().len(), 1);
         assert!(ledger.latest_checkpoint("a", "run").unwrap().is_none());
+    }
+
+    #[test]
+    fn admission_commits_reservation_and_event_together_and_rejects_changed_retry() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let reservation = RunReservation {
+            scope: "a".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            run_id: "run".into(),
+            idempotency_key: "key".into(),
+            request: json!({}),
+        };
+        let event = EventDraft {
+            scope: "a".into(),
+            aggregate: "thread".into(),
+            event_id: "e1".into(),
+            idempotency_key: "event-key".into(),
+            event_type: "admitted".into(),
+            payload: json!({"run_id":"run"}),
+            expected_version: 0,
+        };
+        let mut stale = event.clone();
+        stale.expected_version = 1;
+        assert!(matches!(
+            ledger.admit_run(reservation.clone(), stale),
+            Err(LedgerError::VersionConflict)
+        ));
+        let count: i64 = ledger
+            .connection
+            .query_row("SELECT COUNT(*) FROM ve_run_reservations", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 0);
+        let first = ledger
+            .admit_run(reservation.clone(), event.clone())
+            .unwrap();
+        assert_eq!(
+            ledger
+                .admit_run(reservation.clone(), event.clone())
+                .unwrap(),
+            first
+        );
+        let mut changed = event;
+        changed.event_id = "e2".into();
+        changed.idempotency_key = "other".into();
+        changed.expected_version = 1;
+        assert!(matches!(
+            ledger.admit_run(reservation, changed),
+            Err(LedgerError::IdempotencyConflict)
+        ));
+        assert_eq!(ledger.read("a", "thread", 0, 10).unwrap().len(), 1);
     }
 
     #[test]

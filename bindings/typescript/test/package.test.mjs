@@ -30,6 +30,7 @@ import {
   submitToolResult,
   validateStorageSelection,
   sqliteLedgerAppend,
+  sqliteAdmitRun,
   sqliteLedgerRead,
   sqliteReserveRun,
   sqliteSaveCheckpoint,
@@ -52,6 +53,11 @@ test("sqlite ledger persists and retries safely through Node", async () => {
     assert.deepEqual(await sqliteSaveCheckpoint(path, checkpoint), checkpoint);
     assert.deepEqual(await sqliteLatestCheckpoint(path, "team", "run"), checkpoint);
     assert.equal(await sqliteLatestCheckpoint(path, "other", "run"), null);
+    const admission = { scope: "team", thread_id: "thread-2", turn_id: "turn-2", run_id: "run-2", idempotency_key: "key-2", request: {} };
+    const admissionEvent = { scope: "team", aggregate: "thread-2", event_id: "admitted-2", idempotency_key: "event-2", event_type: "admitted", payload: {}, expected_version: 0 };
+    const result = await sqliteAdmitRun(path, admission, admissionEvent);
+    assert.equal(result.event.sequence, 1);
+    assert.deepEqual(await sqliteAdmitRun(path, admission, admissionEvent), result);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

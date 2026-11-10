@@ -27,6 +27,7 @@ from vectora_engine import (
     rerank,
     rerank_contract_version,
     run_contract_version,
+    sqlite_admit_run,
     sqlite_latest_checkpoint,
     sqlite_ledger_append,
     sqlite_ledger_read,
@@ -89,6 +90,26 @@ def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     assert asyncio.run(sqlite_save_checkpoint(path, checkpoint)) == checkpoint
     assert asyncio.run(sqlite_latest_checkpoint(path, "team", "run")) == checkpoint
     assert asyncio.run(sqlite_latest_checkpoint(path, "other", "run")) is None
+    admission = {
+        "scope": "team",
+        "thread_id": "thread-2",
+        "turn_id": "turn-2",
+        "run_id": "run-2",
+        "idempotency_key": "key-2",
+        "request": {},
+    }
+    admission_event = {
+        "scope": "team",
+        "aggregate": "thread-2",
+        "event_id": "admitted-2",
+        "idempotency_key": "event-2",
+        "event_type": "admitted",
+        "payload": {},
+        "expected_version": 0,
+    }
+    first = asyncio.run(sqlite_admit_run(path, admission, admission_event))
+    assert first["event"]["sequence"] == 1
+    assert asyncio.run(sqlite_admit_run(path, admission, admission_event)) == first
 
 
 SETTINGS = {"base_url": "file:///invalid", "api_key": "secret-for-redaction-test"}

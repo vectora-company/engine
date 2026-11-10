@@ -218,6 +218,29 @@ fn sqlite_ledger_read<'py>(
 }
 
 #[pyfunction]
+fn sqlite_admit_run<'py>(
+    py: Python<'py>,
+    path: String,
+    reservation_json: String,
+    event_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let reservation = serde_json::from_str(&reservation_json)
+            .map_err(|_| py_error("invalid run reservation"))?;
+        let event =
+            serde_json::from_str(&event_json).map_err(|_| py_error("invalid ledger event"))?;
+        let result = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+                .admit_run(reservation, event)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
 fn sqlite_reserve_run<'py>(
     py: Python<'py>,
     path: String,
@@ -622,6 +645,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_reserve_run, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_admit_run, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_save_checkpoint, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_latest_checkpoint, module)?)?;
     module.add_function(wrap_pyfunction!(run_create, module)?)?;
