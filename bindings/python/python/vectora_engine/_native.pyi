@@ -99,6 +99,14 @@ async def sqlite_run_transition(
     next_status: str,
     operation_id: str,
 ) -> str: ...
+async def sqlite_run_verify(
+    path: str,
+    scope: str,
+    state_json: str,
+    report_json: str,
+    policy_json: str,
+    operation_id: str,
+) -> str: ...
 async def sqlite_save_checkpoint(path: str, input_json: str) -> str: ...
 async def sqlite_latest_checkpoint(path: str, scope: str, aggregate: str) -> str: ...
 async def sqlite_ledger_read(

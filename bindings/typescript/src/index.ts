@@ -229,6 +229,15 @@ export interface DurableRunLifecycleState {
   scope: string;
   ledger_sequence: number;
   lifecycle: RunLifecycle;
+  verification?: DurableVerificationRecord;
+}
+
+export interface DurableVerificationRecord {
+  operation_id: string;
+  report: VerificationReport;
+  policy: EvidenceDispositionPolicy;
+  evaluation: GateEvaluation;
+  transition: RunTransition;
 }
 
 export interface DurableRunAdmission {
@@ -238,6 +247,11 @@ export interface DurableRunAdmission {
 }
 
 export interface DurableRunTransition {
+  state: DurableRunLifecycleState;
+  transition?: RunTransition;
+}
+
+export interface DurableRunVerification {
   state: DurableRunLifecycleState;
   transition?: RunTransition;
 }
@@ -570,6 +584,14 @@ interface NativeBinding {
     scope: string,
     stateJson: string,
     nextStatus: string,
+    operationId: string,
+  ): Promise<string>;
+  sqliteRunVerify(
+    path: string,
+    scope: string,
+    stateJson: string,
+    reportJson: string,
+    policyJson: string,
     operationId: string,
   ): Promise<string>;
   toolContractVersion(): number;
@@ -918,6 +940,27 @@ export async function sqliteRunTransition(
       operationId,
     ),
   ) as DurableRunTransition;
+}
+
+/** Persist report, policy, verdict and the resulting lifecycle transition atomically. */
+export async function sqliteRunVerify(
+  path: string,
+  scope: string,
+  state: DurableRunLifecycleState,
+  report: VerificationReport,
+  policy: EvidenceDispositionPolicy,
+  operationId: string,
+): Promise<DurableRunVerification> {
+  return JSON.parse(
+    await native.sqliteRunVerify(
+      path,
+      scope,
+      JSON.stringify(state),
+      JSON.stringify(report),
+      JSON.stringify(policy),
+      operationId,
+    ),
+  ) as DurableRunVerification;
 }
 
 export async function sqliteReserveRun(

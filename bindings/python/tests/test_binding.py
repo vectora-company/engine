@@ -39,6 +39,7 @@ from vectora_engine import (
     sqlite_run_admit,
     sqlite_run_load_latest,
     sqlite_run_transition,
+    sqlite_run_verify,
     sqlite_save_checkpoint,
     start_model_tool_loop,
     submit_tool_result,
@@ -199,6 +200,106 @@ def test_sqlite_run_lifecycle_admission_and_transitions_survive_reopen(
             sqlite_run_load_latest(path, "workspace-durable-1", identity["run_id"])
         )
         == running["state"]
+    )
+
+
+def test_sqlite_run_verification_persists_evidence_and_gate_before_completion(
+    tmp_path: Any,
+) -> None:
+    path = str(tmp_path / "verified-runs.db")
+    identity = {
+        "contract_version": 1,
+        "run_id": "run-gated-1",
+        "idempotency_key": "admit-gated-1",
+        "thread_id": "thread-gated-1",
+        "turn_id": "turn-gated-1",
+        "scope_id": "workspace-gated-1",
+    }
+    admitted = asyncio.run(sqlite_run_admit(path, "workspace-gated-1", identity, {}))
+    running = asyncio.run(
+        sqlite_run_transition(
+            path, "workspace-gated-1", admitted["state"], "running", "gated-running"
+        )
+    )
+    verifying = asyncio.run(
+        sqlite_run_transition(
+            path,
+            "workspace-gated-1",
+            running["state"],
+            "verifying",
+            "gated-verifying",
+        )
+    )
+    with pytest.raises(RuntimeError, match="requires a persisted passing verification"):
+        asyncio.run(
+            sqlite_run_transition(
+                path,
+                "workspace-gated-1",
+                verifying["state"],
+                "completed",
+                "complete-without-gate",
+            )
+        )
+
+    report = {
+        "contract_version": 1,
+        "run_id": identity["run_id"],
+        "evaluated_at_unix_ms": 100,
+        "checks": [
+            {
+                "check_id": "tests",
+                "outcome": "passed",
+                "evidence": [
+                    {
+                        "evidence_id": "test-artifact",
+                        "origin": "pytest",
+                        "artifact_ref": "artifact:tests",
+                        "sha256": "a" * 64,
+                        "redacted": True,
+                        "expires_at_unix_ms": None,
+                    }
+                ],
+            }
+        ],
+    }
+    policy = {
+        "contract_version": 1,
+        "required_checks": ["tests"],
+        "require_evidence": True,
+        "failed_check": "blocked",
+        "inconclusive": "unverified",
+    }
+    saved = asyncio.run(
+        sqlite_run_verify(
+            path,
+            "workspace-gated-1",
+            verifying["state"],
+            report,
+            policy,
+            "verify-gated-1",
+        )
+    )
+    assert saved["state"]["lifecycle"]["status"] == "completed"
+    assert saved["state"]["verification"]["evaluation"]["verdict"] == "passed"
+    assert saved["state"]["verification"]["report"] == report
+    assert (
+        asyncio.run(
+            sqlite_run_verify(
+                path,
+                "workspace-gated-1",
+                verifying["state"],
+                report,
+                policy,
+                "verify-gated-1",
+            )
+        )["state"]
+        == saved["state"]
+    )
+    assert (
+        asyncio.run(
+            sqlite_run_load_latest(path, "workspace-gated-1", identity["run_id"])
+        )
+        == saved["state"]
     )
 
 

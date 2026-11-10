@@ -856,6 +856,38 @@ fn sqlite_run_transition<'py>(
 }
 
 #[pyfunction]
+fn sqlite_run_verify<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    report_json: String,
+    policy_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state =
+            serde_json::from_str(&state_json).map_err(|_| py_error("invalid durable run state"))?;
+        let report = serde_json::from_str(&report_json)
+            .map_err(|_| py_error("invalid verification report"))?;
+        let policy = serde_json::from_str(&policy_json)
+            .map_err(|_| py_error("invalid verification policy"))?;
+        let verification = tokio::task::spawn_blocking(move || {
+            let mut store =
+                vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                    .map_err(|error| error.to_string())?;
+            store
+                .verify(&state, report, policy, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("run store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&verification)
+    })
+}
+
+#[pyfunction]
 fn sqlite_reserve_run<'py>(
     py: Python<'py>,
     path: String,
@@ -1359,6 +1391,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sqlite_run_admit, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_load_latest, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_transition, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_run_verify, module)?)?;
     module.add_function(wrap_pyfunction!(tool_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(tool_dispatch_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(tool_policy_contract_version, module)?)?;

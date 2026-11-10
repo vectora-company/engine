@@ -271,6 +271,26 @@ async def sqlite_run_transition(
     return json.loads(encoded)
 
 
+async def sqlite_run_verify(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    report: JsonObject,
+    policy: JsonObject,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist verification evidence and its gate-driven lifecycle transition atomically."""
+    encoded = await _native.sqlite_run_verify(
+        path,
+        scope,
+        json.dumps(state, separators=(",", ":")),
+        json.dumps(report, separators=(",", ":")),
+        json.dumps(policy, separators=(",", ":")),
+        operation_id,
+    )
+    return json.loads(encoded)
+
+
 async def sqlite_save_checkpoint(path: str, checkpoint: JsonObject) -> dict[str, Any]:
     """Persist an immutable versioned checkpoint for an existing event."""
     return json.loads(
@@ -653,6 +673,7 @@ __all__ = [
     "sqlite_run_admit",
     "sqlite_run_load_latest",
     "sqlite_run_transition",
+    "sqlite_run_verify",
     "sqlite_save_checkpoint",
     "start_model_tool_loop",
     "submit_tool_result",

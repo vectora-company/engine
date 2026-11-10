@@ -39,6 +39,7 @@ import {
   sqliteRunAdmit,
   sqliteRunLoadLatest,
   sqliteRunTransition,
+  sqliteRunVerify,
   sqliteLedgerRead,
   sqliteReserveRun,
   sqliteSaveCheckpoint,
@@ -252,6 +253,101 @@ test("SQLite run lifecycle admission and transitions survive retries and reopen"
     assert.deepEqual(
       await sqliteRunLoadLatest(path, "workspace-durable-1", identity.run_id),
       running.state,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("SQLite run verification persists gate evidence before lifecycle completion", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-run-verification-"));
+  try {
+    const path = join(dir, "runs.db");
+    const identity = {
+      contract_version: 1,
+      run_id: "run-gated-1",
+      idempotency_key: "admit-gated-1",
+      thread_id: "thread-gated-1",
+      turn_id: "turn-gated-1",
+      scope_id: "workspace-gated-1",
+    };
+    const admitted = await sqliteRunAdmit(path, "workspace-gated-1", identity, {});
+    const running = await sqliteRunTransition(
+      path,
+      "workspace-gated-1",
+      admitted.state,
+      "running",
+      "gated-running",
+    );
+    const verifying = await sqliteRunTransition(
+      path,
+      "workspace-gated-1",
+      running.state,
+      "verifying",
+      "gated-verifying",
+    );
+    await assert.rejects(
+      sqliteRunTransition(
+        path,
+        "workspace-gated-1",
+        verifying.state,
+        "completed",
+        "complete-without-gate",
+      ),
+      /requires a persisted passing verification/,
+    );
+
+    const report = {
+      contract_version: 1,
+      run_id: identity.run_id,
+      evaluated_at_unix_ms: 100,
+      checks: [
+        {
+          check_id: "tests",
+          outcome: "passed",
+          evidence: [
+            {
+              evidence_id: "test-artifact",
+              origin: "node-test",
+              artifact_ref: "artifact:tests",
+              sha256: "a".repeat(64),
+              redacted: true,
+              expires_at_unix_ms: null,
+            },
+          ],
+        },
+      ],
+    };
+    const policy = {
+      contract_version: 1,
+      required_checks: ["tests"],
+      require_evidence: true,
+      failed_check: "blocked",
+      inconclusive: "unverified",
+    };
+    const saved = await sqliteRunVerify(
+      path,
+      "workspace-gated-1",
+      verifying.state,
+      report,
+      policy,
+      "verify-gated-1",
+    );
+    assert.equal(saved.state.lifecycle.status, "completed");
+    assert.equal(saved.state.verification.evaluation.verdict, "passed");
+    assert.deepEqual(saved.state.verification.report, report);
+    const replay = await sqliteRunVerify(
+      path,
+      "workspace-gated-1",
+      verifying.state,
+      report,
+      policy,
+      "verify-gated-1",
+    );
+    assert.deepEqual(replay.state, saved.state);
+    assert.deepEqual(
+      await sqliteRunLoadLatest(path, "workspace-gated-1", identity.run_id),
+      saved.state,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
