@@ -744,7 +744,7 @@ fn parse_stream_event(frame: &str) -> Result<Vec<ChatEvent>, ChatError> {
                 _ => return Err(ChatError::Protocol("reasoning delta is not a string")),
             }
         }
-        if let Some(calls) = delta.get("tool_calls") {
+        if let Some(calls) = delta.get("tool_calls").filter(|value| !value.is_null()) {
             let calls = calls
                 .as_array()
                 .ok_or(ChatError::Protocol("tool_calls delta is not an array"))?;
@@ -787,7 +787,7 @@ fn parse_stream_event(frame: &str) -> Result<Vec<ChatEvent>, ChatError> {
 }
 
 fn parse_tool_calls(value: Option<&Value>) -> Result<Vec<ToolCall>, ChatError> {
-    let Some(value) = value else {
+    let Some(value) = value.filter(|value| !value.is_null()) else {
         return Ok(Vec::new());
     };
     let calls = value
@@ -823,7 +823,7 @@ fn parse_tool_calls(value: Option<&Value>) -> Result<Vec<ToolCall>, ChatError> {
 }
 
 fn parse_usage(value: Option<&Value>) -> Result<Option<Usage>, ChatError> {
-    let Some(value) = value else {
+    let Some(value) = value.filter(|value| !value.is_null()) else {
         return Ok(None);
     };
     let input = value
@@ -888,6 +888,24 @@ fn safe_endpoint(raw: &str) -> String {
 mod tests {
     use super::*;
     use crate::chat::{ContentPart, ImageUrl, ToolDefinition};
+
+    #[test]
+    fn null_optional_usage_and_tool_calls_are_absent_in_completion_and_stream() {
+        let completion = parse_completion(json!({
+            "choices": [{"message": {"content": "ok", "tool_calls": null}, "finish_reason": "stop"}],
+            "usage": null
+        })).unwrap();
+        assert_eq!(completion.content, "ok");
+        assert!(completion.tool_calls.is_empty());
+        assert!(completion.usage.is_none());
+        let events = parse_stream_event(
+            r#"{"choices":[{"delta":{"content":"ok","tool_calls":null}}],"usage":null}"#,
+        )
+        .unwrap();
+        assert!(matches!(events[0].event, ChatEventKind::TextDelta { .. }));
+        assert!(parse_tool_calls(Some(&json!({}))).is_err());
+        assert!(parse_usage(Some(&json!({}))).is_err());
+    }
 
     #[test]
     fn validates_configuration_before_network_use_and_redacts_secrets() {

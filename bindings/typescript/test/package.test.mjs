@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   assembleTurn,
   acceptModelTurn,
@@ -25,7 +28,29 @@ import {
   toolDispatchContractVersion,
   startModelToolLoop,
   submitToolResult,
+  validateStorageSelection,
+  sqliteLedgerAppend,
+  sqliteLedgerRead,
 } from "../dist/index.js";
+
+test("sqlite ledger persists and retries safely through Node", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-ledger-"));
+  try {
+    const path = join(dir, "ledger.db");
+    const event = { scope: "team", aggregate: "run", event_id: "one", idempotency_key: "key", event_type: "started", payload: {}, expected_version: 0 };
+    assert.equal((await sqliteLedgerAppend(path, event)).sequence, 1);
+    assert.equal((await sqliteLedgerAppend(path, event)).sequence, 1);
+    assert.equal((await sqliteLedgerRead(path, "team", "run")).length, 1);
+    assert.deepEqual(await sqliteLedgerRead(path, "other", "run"), []);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("storage selection validates independent backends in Rust", () => {
+  const selection = validateStorageSelection({ contract_version: 1, sql: "sqlite", queue: "nats_jetstream" });
+  assert.equal(selection.sql, "sqlite");
+  assert.equal(selection.queue, "nats_jetstream");
+  assert.throws(() => validateStorageSelection({ contract_version: 99 }));
+});
 
 const settings = {
   base_url: "file:///invalid",

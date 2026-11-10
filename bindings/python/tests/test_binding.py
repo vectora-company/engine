@@ -27,13 +27,45 @@ from vectora_engine import (
     rerank,
     rerank_contract_version,
     run_contract_version,
+    sqlite_ledger_append,
+    sqlite_ledger_read,
     start_model_tool_loop,
     submit_tool_result,
     tool_chat_definitions,
     tool_contract_version,
     tool_dispatch_contract_version,
     transition_run,
+    validate_storage_selection,
 )
+
+
+def test_storage_selection_is_validated_by_rust() -> None:
+    selection = validate_storage_selection(
+        {"contract_version": 1, "sql": "sqlite", "queue": "nats_jetstream"}
+    )
+    assert selection["sql"] == "sqlite"
+    assert selection["queue"] == "nats_jetstream"
+    assert selection["vector"] is None
+    with pytest.raises(RuntimeError, match="unsupported storage contract version"):
+        validate_storage_selection({"contract_version": 99})
+
+
+def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
+    path = str(tmp_path / "ledger.db")
+    event = {
+        "scope": "team",
+        "aggregate": "run",
+        "event_id": "one",
+        "idempotency_key": "key",
+        "event_type": "started",
+        "payload": {"status": "ok"},
+        "expected_version": 0,
+    }
+    assert asyncio.run(sqlite_ledger_append(path, event))["sequence"] == 1
+    assert asyncio.run(sqlite_ledger_append(path, event))["sequence"] == 1
+    assert len(asyncio.run(sqlite_ledger_read(path, "team", "run"))) == 1
+    assert asyncio.run(sqlite_ledger_read(path, "other", "run")) == []
+
 
 SETTINGS = {"base_url": "file:///invalid", "api_key": "secret-for-redaction-test"}
 REQUEST = {

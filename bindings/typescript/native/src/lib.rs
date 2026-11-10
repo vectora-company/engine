@@ -173,6 +173,52 @@ pub fn run_contract_version() -> u32 {
 }
 
 #[napi]
+pub fn storage_validate_selection(selection_json: String) -> Result<String> {
+    let selection: vectora_engine::storage::StorageSelection =
+        serde_json::from_str(&selection_json)
+            .map_err(|_| Error::from_reason("invalid storage selection"))?;
+    selection
+        .validate()
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&selection)
+}
+
+#[napi]
+pub async fn sqlite_ledger_append(path: String, draft_json: String) -> Result<String> {
+    let draft = serde_json::from_str(&draft_json)
+        .map_err(|_| Error::from_reason("invalid ledger event"))?;
+    let event = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.append(draft)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&event)
+}
+
+#[napi]
+pub async fn sqlite_ledger_read(
+    path: String,
+    scope: String,
+    aggregate: String,
+    after: u32,
+    limit: u32,
+) -> Result<String> {
+    let events = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.read(
+            &scope,
+            &aggregate,
+            u64::from(after),
+            limit,
+        )
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&events)
+}
+
+#[napi]
 pub fn run_create(identity_json: String) -> Result<String> {
     let identity: RunIdentity = serde_json::from_str(&identity_json)
         .map_err(|_| Error::from_reason("invalid run identity"))?;

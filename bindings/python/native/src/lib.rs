@@ -170,6 +170,54 @@ fn run_contract_version() -> u16 {
 }
 
 #[pyfunction]
+fn storage_validate_selection(selection_json: String) -> PyResult<String> {
+    let selection: vectora_engine::storage::StorageSelection =
+        serde_json::from_str(&selection_json).map_err(|_| py_error("invalid storage selection"))?;
+    selection.validate().map_err(py_error)?;
+    encode_json(&selection)
+}
+
+#[pyfunction]
+fn sqlite_ledger_append<'py>(
+    py: Python<'py>,
+    path: String,
+    draft_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let draft =
+            serde_json::from_str(&draft_json).map_err(|_| py_error("invalid ledger event"))?;
+        let event = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.append(draft)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&event)
+    })
+}
+
+#[pyfunction]
+fn sqlite_ledger_read<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    aggregate: String,
+    after: u64,
+    limit: u32,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let events = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+                .read(&scope, &aggregate, after, limit)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&events)
+    })
+}
+
+#[pyfunction]
 fn run_create(identity_json: String) -> PyResult<String> {
     let identity: RunIdentity =
         serde_json::from_str(&identity_json).map_err(|_| py_error("invalid run identity"))?;
@@ -512,6 +560,9 @@ fn fallback_chat_stream_start<'py>(
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
     module.add_function(wrap_pyfunction!(run_create, module)?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(tool_contract_version, module)?)?;

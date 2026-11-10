@@ -11,6 +11,25 @@ from . import _native
 JsonObject = Mapping[str, Any]
 
 
+def validate_storage_selection(selection: JsonObject) -> dict[str, Any]:
+    """Validate independent storage choices; this does not open any adapter."""
+    return json.loads(_native.storage_validate_selection(json.dumps(selection)))
+
+
+async def sqlite_ledger_append(path: str, event: JsonObject) -> dict[str, Any]:
+    """Append an event; the caller must authorize scope and redact payloads."""
+    return json.loads(await _native.sqlite_ledger_append(path, json.dumps(event)))
+
+
+async def sqlite_ledger_read(
+    path: str, scope: str, aggregate: str, *, after: int = 0, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Read ordered events after a sequence in a trusted scope."""
+    return json.loads(
+        await _native.sqlite_ledger_read(path, scope, aggregate, after, limit)
+    )
+
+
 def assemble_turn(
     turn_id: str,
     events: Sequence[JsonObject],
@@ -279,10 +298,13 @@ __all__ = [
     "rerank",
     "rerank_contract_version",
     "run_contract_version",
+    "sqlite_ledger_append",
+    "sqlite_ledger_read",
     "start_model_tool_loop",
     "submit_tool_result",
     "tool_chat_definitions",
     "tool_contract_version",
     "tool_dispatch_contract_version",
     "transition_run",
+    "validate_storage_selection",
 ]

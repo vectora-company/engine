@@ -303,6 +303,9 @@ export interface FallbackRerankSettings {
 }
 
 interface NativeBinding {
+  storageValidateSelection(selectionJson: string): string;
+  sqliteLedgerAppend(path: string, draftJson: string): Promise<string>;
+  sqliteLedgerRead(path: string, scope: string, aggregate: string, after: number, limit: number): Promise<string>;
   runContractVersion(): number;
   runCreate(identityJson: string): string;
   runTransition(lifecycleJson: string, nextStatus: string): string;
@@ -339,6 +342,35 @@ interface NativeBinding {
 }
 
 const native = (await import("../native/index.js")) as NativeBinding;
+
+export interface StorageSelection {
+  contract_version: number;
+  sql?: "sqlite" | "postgresql" | null;
+  vector?: "lance_db" | "qdrant" | null;
+  kv?: "redis" | "nats_jetstream" | "memory" | null;
+  queue?: "redis_streams" | "nats_jetstream" | "memory" | null;
+  pubsub?: "redis" | "nats_core" | "memory" | null;
+}
+
+/** Validate selections without opening a connection or claiming availability. */
+export function validateStorageSelection(selection: StorageSelection): StorageSelection {
+  return JSON.parse(native.storageValidateSelection(JSON.stringify(selection))) as StorageSelection;
+}
+
+export interface LedgerDraft {
+  scope: string; aggregate: string; event_id: string; idempotency_key: string;
+  event_type: string; payload: JsonValue; expected_version: number;
+}
+export interface LedgerEvent extends Omit<LedgerDraft, "expected_version"> { sequence: number }
+
+/** The host must authorize the scope and redact payloads before persistence. */
+export async function sqliteLedgerAppend(path: string, event: LedgerDraft): Promise<LedgerEvent> {
+  return JSON.parse(await native.sqliteLedgerAppend(path, JSON.stringify(event))) as LedgerEvent;
+}
+
+export async function sqliteLedgerRead(path: string, scope: string, aggregate: string, after = 0, limit = 100): Promise<LedgerEvent[]> {
+  return JSON.parse(await native.sqliteLedgerRead(path, scope, aggregate, after, limit)) as LedgerEvent[];
+}
 
 /** Version of the experimental run lifecycle contract. */
 export const runContractVersion = (): number => native.runContractVersion();

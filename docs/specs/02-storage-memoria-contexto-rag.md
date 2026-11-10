@@ -38,6 +38,14 @@ A interface comum expõe somente o menor denominador seguro. Recursos próprios 
 
 ## Ledger e estado de execução
 
+Estado experimental atual: a Engine oferece append e leitura paginada de
+eventos em SQLite, com sequência por escopo/agregado, versão esperada e chave
+idempotente. O host autoriza o escopo e redige o payload antes de gravar; a
+Engine ainda não garante redação automática, checkpoints, reserva de runs,
+outbox ou recovery. As operações dos bindings abrem conexões por chamada e
+exigem arquivo persistente; SQLite em memória não é aceito nesses bindings.
+PostgreSQL, vetores, KV, filas e pub/sub permanecem planejados.
+
 - Separar registro append-only de eventos, projeções consultáveis, checkpoints, cursor e referências a artifacts.
 - Envelope deve carregar `event_id`, sequência por agregado/stream, versão do schema, idempotency key, run/turno e escopo confiável do consumidor.
 - Retry, redelivery, reconexão e replay não duplicam eventos ou efeitos; lacunas de sequência são representáveis e reconciliáveis.
