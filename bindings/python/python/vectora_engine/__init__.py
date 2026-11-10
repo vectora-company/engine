@@ -444,6 +444,20 @@ def submit_tool_result(state: JsonObject, result: JsonObject) -> dict[str, Any]:
     return json.loads(encoded)
 
 
+def evidence_gate_contract_version() -> int:
+    """Return the version of verification evidence and gate contracts."""
+    return _native.evidence_gate_contract_version()
+
+
+def evaluate_verification(report: JsonObject, policy: JsonObject) -> dict[str, Any]:
+    """Evaluate required checks without treating missing work as success."""
+    encoded = _native.evaluate_verification_json(
+        json.dumps(report, separators=(",", ":")),
+        json.dumps(policy, separators=(",", ":")),
+    )
+    return json.loads(encoded)
+
+
 def recover_model_tool_loop(state: JsonObject) -> dict[str, Any]:
     """Mark pending calls for explicit reconciliation; no tool is replayed."""
     encoded = _native.model_tool_loop_recover(json.dumps(state, separators=(",", ":")))
@@ -598,6 +612,8 @@ __all__ = [
     "create_run",
     "embed",
     "embedding_contract_version",
+    "evaluate_verification",
+    "evidence_gate_contract_version",
     "fallback_chat_complete",
     "fallback_chat_stream",
     "fallback_embed",

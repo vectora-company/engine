@@ -56,8 +56,12 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    provider/adapters, reconciliação autenticada e recuperação operacional ainda
    precisam ser concluídas. Recovery nunca repete silenciosamente um efeito de
    resultado incerto.
-6. **Verificação e conformidade** — separar resultado da verificação do veredito
-   do gate; verificar replay, cancelamento, redaction, restart e dois perfis de
+6. **Verificação e conformidade** — contrato experimental de resultados e
+   vereditos implementado em `docs/specs/15-verification-gates.md`, com
+   bindings Python/TypeScript e avaliação determinística. Persistência de
+   reports/decisões no lifecycle, execução dos checks pelo host e evidência
+   autenticada ainda faltam. A fase segue aberta para integrar o gate ao
+   recovery e validar replay, cancelamento, redaction, restart e dois perfis de
    consumidor antes de qualquer alegação de paridade ou adoção.
 
 Cada parte do plano deve ser entregue em PR próprio empilhado sobre o anterior.

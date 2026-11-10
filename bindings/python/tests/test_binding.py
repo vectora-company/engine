@@ -17,6 +17,8 @@ from vectora_engine import (
     create_run,
     embed,
     embedding_contract_version,
+    evaluate_verification,
+    evidence_gate_contract_version,
     fallback_chat_complete,
     fallback_chat_stream,
     fallback_embed,
@@ -1388,3 +1390,73 @@ def test_fallback_stream_switches_before_output_and_never_replays_partial_chunks
     ]
     assert events[0]["from_model_id"] == "openrouter:first-model"
     assert events[0]["to_model_id"] == "cohere:command-a"
+
+
+def test_verification_gate_binding_keeps_gate_verdict_separate() -> None:
+    assert evidence_gate_contract_version() == 1
+    report = {
+        "contract_version": 1,
+        "run_id": "run-verification-1",
+        "evaluated_at_unix_ms": 100,
+        "checks": [
+            {
+                "check_id": check_id,
+                "outcome": outcome,
+                "evidence": [
+                    {
+                        "evidence_id": f"evidence-{check_id}",
+                        "origin": "test_runner",
+                        "artifact_ref": f"artifact:{check_id}",
+                        "sha256": "a" * 64,
+                        "redacted": True,
+                        "expires_at_unix_ms": None,
+                    }
+                ],
+            }
+            for check_id, outcome in (("tests", "passed"), ("lint", "infra_error"))
+        ],
+    }
+    policy = {
+        "contract_version": 1,
+        "required_checks": ["tests", "lint"],
+        "require_evidence": True,
+        "failed_check": "blocked",
+        "inconclusive": "unverified",
+    }
+    evaluation = evaluate_verification(report, policy)
+    assert evaluation["verification_status"] == "infra_error"
+    assert evaluation["verdict"] == "unverified"
+    assert evaluation["reason_code"] == "verification_infrastructure_error"
+
+
+def test_verification_gate_binding_rejects_unredacted_evidence() -> None:
+    report = {
+        "contract_version": 1,
+        "run_id": "run-verification-2",
+        "evaluated_at_unix_ms": 100,
+        "checks": [
+            {
+                "check_id": "tests",
+                "outcome": "passed",
+                "evidence": [
+                    {
+                        "evidence_id": "evidence-tests",
+                        "origin": "test_runner",
+                        "artifact_ref": "artifact:tests",
+                        "sha256": None,
+                        "redacted": False,
+                        "expires_at_unix_ms": None,
+                    }
+                ],
+            }
+        ],
+    }
+    policy = {
+        "contract_version": 1,
+        "required_checks": ["tests"],
+        "require_evidence": True,
+        "failed_check": "blocked",
+        "inconclusive": "unverified",
+    }
+    with pytest.raises(RuntimeError, match="redacted"):
+        evaluate_verification(report, policy)

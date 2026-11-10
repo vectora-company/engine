@@ -182,6 +182,48 @@ export interface RunTransition {
   to: RunStatus;
 }
 
+export type VerificationOutcome = "passed" | "failed" | "infra_error" | "not_run";
+export type VerificationStatus = VerificationOutcome;
+export type GateVerdict = "passed" | "degraded" | "blocked" | "unverified";
+
+export interface VerificationEvidence {
+  evidence_id: string;
+  origin: string;
+  artifact_ref: string;
+  sha256?: string | null;
+  redacted: boolean;
+  expires_at_unix_ms?: number | null;
+}
+
+export interface VerificationCheck {
+  check_id: string;
+  outcome: VerificationOutcome;
+  evidence?: VerificationEvidence[];
+}
+
+export interface VerificationReport {
+  contract_version: number;
+  run_id: string;
+  evaluated_at_unix_ms: number;
+  checks: VerificationCheck[];
+}
+
+export interface EvidenceDispositionPolicy {
+  contract_version: number;
+  required_checks: string[];
+  require_evidence: boolean;
+  failed_check: "degraded" | "blocked";
+  inconclusive: "degraded" | "blocked" | "unverified";
+}
+
+export interface GateEvaluation {
+  contract_version: number;
+  run_id: string;
+  verification_status: VerificationStatus;
+  verdict: GateVerdict;
+  reason_code: string;
+}
+
 export interface DurableRunLifecycleState {
   contract_version: number;
   scope: string;
@@ -508,6 +550,8 @@ interface NativeBinding {
     aggregate: string,
   ): Promise<string>;
   runContractVersion(): number;
+  evidenceGateContractVersion(): number;
+  evaluateVerificationJson(reportJson: string, policyJson: string): string;
   runCreate(identityJson: string): string;
   runTransition(lifecycleJson: string, nextStatus: string): string;
   sqliteRunAdmit(
@@ -1074,6 +1118,20 @@ export async function sqliteLedgerRead(
 
 /** Version of the experimental run lifecycle contract. */
 export const runContractVersion = (): number => native.runContractVersion();
+
+/** Version of verification result and gate decision contracts. */
+export const evidenceGateContractVersion = (): number =>
+  native.evidenceGateContractVersion();
+
+/** Evaluate consumer-provided required checks and redacted evidence. */
+export function evaluateVerification(
+  report: VerificationReport,
+  policy: EvidenceDispositionPolicy,
+): GateEvaluation {
+  return JSON.parse(
+    native.evaluateVerificationJson(JSON.stringify(report), JSON.stringify(policy)),
+  ) as GateEvaluation;
+}
 
 /** Create a validated planned run snapshot; durability is caller-owned. */
 export function createRun(identity: RunIdentity): RunLifecycle {

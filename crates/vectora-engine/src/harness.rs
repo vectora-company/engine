@@ -9,6 +9,7 @@ use thiserror::Error;
 mod model_tool_loop;
 mod policy;
 mod tool_dispatch;
+mod verification;
 
 pub use model_tool_loop::{
     MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopAction, ModelToolLoopError, ModelToolLoopPhase,
@@ -26,6 +27,12 @@ pub use tool_dispatch::{
     TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDecision,
     ToolDenialCode, ToolDispatch, ToolDispatchError, ToolDispatchSettings, ToolEffect,
     ToolExecutionMode, ToolIdempotency, prepare_tool_dispatch, tool_chat_definitions,
+};
+pub use verification::{
+    EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDisposition, EvidenceDispositionPolicy,
+    FailureDisposition, GateEvaluation, GateVerdict, VerificationCheck, VerificationError,
+    VerificationEvidence, VerificationOutcome, VerificationReport, VerificationStatus,
+    evaluate_verification,
 };
 
 /// Version of the public run lifecycle contract.

@@ -11,6 +11,8 @@ import {
   chatComplete,
   chatContractVersion,
   createRun,
+  evidenceGateContractVersion,
+  evaluateVerification,
   prepareToolDispatch,
   chatStream,
   embed,
@@ -42,6 +44,72 @@ import {
   sqliteSaveCheckpoint,
   sqliteLatestCheckpoint,
 } from "../dist/index.js";
+
+test("verification gate distinguishes check result from final verdict", () => {
+  assert.equal(evidenceGateContractVersion(), 1);
+  const evidence = (id) => ({
+    evidence_id: `evidence-${id}`,
+    origin: "test_runner",
+    artifact_ref: `artifact:${id}`,
+    sha256: "a".repeat(64),
+    redacted: true,
+  });
+  const report = {
+    contract_version: 1,
+    run_id: "run-verification-1",
+    evaluated_at_unix_ms: 100,
+    checks: [
+      { check_id: "tests", outcome: "passed", evidence: [evidence("tests")] },
+      { check_id: "lint", outcome: "infra_error", evidence: [evidence("lint")] },
+    ],
+  };
+  const policy = {
+    contract_version: 1,
+    required_checks: ["tests", "lint"],
+    require_evidence: true,
+    failed_check: "blocked",
+    inconclusive: "unverified",
+  };
+  assert.deepEqual(evaluateVerification(report, policy), {
+    contract_version: 1,
+    run_id: "run-verification-1",
+    verification_status: "infra_error",
+    verdict: "unverified",
+    reason_code: "verification_infrastructure_error",
+  });
+  assert.throws(
+    () => evaluateVerification({ ...report, run_id: "" }, policy),
+    /run ID must not be empty/,
+  );
+});
+
+test("verification gate rejects sensitive or expired required evidence", () => {
+  const report = {
+    contract_version: 1,
+    run_id: "run-verification-2",
+    evaluated_at_unix_ms: 100,
+    checks: [
+      {
+        check_id: "tests",
+        outcome: "passed",
+        evidence: [{ evidence_id: "e1", origin: "runner", artifact_ref: "artifact:e1", redacted: true, expires_at_unix_ms: 100 }],
+      },
+    ],
+  };
+  const policy = {
+    contract_version: 1,
+    required_checks: ["tests"],
+    require_evidence: true,
+    failed_check: "blocked",
+    inconclusive: "unverified",
+  };
+  assert.equal(
+    evaluateVerification(report, policy).reason_code,
+    "required_evidence_missing_or_expired",
+  );
+  report.checks[0].evidence[0].redacted = false;
+  assert.throws(() => evaluateVerification(report, policy), /must be redacted/);
+});
 
 test("sqlite ledger persists and retries safely through Node", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vectora-ledger-"));
