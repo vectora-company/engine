@@ -177,6 +177,7 @@ mod tests {
         drop(ledger);
         let ledger = ResilientLedger::open(&path, None).unwrap();
         assert_eq!(ledger.pending_count().unwrap(), 1);
+        drop(ledger);
         std::fs::remove_file(path).unwrap();
     }
 
