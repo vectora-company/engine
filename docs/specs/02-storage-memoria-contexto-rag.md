@@ -81,7 +81,7 @@ Cada operação deve permitir registrar adapter/capability escolhida, versão/co
 2. **SQL:** implementar SQLite e PostgreSQL com casos comuns e específicos.
 3. **Vetorial:** implementar LanceDB e Qdrant sem forçar equivalência de busca/filtro.
 4. **KV/mensageria:** implementar Redis e NATS JetStream para usos descobertos, documentando semânticas distintas.
-5. **Bindings/distribuição e adoção:** expor contratos pela API Rust canônica e por bindings Python (PyPI) e TypeScript/Node (npm), sem duplicar adapters ou semântica. O backend Python do Vectora e o GH Bot TypeScript são consumidores explícitos; adotar capabilities de forma reversível, um consumidor por vez.
+5. **Distribuição e adoção:** cada capability pública inclui bindings Python e TypeScript no mesmo PR. Preparar publicação e adotar de forma reversível, começando pelo GH Bot TypeScript e seguindo posteriormente com o backend Python do Vectora.
 6. **Migração de dados:** por entidade/capability, com métricas de integridade e rollback aprovados antes da troca de padrão.
 
 A ordem pode mudar conforme dependências reais, mas não remove os gates de contrato, conformidade e recuperação.
