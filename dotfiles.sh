@@ -224,13 +224,17 @@ export PATH="$HOME/.pyenv/bin:$HOME/.pyenv/shims:$PATH"
 eval "$(pyenv init - bash)"
 PYTHON_VERSION="${VECTORA_ENGINE_PYTHON_VERSION:-$(pyenv latest -k "$PYTHON_SERIES")}"
 if ! pyenv versions --bare | grep -Fxq "$PYTHON_VERSION"; then pyenv install "$PYTHON_VERSION"; fi
-pyenv global "$PYTHON_VERSION"
+PYTHON_PREFIX=$(pyenv prefix "$PYTHON_VERSION")
+PYTHON_EXECUTABLE="$PYTHON_PREFIX/bin/python"
+if [[ ! -x "$PYTHON_EXECUTABLE" ]]; then
+  printf 'Python do pyenv não foi encontrado em %s.\n' "$PYTHON_EXECUTABLE" >&2
+  exit 1
+fi
 
 if ! command_exists uv; then curl -LsSf https://astral.sh/uv/install.sh | sh; fi
 export PATH="$UV_TOOL_BIN_DIR:$PATH"
-uv python install "$PYTHON_VERSION"
-uv tool install --upgrade scons
-uv tool install --upgrade pre-commit
+uv tool install --python "$PYTHON_EXECUTABLE" --upgrade scons
+uv tool install --python "$PYTHON_EXECUTABLE" --upgrade pre-commit
 
 if ! command_exists rustup; then
   curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs | \

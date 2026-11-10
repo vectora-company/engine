@@ -1,14 +1,16 @@
 """SCons entry point for the Rust engine workspace."""
 
+import glob
+import io
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import urllib.request
 import zipfile
-import io
 
 
 ROOT = Dir(".").abspath
@@ -18,6 +20,31 @@ DEV_SERVICE_IMAGES = (
     "docker.io/qdrant/qdrant:v1.15.5",
     "docker.io/library/redis:7.4-alpine",
 )
+
+
+def _project_python_args() -> list[str]:
+    """Select the pyenv-installed interpreter through uv when available."""
+    configured = os.environ.get("UV_PYTHON")
+    if configured:
+        return ["--python", configured]
+    if not sys.platform.startswith("linux"):
+        return []
+    pyenv_root = os.environ.get("PYENV_ROOT", os.path.expanduser("~/.pyenv"))
+    candidates = glob.glob(
+        os.path.join(pyenv_root, "versions", "3.13.*", "bin", "python")
+    )
+    if not candidates:
+        return []
+    latest = max(
+        candidates,
+        key=lambda path: tuple(
+            int(part)
+            for part in os.path.basename(
+                os.path.dirname(os.path.dirname(path))
+            ).split(".")
+        ),
+    )
+    return ["--python", latest]
 
 
 def _run(*command: str, cwd: str = ROOT) -> None:
@@ -66,7 +93,7 @@ def _install(target, source, env):
         )
     _run("rustup", "component", "add", "rustfmt", "clippy")
     _run("cargo", "fetch", "--locked")
-    _run("uv", "sync", "--locked", "--all-groups")
+    _run("uv", "sync", "--locked", "--all-groups", *_project_python_args())
     if shutil.which("podman") is None:
         raise SystemExit(
             "Podman is required to install the development service images. "
