@@ -306,6 +306,9 @@ interface NativeBinding {
   storageValidateSelection(selectionJson: string): string;
   sqliteLedgerAppend(path: string, draftJson: string): Promise<string>;
   sqliteLedgerRead(path: string, scope: string, aggregate: string, after: number, limit: number): Promise<string>;
+  sqliteReserveRun(path: string, inputJson: string): Promise<string>;
+  sqliteSaveCheckpoint(path: string, inputJson: string): Promise<string>;
+  sqliteLatestCheckpoint(path: string, scope: string, aggregate: string): Promise<string>;
   runContractVersion(): number;
   runCreate(identityJson: string): string;
   runTransition(lifecycleJson: string, nextStatus: string): string;
@@ -362,6 +365,22 @@ export interface LedgerDraft {
   event_type: string; payload: JsonValue; expected_version: number;
 }
 export interface LedgerEvent extends Omit<LedgerDraft, "expected_version"> { sequence: number }
+export interface RunReservation {
+  scope: string; thread_id: string; turn_id: string; run_id: string; idempotency_key: string; request: JsonValue;
+}
+export interface LedgerCheckpoint {
+  contract_version: number; scope: string; aggregate: string; checkpoint_id: string; sequence: number; state: JsonValue;
+}
+
+export async function sqliteReserveRun(path: string, reservation: RunReservation): Promise<RunReservation> {
+  return JSON.parse(await native.sqliteReserveRun(path, JSON.stringify(reservation))) as RunReservation;
+}
+export async function sqliteSaveCheckpoint(path: string, checkpoint: LedgerCheckpoint): Promise<LedgerCheckpoint> {
+  return JSON.parse(await native.sqliteSaveCheckpoint(path, JSON.stringify(checkpoint))) as LedgerCheckpoint;
+}
+export async function sqliteLatestCheckpoint(path: string, scope: string, aggregate: string): Promise<LedgerCheckpoint | null> {
+  return JSON.parse(await native.sqliteLatestCheckpoint(path, scope, aggregate)) as LedgerCheckpoint | null;
+}
 
 /** The host must authorize the scope and redact payloads before persistence. */
 export async function sqliteLedgerAppend(path: string, event: LedgerDraft): Promise<LedgerEvent> {

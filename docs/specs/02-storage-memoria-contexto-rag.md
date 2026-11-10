@@ -40,9 +40,10 @@ A interface comum expõe somente o menor denominador seguro. Recursos próprios 
 
 Estado experimental atual: a Engine oferece append e leitura paginada de
 eventos em SQLite, com sequência por escopo/agregado, versão esperada e chave
-idempotente. O host autoriza o escopo e redige o payload antes de gravar; a
-Engine ainda não garante redação automática, checkpoints, reserva de runs,
-outbox ou recovery. As operações dos bindings abrem conexões por chamada e
+idempotente. Inclui reserva idempotente de run e checkpoints versionados
+imutáveis vinculados a uma sequência existente. O host autoriza o escopo e
+redige o payload antes de gravar; a Engine ainda não garante redação automática,
+outbox, retomada de execução ou recovery. As operações dos bindings abrem conexões por chamada e
 exigem arquivo persistente; SQLite em memória não é aceito nesses bindings.
 PostgreSQL, vetores, KV, filas e pub/sub permanecem planejados.
 

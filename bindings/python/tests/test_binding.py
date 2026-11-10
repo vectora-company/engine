@@ -27,8 +27,11 @@ from vectora_engine import (
     rerank,
     rerank_contract_version,
     run_contract_version,
+    sqlite_latest_checkpoint,
     sqlite_ledger_append,
     sqlite_ledger_read,
+    sqlite_reserve_run,
+    sqlite_save_checkpoint,
     start_model_tool_loop,
     submit_tool_result,
     tool_chat_definitions,
@@ -65,6 +68,27 @@ def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     assert asyncio.run(sqlite_ledger_append(path, event))["sequence"] == 1
     assert len(asyncio.run(sqlite_ledger_read(path, "team", "run"))) == 1
     assert asyncio.run(sqlite_ledger_read(path, "other", "run")) == []
+    reservation = {
+        "scope": "team",
+        "thread_id": "thread",
+        "turn_id": "turn",
+        "run_id": "run",
+        "idempotency_key": "key",
+        "request": {},
+    }
+    assert asyncio.run(sqlite_reserve_run(path, reservation)) == reservation
+    assert asyncio.run(sqlite_reserve_run(path, reservation)) == reservation
+    checkpoint = {
+        "contract_version": 1,
+        "scope": "team",
+        "aggregate": "run",
+        "checkpoint_id": "cp",
+        "sequence": 1,
+        "state": {"status": "running"},
+    }
+    assert asyncio.run(sqlite_save_checkpoint(path, checkpoint)) == checkpoint
+    assert asyncio.run(sqlite_latest_checkpoint(path, "team", "run")) == checkpoint
+    assert asyncio.run(sqlite_latest_checkpoint(path, "other", "run")) is None
 
 
 SETTINGS = {"base_url": "file:///invalid", "api_key": "secret-for-redaction-test"}

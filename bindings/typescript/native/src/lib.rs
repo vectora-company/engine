@@ -219,6 +219,48 @@ pub async fn sqlite_ledger_read(
 }
 
 #[napi]
+pub async fn sqlite_reserve_run(path: String, input_json: String) -> Result<String> {
+    let input = serde_json::from_str(&input_json)
+        .map_err(|_| Error::from_reason("invalid run reservation"))?;
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.reserve_run(input)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
+pub async fn sqlite_save_checkpoint(path: String, input_json: String) -> Result<String> {
+    let input =
+        serde_json::from_str(&input_json).map_err(|_| Error::from_reason("invalid checkpoint"))?;
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.save_checkpoint(input)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
+pub async fn sqlite_latest_checkpoint(
+    path: String,
+    scope: String,
+    aggregate: String,
+) -> Result<String> {
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+            .latest_checkpoint(&scope, &aggregate)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
 pub fn run_create(identity_json: String) -> Result<String> {
     let identity: RunIdentity = serde_json::from_str(&identity_json)
         .map_err(|_| Error::from_reason("invalid run identity"))?;

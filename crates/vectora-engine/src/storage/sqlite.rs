@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
+pub const CHECKPOINT_VERSION: u16 = 1;
 const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Error)]
@@ -53,6 +54,29 @@ pub struct LedgerEvent {
     pub sequence: u64,
 }
 
+/// Request identity and payload are supplied by a trusted, authorizing host.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RunReservation {
+    pub scope: String,
+    pub thread_id: String,
+    pub turn_id: String,
+    pub run_id: String,
+    pub idempotency_key: String,
+    pub request: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Checkpoint {
+    pub contract_version: u16,
+    pub scope: String,
+    pub aggregate: String,
+    pub checkpoint_id: String,
+    pub sequence: u64,
+    pub state: Value,
+}
+
 pub struct SqliteLedger {
     connection: Connection,
 }
@@ -87,7 +111,7 @@ impl SqliteLedger {
             })
             .optional()?;
         match version {
-            Some(SCHEMA_VERSION) => {}
+            Some(1 | SCHEMA_VERSION) => {}
             Some(_) => return Err(LedgerError::SchemaVersion),
             None => {
                 tx.execute_batch(
@@ -100,6 +124,19 @@ impl SqliteLedger {
                 ); INSERT INTO ve_ledger_meta(id,version) VALUES (1,1);",
                 )?;
             }
+        }
+        if version != Some(SCHEMA_VERSION) {
+            tx.execute_batch("CREATE TABLE ve_run_reservations (
+                scope TEXT NOT NULL, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+                run_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, request TEXT NOT NULL,
+                PRIMARY KEY(scope,thread_id,turn_id), UNIQUE(scope,idempotency_key), UNIQUE(scope,run_id)
+            );
+            CREATE TABLE ve_ledger_checkpoints (
+                scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, checkpoint_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL, contract_version INTEGER NOT NULL, state TEXT NOT NULL,
+                PRIMARY KEY(scope,aggregate_id,checkpoint_id), UNIQUE(scope,aggregate_id,sequence)
+            );
+            UPDATE ve_ledger_meta SET version=2 WHERE id=1;")?;
         }
         tx.commit()?;
         Ok(())
@@ -208,6 +245,122 @@ impl SqliteLedger {
         }
         Ok(events)
     }
+
+    /// Atomically admit a run or return its identical earlier reservation.
+    pub fn reserve_run(&mut self, input: RunReservation) -> Result<RunReservation, LedgerError> {
+        if [
+            &input.scope,
+            &input.thread_id,
+            &input.turn_id,
+            &input.run_id,
+            &input.idempotency_key,
+        ]
+        .iter()
+        .any(|s| s.trim().is_empty())
+        {
+            return Err(LedgerError::InvalidInput);
+        }
+        let request =
+            serde_json::to_string(&input.request).map_err(|_| LedgerError::InvalidInput)?;
+        if request.len() > MAX_PAYLOAD_BYTES {
+            return Err(LedgerError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let existing: Option<(String, String, String, String, String)> = tx.query_row(
+            "SELECT thread_id,turn_id,run_id,idempotency_key,request FROM ve_run_reservations WHERE scope=?1 AND (idempotency_key=?2 OR (thread_id=?3 AND turn_id=?4) OR run_id=?5) LIMIT 1",
+            params![input.scope, input.idempotency_key, input.thread_id, input.turn_id, input.run_id],
+            |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)),
+        ).optional()?;
+        if let Some((thread, turn, run, key, prior)) = existing {
+            let prior: Value = serde_json::from_str(&prior).map_err(|_| LedgerError::Storage)?;
+            if thread != input.thread_id
+                || turn != input.turn_id
+                || run != input.run_id
+                || key != input.idempotency_key
+                || prior != input.request
+            {
+                return Err(LedgerError::IdempotencyConflict);
+            }
+        } else {
+            tx.execute("INSERT INTO ve_run_reservations(scope,thread_id,turn_id,run_id,idempotency_key,request) VALUES(?1,?2,?3,?4,?5,?6)", params![input.scope,input.thread_id,input.turn_id,input.run_id,input.idempotency_key,request])?;
+        }
+        tx.commit()?;
+        Ok(input)
+    }
+
+    /// Save an immutable checkpoint for an existing event sequence.
+    pub fn save_checkpoint(&mut self, checkpoint: Checkpoint) -> Result<Checkpoint, LedgerError> {
+        if checkpoint.contract_version != CHECKPOINT_VERSION {
+            return Err(LedgerError::SchemaVersion);
+        }
+        if [
+            &checkpoint.scope,
+            &checkpoint.aggregate,
+            &checkpoint.checkpoint_id,
+        ]
+        .iter()
+        .any(|s| s.trim().is_empty())
+            || checkpoint.sequence == 0
+            || checkpoint.sequence > i64::MAX as u64
+        {
+            return Err(LedgerError::InvalidInput);
+        }
+        let state =
+            serde_json::to_string(&checkpoint.state).map_err(|_| LedgerError::InvalidInput)?;
+        if state.len() > MAX_PAYLOAD_BYTES {
+            return Err(LedgerError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM ve_ledger_events WHERE scope=?1 AND aggregate_id=?2 AND sequence=?3)", params![checkpoint.scope,checkpoint.aggregate,checkpoint.sequence as i64], |row| row.get(0))?;
+        if !exists {
+            return Err(LedgerError::VersionConflict);
+        }
+        let prior: Option<(String,i64,i64,String)> = tx.query_row("SELECT checkpoint_id,sequence,contract_version,state FROM ve_ledger_checkpoints WHERE scope=?1 AND aggregate_id=?2 AND (checkpoint_id=?3 OR sequence=?4) LIMIT 1", params![checkpoint.scope,checkpoint.aggregate,checkpoint.checkpoint_id,checkpoint.sequence as i64], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?))).optional()?;
+        if let Some((id, sequence, version, prior)) = prior {
+            let prior: Value = serde_json::from_str(&prior).map_err(|_| LedgerError::Storage)?;
+            if id != checkpoint.checkpoint_id
+                || sequence as u64 != checkpoint.sequence
+                || version != i64::from(checkpoint.contract_version)
+                || prior != checkpoint.state
+            {
+                return Err(LedgerError::IdempotencyConflict);
+            }
+        } else {
+            tx.execute("INSERT INTO ve_ledger_checkpoints(scope,aggregate_id,checkpoint_id,sequence,contract_version,state) VALUES(?1,?2,?3,?4,?5,?6)", params![checkpoint.scope,checkpoint.aggregate,checkpoint.checkpoint_id,checkpoint.sequence as i64,checkpoint.contract_version,state])?;
+        }
+        tx.commit()?;
+        Ok(checkpoint)
+    }
+
+    pub fn latest_checkpoint(
+        &self,
+        scope: &str,
+        aggregate: &str,
+    ) -> Result<Option<Checkpoint>, LedgerError> {
+        if scope.trim().is_empty() || aggregate.trim().is_empty() {
+            return Err(LedgerError::InvalidInput);
+        }
+        let prior: Option<(String,i64,i64,String)> = self.connection.query_row("SELECT checkpoint_id,sequence,contract_version,state FROM ve_ledger_checkpoints WHERE scope=?1 AND aggregate_id=?2 ORDER BY sequence DESC LIMIT 1", params![scope,aggregate], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?))).optional()?;
+        prior
+            .map(|(checkpoint_id, sequence, version, state)| {
+                if version != i64::from(CHECKPOINT_VERSION) {
+                    return Err(LedgerError::SchemaVersion);
+                }
+                Ok(Checkpoint {
+                    contract_version: CHECKPOINT_VERSION,
+                    scope: scope.into(),
+                    aggregate: aggregate.into(),
+                    checkpoint_id,
+                    sequence: u64::try_from(sequence).map_err(|_| LedgerError::Storage)?,
+                    state: serde_json::from_str(&state).map_err(|_| LedgerError::Storage)?,
+                })
+            })
+            .transpose()
+    }
 }
 
 #[cfg(test)]
@@ -245,5 +398,142 @@ mod tests {
         assert!(ledger.read("b", "run", 0, 10).unwrap().is_empty());
         assert_eq!(ledger.read("a", "run", 0, 10).unwrap().len(), 1);
         assert!(ledger.read("a", "run", 1, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn reservation_and_checkpoint_are_immutable_and_scoped() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let reservation = RunReservation {
+            scope: "a".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            run_id: "run".into(),
+            idempotency_key: "key".into(),
+            request: json!({"prompt":"redacted"}),
+        };
+        assert_eq!(
+            ledger.reserve_run(reservation.clone()).unwrap(),
+            reservation
+        );
+        assert_eq!(
+            ledger.reserve_run(reservation.clone()).unwrap(),
+            reservation
+        );
+        let mut changed = reservation.clone();
+        changed.request = json!({"prompt":"different"});
+        assert!(matches!(
+            ledger.reserve_run(changed),
+            Err(LedgerError::IdempotencyConflict)
+        ));
+        let draft = EventDraft {
+            scope: "a".into(),
+            aggregate: "run".into(),
+            event_id: "one".into(),
+            idempotency_key: "event".into(),
+            event_type: "started".into(),
+            payload: json!({}),
+            expected_version: 0,
+        };
+        ledger.append(draft).unwrap();
+        let checkpoint = Checkpoint {
+            contract_version: 1,
+            scope: "a".into(),
+            aggregate: "run".into(),
+            checkpoint_id: "cp".into(),
+            sequence: 1,
+            state: json!({"status":"running"}),
+        };
+        assert_eq!(
+            ledger.save_checkpoint(checkpoint.clone()).unwrap(),
+            checkpoint
+        );
+        assert_eq!(
+            ledger.save_checkpoint(checkpoint.clone()).unwrap(),
+            checkpoint
+        );
+        assert_eq!(
+            ledger.latest_checkpoint("a", "run").unwrap(),
+            Some(checkpoint.clone())
+        );
+        assert_eq!(ledger.latest_checkpoint("b", "run").unwrap(), None);
+        let mut changed = checkpoint;
+        changed.state = json!({"status":"other"});
+        assert!(matches!(
+            ledger.save_checkpoint(changed),
+            Err(LedgerError::IdempotencyConflict)
+        ));
+    }
+
+    #[test]
+    fn migrates_v1_without_deleting_events() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        ledger
+            .append(EventDraft {
+                scope: "a".into(),
+                aggregate: "run".into(),
+                event_id: "e".into(),
+                idempotency_key: "k".into(),
+                event_type: "started".into(),
+                payload: json!({}),
+                expected_version: 0,
+            })
+            .unwrap();
+        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; UPDATE ve_ledger_meta SET version=1;").unwrap();
+        ledger.migrate().unwrap();
+        let version: i64 = ledger
+            .connection
+            .query_row("SELECT version FROM ve_ledger_meta", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        assert_eq!(ledger.read("a", "run", 0, 10).unwrap().len(), 1);
+        assert!(ledger.latest_checkpoint("a", "run").unwrap().is_none());
+    }
+
+    #[test]
+    fn concurrent_run_admissions_allow_only_one_distinct_payload() {
+        use std::sync::{Arc, Barrier};
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let path = std::env::temp_dir().join(format!(
+            "vectora-ledger-{}-{}.db",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        drop(SqliteLedger::open_persistent(&path).unwrap());
+        let barrier = Arc::new(Barrier::new(2));
+        let threads: Vec<_> = ["one", "two"]
+            .into_iter()
+            .map(|run| {
+                let path = path.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let mut ledger = SqliteLedger::open_persistent(path).unwrap();
+                    barrier.wait();
+                    ledger.reserve_run(RunReservation {
+                        scope: "scope".into(),
+                        thread_id: "thread".into(),
+                        turn_id: "turn".into(),
+                        run_id: run.into(),
+                        idempotency_key: "key".into(),
+                        request: json!({"run":run}),
+                    })
+                })
+            })
+            .collect();
+        let results: Vec<_> = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| matches!(result, Err(LedgerError::IdempotencyConflict)))
+                .count(),
+            1
+        );
+        std::fs::remove_file(path).unwrap();
     }
 }

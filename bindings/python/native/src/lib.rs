@@ -218,6 +218,64 @@ fn sqlite_ledger_read<'py>(
 }
 
 #[pyfunction]
+fn sqlite_reserve_run<'py>(
+    py: Python<'py>,
+    path: String,
+    input_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let input =
+            serde_json::from_str(&input_json).map_err(|_| py_error("invalid run reservation"))?;
+        let result = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.reserve_run(input)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
+fn sqlite_save_checkpoint<'py>(
+    py: Python<'py>,
+    path: String,
+    input_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let input =
+            serde_json::from_str(&input_json).map_err(|_| py_error("invalid checkpoint"))?;
+        let result = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+                .save_checkpoint(input)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
+fn sqlite_latest_checkpoint<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    aggregate: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let result = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+                .latest_checkpoint(&scope, &aggregate)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
 fn run_create(identity_json: String) -> PyResult<String> {
     let identity: RunIdentity =
         serde_json::from_str(&identity_json).map_err(|_| py_error("invalid run identity"))?;
@@ -563,6 +621,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_reserve_run, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_save_checkpoint, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_latest_checkpoint, module)?)?;
     module.add_function(wrap_pyfunction!(run_create, module)?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(tool_contract_version, module)?)?;

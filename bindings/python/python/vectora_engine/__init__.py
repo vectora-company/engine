@@ -21,6 +21,25 @@ async def sqlite_ledger_append(path: str, event: JsonObject) -> dict[str, Any]:
     return json.loads(await _native.sqlite_ledger_append(path, json.dumps(event)))
 
 
+async def sqlite_reserve_run(path: str, reservation: JsonObject) -> dict[str, Any]:
+    """Reserve an idempotent run; the host authorizes and redacts input."""
+    return json.loads(await _native.sqlite_reserve_run(path, json.dumps(reservation)))
+
+
+async def sqlite_save_checkpoint(path: str, checkpoint: JsonObject) -> dict[str, Any]:
+    """Persist an immutable versioned checkpoint for an existing event."""
+    return json.loads(
+        await _native.sqlite_save_checkpoint(path, json.dumps(checkpoint))
+    )
+
+
+async def sqlite_latest_checkpoint(
+    path: str, scope: str, aggregate: str
+) -> dict[str, Any] | None:
+    """Read the latest compatible checkpoint in an authorized scope."""
+    return json.loads(await _native.sqlite_latest_checkpoint(path, scope, aggregate))
+
+
 async def sqlite_ledger_read(
     path: str, scope: str, aggregate: str, *, after: int = 0, limit: int = 100
 ) -> list[dict[str, Any]]:
@@ -298,8 +317,11 @@ __all__ = [
     "rerank",
     "rerank_contract_version",
     "run_contract_version",
+    "sqlite_latest_checkpoint",
     "sqlite_ledger_append",
     "sqlite_ledger_read",
+    "sqlite_reserve_run",
+    "sqlite_save_checkpoint",
     "start_model_tool_loop",
     "submit_tool_result",
     "tool_chat_definitions",
