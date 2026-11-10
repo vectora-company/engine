@@ -41,29 +41,31 @@ mais rápido ou barato.
 
 ## Preparar o ambiente
 
-No Linux, `dotfiles.sh` detecta a distribuição e prepara as dependências de
-sistema e as toolchains usadas neste repositório. Ele instala Rust stable,
-`protoc`, Podman para serviços opcionais de integração, Python 3.13, Node.js 24,
-pnpm, uv e as ferramentas de desenvolvimento. O script não inicia containers
-nem instala sidecars ou dependências dos produtos consumidores.
+No Linux, `dotfiles.sh` detecta a distribuição e configura somente o host:
+pacotes de sistema, Rust, `protoc`, Podman, Python 3.13, Node.js 24, pnpm, uv,
+SCons e pre-commit. Ele não instala dependências do checkout, não chama SCons,
+não compila o projeto e não inicia containers.
 
 ```bash
 ./dotfiles.sh --check
 ./dotfiles.sh
 ```
 
-Use `./dotfiles.sh --toolchain-only` para instalar apenas os pré-requisitos do
-host. Em macOS e Windows, instale os requisitos de `CONTRIBUTING.md` diretamente
-e execute `scons install`. Esse alvo sincroniza as dependências bloqueadas,
-compila a extensão Python e instala as dependências pnpm do binding TypeScript.
+Em macOS e Windows, instale os requisitos de `CONTRIBUTING.md` diretamente.
+`scons install` instala dependências do projeto, baixa o binário NATS e prepara
+imagens Podman de PostgreSQL, Qdrant e Redis para desenvolvimento. Não compila
+bindings nem inicia containers. `scons build` é o alvo explícito para compilar o
+workspace Rust e os bindings presentes.
 
 ## Comandos
 
 ```bash
 scons                 # mostra os alvos disponíveis
+scons install         # instala dependências do projeto e sidecars de desenvolvimento
+scons build           # compila Rust e bindings Python/TypeScript (e Go quando existir)
 scons lint            # Rust: rustfmt + Clippy; Python: Ruff + ty + Bandit
 scons tests           # testes Cargo, pytest e pacote Node nativo
-scons ci              # install, lint e tests
+scons ci              # install, build, lint e tests
 scons update          # atualiza Cargo e uv.lock; revise os lockfiles
 scons clean           # remove artefatos de build
 ```

@@ -7,12 +7,10 @@ capability correspondente demonstrar conformidade e rollback.
 
 ## Preparar o ambiente
 
-Em Linux, o bootstrap instala os pacotes de sistema e as toolchains do projeto,
-incluindo `protobuf-compiler` (`protoc`), Podman para serviços opcionais de
-integração, Rust, Python 3.13, Node.js 24, pnpm, uv e SCons. Ele reconhece
-distribuições Debian/Ubuntu, Fedora e Arch.
-`--check` apenas diagnostica o host; `--toolchain-only` instala os requisitos
-sem compilar os bindings.
+Em Linux, `dotfiles.sh` configura o host: pacotes de sistema, `protoc`, Podman,
+Rust, Python 3.13, Node.js 24, pnpm, uv, SCons e pre-commit. Ele reconhece
+distribuições Debian/Ubuntu, Fedora e Arch. `--check` apenas diagnostica o host.
+O script não chama SCons, não instala dependências do checkout e não compila.
 
 ```bash
 ./dotfiles.sh --check
@@ -23,10 +21,12 @@ Em macOS e Windows, prepare manualmente os requisitos abaixo. No macOS, instale
 `protoc` com `brew install protobuf`; no Windows, instale o compilador da
 release oficial de Protocol Buffers e adicione-o ao `PATH`.
 
-O alvo `scons install` instala componentes Rust, baixa dependências conforme
-`Cargo.lock`, sincroniza o tooling Python, compila a extensão Python e instala
-as dependências pnpm do binding Node. Não instala dependências dos produtos
-consumidores nem sidecars.
+`scons install` baixa dependências Cargo, sincroniza o ambiente Python, instala
+as dependências pnpm, baixa o sidecar NATS e prepara as imagens Podman de
+PostgreSQL, Qdrant e Redis. Não compila o projeto nem inicia containers.
+`scons build` compila o workspace Rust, gera o wheel Python e compila o addon e
+os arquivos TypeScript; quando existir `bindings/go/go.mod`, também compila Go.
+Cargo e TypeScript mantêm caches incrementais locais entre builds.
 
 ### Requisitos manuais
 
@@ -38,9 +38,10 @@ consumidores nem sidecars.
 - `scons` para os alvos de desenvolvimento.
 - `uv` e Python 3.13 para tooling e verificações dos bindings Python.
 - `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
+- Podman para preparar as imagens usadas pelos testes de integração com serviços.
 
 Se o pré-requisito `protoc` estiver ausente, `scons install` orienta executar
-`./dotfiles.sh --toolchain-only` em Linux ou instalar o pacote equivalente no
+`./dotfiles.sh` em Linux ou instalar o pacote equivalente no
 macOS/Windows.
 
 ## Verificações

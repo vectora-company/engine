@@ -3,16 +3,15 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-MODE=install
+MODE=configure
 case "${1:-}" in
   "") ;;
   --check) MODE=check ;;
-  --toolchain-only) MODE=toolchain ;;
   -h|--help)
-    printf '%s\n' 'Uso: ./dotfiles.sh [--check|--toolchain-only]' \
-      '  padrão             instala dependências Linux e executa scons install' \
-      '  --check            apenas verifica a configuração local' \
-      '  --toolchain-only   instala dependências e toolchains, sem compilar o projeto'
+    printf '%s\n' 'Uso: ./dotfiles.sh [--check]' \
+      '  padrão             configura dependências globais do host Linux' \
+      '  --check            apenas verifica as dependências globais do host' \
+      '  não instala dependências do projeto nem chama SCons'
     exit 0
     ;;
   *) printf 'Opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
@@ -242,6 +241,6 @@ rustup toolchain install stable --profile minimal
 rustup default stable
 rustup component add rustfmt clippy rust-analyzer rust-src --toolchain stable
 
-if [[ "$MODE" == toolchain ]]; then exit 0; fi
-cd "$ROOT_DIR"
-scons install
+printf '\nConfiguração global do host concluída.\n'
+printf 'Para instalar dependências do projeto e sidecars, execute scons install.\n'
+printf 'Para compilar o projeto, execute scons build.\n'

@@ -34,6 +34,7 @@ resources/nats-server.exe
 resources/.nats-server-version
 .pytest_cache/
 .ruff_cache/
+bindings/typescript/.cache/
 
 # Node-based language bindings
 node_modules/
