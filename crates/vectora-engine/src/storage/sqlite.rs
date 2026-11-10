@@ -73,6 +73,13 @@ pub struct Admission {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct CheckpointedAdmission {
+    pub reservation: RunReservation,
+    pub admission_event: LedgerEvent,
+    pub lifecycle: CheckpointedEvent,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Checkpoint {
     pub contract_version: u16,
@@ -201,18 +208,9 @@ impl SqliteLedger {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let event = Self::append_in(&tx, draft)?;
-        let checkpoint = Checkpoint {
-            contract_version: CHECKPOINT_VERSION,
-            scope: event.scope.clone(),
-            aggregate: event.aggregate.clone(),
-            checkpoint_id,
-            sequence: event.sequence,
-            state,
-        };
-        Self::save_checkpoint_in(&tx, &checkpoint)?;
+        let result = Self::append_checkpointed_in(&tx, draft, checkpoint_id, state)?;
         tx.commit()?;
-        Ok(CheckpointedEvent { event, checkpoint })
+        Ok(result)
     }
 
     /// Appends locally and queues a durable mirror record in the same transaction.
@@ -319,6 +317,28 @@ impl SqliteLedger {
         })
     }
 
+    fn append_checkpointed_in(
+        tx: &Transaction<'_>,
+        draft: EventDraft,
+        checkpoint_id: String,
+        state: Value,
+    ) -> Result<CheckpointedEvent, LedgerError> {
+        if checkpoint_id.trim().is_empty() {
+            return Err(LedgerError::InvalidInput);
+        }
+        let event = Self::append_in(tx, draft)?;
+        let checkpoint = Checkpoint {
+            contract_version: CHECKPOINT_VERSION,
+            scope: event.scope.clone(),
+            aggregate: event.aggregate.clone(),
+            checkpoint_id,
+            sequence: event.sequence,
+            state,
+        };
+        Self::save_checkpoint_in(tx, &checkpoint)?;
+        Ok(CheckpointedEvent { event, checkpoint })
+    }
+
     pub fn read(
         &self,
         scope: &str,
@@ -401,6 +421,63 @@ impl SqliteLedger {
         }
         tx.commit()?;
         Ok(Admission { reservation, event })
+    }
+
+    /// Atomically reserve a run, append its thread admission and persist its
+    /// initial lifecycle checkpoint in the run aggregate.
+    pub fn admit_run_checkpointed(
+        &mut self,
+        reservation: RunReservation,
+        mut admission_event: EventDraft,
+        lifecycle_event: EventDraft,
+        checkpoint_id: String,
+        state: Value,
+    ) -> Result<CheckpointedAdmission, LedgerError> {
+        if reservation.scope != admission_event.scope
+            || reservation.thread_id != admission_event.aggregate
+            || reservation.scope != lifecycle_event.scope
+            || lifecycle_event.aggregate == admission_event.aggregate
+        {
+            return Err(LedgerError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let reservation = Self::reserve_run_in(&tx, reservation)?;
+        let prior: Option<(String, String)> = tx.query_row(
+            "SELECT run_id,event_id FROM ve_run_admissions WHERE scope=?1 AND (run_id=?2 OR event_id=?3) LIMIT 1",
+            params![reservation.scope, reservation.run_id, admission_event.event_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+        if prior.as_ref().is_some_and(|(run_id, event_id)| {
+            run_id != &reservation.run_id || event_id != &admission_event.event_id
+        }) {
+            return Err(LedgerError::IdempotencyConflict);
+        }
+        let current_thread_sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0) FROM ve_ledger_events WHERE scope=?1 AND aggregate_id=?2",
+            params![admission_event.scope, admission_event.aggregate],
+            |row| row.get(0),
+        )?;
+        admission_event.expected_version = current_thread_sequence as u64;
+        let admission_event = Self::append_in(&tx, admission_event)?;
+        if prior.is_none() {
+            tx.execute(
+                "INSERT INTO ve_run_admissions(scope,run_id,event_id) VALUES(?1,?2,?3)",
+                params![
+                    reservation.scope,
+                    reservation.run_id,
+                    admission_event.event_id
+                ],
+            )?;
+        }
+        let lifecycle = Self::append_checkpointed_in(&tx, lifecycle_event, checkpoint_id, state)?;
+        tx.commit()?;
+        Ok(CheckpointedAdmission {
+            reservation,
+            admission_event,
+            lifecycle,
+        })
     }
 
     fn reserve_run_in(

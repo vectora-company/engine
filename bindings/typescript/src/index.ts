@@ -174,6 +174,32 @@ export interface RunLifecycle {
   sequence: number;
 }
 
+export interface RunTransition {
+  contract_version: number;
+  run_id: string;
+  sequence: number;
+  from: RunStatus;
+  to: RunStatus;
+}
+
+export interface DurableRunLifecycleState {
+  contract_version: number;
+  scope: string;
+  ledger_sequence: number;
+  lifecycle: RunLifecycle;
+}
+
+export interface DurableRunAdmission {
+  reservation: RunReservation;
+  admission_event: LedgerEvent;
+  state: DurableRunLifecycleState;
+}
+
+export interface DurableRunTransition {
+  state: DurableRunLifecycleState;
+  transition?: RunTransition;
+}
+
 export type ToolEffect = "read_only" | "external_effect" | "destructive";
 export type ToolIdempotency = "not_guaranteed" | "idempotent" | "requires_key";
 export interface ToolContract {
@@ -484,6 +510,24 @@ interface NativeBinding {
   runContractVersion(): number;
   runCreate(identityJson: string): string;
   runTransition(lifecycleJson: string, nextStatus: string): string;
+  sqliteRunAdmit(
+    path: string,
+    scope: string,
+    identityJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  sqliteRunLoadLatest(
+    path: string,
+    scope: string,
+    runId: string,
+  ): Promise<string | null>;
+  sqliteRunTransition(
+    path: string,
+    scope: string,
+    stateJson: string,
+    nextStatus: string,
+    operationId: string,
+  ): Promise<string>;
   toolContractVersion(): number;
   toolDispatchContractVersion(): number;
   toolPolicyContractVersion(): number;
@@ -782,6 +826,54 @@ export async function sqliteAdmitRun(
       JSON.stringify(event),
     ),
   ) as { reservation: RunReservation; event: LedgerEvent };
+}
+
+/** Atomically reserve a run and persist its initial planned lifecycle state. */
+export async function sqliteRunAdmit(
+  path: string,
+  scope: string,
+  identity: RunIdentity,
+  request: JsonValue,
+): Promise<DurableRunAdmission> {
+  return JSON.parse(
+    await native.sqliteRunAdmit(
+      path,
+      scope,
+      JSON.stringify(identity),
+      JSON.stringify(request),
+    ),
+  ) as DurableRunAdmission;
+}
+
+/** Load the latest persisted lifecycle state for a run. */
+export async function sqliteRunLoadLatest(
+  path: string,
+  scope: string,
+  runId: string,
+): Promise<DurableRunLifecycleState | null> {
+  const encoded = await native.sqliteRunLoadLatest(path, scope, runId);
+  return encoded === null
+    ? null
+    : (JSON.parse(encoded) as DurableRunLifecycleState);
+}
+
+/** Persist a lifecycle transition with optimistic concurrency. */
+export async function sqliteRunTransition(
+  path: string,
+  scope: string,
+  state: DurableRunLifecycleState,
+  nextStatus: RunStatus,
+  operationId: string,
+): Promise<DurableRunTransition> {
+  return JSON.parse(
+    await native.sqliteRunTransition(
+      path,
+      scope,
+      JSON.stringify(state),
+      nextStatus,
+      operationId,
+    ),
+  ) as DurableRunTransition;
 }
 
 export async function sqliteReserveRun(

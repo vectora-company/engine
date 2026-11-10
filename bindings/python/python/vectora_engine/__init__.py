@@ -238,6 +238,39 @@ async def sqlite_admit_run(
     )
 
 
+async def sqlite_run_admit(
+    path: str, scope: str, identity: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Atomically reserve a run and persist its planned lifecycle state."""
+    return json.loads(
+        await _native.sqlite_run_admit(
+            path, scope, json.dumps(identity), json.dumps(request)
+        )
+    )
+
+
+async def sqlite_run_load_latest(
+    path: str, scope: str, run_id: str
+) -> dict[str, Any] | None:
+    """Load the latest persisted lifecycle state for a run."""
+    encoded = await _native.sqlite_run_load_latest(path, scope, run_id)
+    return json.loads(encoded) if encoded is not None else None
+
+
+async def sqlite_run_transition(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    next_status: str,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist one lifecycle transition using optimistic concurrency."""
+    encoded = await _native.sqlite_run_transition(
+        path, scope, json.dumps(state), next_status, operation_id
+    )
+    return json.loads(encoded)
+
+
 async def sqlite_save_checkpoint(path: str, checkpoint: JsonObject) -> dict[str, Any]:
     """Persist an immutable versioned checkpoint for an existing event."""
     return json.loads(
@@ -601,6 +634,9 @@ __all__ = [
     "sqlite_model_tool_loop_start",
     "sqlite_model_tool_loop_submit_tool_result",
     "sqlite_reserve_run",
+    "sqlite_run_admit",
+    "sqlite_run_load_latest",
+    "sqlite_run_transition",
     "sqlite_save_checkpoint",
     "start_model_tool_loop",
     "submit_tool_result",

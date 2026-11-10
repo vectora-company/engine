@@ -34,6 +34,9 @@ from vectora_engine import (
     sqlite_ledger_append_checkpointed,
     sqlite_ledger_read,
     sqlite_reserve_run,
+    sqlite_run_admit,
+    sqlite_run_load_latest,
+    sqlite_run_transition,
     sqlite_save_checkpoint,
     start_model_tool_loop,
     submit_tool_result,
@@ -135,6 +138,66 @@ def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     first = asyncio.run(sqlite_admit_run(path, admission, admission_event))
     assert first["event"]["sequence"] == 1
     assert asyncio.run(sqlite_admit_run(path, admission, admission_event)) == first
+
+
+def test_sqlite_run_lifecycle_admission_and_transitions_survive_reopen(
+    tmp_path: Any,
+) -> None:
+    path = str(tmp_path / "runs.db")
+    identity = {
+        "contract_version": 1,
+        "run_id": "run-durable-1",
+        "idempotency_key": "admit-durable-1",
+        "thread_id": "thread-durable-1",
+        "turn_id": "turn-durable-1",
+        "scope_id": "workspace-durable-1",
+        "capabilities": ["tools.read"],
+    }
+    request = {"input_digest": "redacted-digest"}
+    admitted = asyncio.run(
+        sqlite_run_admit(path, "workspace-durable-1", identity, request)
+    )
+    assert admitted["state"]["lifecycle"]["status"] == "planned"
+    assert admitted["state"]["ledger_sequence"] == 1
+    assert admitted["admission_event"]["sequence"] == 1
+    assert (
+        asyncio.run(sqlite_run_admit(path, "workspace-durable-1", identity, request))
+        == admitted
+    )
+    assert (
+        asyncio.run(
+            sqlite_run_load_latest(path, "workspace-durable-1", identity["run_id"])
+        )
+        == admitted["state"]
+    )
+
+    running = asyncio.run(
+        sqlite_run_transition(
+            path,
+            "workspace-durable-1",
+            admitted["state"],
+            "running",
+            "run-started-1",
+        )
+    )
+    assert running["state"]["lifecycle"]["status"] == "running"
+    assert running["state"]["ledger_sequence"] == 2
+    with pytest.raises(RuntimeError, match="ledger aggregate version conflict"):
+        asyncio.run(
+            sqlite_run_transition(
+                path,
+                "workspace-durable-1",
+                admitted["state"],
+                "cancelled",
+                "stale-cancel-1",
+            )
+        )
+    assert (
+        asyncio.run(
+            sqlite_run_load_latest(path, "workspace-durable-1", identity["run_id"])
+        )
+        == running["state"]
+    )
 
 
 SETTINGS = {"base_url": "file:///invalid", "api_key": "secret-for-redaction-test"}

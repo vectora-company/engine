@@ -760,6 +760,86 @@ fn sqlite_admit_run<'py>(
 }
 
 #[pyfunction]
+fn sqlite_run_admit<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    identity_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let identity: RunIdentity =
+            serde_json::from_str(&identity_json).map_err(|_| py_error("invalid run identity"))?;
+        let request = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid run admission request"))?;
+        let admitted = tokio::task::spawn_blocking(move || {
+            let mut store =
+                vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                    .map_err(|error| error.to_string())?;
+            store
+                .admit(identity, request)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("run store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&admitted)
+    })
+}
+
+#[pyfunction]
+fn sqlite_run_load_latest<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    run_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state = tokio::task::spawn_blocking(move || {
+            let store =
+                vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                    .map_err(|error| error.to_string())?;
+            store
+                .load_latest(&run_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("run store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&state)
+    })
+}
+
+#[pyfunction]
+fn sqlite_run_transition<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    next_status: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state =
+            serde_json::from_str(&state_json).map_err(|_| py_error("invalid durable run state"))?;
+        let next_status: RunStatus = serde_json::from_value(serde_json::Value::String(next_status))
+            .map_err(|_| py_error("unknown run status"))?;
+        let transition = tokio::task::spawn_blocking(move || {
+            let mut store =
+                vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                    .map_err(|error| error.to_string())?;
+            store
+                .transition(&state, next_status, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("run store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&transition)
+    })
+}
+
+#[pyfunction]
 fn sqlite_reserve_run<'py>(
     py: Python<'py>,
     path: String,
@@ -1258,6 +1338,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sqlite_latest_checkpoint, module)?)?;
     module.add_function(wrap_pyfunction!(run_create, module)?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_run_admit, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_run_load_latest, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(tool_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(tool_dispatch_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(tool_policy_contract_version, module)?)?;

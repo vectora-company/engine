@@ -5,29 +5,43 @@ com a documentação de arquitetura e com os consumidores do contrato. Preserve
 a implementação atual do Vectora até a
 capability correspondente demonstrar conformidade e rollback.
 
-## Requisitos
+## Preparar o ambiente
+
+Em Linux, o bootstrap instala os pacotes de sistema e as toolchains do projeto,
+incluindo `protobuf-compiler` (`protoc`), Podman para serviços opcionais de
+integração, Rust, Python 3.13, Node.js 24, pnpm, uv e SCons. Ele reconhece
+distribuições Debian/Ubuntu, Fedora e Arch.
+`--check` apenas diagnostica o host; `--toolchain-only` instala os requisitos
+sem compilar os bindings.
+
+```bash
+./dotfiles.sh --check
+./dotfiles.sh
+```
+
+Em macOS e Windows, prepare manualmente os requisitos abaixo. No macOS, instale
+`protoc` com `brew install protobuf`; no Windows, instale o compilador da
+release oficial de Protocol Buffers e adicione-o ao `PATH`.
+
+O alvo `scons install` instala componentes Rust, baixa dependências conforme
+`Cargo.lock`, sincroniza o tooling Python, compila a extensão Python e instala
+as dependências pnpm do binding Node. Não instala dependências dos produtos
+consumidores nem sidecars.
+
+### Requisitos manuais
 
 - Rust stable via `rustup`, com `rustfmt` e `clippy` (selecionados por
   `rust-toolchain.toml`).
-- `protoc` (Protocol Buffers compiler), necessário para compilar a dependência
-  LanceDB e os bindings nativos. Em Linux, instale `protobuf-compiler`; no
-  macOS, `brew install protobuf`; em Windows, instale o compilador da release
-  oficial de Protocol Buffers e deixe-o no `PATH`.
+- `protoc` (Protocol Buffers compiler), necessário pela dependência LanceDB.
+  No Linux o script instala `protobuf-compiler` em Debian/Ubuntu/Fedora e
+  `protobuf` no Arch.
 - `scons` para os alvos de desenvolvimento.
 - `uv` e Python 3.13 para tooling e verificações dos bindings Python.
 - `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
 
-## Preparar o ambiente
-
-```bash
-scons install
-```
-
-O comando instala os componentes Rust selecionados, baixa dependências Cargo
-conforme `Cargo.lock`, sincroniza o tooling Python, compila a extensão Python
-local e instala as dependências pnpm do binding Node. Não instala dependências
-do app Vectora nem sidecars de produto. O alvo verifica se `protoc` está
-disponível e informa o requisito antes de iniciar a compilação.
+Se o pré-requisito `protoc` estiver ausente, `scons install` orienta executar
+`./dotfiles.sh --toolchain-only` em Linux ou instalar o pacote equivalente no
+macOS/Windows.
 
 ## Verificações
 
