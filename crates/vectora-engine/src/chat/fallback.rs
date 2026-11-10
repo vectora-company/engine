@@ -123,14 +123,14 @@ impl FallbackChatClient {
 
     pub async fn complete(&self, mut request: ChatRequest) -> Result<ChatCompletion, ChatError> {
         let mut last_error = None;
-        for (index, candidate) in self.candidates.iter().enumerate() {
+        for candidate in &self.candidates {
             request.model.clone_from(&candidate.model);
             match candidate.client.complete(request.clone()).await {
                 Ok(mut completion) => {
                     completion.selected_model_id = Some(candidate.model_id.clone());
                     return Ok(completion);
                 }
-                Err(error) if can_fallback(&error, index) => last_error = Some(error),
+                Err(error) if can_fallback(&error) => last_error = Some(error),
                 Err(error) => return Err(error),
             }
         }
@@ -167,7 +167,7 @@ impl FallbackChatClient {
                                     yield Ok(event);
                                 }
                                 Err(error) => {
-                                    if emitted || !can_fallback(&error, index) {
+                                    if emitted || !can_fallback(&error) {
                                         yield Err(error);
                                         return;
                                     }
@@ -181,7 +181,7 @@ impl FallbackChatClient {
                     Err(error) => Some(error),
                 };
                 if let Some(error) = candidate_error {
-                    if !can_fallback(&error, index) {
+                    if !can_fallback(&error) {
                         yield Err(error);
                         return;
                     }
@@ -202,22 +202,18 @@ impl FallbackChatClient {
     }
 }
 
-fn can_fallback(error: &ChatError, candidate_index: usize) -> bool {
-    if matches!(error, ChatError::Cancelled) {
-        return false;
-    }
-    candidate_index > 0
-        || matches!(
-            error,
-            ChatError::Quota
-                | ChatError::RateLimited { .. }
-                | ChatError::Connection
-                | ChatError::Timeout
-                | ChatError::Overloaded
-                | ChatError::ProviderIncompatible
-                | ChatError::MultimodalIncompatible
-                | ChatError::Server { status: 503 | 529 }
-        )
+fn can_fallback(error: &ChatError) -> bool {
+    matches!(
+        error,
+        ChatError::Quota
+            | ChatError::RateLimited { .. }
+            | ChatError::Connection
+            | ChatError::Timeout
+            | ChatError::Overloaded
+            | ChatError::ProviderIncompatible
+            | ChatError::MultimodalIncompatible
+            | ChatError::Server { status: 503 | 529 }
+    )
 }
 
 fn normalize_provider(provider: &str) -> String {
@@ -239,12 +235,43 @@ fn exhausted_error(candidate: &Candidate, last_error: ChatError) -> ChatError {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_provider;
+    use super::{can_fallback, normalize_provider};
+    use crate::chat::ChatError;
 
     #[test]
     fn provider_aliases_are_normalized_before_same_provider_filtering() {
         assert_eq!(normalize_provider("google-genai"), "google");
         assert_eq!(normalize_provider("Google"), "google");
         assert_eq!(normalize_provider("nine-router"), "nine_router");
+    }
+
+    #[test]
+    fn fallback_eligibility_does_not_depend_on_candidate_position() {
+        let eligible = [
+            ChatError::Quota,
+            ChatError::RateLimited { retry_after: None },
+            ChatError::Connection,
+            ChatError::Timeout,
+            ChatError::Overloaded,
+            ChatError::ProviderIncompatible,
+            ChatError::MultimodalIncompatible,
+            ChatError::Server { status: 503 },
+            ChatError::Server { status: 529 },
+        ];
+        assert!(eligible.iter().all(can_fallback));
+    }
+
+    #[test]
+    fn fallback_does_not_hide_permanent_errors_from_later_candidates() {
+        let permanent = [
+            ChatError::Authentication,
+            ChatError::Provider { status: 400 },
+            ChatError::Server { status: 500 },
+            ChatError::InvalidConfiguration("invalid request"),
+            ChatError::InvalidResponse,
+            ChatError::Protocol("invalid stream"),
+            ChatError::Cancelled,
+        ];
+        assert!(permanent.iter().all(|error| !can_fallback(error)));
     }
 }

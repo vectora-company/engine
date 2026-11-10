@@ -20,13 +20,13 @@ crate Rust e pelas bindings Python e TypeScript/N-API do bootstrap.
 
 ## Erros e política
 
-No primeiro candidato, o fallback ocorre para quota, rate limit, conexão,
+Em qualquer candidato, o fallback ocorre para quota, rate limit, conexão,
 timeout, indisponibilidade temporária do provider (503/529 ou mensagem de
 sobrecarga reconhecida), incompatibilidade conhecida de `tool_plan` e
 incompatibilidade explícita de imagem/visão. Erros de autenticação, contrato,
-protocolo ou configuração propagam sem tentar outro provider. Depois que a
-cadeia já avançou, erros dos candidatos seguintes permitem continuar para o
-próximo, exceto cancelamento.
+protocolo ou configuração propagam sem tentar outro provider. Uma falha
+elegível posterior à primeira tentativa pode avançar para o próximo candidato;
+erros permanentes nunca são convertidos em `FallbackExhausted`.
 
 Em completion, uma resposta bem-sucedida inclui `selected_model_id`. Se todos
 os candidatos elegíveis falharem, retorna `FallbackExhausted` com o último
