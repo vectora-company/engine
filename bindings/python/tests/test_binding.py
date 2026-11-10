@@ -10,6 +10,7 @@ import pytest
 from vectora_engine import (
     accept_model_turn,
     assemble_turn,
+    authorize_tool_dispatch,
     chat_complete,
     chat_contract_version,
     chat_stream,
@@ -38,6 +39,7 @@ from vectora_engine import (
     tool_chat_definitions,
     tool_contract_version,
     tool_dispatch_contract_version,
+    tool_policy_contract_version,
     transition_run,
     validate_storage_selection,
 )
@@ -305,6 +307,93 @@ def test_tool_dispatch_rejects_bad_schema_arguments_and_non_running_run() -> Non
     assert result["decisions"][0]["code"] == "schema_mismatch"
     with pytest.raises(RuntimeError, match="requires a running run"):
         prepare_tool_dispatch({**run, "status": "planned"}, completion, [contract])
+
+
+def test_policy_gate_binds_approval_to_the_exact_call_and_policy() -> None:
+    assert tool_policy_contract_version() == 1
+    run = transition_run(
+        create_run(
+            {
+                "contract_version": 1,
+                "run_id": "run-policy",
+                "idempotency_key": "key-policy",
+                "thread_id": "thread-policy",
+                "turn_id": "turn-policy",
+                "actor_id": "actor-1",
+                "scope_id": "workspace-1",
+                "capabilities": ["file.write"],
+            }
+        ),
+        "running",
+    )
+    completion = {
+        "contract_version": 1,
+        "content": "",
+        "tool_calls": [
+            {
+                "id": "call-policy",
+                "name": "write_file",
+                "arguments": {"state": "object", "value": {"path": "src/main.rs"}},
+            }
+        ],
+    }
+    contract = {
+        "contract_version": 1,
+        "schema_version": "write.v1",
+        "name": "write_file",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+            "additionalProperties": False,
+        },
+        "required_capability": "file.write",
+        "timeout_ms": 5000,
+        "effect": "external_effect",
+        "idempotency": "requires_key",
+    }
+    policy = {
+        "contract_version": 1,
+        "run_id": "run-policy",
+        "thread_id": "thread-policy",
+        "turn_id": "turn-policy",
+        "actor_id": "actor-1",
+        "scope_id": "workspace-1",
+        "policy_digest": "policy-digest-v1",
+        "revision": "7",
+        "approval_mode": "require_all_effects",
+        "expires_at_ms": 5000,
+    }
+    pending = authorize_tool_dispatch(run, completion, [contract], policy, now_ms=1000)
+    assert pending["status"] == "awaiting_approval"
+    assert pending.get("dispatch") is None
+    request = pending["decisions"][0]["request"]
+    grant = {
+        "contract_version": 1,
+        "binding_digest": request["binding_digest"],
+        "approved_by": "human-1",
+        "issued_at_ms": 1001,
+        "expires_at_ms": 2000,
+    }
+    approved = authorize_tool_dispatch(
+        run, completion, [contract], policy, [grant], now_ms=1500
+    )
+    assert approved["status"] == "ready"
+    assert approved["dispatch"]["decisions"][0]["decision"] == "invoke"
+
+    changed_completion = {
+        **completion,
+        "tool_calls": [
+            {
+                **completion["tool_calls"][0],
+                "arguments": {"state": "object", "value": {"path": "src/other.rs"}},
+            }
+        ],
+    }
+    with pytest.raises(RuntimeError, match="approval grant does not match"):
+        authorize_tool_dispatch(
+            run, changed_completion, [contract], policy, [grant], now_ms=1500
+        )
 
 
 def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:

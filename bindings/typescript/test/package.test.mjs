@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  authorizeToolDispatch,
   assembleTurn,
   acceptModelTurn,
   chatComplete,
@@ -26,6 +27,7 @@ import {
   toolContractVersion,
   toolChatDefinitions,
   toolDispatchContractVersion,
+  toolPolicyContractVersion,
   startModelToolLoop,
   submitToolResult,
   validateStorageSelection,
@@ -166,6 +168,91 @@ test("tool dispatch validates schemas and trusted capabilities in Rust", () => {
   assert.throws(
     () => prepareToolDispatch({ ...run, status: "planned" }, completion, [contract]),
     /requires a running run/,
+  );
+});
+
+test("policy approval is bound to the model call and withheld until granted", () => {
+  assert.equal(toolPolicyContractVersion(), 1);
+  const run = transitionRun(
+    createRun({
+      contract_version: 1,
+      run_id: "run-policy",
+      idempotency_key: "key-policy",
+      thread_id: "thread-policy",
+      turn_id: "turn-policy",
+      actor_id: "actor-1",
+      scope_id: "workspace-1",
+      capabilities: ["file.write"],
+    }),
+    "running",
+  );
+  const completion = {
+    contract_version: 1,
+    content: "",
+    tool_calls: [{
+      id: "call-policy",
+      name: "write_file",
+      arguments: { state: "object", value: { path: "src/main.rs" } },
+    }],
+  };
+  const contract = {
+    contract_version: 1,
+    schema_version: "write.v1",
+    name: "write_file",
+    input_schema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+      additionalProperties: false,
+    },
+    required_capability: "file.write",
+    timeout_ms: 5000,
+    effect: "external_effect",
+    idempotency: "requires_key",
+  };
+  const policy = {
+    contract_version: 1,
+    run_id: "run-policy",
+    thread_id: "thread-policy",
+    turn_id: "turn-policy",
+    actor_id: "actor-1",
+    scope_id: "workspace-1",
+    policy_digest: "policy-digest-v1",
+    revision: "7",
+    approval_mode: "require_all_effects",
+    expires_at_ms: 5000,
+  };
+  const pending = authorizeToolDispatch(run, completion, [contract], policy, [], 1000);
+  assert.equal(pending.status, "awaiting_approval");
+  assert.equal(pending.dispatch, undefined);
+  const request = pending.decisions[0].request;
+  const grant = {
+    contract_version: 1,
+    binding_digest: request.binding_digest,
+    approved_by: "human-1",
+    issued_at_ms: 1001,
+    expires_at_ms: 2000,
+  };
+  const approved = authorizeToolDispatch(
+    run,
+    completion,
+    [contract],
+    policy,
+    [grant],
+    1500,
+  );
+  assert.equal(approved.status, "ready");
+  assert.equal(approved.dispatch.decisions[0].decision, "invoke");
+  const changed = {
+    ...completion,
+    tool_calls: [{
+      ...completion.tool_calls[0],
+      arguments: { state: "object", value: { path: "src/other.rs" } },
+    }],
+  };
+  assert.throws(
+    () => authorizeToolDispatch(run, changed, [contract], policy, [grant], 1500),
+    /approval grant does not match/,
   );
 });
 

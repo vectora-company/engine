@@ -16,10 +16,11 @@ use vectora_engine::chat::{
     TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
-    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
-    RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
-    TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult,
-    advance_model_turn, advance_tool_result, prepare_tool_dispatch, tool_chat_definitions,
+    ApprovalGrant, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
+    PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
+    TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
+    ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, advance_model_turn,
+    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -610,6 +611,48 @@ pub fn tool_contract_version() -> u32 {
 #[napi]
 pub fn tool_dispatch_contract_version() -> u32 {
     u32::from(TOOL_DISPATCH_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn tool_policy_contract_version() -> u32 {
+    u32::from(TOOL_POLICY_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn authorize_tool_dispatch_json(
+    lifecycle_json: String,
+    completion_json: String,
+    contracts_json: String,
+    settings_json: String,
+    snapshot_json: String,
+    grants_json: String,
+    now_ms: i64,
+) -> Result<String> {
+    let lifecycle: RunLifecycle = serde_json::from_str(&lifecycle_json)
+        .map_err(|_| Error::from_reason("invalid run lifecycle"))?;
+    let completion = serde_json::from_str(&completion_json)
+        .map_err(|_| Error::from_reason("invalid chat completion"))?;
+    let contracts: Vec<ToolContract> = serde_json::from_str(&contracts_json)
+        .map_err(|_| Error::from_reason("invalid tool contracts"))?;
+    let settings: ToolDispatchSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid dispatch settings"))?;
+    let snapshot: PolicySnapshot = serde_json::from_str(&snapshot_json)
+        .map_err(|_| Error::from_reason("invalid policy snapshot"))?;
+    let grants: Vec<ApprovalGrant> = serde_json::from_str(&grants_json)
+        .map_err(|_| Error::from_reason("invalid approval grants"))?;
+    let now_ms =
+        u64::try_from(now_ms).map_err(|_| Error::from_reason("now_ms must be non-negative"))?;
+    let evaluation = authorize_tool_dispatch(
+        &lifecycle,
+        &completion,
+        &contracts,
+        settings,
+        &snapshot,
+        &grants,
+        now_ms,
+    )
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&evaluation)
 }
 
 #[napi]

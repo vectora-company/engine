@@ -210,6 +210,55 @@ export interface ToolDispatch {
   decisions: ToolDecision[];
 }
 
+export type ApprovalMode =
+  "require_all_effects" | "require_destructive" | "capability_only";
+export interface PolicySnapshot {
+  contract_version: number;
+  run_id: string;
+  thread_id: string;
+  turn_id: string;
+  actor_id?: string | null;
+  scope_id?: string | null;
+  policy_digest: string;
+  revision: string;
+  disabled_tools?: string[];
+  denied_capabilities?: string[];
+  untrusted_content?: boolean;
+  approval_mode?: ApprovalMode;
+  expires_at_ms?: number | null;
+}
+export interface ApprovalRequest {
+  contract_version: number;
+  run_id: string;
+  thread_id: string;
+  turn_id: string;
+  call_id: string;
+  tool_name: string;
+  scope_id?: string | null;
+  policy_digest: string;
+  arguments_digest: string;
+  binding_digest: string;
+}
+export interface ApprovalGrant {
+  contract_version: number;
+  binding_digest: string;
+  approved_by: string;
+  issued_at_ms: number;
+  expires_at_ms: number;
+}
+export type ToolAuthorizationDecision =
+  | { decision: "allow"; call_id: string; tool_name: string }
+  | { decision: "require_approval"; request: ApprovalRequest }
+  | { decision: "deny"; call_id: string; tool_name: string; code: string };
+export interface PolicyEvaluation {
+  contract_version: number;
+  run_id: string;
+  turn_id: string;
+  status: "ready" | "awaiting_approval";
+  decisions: ToolAuthorizationDecision[];
+  dispatch?: ToolDispatch;
+}
+
 export interface ModelToolLoopSettings {
   max_model_turns?: number;
   max_tool_calls?: number;
@@ -379,6 +428,16 @@ interface NativeBinding {
   runTransition(lifecycleJson: string, nextStatus: string): string;
   toolContractVersion(): number;
   toolDispatchContractVersion(): number;
+  toolPolicyContractVersion(): number;
+  authorizeToolDispatchJson(
+    lifecycleJson: string,
+    completionJson: string,
+    contractsJson: string,
+    settingsJson: string,
+    snapshotJson: string,
+    grantsJson: string,
+    nowMs: number,
+  ): string;
   prepareToolDispatchJson(
     lifecycleJson: string,
     completionJson: string,
@@ -746,6 +805,8 @@ export function transitionRun(
 export const toolContractVersion = (): number => native.toolContractVersion();
 export const toolDispatchContractVersion = (): number =>
   native.toolDispatchContractVersion();
+export const toolPolicyContractVersion = (): number =>
+  native.toolPolicyContractVersion();
 
 /** Validate a model turn and prepare default-deny tool decisions in Rust. */
 export function prepareToolDispatch(
@@ -762,6 +823,29 @@ export function prepareToolDispatch(
       JSON.stringify({ max_calls_per_turn: settings.max_calls_per_turn ?? 32 }),
     ),
   ) as ToolDispatch;
+}
+
+/** Enforce a run-bound policy before adapters can execute model tool calls. */
+export function authorizeToolDispatch(
+  lifecycle: RunLifecycle,
+  completion: ChatCompletion,
+  contracts: ToolContract[],
+  snapshot: PolicySnapshot,
+  grants: ApprovalGrant[] = [],
+  nowMs = Date.now(),
+  settings: ToolDispatchSettings = {},
+): PolicyEvaluation {
+  return JSON.parse(
+    native.authorizeToolDispatchJson(
+      JSON.stringify(lifecycle),
+      JSON.stringify(completion),
+      JSON.stringify(contracts),
+      JSON.stringify({ max_calls_per_turn: settings.max_calls_per_turn ?? 32 }),
+      JSON.stringify(snapshot),
+      JSON.stringify(grants),
+      nowMs,
+    ),
+  ) as PolicyEvaluation;
 }
 
 /** Build provider-visible tool schemas from the validated Rust contracts. */

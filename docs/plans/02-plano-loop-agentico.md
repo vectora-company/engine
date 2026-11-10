@@ -35,6 +35,10 @@ etapa troca automaticamente o runtime de qualquer consumidor.
 4. **Política e aprovação** — definir snapshot efetivo e decisão default-deny;
    vincular HITL a conteúdo, arguments normalizados, escopo e digest da policy.
    Revalidar antes de efeitos e retomar. Falha de policy interrompe o efeito.
+   O contrato síncrono de snapshot, bloqueios e aprovação por binding foi
+   implementado experimentalmente em `docs/specs/12-policy-and-approval.md` e
+   exposto pelos dois bindings. Persistência das concessões e revalidação após
+   retomada continuam para a fase 5.
 5. **Persistência e recovery** — integrar com os contratos de storage planejados
    em `docs/plans/01-plano-portabilidade-llm-rust.md`: reserva atômica por
    thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. Recovery

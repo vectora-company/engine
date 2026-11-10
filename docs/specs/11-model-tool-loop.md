@@ -36,12 +36,13 @@ responsável por chamar o provider e executar os adapters.
 
 ## Responsabilidades do consumidor
 
-O consumidor impõe timeout e cancelamento, redige outputs, executa somente
-invocações retornadas por Rust e persiste estado/ledger de forma durável quando
-necessário. A engine não chama providers ou adapters nesta API, não faz retry,
-não garante exactly-once, não aplica policy completa nem aprovação humana.
-Snapshots fornecidos pelo consumidor podem ser forjados; isto não é uma fronteira
-de segurança ou autorização.
+O consumidor impõe timeout e cancelamento, redige outputs, chama o gate de
+[`12-policy-and-approval.md`](12-policy-and-approval.md) imediatamente antes
+de executar adapters e persiste estado/ledger de forma durável quando
+necessário. Esta máquina de loop não chama providers ou adapters, não faz
+retry, não garante exactly-once e não invoca o gate automaticamente. Snapshots
+fornecidos pelo consumidor podem ser forjados; isto não é por si só uma
+fronteira de segurança ou autorização.
 
 ## APIs
 

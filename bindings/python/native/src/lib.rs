@@ -16,10 +16,11 @@ use vectora_engine::chat::{
     TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
-    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
-    RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
-    TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult,
-    advance_model_turn, advance_tool_result, prepare_tool_dispatch, tool_chat_definitions,
+    ApprovalGrant, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
+    PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
+    TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
+    ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, advance_model_turn,
+    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -657,6 +658,46 @@ fn tool_dispatch_contract_version() -> u16 {
 }
 
 #[pyfunction]
+fn tool_policy_contract_version() -> u16 {
+    TOOL_POLICY_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn authorize_tool_dispatch_json(
+    lifecycle_json: String,
+    completion_json: String,
+    contracts_json: String,
+    settings_json: String,
+    snapshot_json: String,
+    grants_json: String,
+    now_ms: u64,
+) -> PyResult<String> {
+    let lifecycle: RunLifecycle =
+        serde_json::from_str(&lifecycle_json).map_err(|_| py_error("invalid run lifecycle"))?;
+    let completion =
+        serde_json::from_str(&completion_json).map_err(|_| py_error("invalid chat completion"))?;
+    let contracts: Vec<ToolContract> =
+        serde_json::from_str(&contracts_json).map_err(|_| py_error("invalid tool contracts"))?;
+    let settings: ToolDispatchSettings =
+        serde_json::from_str(&settings_json).map_err(|_| py_error("invalid dispatch settings"))?;
+    let snapshot: PolicySnapshot =
+        serde_json::from_str(&snapshot_json).map_err(|_| py_error("invalid policy snapshot"))?;
+    let grants: Vec<ApprovalGrant> =
+        serde_json::from_str(&grants_json).map_err(|_| py_error("invalid approval grants"))?;
+    let evaluation = authorize_tool_dispatch(
+        &lifecycle,
+        &completion,
+        &contracts,
+        settings,
+        &snapshot,
+        &grants,
+        now_ms,
+    )
+    .map_err(py_error)?;
+    encode_json(&evaluation)
+}
+
+#[pyfunction]
 fn prepare_tool_dispatch_json(
     lifecycle_json: String,
     completion_json: String,
@@ -996,6 +1037,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(tool_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(tool_dispatch_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(tool_policy_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(authorize_tool_dispatch_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_tool_dispatch_json, module)?)?;
     module.add_function(wrap_pyfunction!(tool_chat_definitions_json, module)?)?;
     module.add_function(wrap_pyfunction!(model_tool_loop_contract_version, module)?)?;
