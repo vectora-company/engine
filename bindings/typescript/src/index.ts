@@ -335,6 +335,16 @@ export interface ModelToolLoopTransition {
   state: ModelToolLoopState;
   action: ModelToolLoopAction;
 }
+export interface DurableModelToolLoopState {
+  contract_version: number;
+  scope: string;
+  ledger_sequence: number;
+  loop_state: ModelToolLoopState;
+}
+export interface DurableModelToolLoopTransition {
+  state: DurableModelToolLoopState;
+  action: ModelToolLoopAction;
+}
 
 export interface EmbeddingCandidateSettings {
   model_id: string;
@@ -404,6 +414,48 @@ interface NativeBinding {
     draftJson: string,
     checkpointId: string,
     stateJson: string,
+  ): Promise<string>;
+  sqliteModelToolLoopStart(
+    path: string,
+    scope: string,
+    runId: string,
+    turnId: string,
+    settingsJson: string,
+    operationId: string,
+  ): Promise<string>;
+  sqliteModelToolLoopLoad(
+    path: string,
+    scope: string,
+    runId: string,
+    turnId: string,
+  ): Promise<string | null>;
+  sqliteModelToolLoopAcceptModelTurn(
+    path: string,
+    scope: string,
+    stateJson: string,
+    completionJson: string,
+    dispatchJson: string,
+    operationId: string,
+  ): Promise<string>;
+  sqliteModelToolLoopSubmitToolResult(
+    path: string,
+    scope: string,
+    stateJson: string,
+    resultJson: string,
+    operationId: string,
+  ): Promise<string>;
+  sqliteModelToolLoopRecover(
+    path: string,
+    scope: string,
+    stateJson: string,
+    operationId: string,
+  ): Promise<string>;
+  sqliteModelToolLoopReconcileToolResult(
+    path: string,
+    scope: string,
+    stateJson: string,
+    resultJson: string,
+    operationId: string,
   ): Promise<string>;
   resilientLedgerAppend(
     path: string,
@@ -783,6 +835,118 @@ export async function sqliteLedgerAppendCheckpointed(
       JSON.stringify(state),
     ),
   ) as CheckpointedLedgerEvent;
+}
+
+/** Persist initial loop state before the first model request. */
+export async function sqliteModelToolLoopStart(
+  path: string,
+  scope: string,
+  runId: string,
+  turnId: string,
+  settings: ModelToolLoopSettings,
+  operationId: string,
+): Promise<DurableModelToolLoopState> {
+  return JSON.parse(
+    await native.sqliteModelToolLoopStart(
+      path,
+      scope,
+      runId,
+      turnId,
+      JSON.stringify(settings),
+      operationId,
+    ),
+  ) as DurableModelToolLoopState;
+}
+
+export async function sqliteModelToolLoopLoad(
+  path: string,
+  scope: string,
+  runId: string,
+  turnId: string,
+): Promise<DurableModelToolLoopState | null> {
+  const serialized = await native.sqliteModelToolLoopLoad(
+    path,
+    scope,
+    runId,
+    turnId,
+  );
+  return serialized === null
+    ? null
+    : (JSON.parse(serialized) as DurableModelToolLoopState);
+}
+
+/** Commit pending tool calls before returning an execute_tools action. */
+export async function sqliteModelToolLoopAcceptModelTurn(
+  path: string,
+  scope: string,
+  state: DurableModelToolLoopState,
+  completion: ChatCompletion,
+  dispatch: ToolDispatch,
+  operationId: string,
+): Promise<DurableModelToolLoopTransition> {
+  return JSON.parse(
+    await native.sqliteModelToolLoopAcceptModelTurn(
+      path,
+      scope,
+      JSON.stringify(state),
+      JSON.stringify(completion),
+      JSON.stringify(dispatch),
+      operationId,
+    ),
+  ) as DurableModelToolLoopTransition;
+}
+
+/** Commit an adapter result before allowing the host to continue the loop. */
+export async function sqliteModelToolLoopSubmitToolResult(
+  path: string,
+  scope: string,
+  state: DurableModelToolLoopState,
+  result: ToolResult,
+  operationId: string,
+): Promise<DurableModelToolLoopTransition> {
+  return JSON.parse(
+    await native.sqliteModelToolLoopSubmitToolResult(
+      path,
+      scope,
+      JSON.stringify(state),
+      JSON.stringify(result),
+      operationId,
+    ),
+  ) as DurableModelToolLoopTransition;
+}
+
+export async function sqliteModelToolLoopRecover(
+  path: string,
+  scope: string,
+  state: DurableModelToolLoopState,
+  operationId: string,
+): Promise<DurableModelToolLoopTransition> {
+  return JSON.parse(
+    await native.sqliteModelToolLoopRecover(
+      path,
+      scope,
+      JSON.stringify(state),
+      operationId,
+    ),
+  ) as DurableModelToolLoopTransition;
+}
+
+export async function sqliteModelToolLoopReconcileToolResult(
+  path: string,
+  scope: string,
+  state: DurableModelToolLoopState,
+  result: ToolResult,
+  operationId: string,
+): Promise<DurableModelToolLoopTransition> {
+  return JSON.parse(
+    await native.sqliteModelToolLoopReconcileToolResult(
+      path,
+      scope,
+      JSON.stringify(state),
+      JSON.stringify(result),
+      operationId,
+    ),
+  ) as DurableModelToolLoopTransition;
 }
 
 export interface DurableLedgerAppend {

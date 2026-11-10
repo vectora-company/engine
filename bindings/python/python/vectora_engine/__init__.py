@@ -125,6 +125,96 @@ async def sqlite_ledger_append_checkpointed(
     )
 
 
+async def sqlite_model_tool_loop_start(
+    path: str,
+    scope: str,
+    run_id: str,
+    turn_id: str,
+    settings: JsonObject | None,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist a new loop before the host sends its first model request."""
+    return json.loads(
+        await _native.sqlite_model_tool_loop_start(
+            path,
+            scope,
+            run_id,
+            turn_id,
+            json.dumps(settings or {}),
+            operation_id,
+        )
+    )
+
+
+async def sqlite_model_tool_loop_load(
+    path: str, scope: str, run_id: str, turn_id: str
+) -> dict[str, Any] | None:
+    """Load and validate the latest durable loop snapshot."""
+    result = await _native.sqlite_model_tool_loop_load(path, scope, run_id, turn_id)
+    return json.loads(result) if result is not None else None
+
+
+async def sqlite_model_tool_loop_accept_model_turn(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    completion: JsonObject,
+    dispatch: JsonObject,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist the model decision before exposing any tool action to the host."""
+    result = await _native.sqlite_model_tool_loop_accept_model_turn(
+        path,
+        scope,
+        json.dumps(state),
+        json.dumps(completion),
+        json.dumps(dispatch),
+        operation_id,
+    )
+    return json.loads(result)
+
+
+async def sqlite_model_tool_loop_submit_tool_result(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    result: JsonObject,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist an adapter result before the host continues the model loop."""
+    encoded = await _native.sqlite_model_tool_loop_submit_tool_result(
+        path, scope, json.dumps(state), json.dumps(result), operation_id
+    )
+    return json.loads(encoded)
+
+
+async def sqlite_model_tool_loop_recover(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist recovery-required state without replaying unresolved tools."""
+    encoded = await _native.sqlite_model_tool_loop_recover(
+        path, scope, json.dumps(state), operation_id
+    )
+    return json.loads(encoded)
+
+
+async def sqlite_model_tool_loop_reconcile_tool_result(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    result: JsonObject,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist a host-reconciled effect before continuing the loop."""
+    encoded = await _native.sqlite_model_tool_loop_reconcile_tool_result(
+        path, scope, json.dumps(state), json.dumps(result), operation_id
+    )
+    return json.loads(encoded)
+
+
 async def resilient_ledger_append(
     path: str, event: JsonObject, postgres_url: str | None = None
 ) -> dict[str, Any]:
@@ -504,6 +594,12 @@ __all__ = [
     "sqlite_ledger_append",
     "sqlite_ledger_append_checkpointed",
     "sqlite_ledger_read",
+    "sqlite_model_tool_loop_accept_model_turn",
+    "sqlite_model_tool_loop_load",
+    "sqlite_model_tool_loop_reconcile_tool_result",
+    "sqlite_model_tool_loop_recover",
+    "sqlite_model_tool_loop_start",
+    "sqlite_model_tool_loop_submit_tool_result",
     "sqlite_reserve_run",
     "sqlite_save_checkpoint",
     "start_model_tool_loop",
