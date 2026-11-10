@@ -17,17 +17,26 @@ capability correspondente demonstrar conformidade e rollback.
 - `uv` e Python 3.13 para tooling e verificações dos bindings Python.
 - `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
 
+No Linux, `dotfiles.sh` configura esses pré-requisitos do host para as
+distribuições suportadas. Ele instala somente ferramentas e bibliotecas usadas
+pela Engine; não instala dependências dos produtos consumidores.
+
 ## Preparar o ambiente
 
+No Linux, rode o bootstrap uma vez:
+
 ```bash
-scons install
+./dotfiles.sh
 ```
 
-O comando instala os componentes Rust selecionados, baixa dependências Cargo
-conforme `Cargo.lock`, sincroniza o tooling Python, compila a extensão Python
-local e instala as dependências pnpm do binding Node. Não instala dependências
-do app Vectora nem sidecars de produto. O alvo verifica se `protoc` está
-disponível e informa o requisito antes de iniciar a compilação.
+Para verificar sem instalar nada, use `./dotfiles.sh --check`. Em macOS e
+Windows, instale os requisitos acima e execute `scons install`.
+
+`scons install` instala os componentes Rust selecionados, baixa dependências
+Cargo conforme `Cargo.lock`, sincroniza o tooling Python, compila a extensão
+Python local e instala as dependências pnpm do binding Node. No Linux, ele
+aciona o bootstrap de toolchain se necessário. Não instala dependências do app
+Vectora nem sidecars de produto.
 
 ## Verificações
 

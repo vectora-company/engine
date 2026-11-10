@@ -41,24 +41,31 @@ mais rápido ou barato.
 
 ## Preparar o ambiente
 
-Instale Rust stable por meio do `rustup`; o `rust-toolchain.toml` seleciona
-também `rustfmt` e `clippy`. `uv` e Python 3.13 são usados pelo tooling
-compartilhado em `utils/`. Instale também `protoc` (Protocol Buffers compiler),
-necessário pela dependência LanceDB: use `protobuf-compiler` no Linux, execute
-`brew install protobuf` no macOS ou instale a release oficial de Protocol
-Buffers no Windows e adicione o executável ao `PATH`.
+No Linux, prepare os pré-requisitos do sistema e as toolchains do projeto com:
+
+```bash
+./dotfiles.sh
+```
+
+O script reconhece a distribuição, instala `protoc` e as bibliotecas de build,
+configura Rust, Python 3.13, Node.js 24, pnpm e uv, e termina executando
+`scons install`. `./dotfiles.sh --check` somente verifica o ambiente.
+
+No macOS e Windows, instale Rust stable com `rustup` (incluindo `rustfmt` e
+`clippy`), `uv` com Python 3.13, Node.js 24 com a versão pnpm fixada no
+`bindings/typescript/package.json` e `protoc`. No macOS, `brew install
+protobuf`; no Windows, instale a release oficial de Protocol Buffers e deixe o
+executável no `PATH`.
 
 ```bash
 scons install
 ```
 
-Esse alvo instala os componentes Rust selecionados, baixa as dependências
-Cargo conforme o `Cargo.lock`, prepara o ambiente Python do tooling, compila e
-instala a extensão Python no ambiente virtual do projeto e instala as
-dependências Node do binding TypeScript. Node.js e pnpm precisam estar
-instalados. O alvo verifica a presença de `protoc` antes de compilar. Ele não
-instala dependências dos apps consumidores, navegadores Playwright ou sidecars
-de produto.
+Em Linux, o alvo também chama `dotfiles.sh --toolchain-only` se a toolchain
+estiver incompleta. Ele baixa as dependências Cargo conforme o `Cargo.lock`,
+prepara o ambiente Python, compila e instala a extensão Python e instala as
+dependências Node do binding TypeScript. Ele não instala dependências dos apps
+consumidores, navegadores Playwright ou sidecars de produto.
 
 ## Comandos
 
