@@ -117,7 +117,9 @@ impl SqliteLedger {
             })
             .optional()?;
         match version {
-            Some(v) if v > SCHEMA_VERSION || v < 1 => return Err(LedgerError::SchemaVersion),
+            Some(v) if !(1..=SCHEMA_VERSION).contains(&v) => {
+                return Err(LedgerError::SchemaVersion);
+            }
             Some(_) => {}
             None => {
                 tx.execute_batch(

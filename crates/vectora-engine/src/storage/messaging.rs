@@ -299,7 +299,7 @@ impl KvStore for NatsStore {
 
 pub enum KvStoreAdapter {
     Redis(RedisStore),
-    Nats(NatsStore),
+    Nats(Box<NatsStore>),
 }
 
 impl KvStoreAdapter {
@@ -309,9 +309,9 @@ impl KvStoreAdapter {
                 &config.endpoint,
                 &config.namespace,
             )?)),
-            super::KvBackend::NatsJetstream => Ok(Self::Nats(
+            super::KvBackend::NatsJetstream => Ok(Self::Nats(Box::new(
                 NatsStore::connect(&config.endpoint, &config.namespace).await?,
-            )),
+            ))),
             super::KvBackend::Memory => Err(MessagingError::Unsupported),
         }
     }

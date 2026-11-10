@@ -142,12 +142,11 @@ impl PostgresLedger {
         let prior = sqlx::query("SELECT run_id,event_id FROM ve_run_admissions WHERE scope=$1 AND (run_id=$2 OR event_id=$3) FOR UPDATE")
             .bind(&reservation.scope).bind(&reservation.run_id).bind(&event.event_id).fetch_optional(&mut *tx).await?;
         let is_new_admission = prior.is_none();
-        if let Some(row) = prior {
-            if row.try_get::<String, _>("run_id")? != reservation.run_id
-                || row.try_get::<String, _>("event_id")? != event.event_id
-            {
-                return Err(PostgresError::IdempotencyConflict);
-            }
+        if let Some(row) = prior
+            && (row.try_get::<String, _>("run_id")? != reservation.run_id
+                || row.try_get::<String, _>("event_id")? != event.event_id)
+        {
+            return Err(PostgresError::IdempotencyConflict);
         }
         let ledger_event = append_tx(&mut tx, event.clone()).await?;
         if is_new_admission {
@@ -326,12 +325,10 @@ async fn append_tx(
     .bind(&draft.event_id)
     .fetch_optional(&mut **tx)
     .await?
+        && (row.try_get::<String, _>("aggregate_id")? != draft.aggregate
+            || row.try_get::<String, _>("idempotency_key")? != draft.idempotency_key)
     {
-        if row.try_get::<String, _>("aggregate_id")? != draft.aggregate
-            || row.try_get::<String, _>("idempotency_key")? != draft.idempotency_key
-        {
-            return Err(PostgresError::IdempotencyConflict);
-        }
+        return Err(PostgresError::IdempotencyConflict);
     }
     if let Some(row) = sqlx::query("SELECT sequence,event_id,event_type,payload FROM ve_ledger_events WHERE scope=$1 AND aggregate_id=$2 AND idempotency_key=$3").bind(&draft.scope).bind(&draft.aggregate).bind(&draft.idempotency_key).fetch_optional(&mut **tx).await? {
         if row.try_get::<String,_>("event_id")? != draft.event_id || row.try_get::<String,_>("event_type")? != draft.event_type || row.try_get::<Value,_>("payload")? != draft.payload { return Err(PostgresError::IdempotencyConflict); }
