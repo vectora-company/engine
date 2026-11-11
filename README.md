@@ -41,39 +41,31 @@ mais rápido ou barato.
 
 ## Preparar o ambiente
 
-No Linux, prepare os pré-requisitos do sistema e as toolchains do projeto com:
+No Linux, `dotfiles.sh` detecta a distribuição e configura somente o host:
+pacotes de sistema, Rust, `protoc`, Podman, Python 3.13, Node.js 24, pnpm, uv,
+SCons e pre-commit. Ele não instala dependências do checkout, não chama SCons,
+não compila o projeto e não inicia containers.
 
 ```bash
+./dotfiles.sh --check
 ./dotfiles.sh
 ```
 
-O script reconhece a distribuição, instala `protoc` e as bibliotecas de build,
-configura Rust, Python 3.13, Node.js 24, pnpm e uv, e termina executando
-`scons install`. `./dotfiles.sh --check` somente verifica o ambiente.
-
-No macOS e Windows, instale Rust stable com `rustup` (incluindo `rustfmt` e
-`clippy`), `uv` com Python 3.13, Node.js 24 com a versão pnpm fixada no
-`bindings/typescript/package.json` e `protoc`. No macOS, `brew install
-protobuf`; no Windows, instale a release oficial de Protocol Buffers e deixe o
-executável no `PATH`.
-
-```bash
-scons install
-```
-
-Em Linux, o alvo também chama `dotfiles.sh --toolchain-only` se a toolchain
-estiver incompleta. Ele baixa as dependências Cargo conforme o `Cargo.lock`,
-prepara o ambiente Python, compila e instala a extensão Python e instala as
-dependências Node do binding TypeScript. Ele não instala dependências dos apps
-consumidores, navegadores Playwright ou sidecars de produto.
+Em macOS e Windows, instale os requisitos de `CONTRIBUTING.md` diretamente.
+`scons install` instala dependências do projeto, baixa o binário NATS e prepara
+imagens Podman de PostgreSQL, Qdrant e Redis para desenvolvimento. Não compila
+bindings nem inicia containers. `scons build` é o alvo explícito para compilar o
+workspace Rust e os bindings presentes.
 
 ## Comandos
 
 ```bash
 scons                 # mostra os alvos disponíveis
+scons install         # instala dependências do projeto e sidecars de desenvolvimento
+scons build           # compila Rust e bindings Python/TypeScript (e Go quando existir)
 scons lint            # Rust: rustfmt + Clippy; Python: Ruff + ty + Bandit
 scons tests           # testes Cargo, pytest e pacote Node nativo
-scons ci              # install, lint e tests
+scons ci              # install, build, lint e tests
 scons update          # atualiza Cargo e uv.lock; revise os lockfiles
 scons clean           # remove artefatos de build
 ```

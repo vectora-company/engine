@@ -5,38 +5,44 @@ com a documentação de arquitetura e com os consumidores do contrato. Preserve
 a implementação atual do Vectora até a
 capability correspondente demonstrar conformidade e rollback.
 
-## Requisitos
-
-- Rust stable via `rustup`, com `rustfmt` e `clippy` (selecionados por
-  `rust-toolchain.toml`).
-- `protoc` (Protocol Buffers compiler), necessário para compilar a dependência
-  LanceDB e os bindings nativos. Em Linux, instale `protobuf-compiler`; no
-  macOS, `brew install protobuf`; em Windows, instale o compilador da release
-  oficial de Protocol Buffers e deixe-o no `PATH`.
-- `scons` para os alvos de desenvolvimento.
-- `uv` e Python 3.13 para tooling e verificações dos bindings Python.
-- `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
-
-No Linux, `dotfiles.sh` configura esses pré-requisitos do host para as
-distribuições suportadas. Ele instala somente ferramentas e bibliotecas usadas
-pela Engine; não instala dependências dos produtos consumidores.
-
 ## Preparar o ambiente
 
-No Linux, rode o bootstrap uma vez:
+Em Linux, `dotfiles.sh` configura o host: pacotes de sistema, `protoc`, Podman,
+Rust, Python 3.13, Node.js 24, pnpm, uv, SCons e pre-commit. Ele reconhece
+distribuições Debian/Ubuntu, Fedora e Arch. `--check` apenas diagnostica o host.
+O script não chama SCons, não instala dependências do checkout e não compila.
 
 ```bash
+./dotfiles.sh --check
 ./dotfiles.sh
 ```
 
-Para verificar sem instalar nada, use `./dotfiles.sh --check`. Em macOS e
-Windows, instale os requisitos acima e execute `scons install`.
+Em macOS e Windows, prepare manualmente os requisitos abaixo. No macOS, instale
+`protoc` com `brew install protobuf`; no Windows, instale o compilador da
+release oficial de Protocol Buffers e adicione-o ao `PATH`.
 
-`scons install` instala os componentes Rust selecionados, baixa dependências
-Cargo conforme `Cargo.lock`, sincroniza o tooling Python, compila a extensão
-Python local e instala as dependências pnpm do binding Node. No Linux, ele
-aciona o bootstrap de toolchain se necessário. Não instala dependências do app
-Vectora nem sidecars de produto.
+`scons install` baixa dependências Cargo, sincroniza o ambiente Python, instala
+as dependências pnpm, baixa o sidecar NATS e prepara as imagens Podman de
+PostgreSQL, Qdrant e Redis. Não compila o projeto nem inicia containers.
+`scons build` compila o workspace Rust, gera o wheel Python e compila o addon e
+os arquivos TypeScript; quando existir `bindings/go/go.mod`, também compila Go.
+Cargo e TypeScript mantêm caches incrementais locais entre builds.
+
+### Requisitos manuais
+
+- Rust stable via `rustup`, com `rustfmt` e `clippy` (selecionados por
+  `rust-toolchain.toml`).
+- `protoc` (Protocol Buffers compiler), necessário pela dependência LanceDB.
+  No Linux o script instala `protobuf-compiler` em Debian/Ubuntu/Fedora e
+  `protobuf` no Arch.
+- `scons` para os alvos de desenvolvimento.
+- `uv` e Python 3.13 para tooling e verificações dos bindings Python.
+- `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
+- Podman para preparar as imagens usadas pelos testes de integração com serviços.
+
+Se o pré-requisito `protoc` estiver ausente, `scons install` orienta executar
+`./dotfiles.sh` em Linux ou instalar o pacote equivalente no
+macOS/Windows.
 
 ## Verificações
 
