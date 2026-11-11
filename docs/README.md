@@ -47,9 +47,12 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 ## Site público
 
-O código-fonte do site Hugo + Hextra fica em `website/`. O conteúdo público
-começará vazio, com índices em inglês e português; planos, auditorias e specs
-internas em `docs/` não são publicados automaticamente.
+O código-fonte e a documentação pública Hugo + Hextra ficam em `website/`, com
+conteúdo em português e inglês sobre instalação, arquitetura, capacidades,
+contratos, Rust, Python e TypeScript/Node. Planos, auditorias, sabatina e specs
+internas em `docs/` não são publicados automaticamente. O site ainda não tem
+workflow de publicação; consulte [o plano do site](plans/06-site-documentacao-engine.md)
+antes de habilitar hosting público.
 
 ## Especificações
 
