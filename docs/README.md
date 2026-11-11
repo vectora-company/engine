@@ -13,9 +13,13 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 - [Checklist de implementação](checklists/00-checklist-de-implementacao.md):
   checklist completo para preparar, implementar, verificar e entregar cada
   etapa de um plano.
+- [Checklist da auditoria OpenAI-compatible](checklists/01-review-pr3-openai-compatible.md):
+  classificação dos findings antigos e verificação das correções desta etapa.
 - [Análise e referências de desenvolvimento](analyses/00-analise-e-referencias-de-desenvolvimento.md):
   hierarquia das fontes, investigação obrigatória, registro de decisões e
   limites para inferências.
+- [Auditoria de review do PR #3](analyses/01-auditoria-review-pr3.md): findings
+  revalidados contra a implementação atual, com evidências e limitações.
 
 ## Planos
 

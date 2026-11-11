@@ -16,8 +16,10 @@ etapa troca automaticamente o runtime de qualquer consumidor.
 ## Fases empilhadas
 
 1. **Contrato de ciclo de vida** — identidade de execução versionada e estados
-   válidos. Implementado como base experimental: snapshots são em memória e não
-   fornecem reserva idempotente entre processos nem recuperação após restart.
+   válidos. Implementado experimentalmente com `SqliteRunLifecycleStore`: a
+   admissão, evento inicial e checkpoint são persistidos atomicamente; as
+   transições verificam sequência esperada. Não generaliza esse lifecycle para
+   PostgreSQL nem torna efeitos externos atômicos.
 2. **Montagem de turno** — acumular texto, tool calls fragmentadas, usage e
    término em resposta canônica; validar ordem e impor limites. API incremental
    no Rust e API equivalente de conformidade nos dois bindings. Não executar
@@ -31,14 +33,19 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    A máquina de rodadas e o protocolo de resultados foram implementados
    experimentalmente em `docs/specs/11-model-tool-loop.md`. Ambos os bindings
    expõem o núcleo. O consumidor fornece adapters; persistência, aprovação e
-   recovery durável continuam pendentes.
+   recovery durável foram acrescentados nas etapas seguintes; adapters de tool,
+   identidade e autorização do host continuam fora do core.
 4. **Política e aprovação** — definir snapshot efetivo e decisão default-deny;
    vincular HITL a conteúdo, arguments normalizados, escopo e digest da policy.
    Revalidar antes de efeitos e retomar. Falha de policy interrompe o efeito.
    O contrato síncrono de snapshot, bloqueios e aprovação por binding foi
    implementado experimentalmente em `docs/specs/12-policy-and-approval.md` e
-   exposto pelos dois bindings. Persistência das concessões e revalidação após
-   retomada continuam para a fase 5.
+   exposto pelos dois bindings. PR #30 acrescentou `SqliteToolPolicyStore`,
+   exposto em Python e TypeScript, para persistir snapshot, pedidos e recibos,
+   reavaliar o estado mais recente e rejeitar conflitos de binding. O contrato
+   do store está em `docs/specs/16-sqlite-durable-tool-policy.md`. O host segue
+   responsável por autenticar aprovadores e validar recibos; o adapter não
+   executa nem cancela tools.
 5. **Persistência e recovery** — integrar com os contratos de storage planejados
    em `docs/plans/01-plano-portabilidade-llm-rust.md`: reserva atômica por
    thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. O adapter
@@ -51,11 +58,12 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    transições usam sequência esperada e checkpoints duráveis. O contrato está
    em `docs/specs/14-sqlite-durable-run-lifecycle.md`. Esses adapters não
    tornam efeitos externos atômicos, não fornecem exactly-once e não autenticam
-   o host. Integração genérica com PostgreSQL, persistência/revalidação de
-   policy e concessões, coordenação do
-   provider/adapters, reconciliação autenticada e recuperação operacional ainda
-   precisam ser concluídas. Recovery nunca repete silenciosamente um efeito de
-   resultado incerto.
+   o host. Integração genérica com PostgreSQL, coordenação dos
+   providers/adapters, autenticação de recibos pelo host e recuperação
+   operacional ainda precisam ser concluídas. O cancellation request é
+   durável e o host recebe os IDs pendentes para interromper e reconciliar; isso
+   não comprova término dos processos. Recovery nunca repete silenciosamente
+   um efeito de resultado incerto.
 6. **Verificação e conformidade** — o contrato de resultados e vereditos está
    em `docs/specs/15-verification-gates.md`. `SqliteRunLifecycleStore` grava
    report, policy, avaliação e transição terminal no mesmo evento/checkpoint;

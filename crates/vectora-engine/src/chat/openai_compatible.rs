@@ -188,6 +188,7 @@ impl OpenAiCompatibleClient {
         let endpoint = validate_config(&config)?;
         let client = Client::builder()
             .connect_timeout(config.connect_timeout)
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|_| ChatError::InvalidConfiguration("HTTP client could not be created"))?;
         Ok(Self {
@@ -392,6 +393,10 @@ fn validate_config(config: &OpenAiCompatibleConfig) -> Result<Url, ChatError> {
     {
         return Err(ChatError::InvalidConfiguration("API key must not be empty"));
     }
+    if let Some(api_key) = &config.api_key {
+        header::HeaderValue::from_str(&format!("Bearer {api_key}"))
+            .map_err(|_| ChatError::InvalidConfiguration("API key is not a valid header value"))?;
+    }
 
     let mut seen = HashSet::new();
     for (name, value) in &config.headers {
@@ -513,14 +518,11 @@ fn request_payload(request: &ChatRequest, stream: bool) -> Value {
                 .tools
                 .iter()
                 .map(|tool| {
-                    json!({
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": tool.parameters,
-                        }
-                    })
+                    let mut function = json!({ "name": tool.name, "parameters": tool.parameters });
+                    if let Some(description) = &tool.description {
+                        function["description"] = json!(description);
+                    }
+                    json!({ "type": "function", "function": function })
                 })
                 .collect(),
         );
@@ -579,13 +581,13 @@ fn content_payload(content: &MessageContent) -> Value {
                 .iter()
                 .map(|part| match part {
                     ContentPart::Text { text } => json!({ "type": "text", "text": text }),
-                    ContentPart::ImageUrl { image_url } => json!({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": image_url.url,
-                            "detail": image_url.detail,
+                    ContentPart::ImageUrl { image_url } => {
+                        let mut value = json!({ "url": image_url.url });
+                        if let Some(detail) = &image_url.detail {
+                            value["detail"] = json!(detail);
                         }
-                    }),
+                        json!({ "type": "image_url", "image_url": value })
+                    }
                 })
                 .collect(),
         ),
@@ -917,6 +919,39 @@ mod tests {
         let debug = format!("{config:?}");
         assert!(!debug.contains("super-secret"));
         assert!(!debug.contains("password"));
+
+        let invalid_key = OpenAiCompatibleConfig::new("https://example.test/v1").api_key("key\n");
+        assert!(matches!(
+            OpenAiCompatibleClient::new(invalid_key),
+            Err(ChatError::InvalidConfiguration(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn does_not_follow_http_redirects() {
+        use std::{io::Read, io::Write, net::TcpListener, thread};
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 4096];
+            let _ = stream.read(&mut request).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/redirected\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let client = OpenAiCompatibleClient::new(OpenAiCompatibleConfig::new(format!(
+            "http://{address}/v1"
+        )))
+        .unwrap();
+        let result = client.complete(ChatRequest::new("model", Vec::new())).await;
+        server.join().unwrap();
+
+        assert!(matches!(result, Err(ChatError::Provider { status: 302 })));
     }
 
     #[test]
@@ -953,7 +988,25 @@ mod tests {
             "high"
         );
         assert_eq!(payload["tools"][0]["function"]["name"], "read_file");
+        assert!(payload["tools"][0]["function"].get("description").is_none());
         assert_eq!(payload["stream"], true);
+
+        request.tools[0].description = Some("Read a file".into());
+        if let MessageContent::Parts(parts) = &mut request.messages[0].content
+            && let ContentPart::ImageUrl { image_url } = &mut parts[1]
+        {
+            image_url.detail = None;
+        }
+        let payload = request_payload(&request, false);
+        assert_eq!(
+            payload["tools"][0]["function"]["description"],
+            "Read a file"
+        );
+        assert!(
+            payload["messages"][0]["content"][1]["image_url"]
+                .get("detail")
+                .is_none()
+        );
 
         request.tools[0].parameters = json!([]);
         assert!(matches!(
