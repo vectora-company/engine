@@ -27,6 +27,8 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
   revalidados contra a implementação atual, com evidências e limitações.
 - [Matriz de conformidade das capabilities](analyses/02-matriz-conformidade-capabilities.md):
   contratos, APIs Rust/Python/TypeScript, testes existentes, maturidade e gaps.
+- [Análise cruzada: Akita, Engine, Vectora e GH Bot](analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md):
+  livro, snapshots de código, capacidades comparadas, fronteiras e sabatina.
 - [Checklist da matriz de conformidade](checklists/02-matriz-conformidade-capabilities.md):
   inventário concluído e trabalho pendente antes da próxima etapa do plano.
 
