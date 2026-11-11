@@ -159,6 +159,9 @@ impl SqliteToolPolicyStore {
 
     /// Reevaluate the complete batch against the latest persisted policy and
     /// grants. Approval requests are checkpointed before being returned.
+    // Keep the inputs explicit: they are separate versioned engine contracts
+    // and should not be hidden inside a loosely coupled options bag.
+    #[allow(clippy::too_many_arguments)]
     pub fn authorize(
         &mut self,
         state: &DurableToolPolicyState,
