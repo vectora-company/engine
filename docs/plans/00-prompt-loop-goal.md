@@ -7,6 +7,12 @@ Leia o [plano operacional](../goal-loop/01-plano-operacional.md), o
 [critérios de encerramento](../goal-loop/04-criterios-de-encerramento.md).
 Retome a próxima etapa aprovada do plano ativo e leia sua spec, análise e
 checklist. Implemente, verifique localmente e atualize os documentos da etapa.
+Leia também a [sabatina do ecossistema](../analyses/04-sabatina-engine-ecossistema.md).
+Mantenha suas respostas sempre atuais: após cada mudança de código, contrato,
+teste, plano, referência ou snapshot de consumidor, revise e atualize as Q&As
+afetadas, cite evidências e marque claramente implementação, parcialidade,
+planejamento, decisão ou ausência. Antes de encerrar cada ciclo, confira o SHA,
+a data e se nenhuma resposta confunde spec/roadmap com comportamento verificado.
 
 **Encerre somente** quando o plano ativo estiver concluído, uma decisão vital
 estiver documentada e aguardando `brunosrz`, ou um bloqueio externo impedir todo

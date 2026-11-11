@@ -29,6 +29,10 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
   contratos, APIs Rust/Python/TypeScript, testes existentes, maturidade e gaps.
 - [Análise cruzada: Akita, Engine, Vectora e GH Bot](analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md):
   livro, snapshots de código, capacidades comparadas, fronteiras e sabatina.
+- [Sabatina da Engine e do ecossistema](analyses/04-sabatina-engine-ecossistema.md):
+  200 perguntas e respostas sobre arquitetura, implementação, lacunas,
+  consumidores e frameworks/harnesses relacionados. Atualize-a em cada ciclo
+  do goal loop conforme o [prompt](plans/00-prompt-loop-goal.md).
 - [Checklist da matriz de conformidade](checklists/02-matriz-conformidade-capabilities.md):
   inventário concluído e trabalho pendente antes da próxima etapa do plano.
 
