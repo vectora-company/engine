@@ -74,7 +74,40 @@ def _pnpm(*arguments: str, cwd: str = ROOT) -> None:
     )
 
 
+def _activate_user_tool_paths() -> None:
+    """Expose tools installed by the Linux bootstrap to this SCons process."""
+    home = os.path.expanduser("~")
+    paths = [
+        os.path.join(home, ".local", "bin"),
+        os.path.join(home, ".cargo", "bin"),
+        os.path.join(
+            os.environ.get("PYENV_ROOT", os.path.join(home, ".pyenv")), "bin"
+        ),
+        os.path.join(
+            os.environ.get("PYENV_ROOT", os.path.join(home, ".pyenv")), "shims"
+        ),
+        os.environ.get(
+            "PNPM_HOME", os.path.join(home, ".local", "share", "pnpm")
+        ),
+    ]
+    node_root = os.path.join(
+        os.environ.get("NVM_DIR", os.path.join(home, ".nvm")), "versions", "node"
+    )
+    if os.path.isdir(node_root):
+        paths.extend(
+            os.path.join(node_root, entry, "bin")
+            for entry in os.listdir(node_root)
+            if entry.startswith("v24")
+        )
+    current = os.environ.get("PATH", "")
+    os.environ["PATH"] = os.pathsep.join(
+        [path for path in paths if os.path.isdir(path)] + [current]
+    )
+
+
 def _install(target, source, env):
+    if platform.system() == "Linux":
+        _activate_user_tool_paths()
     if shutil.which("rustup") is None:
         raise SystemExit(
             "Install Rust with rustup first; rust-toolchain.toml selects "
