@@ -22,10 +22,10 @@ direta dessas teses.
 | Fonte            | Snapshot consultado                                                                                                        | Uso                                                                           |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Livro            | `CompetenteOSuficiente` em `b0e7e1c0ec1411113ae5e8d893ebe05ead89535e`                                                      | Argumentos e experiências do autor; edição local em `book/pt/`.               |
-| Engine           | topo da stack, PR [#34](https://github.com/vectora-ltda/engine/pull/34), commit `a2afb65dc898a6214dd83a6473967132b6a9ac79` | Contratos e fixture de conformidade disponíveis nesta etapa.                  |
+| Engine           | topo da stack, PR [#34](https://github.com/vectora-company/engine/pull/34), commit `a2afb65dc898a6214dd83a6473967132b6a9ac79` | Contratos e fixture de conformidade disponíveis nesta etapa.                  |
 | Vectora          | `origin/master` em `bf1732ac92eac21671881cc34a530c2ddb7186de`                                                              | Implementação atual do backend consumidor para a comparação.                  |
 | GH Bot           | `main` em `b489b90263e3a4ace94cfdce45763489918a3671`                                                                       | Bootstrap e documentação atuais; integração com a Engine ainda é roadmap.     |
-| Contexto Vectora | issue [#387](https://github.com/vectora-ltda/vectora/issues/387)                                                           | Tese de produto e perguntas de arquitetura; não substitui inspeção do código. |
+| Contexto Vectora | issue [#387](https://github.com/vectora-company/vectora/issues/387)                                                           | Tese de produto e perguntas de arquitetura; não substitui inspeção do código. |
 
 Os snapshots são diferentes entre si e representam o estado consultado nesta
 análise, não uma afirmação de que os repositórios continuam nesses commits.
@@ -225,7 +225,7 @@ para providers, storage ou API GitHub.
 
 ## Issue #387: uso correto como referência
 
-A issue [#387](https://github.com/vectora-ltda/vectora/issues/387) é útil para
+A issue [#387](https://github.com/vectora-company/vectora/issues/387) é útil para
 entender a tese de produto do Vectora — workspace integrado, workbenches e
 operação humano/agente — e para formular perguntas de segurança e adoção da
 Engine. Ela não deve ser usada como inventário definitivo do código:
