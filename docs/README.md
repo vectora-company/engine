@@ -5,6 +5,8 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 ## Operação de desenvolvimento
 
+- [Prompt curto para o goal](plans/00-prompt-loop-goal.md): texto reutilizável
+  para iniciar o loop com referências e critérios de encerramento explícitos.
 - [Plano do loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md): ordem
   de leitura, ciclo de implementação, atualização dos documentos e critérios
   explícitos para continuar ou encerrar o loop.

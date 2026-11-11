@@ -3,7 +3,8 @@
 Este plano define como conduzir trabalho contínuo na Engine sem perder contexto,
 contratos ou critérios de conclusão. Use junto com o [checklist de
 implementação](../checklists/00-checklist-de-implementacao.md) e a [análise e
-referências](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
+referências](../analyses/00-analise-e-referencias-de-desenvolvimento.md). Para
+iniciar um goal com instruções compactas, use o [prompt curto](00-prompt-loop-goal.md).
 
 ## Fonte de verdade
 
