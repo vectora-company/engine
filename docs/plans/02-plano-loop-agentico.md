@@ -64,13 +64,12 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    exige loop concluído e grava report, policy e avaliação no checkpoint do
    loop; o consumidor ainda executa e autentica os checks. Ambos os caminhos
    estão expostos pelos bindings Python/TypeScript. O contrato de snapshot do
-   loop é v2, com leitura compatível de snapshots v1 sem verificação. A fase
-   tem replay de verificação e cancelamento cobertos após reabertura SQLite,
-   inclusive replay idempotente da mesma operação nos bindings Python e
-   TypeScript. Cancelar a lifecycle não interrompe tasks nem efeitos externos;
-   o consumidor continua responsável por sinalizar cancelamento e reconciliar
-   chamadas incertas antes de escolher entre `cancelled` e
-   `recovery_required`. Redaction, dois perfis de consumidor e integração com
+   loop é v2, com leitura compatível de snapshots v1. Verificação e pedido de
+   cancelamento são persistidos no SQLite; o host recebe IDs de tools pendentes
+   para interrompê-las e deve registrar o resultado de cada uma. Isso não prova
+   que adapters/processos terminaram. Resultados incertos exigem reconciliação
+   antes do estado terminal `cancelled`; sem pedido de cancelamento, a
+   reconciliação permite continuar o loop. Redaction, dois perfis de consumidor e integração com
    o fluxo completo seguem abertas antes de qualquer alegação de paridade ou
    adoção.
 

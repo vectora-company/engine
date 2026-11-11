@@ -11,7 +11,9 @@ use super::{
 };
 
 /// Version of the model/tool round state machine.
-pub const MODEL_TOOL_LOOP_CONTRACT_VERSION: u16 = 1;
+pub const MODEL_TOOL_LOOP_CONTRACT_VERSION: u16 = 2;
+const LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION: u16 = 1;
+const TOOL_RESULT_CONTRACT_VERSION: u16 = 1;
 const DEFAULT_MAX_MODEL_TURNS: u32 = 50;
 const DEFAULT_MAX_TOOL_CALLS: u32 = 128;
 const DEFAULT_MAX_RESULT_BYTES: usize = 1024 * 1024;
@@ -86,8 +88,10 @@ impl ModelToolLoopSettings {
 pub enum ModelToolLoopPhase {
     AwaitingModel,
     AwaitingToolResults,
+    Cancelling,
     Completed,
     Stopped,
+    Cancelled,
     RecoveryRequired,
 }
 
@@ -145,6 +149,8 @@ pub struct ModelToolLoopState {
     pub turn_id: String,
     pub settings: ModelToolLoopSettings,
     pub phase: ModelToolLoopPhase,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub cancellation_requested: bool,
     pub model_turns: u32,
     pub tool_calls: u32,
     pub pending_completion: Option<ChatCompletion>,
@@ -177,6 +183,7 @@ impl ModelToolLoopState {
             turn_id,
             settings,
             phase: ModelToolLoopPhase::AwaitingModel,
+            cancellation_requested: false,
             model_turns: 0,
             tool_calls: 0,
             pending_completion: None,
@@ -217,6 +224,19 @@ pub enum ModelToolLoopAction {
         call_id: String,
         tool_name: String,
     },
+    CancelPendingTools {
+        calls: Vec<PendingToolCancellation>,
+    },
+    Cancelled {
+        model_turns: u32,
+        tool_calls: u32,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PendingToolCancellation {
+    pub call_id: String,
+    pub tool_name: String,
 }
 
 /// Stable terminal reason when a loop budget is reached.
@@ -266,6 +286,12 @@ pub enum ModelToolLoopError {
     InvalidState,
     #[error("model/tool loop has no pending tool invocation to recover")]
     NotRecoverable,
+    #[error("model/tool loop is already terminal")]
+    AlreadyTerminal,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 /// Consume a model completion and an already-authorized dispatch decision.
@@ -455,10 +481,13 @@ pub fn submit_tool_result(
     result: ToolResult,
 ) -> Result<(ModelToolLoopState, ModelToolLoopAction), ModelToolLoopError> {
     validate_state(state)?;
-    if state.phase != ModelToolLoopPhase::AwaitingToolResults {
+    if !matches!(
+        state.phase,
+        ModelToolLoopPhase::AwaitingToolResults | ModelToolLoopPhase::Cancelling
+    ) {
         return Err(ModelToolLoopError::NotAwaitingToolResults);
     }
-    if result.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
+    if result.contract_version != TOOL_RESULT_CONTRACT_VERSION {
         return Err(ModelToolLoopError::UnsupportedToolResultContractVersion {
             received: result.contract_version,
         });
@@ -519,6 +548,10 @@ pub fn submit_tool_result(
     if result_bytes > next.settings.max_tool_results_bytes_per_turn {
         return Err(ModelToolLoopError::ToolResultsTooLarge);
     }
+    if next.cancellation_requested {
+        let transition = cancelled_transition(next);
+        return Ok((transition.state, transition.action));
+    }
     let results = ordered_results(&next.pending_results)?;
     let assistant_completion = next
         .pending_completion
@@ -563,7 +596,7 @@ pub fn recover_model_tool_loop(
     validate_state(state)?;
     let mut next = state.clone();
     match next.phase {
-        ModelToolLoopPhase::AwaitingToolResults => {
+        ModelToolLoopPhase::AwaitingToolResults | ModelToolLoopPhase::Cancelling => {
             next.phase = ModelToolLoopPhase::RecoveryRequired;
         }
         ModelToolLoopPhase::RecoveryRequired => {}
@@ -576,6 +609,76 @@ pub fn recover_model_tool_loop(
     })
 }
 
+/// Request cancellation of the current model/tool loop.
+///
+/// If adapters may be running, the host receives their identities to cancel.
+/// The loop remains pending until their outcomes are known. Unknown effects
+/// require reconciliation before the terminal cancelled state is recorded.
+pub fn cancel_model_tool_loop(
+    state: &ModelToolLoopState,
+) -> Result<ModelToolLoopTransition, ModelToolLoopError> {
+    validate_state(state)?;
+    let mut next = state.clone();
+    match next.phase {
+        ModelToolLoopPhase::AwaitingModel => {
+            next.contract_version = MODEL_TOOL_LOOP_CONTRACT_VERSION;
+            next.cancellation_requested = true;
+            next.phase = ModelToolLoopPhase::Cancelled;
+            Ok(cancelled_transition(next))
+        }
+        ModelToolLoopPhase::AwaitingToolResults => {
+            next.contract_version = MODEL_TOOL_LOOP_CONTRACT_VERSION;
+            next.cancellation_requested = true;
+            next.phase = ModelToolLoopPhase::Cancelling;
+            Ok(cancel_pending_tools_transition(next))
+        }
+        ModelToolLoopPhase::Cancelling => Ok(cancel_pending_tools_transition(next)),
+        ModelToolLoopPhase::RecoveryRequired => {
+            next.contract_version = MODEL_TOOL_LOOP_CONTRACT_VERSION;
+            next.cancellation_requested = true;
+            let action = recovery_action(&next)?;
+            Ok(ModelToolLoopTransition {
+                state: next,
+                action,
+            })
+        }
+        ModelToolLoopPhase::Cancelled => Ok(cancelled_transition(next)),
+        ModelToolLoopPhase::Completed | ModelToolLoopPhase::Stopped => {
+            Err(ModelToolLoopError::AlreadyTerminal)
+        }
+    }
+}
+
+fn cancel_pending_tools_transition(state: ModelToolLoopState) -> ModelToolLoopTransition {
+    let calls = state
+        .pending_results
+        .iter()
+        .filter(|pending| pending.result.is_none())
+        .map(|pending| PendingToolCancellation {
+            call_id: pending.call_id.clone(),
+            tool_name: pending.tool_name.clone(),
+        })
+        .collect();
+    ModelToolLoopTransition {
+        state,
+        action: ModelToolLoopAction::CancelPendingTools { calls },
+    }
+}
+
+fn cancelled_transition(mut state: ModelToolLoopState) -> ModelToolLoopTransition {
+    state.phase = ModelToolLoopPhase::Cancelled;
+    state.cancellation_requested = true;
+    state.pending_completion = None;
+    state.pending_results.clear();
+    ModelToolLoopTransition {
+        action: ModelToolLoopAction::Cancelled {
+            model_turns: state.model_turns,
+            tool_calls: state.tool_calls,
+        },
+        state,
+    }
+}
+
 /// Record a host's explicit reconciliation of an invocation after interruption.
 /// The host is responsible for establishing whether the external effect occurred.
 pub fn reconcile_tool_result(
@@ -586,7 +689,7 @@ pub fn reconcile_tool_result(
     if state.phase != ModelToolLoopPhase::RecoveryRequired {
         return Err(ModelToolLoopError::NotRecoverable);
     }
-    if result.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
+    if result.contract_version != TOOL_RESULT_CONTRACT_VERSION {
         return Err(ModelToolLoopError::UnsupportedToolResultContractVersion {
             received: result.contract_version,
         });
@@ -639,6 +742,9 @@ pub fn reconcile_tool_result(
     if result_bytes > next.settings.max_tool_results_bytes_per_turn {
         return Err(ModelToolLoopError::ToolResultsTooLarge);
     }
+    if next.cancellation_requested {
+        return Ok(cancelled_transition(next));
+    }
     let results = ordered_results(&next.pending_results)?;
     let assistant_completion = next
         .pending_completion
@@ -684,7 +790,10 @@ fn recovery_action(state: &ModelToolLoopState) -> Result<ModelToolLoopAction, Mo
 }
 
 fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> {
-    if state.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
+    if !matches!(
+        state.contract_version,
+        LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION | MODEL_TOOL_LOOP_CONTRACT_VERSION
+    ) {
         return Err(ModelToolLoopError::UnsupportedLoopContractVersion {
             received: state.contract_version,
         });
@@ -693,6 +802,19 @@ fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> 
     if state.run_id.trim().is_empty() || state.turn_id.trim().is_empty() {
         return Err(ModelToolLoopError::EmptyIdentity);
     }
+    let cancellation_phase = matches!(
+        state.phase,
+        ModelToolLoopPhase::Cancelling | ModelToolLoopPhase::Cancelled
+    );
+    if (state.contract_version == LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION
+        && (state.cancellation_requested || cancellation_phase))
+        || (cancellation_phase && !state.cancellation_requested)
+        || (state.cancellation_requested
+            && !cancellation_phase
+            && state.phase != ModelToolLoopPhase::RecoveryRequired)
+    {
+        return Err(ModelToolLoopError::InvalidState);
+    }
     if state.model_turns > state.settings.max_model_turns
         || state.tool_calls > state.settings.max_tool_calls
     {
@@ -700,12 +822,29 @@ fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> 
     }
     match state.phase {
         ModelToolLoopPhase::AwaitingModel | ModelToolLoopPhase::Completed => {
-            if state.pending_completion.is_some() || !state.pending_results.is_empty() {
+            if state.cancellation_requested
+                || state.pending_completion.is_some()
+                || !state.pending_results.is_empty()
+            {
                 return Err(ModelToolLoopError::InvalidState);
             }
         }
         ModelToolLoopPhase::AwaitingToolResults => {
-            if state.pending_completion.is_none()
+            if state.cancellation_requested
+                || state.pending_completion.is_none()
+                || state.pending_results.is_empty()
+                || state
+                    .pending_results
+                    .iter()
+                    .all(|pending| pending.result.is_some())
+            {
+                return Err(ModelToolLoopError::InvalidState);
+            }
+            validate_pending(state)?;
+        }
+        ModelToolLoopPhase::Cancelling => {
+            if !state.cancellation_requested
+                || state.pending_completion.is_none()
                 || state.pending_results.is_empty()
                 || state
                     .pending_results
@@ -718,7 +857,18 @@ fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> 
         }
         ModelToolLoopPhase::RecoveryRequired => validate_pending(state)?,
         ModelToolLoopPhase::Stopped => {
-            if state.pending_completion.is_some() || !state.pending_results.is_empty() {
+            if state.cancellation_requested
+                || state.pending_completion.is_some()
+                || !state.pending_results.is_empty()
+            {
+                return Err(ModelToolLoopError::InvalidState);
+            }
+        }
+        ModelToolLoopPhase::Cancelled => {
+            if !state.cancellation_requested
+                || state.pending_completion.is_some()
+                || !state.pending_results.is_empty()
+            {
                 return Err(ModelToolLoopError::InvalidState);
             }
         }
@@ -758,7 +908,7 @@ fn validate_pending(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError
                 || result.turn_id != state.turn_id
                 || result.call_id != pending.call_id
                 || result.tool_name != pending.tool_name
-                || result.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION
+                || result.contract_version != TOOL_RESULT_CONTRACT_VERSION
                 || result.output.len() > state.settings.max_tool_result_bytes)
         {
             return Err(ModelToolLoopError::InvalidState);
@@ -774,7 +924,10 @@ fn validate_pending(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError
         }
     }
     if result_bytes > state.settings.max_tool_results_bytes_per_turn
-        || (state.phase == ModelToolLoopPhase::AwaitingToolResults && has_unknown_effect)
+        || (matches!(
+            state.phase,
+            ModelToolLoopPhase::AwaitingToolResults | ModelToolLoopPhase::Cancelling
+        ) && has_unknown_effect)
         || (state.phase == ModelToolLoopPhase::RecoveryRequired
             && !has_unresolved_invocations(state))
     {
@@ -844,7 +997,7 @@ fn denied_result(
 ) -> ToolResult {
     let code = denial_code(code);
     ToolResult {
-        contract_version: MODEL_TOOL_LOOP_CONTRACT_VERSION,
+        contract_version: TOOL_RESULT_CONTRACT_VERSION,
         run_id: run_id.into(),
         turn_id: turn_id.into(),
         call_id,
@@ -947,7 +1100,7 @@ mod tests {
 
     fn result(call_id: &str, tool_name: &str) -> ToolResult {
         ToolResult {
-            contract_version: MODEL_TOOL_LOOP_CONTRACT_VERSION,
+            contract_version: TOOL_RESULT_CONTRACT_VERSION,
             run_id: "run-1".into(),
             turn_id: "turn-1".into(),
             call_id: call_id.into(),
@@ -1051,6 +1204,119 @@ mod tests {
         assert!(matches!(
             action,
             ModelToolLoopAction::RecoveryRequired { .. }
+        ));
+    }
+
+    #[test]
+    fn cancellation_while_awaiting_model_is_terminal_and_idempotent() {
+        let initial = state(5, 10);
+        let cancelled = cancel_model_tool_loop(&initial).unwrap();
+        assert_eq!(cancelled.state.phase, ModelToolLoopPhase::Cancelled);
+        assert!(cancelled.state.cancellation_requested);
+        assert!(matches!(
+            cancelled.action,
+            ModelToolLoopAction::Cancelled { .. }
+        ));
+        assert_eq!(cancel_model_tool_loop(&cancelled.state).unwrap(), cancelled);
+        validate_state(&cancelled.state).unwrap();
+    }
+
+    #[test]
+    fn legacy_v1_snapshots_remain_readable_until_cancelled() {
+        let mut legacy = state(5, 10);
+        legacy.contract_version = LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION;
+        validate_state(&legacy).unwrap();
+
+        let cancelled = cancel_model_tool_loop(&legacy).unwrap();
+        assert_eq!(
+            cancelled.state.contract_version,
+            MODEL_TOOL_LOOP_CONTRACT_VERSION
+        );
+        assert_eq!(cancelled.state.phase, ModelToolLoopPhase::Cancelled);
+        validate_state(&cancelled.state).unwrap();
+    }
+
+    #[test]
+    fn cancellation_waits_for_pending_effects_before_terminating() {
+        let calls = vec![call("call-1", "write"), call("call-2", "publish")];
+        let (running, _) = accept_model_turn(
+            &state(5, 10),
+            completion(calls.clone()),
+            dispatch(&calls, "run-1", "turn-1"),
+        )
+        .unwrap();
+        let cancelling = cancel_model_tool_loop(&running).unwrap();
+        assert_eq!(cancelling.state.phase, ModelToolLoopPhase::Cancelling);
+        assert_eq!(
+            cancelling.action,
+            ModelToolLoopAction::CancelPendingTools {
+                calls: vec![
+                    PendingToolCancellation {
+                        call_id: "call-1".into(),
+                        tool_name: "write".into(),
+                    },
+                    PendingToolCancellation {
+                        call_id: "call-2".into(),
+                        tool_name: "publish".into(),
+                    },
+                ]
+            }
+        );
+
+        let (still_cancelling, action) =
+            submit_tool_result(&cancelling.state, result("call-2", "publish")).unwrap();
+        assert_eq!(still_cancelling.phase, ModelToolLoopPhase::Cancelling);
+        assert_eq!(
+            action,
+            ModelToolLoopAction::AwaitingToolResults { remaining: 1 }
+        );
+        let (cancelled, action) =
+            submit_tool_result(&still_cancelling, result("call-1", "write")).unwrap();
+        assert_eq!(cancelled.phase, ModelToolLoopPhase::Cancelled);
+        assert!(matches!(action, ModelToolLoopAction::Cancelled { .. }));
+        assert_eq!(
+            submit_tool_result(&cancelled, result("call-1", "write")).unwrap_err(),
+            ModelToolLoopError::NotAwaitingToolResults
+        );
+        validate_state(&cancelled).unwrap();
+    }
+
+    #[test]
+    fn cancelled_loop_reconciles_uncertain_effect_without_resuming_model() {
+        let tool_call = call("call-1", "publish");
+        let (running, _) = accept_model_turn(
+            &state(5, 10),
+            completion(vec![tool_call.clone()]),
+            dispatch(&[tool_call], "run-1", "turn-1"),
+        )
+        .unwrap();
+        let cancelling = cancel_model_tool_loop(&running).unwrap();
+        let uncertain = ToolResult {
+            effect_state: ToolEffectState::Unknown,
+            status: ToolResultStatus::TimedOut,
+            ..result("call-1", "publish")
+        };
+        let (recovery, action) = submit_tool_result(&cancelling.state, uncertain).unwrap();
+        assert_eq!(recovery.phase, ModelToolLoopPhase::RecoveryRequired);
+        assert!(recovery.cancellation_requested);
+        assert!(matches!(
+            action,
+            ModelToolLoopAction::RecoveryRequired { .. }
+        ));
+
+        let reconciled = reconcile_tool_result(
+            &recovery,
+            ToolResult {
+                effect_state: ToolEffectState::Applied,
+                status: ToolResultStatus::Succeeded,
+                ..result("call-1", "publish")
+            },
+        )
+        .unwrap();
+        assert_eq!(reconciled.state.phase, ModelToolLoopPhase::Cancelled);
+        assert!(matches!(
+            reconciled.action,
+            ModelToolLoopAction::Cancelled { .. }
         ));
     }
 

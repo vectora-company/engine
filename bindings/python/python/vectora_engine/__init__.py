@@ -201,6 +201,19 @@ async def sqlite_model_tool_loop_recover(
     return json.loads(encoded)
 
 
+async def sqlite_model_tool_loop_cancel(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Persist loop cancellation before the host interrupts active adapters."""
+    encoded = await _native.sqlite_model_tool_loop_cancel(
+        path, scope, json.dumps(state), operation_id
+    )
+    return json.loads(encoded)
+
+
 async def sqlite_model_tool_loop_reconcile_tool_result(
     path: str,
     scope: str,
@@ -504,6 +517,12 @@ def recover_model_tool_loop(state: JsonObject) -> dict[str, Any]:
     return json.loads(encoded)
 
 
+def cancel_model_tool_loop(state: JsonObject) -> dict[str, Any]:
+    """Request cancellation and return pending adapter calls for host interruption."""
+    encoded = _native.model_tool_loop_cancel(json.dumps(state, separators=(",", ":")))
+    return json.loads(encoded)
+
+
 def reconcile_tool_result(state: JsonObject, result: JsonObject) -> dict[str, Any]:
     """Record a host-confirmed outcome for an interrupted tool call."""
     encoded = _native.model_tool_loop_reconcile_tool_result(
@@ -646,6 +665,7 @@ __all__ = [
     "accept_model_turn",
     "assemble_turn",
     "authorize_tool_dispatch",
+    "cancel_model_tool_loop",
     "chat_complete",
     "chat_contract_version",
     "chat_stream",
@@ -684,6 +704,7 @@ __all__ = [
     "sqlite_ledger_append_checkpointed",
     "sqlite_ledger_read",
     "sqlite_model_tool_loop_accept_model_turn",
+    "sqlite_model_tool_loop_cancel",
     "sqlite_model_tool_loop_load",
     "sqlite_model_tool_loop_reconcile_tool_result",
     "sqlite_model_tool_loop_recover",

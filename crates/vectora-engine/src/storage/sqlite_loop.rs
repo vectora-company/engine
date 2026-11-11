@@ -13,8 +13,9 @@ use crate::{
         EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy, GateEvaluation,
         ModelToolLoopAction, ModelToolLoopError, ModelToolLoopPhase, ModelToolLoopSettings,
         ModelToolLoopState, ModelToolLoopTransition, ToolDispatch, ToolResult, VerificationError,
-        VerificationReport, advance_model_turn, advance_tool_result, evaluate_verification,
-        reconcile_tool_result, recover_model_tool_loop, validate_model_tool_loop_state,
+        VerificationReport, advance_model_turn, advance_tool_result, cancel_model_tool_loop,
+        evaluate_verification, reconcile_tool_result, recover_model_tool_loop,
+        validate_model_tool_loop_state,
     },
 };
 
@@ -171,6 +172,23 @@ impl SqliteModelToolLoopStore {
         validate_operation_id(operation_id)?;
         let transition = advance_tool_result(&state.loop_state, result)?;
         self.persist_transition(state, transition, operation_id, "tool_result_recorded")
+    }
+
+    /// Persist a cancellation request before the host interrupts pending tasks.
+    pub fn cancel(
+        &mut self,
+        state: &DurableModelToolLoopState,
+        operation_id: &str,
+    ) -> Result<DurableModelToolLoopTransition, SqliteModelToolLoopError> {
+        self.validate_state(state)?;
+        validate_operation_id(operation_id)?;
+        let transition = cancel_model_tool_loop(&state.loop_state)?;
+        let event_type = if transition.state.phase == ModelToolLoopPhase::Cancelled {
+            "model_tool_loop_cancelled"
+        } else {
+            "model_tool_loop_cancel_requested"
+        };
+        self.persist_transition(state, transition, operation_id, event_type)
     }
 
     pub fn recover(
@@ -525,6 +543,44 @@ mod tests {
             )
             .unwrap();
         assert_eq!(first, retry);
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn cancellation_is_checkpointed_before_returning_to_host() {
+        let path = database_path();
+        let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let initial = store
+            .start(
+                "run-cancel",
+                "turn-cancel",
+                ModelToolLoopSettings::default(),
+                "start-cancel",
+            )
+            .unwrap();
+
+        let transition = store.cancel(&initial, "cancel-request").unwrap();
+        assert_eq!(
+            transition.state.loop_state.phase,
+            ModelToolLoopPhase::Cancelled
+        );
+        assert_eq!(
+            transition.state.ledger_sequence,
+            initial.ledger_sequence + 1
+        );
+        assert!(matches!(
+            transition.action,
+            ModelToolLoopAction::Cancelled { .. }
+        ));
+        drop(store);
+
+        let store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let restored = store
+            .load_latest("run-cancel", "turn-cancel")
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored, transition.state);
         drop(store);
         std::fs::remove_file(path).unwrap();
     }

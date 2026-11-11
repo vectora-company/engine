@@ -8,6 +8,7 @@ import {
   authorizeToolDispatch,
   assembleTurn,
   acceptModelTurn,
+  cancelModelToolLoop,
   chatComplete,
   chatContractVersion,
   createRun,
@@ -36,6 +37,7 @@ import {
   sqliteLedgerAppend,
   sqliteLedgerAppendCheckpointed,
   sqliteModelToolLoopAcceptModelTurn,
+  sqliteModelToolLoopCancel,
   sqliteModelToolLoopStart,
   sqliteModelToolLoopVerify,
   sqliteAdmitRun,
@@ -541,7 +543,7 @@ test("policy approval is bound to the model call and withheld until granted", ()
 });
 
 test("model/tool loop round trip is exposed through the Node binding", () => {
-  assert.equal(modelToolLoopContractVersion(), 1);
+  assert.equal(modelToolLoopContractVersion(), 2);
   const state = startModelToolLoop("run-1", "turn-1");
   assert.equal(state.phase, "awaiting_model");
   assert.equal(state.settings.max_model_turns, 50);
@@ -598,6 +600,74 @@ test("model/tool loop round trip is exposed through the Node binding", () => {
   assert.equal(next.state.phase, "awaiting_model");
   assert.equal(next.action.action, "continue_with_tool_results");
   assert.equal(next.action.results[0].output, "found");
+});
+
+test("cancellation returns pending calls and waits for their outcomes", () => {
+  const call = {
+    id: "call-cancel",
+    name: "publish",
+    arguments: { state: "object", value: {} },
+  };
+  const state = startModelToolLoop("run-cancel", "turn-cancel");
+  const transition = acceptModelTurn(
+    state,
+    { contract_version: 1, content: "", tool_calls: [call] },
+    {
+      contract_version: 1,
+      run_id: "run-cancel",
+      turn_id: "turn-cancel",
+      execution_mode: "sequential",
+      decisions: [{
+        decision: "invoke",
+        call,
+        schema_version: "publish.v1",
+        required_capability: "publish",
+        timeout_ms: 1000,
+        effect: "external_effect",
+        idempotency: "requires_key",
+        idempotency_key: "publish-1",
+      }],
+    },
+  );
+  const cancellation = cancelModelToolLoop(transition.state);
+  assert.equal(cancellation.state.phase, "cancelling");
+  assert.deepEqual(cancellation.action, {
+    action: "cancel_pending_tools",
+    calls: [{ call_id: "call-cancel", tool_name: "publish" }],
+  });
+  const result = submitToolResult(cancellation.state, {
+    contract_version: 1,
+    run_id: "run-cancel",
+    turn_id: "turn-cancel",
+    call_id: "call-cancel",
+    tool_name: "publish",
+    status: "cancelled",
+    effect_state: "not_applied",
+    output: "cancelled",
+  });
+  assert.equal(result.state.phase, "cancelled");
+  assert.equal(result.action.action, "cancelled");
+});
+
+test("durable loop cancellation is checkpointed", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-loop-cancel-"));
+  try {
+    const path = join(dir, "loop.db");
+    const state = await sqliteModelToolLoopStart(
+      path, "workspace", "run-cancel", "turn-cancel", {}, "start",
+    );
+    const cancelled = await sqliteModelToolLoopCancel(
+      path, "workspace", state, "cancel",
+    );
+    assert.equal(cancelled.state.loop_state.phase, "cancelled");
+    assert.equal(cancelled.action.action, "cancelled");
+    assert.deepEqual(
+      await sqliteModelToolLoopCancel(path, "workspace", state, "cancel"),
+      cancelled,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("durable loop verification is exposed and idempotent through Node", async () => {
