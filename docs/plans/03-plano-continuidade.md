@@ -34,15 +34,15 @@ migração ampla nem mais superfície de provider.
 
 ## Estado observado
 
-| Área | Estado em `main` | Limite relevante |
-| --- | --- | --- |
-| Core e distribuição local | Workspace Rust `0.1.0`; `scons install`, builds focados e cache Cargo separados. | Publicação versionada dos crates/bindings não está comprovada. |
-| Chat e modelos | OpenAI-compatible, Anthropic, Google, Cohere, fallback, embeddings e rerank nos bindings. | Contratos experimentais; seleção, credenciais e fallback de produto pertencem ao consumer. |
-| Storage e mensageria | SQLite/PostgreSQL, LanceDB/Qdrant, NATS/Redis; ledger SQLite-first e fila/pub-sub com contratos distintos. | Garantias são específicas de cada adapter/configuração; revisar S0-S5 em `04-plano-storage-ledger.md`. |
-| Lifecycle e loop | Stores SQLite persistem admissão, transições, eventos/checkpoints do loop e recuperação. | Não dão exactly-once a efeitos externos nem autenticam o host. |
-| Verificação e cancelamento | Reports/gates e pedido de cancelamento são duráveis; resultados incertos exigem reconciliação. | O host executa checks, interrompe adapters e comprova seu término. |
-| Policy e aprovação | `SqliteToolPolicyStore` persiste snapshots, pedidos e recibos, com verificação de estado/binding. | A autenticação do aprovador e a execução da tool permanecem no host. |
-| Consumidores | Backend Python do Vectora e GH Bot seguem como projetos consumidores. | Não foi encontrado uso de `vectora-engine` nos manifests/caminhos atuais examinados. |
+| Área                       | Estado em `main`                                                                                           | Limite relevante                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Core e distribuição local  | Workspace Rust `0.1.0`; `scons install`, builds focados e cache Cargo separados.                           | Publicação versionada dos crates/bindings não está comprovada.                                         |
+| Chat e modelos             | OpenAI-compatible, Anthropic, Google, Cohere, fallback, embeddings e rerank nos bindings.                  | Contratos experimentais; seleção, credenciais e fallback de produto pertencem ao consumer.             |
+| Storage e mensageria       | SQLite/PostgreSQL, LanceDB/Qdrant, NATS/Redis; ledger SQLite-first e fila/pub-sub com contratos distintos. | Garantias são específicas de cada adapter/configuração; revisar S0-S5 em `04-plano-storage-ledger.md`. |
+| Lifecycle e loop           | Stores SQLite persistem admissão, transições, eventos/checkpoints do loop e recuperação.                   | Não dão exactly-once a efeitos externos nem autenticam o host.                                         |
+| Verificação e cancelamento | Reports/gates e pedido de cancelamento são duráveis; resultados incertos exigem reconciliação.             | O host executa checks, interrompe adapters e comprova seu término.                                     |
+| Policy e aprovação         | `SqliteToolPolicyStore` persiste snapshots, pedidos e recibos, com verificação de estado/binding.          | A autenticação do aprovador e a execução da tool permanecem no host.                                   |
+| Consumidores               | Backend Python do Vectora e GH Bot seguem como projetos consumidores.                                      | Não foi encontrado uso de `vectora-engine` nos manifests/caminhos atuais examinados.                   |
 
 ## Fotografia de entregas
 
@@ -67,17 +67,17 @@ como pendente.
 1. **Review do PR #3:** findings classificados; três correções e cobertura
    local estão nesta branch, duas correções já estavam em `main`. Resultado
    final e comandos ficam na análise/checklist desta etapa.
-2. **Matriz:** inventário por capability foi criado; a fixture inicial de run,
-   verificação e storage está implementada nos três bindings. Ainda falta
-   expandir fixtures para fallback e policy/loop e cobrir cancelamento explícito.
-   A auditoria de semântica de fallback não encontrou divergência; os limites
-   de cobertura estão registrados. A matriz não presume paridade.
-3. Expandir fixtures determinísticas para fallback, loop/policy e demais
+2. **Matriz:** inventário por capability foi criado; a fixture de run,
+   verificação, storage e fallback de completion/stream está implementada para
+   os três bindings. Ainda faltam fixtures de policy/loop/ledger e cancelamento
+   explícito. A auditoria de semântica de fallback não encontrou divergência;
+   os limites de cobertura estão registrados. A matriz não presume paridade.
+3. Expandir fixtures determinísticas para loop/policy, ledger e demais
    contratos públicos, distinguindo cobertura de protocolo de diferenças de
    runtime; sem credenciais, rede paga ou efeitos externos.
-4. Reconciliar a semântica de fallback documentada e implementada antes de
-   congelar o contrato. Registrar alterações locais não merged como trabalho em
-   andamento, não como comportamento de `main`.
+4. Semântica de fallback foi comparada com implementação e testes locais sem
+   divergência reproduzida; manter gaps de cobertura explícitos e não atribuir
+   alterações desta branch ao comportamento de `main`.
 
 **Saída:** gaps atuais reproduzíveis, feedback de review triado, fixtures
 compartilhadas e uma linha de base de conformidade para cada binding.

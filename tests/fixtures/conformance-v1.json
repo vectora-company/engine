@@ -91,5 +91,56 @@
     "kv": "redis",
     "queue": "nats_jetstream",
     "pubsub": "nats_core"
+  },
+  "fallback_chat": {
+    "candidate_model_ids": ["openrouter:primary", "cohere:backup"],
+    "rate_limited_response": {
+      "status": 429,
+      "content_type": "application/json",
+      "body": { "error": { "message": "rate limited" } }
+    },
+    "completion": {
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "id": "fixture-completion",
+          "choices": [
+            {
+              "index": 0,
+              "message": { "role": "assistant", "content": "fallback answer" },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 1,
+            "completion_tokens": 2,
+            "total_tokens": 3
+          }
+        }
+      },
+      "expected_request_models": ["primary", "backup"],
+      "expected_selected_model_id": "cohere:backup",
+      "expected_content": "fallback answer"
+    },
+    "stream": {
+      "response": {
+        "status": 200,
+        "content_type": "text/event-stream",
+        "body": "data: {\"choices\":[{\"delta\":{\"content\":\"streamed answer\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\n\ndata: [DONE]\n\n"
+      },
+      "expected_request_models": ["primary", "backup"],
+      "expected_event_types": [
+        "model_switched",
+        "text_delta",
+        "usage",
+        "completed"
+      ],
+      "expected_switch": {
+        "from_model_id": "openrouter:primary",
+        "to_model_id": "cohere:backup"
+      },
+      "expected_text": "streamed answer"
+    }
   }
 }

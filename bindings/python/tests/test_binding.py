@@ -94,6 +94,114 @@ def test_shared_conformance_fixture() -> None:
     )
 
 
+def test_shared_fallback_fixture_conforms_to_completion_and_streaming() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/conformance-v1.json"
+    )
+    fallback = json.loads(fixture_path.read_text(encoding="utf-8"))["fallback_chat"]
+    model_ids = fallback["candidate_model_ids"]
+    request = {
+        "contract_version": 1,
+        "model": "ignored-model",
+        "messages": [{"role": "user", "content": "fixture prompt"}],
+    }
+
+    def make_settings(first: ThreadingHTTPServer, second: ThreadingHTTPServer) -> dict:
+        return {
+            "candidates": [
+                {
+                    "model_id": model_id,
+                    "client": {
+                        "protocol": "open_ai_compatible",
+                        "settings": {
+                            "base_url": endpoint(server),
+                            "api_key": "fixture-token",
+                        },
+                    },
+                }
+                for model_id, server in zip(model_ids, (first, second), strict=True)
+            ]
+        }
+
+    def response_bytes(response: dict[str, Any]) -> bytes:
+        body = response["body"]
+        return body.encode() if isinstance(body, str) else json.dumps(body).encode()
+
+    first, first_thread, first_capture = serve(
+        response_bytes(fallback["rate_limited_response"]),
+        fallback["rate_limited_response"]["content_type"],
+        status=fallback["rate_limited_response"]["status"],
+    )
+    second, second_thread, second_capture = serve(
+        response_bytes(fallback["completion"]["response"]),
+        fallback["completion"]["response"]["content_type"],
+        status=fallback["completion"]["response"]["status"],
+    )
+    try:
+        completion = asyncio.run(
+            fallback_chat_complete(make_settings(first, second), request)
+        )
+    finally:
+        for server, thread in ((first, first_thread), (second, second_thread)):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert [first_capture["body"]["model"], second_capture["body"]["model"]] == (
+        fallback["completion"]["expected_request_models"]
+    )
+    assert (
+        completion["selected_model_id"]
+        == fallback["completion"]["expected_selected_model_id"]
+    )
+    assert completion["content"] == fallback["completion"]["expected_content"]
+
+    first, first_thread, first_capture = serve(
+        response_bytes(fallback["rate_limited_response"]),
+        fallback["rate_limited_response"]["content_type"],
+        status=fallback["rate_limited_response"]["status"],
+    )
+    second, second_thread, second_capture = serve(
+        response_bytes(fallback["stream"]["response"]),
+        fallback["stream"]["response"]["content_type"],
+        status=fallback["stream"]["response"]["status"],
+    )
+
+    async def collect() -> list[dict[str, Any]]:
+        return [
+            event
+            async for event in fallback_chat_stream(
+                make_settings(first, second), request
+            )
+        ]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        for server, thread in ((first, first_thread), (second, second_thread)):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert [first_capture["body"]["model"], second_capture["body"]["model"]] == (
+        fallback["stream"]["expected_request_models"]
+    )
+    assert [event["type"] for event in events] == fallback["stream"][
+        "expected_event_types"
+    ]
+    assert (
+        events[0]["from_model_id"]
+        == fallback["stream"]["expected_switch"]["from_model_id"]
+    )
+    assert (
+        events[0]["to_model_id"] == fallback["stream"]["expected_switch"]["to_model_id"]
+    )
+    assert (
+        "".join(
+            event.get("text", "") for event in events if event["type"] == "text_delta"
+        )
+        == fallback["stream"]["expected_text"]
+    )
+
+
 def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     path = str(tmp_path / "ledger.db")
     event = {

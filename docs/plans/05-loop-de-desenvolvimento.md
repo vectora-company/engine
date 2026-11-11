@@ -8,6 +8,10 @@ iniciar um goal com instruções compactas, use o [prompt curto](00-prompt-loop-
 Para criar os artefatos de uma etapa, copie os [templates de plano, análise e
 checklist](../templates/README.md).
 
+O pacote operacional atualizado do goal está indexado em
+[`docs/goal-loop/README.md`](../goal-loop/README.md); consulte-o para o checklist
+do loop e os critérios sucintos de encerramento.
+
 ## Fonte de verdade
 
 - `AGENTS.md`: regras do repositório e checks obrigatórios.
