@@ -147,22 +147,27 @@ fora do piloto inicial.
 **Saída:** consumidor identificado, comportamento compatível nos casos
 aprovados, métricas e rollback demonstrados, sem declarar paridade global.
 
-### 5. Publicar bindings e integrar consumidores Node
+### 5. Integrar o GH Bot pela binding local; publicar depois
 
-Reduzir a issue #2 a entregas verificáveis: API TypeScript que corresponde às
-capabilities existentes; Node/OS/arquiteturas suportados; instalação limpa e
-carregamento do addon; versão/ABI vinculada ao mesmo SHA/tag do core; artefatos
-reproduzíveis e workflow de release separado do CI. Publicar primeiro como
-versão explicitamente experimental, após build e smoke em cada alvo anunciado.
+O GH Bot é o primeiro ambiente de validação experimental da Engine e deve ser
+desenvolvido em conjunto com ela, não aguardar a publicação de uma versão npm.
+Durante o desenvolvimento, consome `../engine/bindings/typescript` pelo
+workspace local `link:`. Para cada capability necessária ao Bot, validar o
+carregamento do addon Rust local, implementar lacunas no core/binding e ligar o
+fluxo no Bot dentro da mesma stack. O Bot permanece independente do Vectora
+App e mantém a integração GitHub e a lógica de produto; não cria um runtime
+paralelo em TypeScript.
 
-O GH Bot deve ser consumidor independente, não dependência do Vectora App. Não
-publicar ou documentar storage/Decision Models como capacidade disponível
-enquanto não existirem contratos e cobertura correspondentes. Coordenar a
-estratégia de versão/release do crate, PyPI e npm sem afirmar que releases já
-existem.
+Os testes experimentais devem usar uma conta GitHub nova e repositórios de
+teste isolados. Credenciais e repositórios de produção ficam fora do ambiente.
+Publicação em crates.io, PyPI e npm é uma etapa de distribuição separada e não
+bloqueia o desenvolvimento conjunto. Não anunciar capacidades sem contratos e
+cobertura correspondentes.
 
-**Saída:** instalação e API comprovadas em projetos Node limpos, sem browser,
-Electron ou lógica paralela em TypeScript.
+**Saída:** fluxos do GH Bot exercitam a binding local da Engine com erros,
+cancelamento, persistência e efeitos GitHub cobertos conforme cada capability;
+as falhas são atribuídas ao core, binding, configuração do Bot ou serviço
+externo, sem duplicar efeitos.
 
 ### 6. Medir, amadurecer e expandir
 

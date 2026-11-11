@@ -49,7 +49,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 A documentação pública da Engine é mantida no portal central da organização:
 [docs.vectora.company/engine](https://docs.vectora.company/engine/). O site e o
 workflow de publicação pertencem ao repositório
-[`documentation`](https://github.com/vectora-ltda/documentation); este
+[`documentation`](https://github.com/vectora-company/documentation); este
 repositório mantém planos, auditorias, sabatina e especificações internas em
 `docs/`.
 

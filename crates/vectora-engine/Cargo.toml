@@ -1,6 +1,6 @@
 [package]
 name = "vectora-engine"
-version = "0.1.0"
+version = "0.0.1"
 description = "Rust engine core for reusable Vectora agent capabilities"
 edition.workspace = true
 license.workspace = true

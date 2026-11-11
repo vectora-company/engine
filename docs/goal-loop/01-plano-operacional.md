@@ -29,7 +29,10 @@ que permitam revisar o que foi feito e o que permanece pendente.
    retry, cancelamento, concorrência, ownership, autorização, persistência,
    recuperação e observabilidade.
 3. Implemente de forma incremental: core Rust, bindings afetados, consumidores
-   apenas quando estiverem no escopo aprovado.
+   apenas quando estiverem no escopo aprovado. Para capabilities destinadas ao
+   GH Bot, a integração local com `../gh-bot` é parte do desenvolvimento
+   conjunto: use `../engine/bindings/typescript`, sem aguardar uma publicação
+   npm, e siga `../gh-bot/docs/engine-integration.md`.
 4. Acrescente testes para os critérios de aceite, inclusive falhas, limites,
    restart, concorrência e efeitos externos quando aplicável.
 5. Rode verificações locais pertinentes, corrija regressões da etapa e registre
@@ -39,6 +42,16 @@ que permitam revisar o que foi feito e o que permanece pendente.
    real. Não marque como concluído o que só está parcialmente implementado.
 7. Faça commit e atualize o PR/stack segundo as instruções do mantenedor. Antes
    de iniciar outra capability, confirme sua autorização e a base correta.
+
+## Validação experimental pelo GH Bot
+
+O GH Bot é o ambiente controlado para exercitar a Engine durante o bootstrap,
+não uma etapa de adoção posterior à distribuição. Quando a etapa ativa envolver
+uma capability consumível pelo Bot, teste o caminho integrado no checkout local
+e corrija lacunas na Engine e no Bot dentro da mesma stack. Use uma conta GitHub
+nova e repositórios experimentais; não use credenciais nem repositórios de
+produção. Preserve no Bot somente a lógica de produto e integração GitHub, sem
+reimplementar o runtime em TypeScript.
 
 ## Continuidade
 

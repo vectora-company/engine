@@ -107,5 +107,5 @@ conformidade, operação sustentada e rollback.
 
 Vectora Engine é open source sob a licença GNU AGPL-3.0, a mesma licença do
 Vectora. Consulte [`LICENSE`](LICENSE). A organização oficial é
-[vectora-ltda](https://github.com/vectora-ltda); o fundador e principal
+[vectora-company](https://github.com/vectora-company); o fundador e principal
 mantenedor é [brunosrz](https://github.com/brunosrz/).

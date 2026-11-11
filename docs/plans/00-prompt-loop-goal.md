@@ -8,6 +8,15 @@ Leia o [plano operacional](../goal-loop/01-plano-operacional.md), o
 Retome a próxima etapa aprovada do plano ativo e leia sua spec, análise e
 checklist. Implemente, verifique localmente e atualize os documentos da etapa.
 Leia também a [sabatina do ecossistema](../analyses/04-sabatina-engine-ecossistema.md).
+Desenvolva a Engine e o GH Bot conjuntamente: consulte o [guia de integração do
+GH Bot](../../../gh-bot/docs/engine-integration.md) e exercite as capabilities no
+Bot como ambiente experimental controlado, usando uma conta GitHub nova e
+repositórios de teste. Durante o desenvolvimento, o Bot deve consumir
+`../engine/bindings/typescript` localmente; não espere nem exija publicação ou
+versionamento npm. Quando faltar uma capability, implemente-a no core Rust,
+exponha-a pelos bindings necessários, teste-a e integre-a ao Bot na mesma stack,
+sem duplicar o runtime em TypeScript. Mantenha credenciais e repositórios de
+produção fora desse ambiente.
 Mantenha suas respostas sempre atuais: após cada mudança de código, contrato,
 teste, plano, referência ou snapshot de consumidor, revise e atualize as Q&As
 afetadas, cite evidências e marque claramente implementação, parcialidade,

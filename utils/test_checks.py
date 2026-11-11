@@ -164,12 +164,12 @@ class TestTrackerDeteccao:
         issue = _write(
             tmp_path,
             "issue.py",
-            "# https://github.com/vectora-ltda/vectora/issues/367\nx = 1\n",
+            "# https://github.com/vectora-company/vectora/issues/367\nx = 1\n",
         )
         pull = _write(
             tmp_path,
             "pull.py",
-            "# https://github.com/vectora-ltda/vectora/pull/385\nx = 1\n",
+            "# https://github.com/vectora-company/vectora/pull/385\nx = 1\n",
         )
         assert len(_find_violations(issue)) == 1
         assert len(_find_violations(pull)) == 1

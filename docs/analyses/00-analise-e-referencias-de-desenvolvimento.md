@@ -13,8 +13,11 @@ as regras específicas de uma spec ou de um plano.
    `../issues/` quando estiverem disponíveis.
 5. Implementação atual da Engine e seus testes para verificar o comportamento
    realmente existente.
-6. Consumidores relevantes, em especial `../vectora/`, para descobrir contratos
-   e comportamento que precisam continuar compatíveis.
+6. Consumidores relevantes: `../gh-bot/` como primeiro ambiente experimental
+   integrado pela binding TypeScript local e `../vectora/` como referência de
+   comportamento e consumidor Python posterior. Consulte
+   `../gh-bot/docs/engine-integration.md` para o fluxo de desenvolvimento
+   conjunto; não condicione esse fluxo à publicação npm.
 7. Documentação primária das bibliotecas e protocolos externos citados.
 
 Issues locais e auditorias são material de requisitos e contexto. Não são prova
