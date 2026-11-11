@@ -8,7 +8,8 @@ navegação, busca e suporte multilíngue. O código-fonte fica em `website/`.
 
 ## Limites deste bootstrap
 
-- Preservar a configuração Hugo + Hextra e os assets de marca reutilizáveis.
+- Preservar Hugo + Hextra, adicionar marca própria da Engine derivada do
+  beija-flor Vectora e gerar assets de favicon/compartilhamento.
 - Configurar identidade, metadados SEO, navegação, tema e idiomas inglês e
   português.
 - Deixar apenas os índices iniciais vazios nos dois idiomas; conteúdo técnico
@@ -35,8 +36,8 @@ navegação, busca e suporte multilíngue. O código-fonte fica em `website/`.
 
 - Hugo reconhece o site e Hextra sem conteúdo de produto alheio à Engine.
 - Inglês e português aparecem como idiomas disponíveis.
-- Metadados SEO e identidade descrevem a Vectora Engine, sem links de trial,
-  billing ou instalação do aplicativo.
+- Metadados SEO, título, favicon e imagem social descrevem a Vectora Engine,
+  sem links de trial, billing ou instalação do aplicativo.
 - `website/public/` e demais saídas de build não são versionadas.
 - O conteúdo Markdown em `website/content/` consiste apenas nos dois índices
   vazios iniciais.
