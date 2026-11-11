@@ -5,43 +5,38 @@ com a documentação de arquitetura e com os consumidores do contrato. Preserve
 a implementação atual do Vectora até a
 capability correspondente demonstrar conformidade e rollback.
 
-## Preparar o ambiente
-
-Em Linux, o bootstrap instala os pacotes de sistema e as toolchains do projeto,
-incluindo `protobuf-compiler` (`protoc`), Podman para serviços opcionais de
-integração, Rust, Python 3.13, Node.js 24, pnpm, uv e SCons. Ele reconhece
-distribuições Debian/Ubuntu, Fedora e Arch.
-`--check` apenas diagnostica o host; `--toolchain-only` instala os requisitos
-sem compilar os bindings.
-
-```bash
-./dotfiles.sh --check
-./dotfiles.sh
-```
-
-Em macOS e Windows, prepare manualmente os requisitos abaixo. No macOS, instale
-`protoc` com `brew install protobuf`; no Windows, instale o compilador da
-release oficial de Protocol Buffers e adicione-o ao `PATH`.
-
-O alvo `scons install` instala componentes Rust, baixa dependências conforme
-`Cargo.lock`, sincroniza o tooling Python, compila a extensão Python e instala
-as dependências pnpm do binding Node. Não instala dependências dos produtos
-consumidores nem sidecars.
-
-### Requisitos manuais
+## Requisitos
 
 - Rust stable via `rustup`, com `rustfmt` e `clippy` (selecionados por
   `rust-toolchain.toml`).
-- `protoc` (Protocol Buffers compiler), necessário pela dependência LanceDB.
-  No Linux o script instala `protobuf-compiler` em Debian/Ubuntu/Fedora e
-  `protobuf` no Arch.
+- `protoc` (Protocol Buffers compiler), necessário para compilar a dependência
+  LanceDB e os bindings nativos. Em Linux, instale `protobuf-compiler`; no
+  macOS, `brew install protobuf`; em Windows, instale o compilador da release
+  oficial de Protocol Buffers e deixe-o no `PATH`.
 - `scons` para os alvos de desenvolvimento.
 - `uv` e Python 3.13 para tooling e verificações dos bindings Python.
 - `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
 
-Se o pré-requisito `protoc` estiver ausente, `scons install` orienta executar
-`./dotfiles.sh --toolchain-only` em Linux ou instalar o pacote equivalente no
-macOS/Windows.
+No Linux, `dotfiles.sh` configura esses pré-requisitos do host para as
+distribuições suportadas. Ele instala somente ferramentas e bibliotecas usadas
+pela Engine; não instala dependências dos produtos consumidores.
+
+## Preparar o ambiente
+
+No Linux, rode o bootstrap uma vez:
+
+```bash
+./dotfiles.sh
+```
+
+Para verificar sem instalar nada, use `./dotfiles.sh --check`. Em macOS e
+Windows, instale os requisitos acima e execute `scons install`.
+
+`scons install` instala os componentes Rust selecionados, baixa dependências
+Cargo conforme `Cargo.lock`, sincroniza o tooling Python, compila a extensão
+Python local e instala as dependências pnpm do binding Node. No Linux, ele
+aciona o bootstrap de toolchain se necessário. Não instala dependências do app
+Vectora nem sidecars de produto.
 
 ## Verificações
 
