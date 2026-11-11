@@ -41,21 +41,31 @@ mais rápido ou barato.
 
 ## Preparar o ambiente
 
-No Linux, `dotfiles.sh` detecta a distribuição e prepara as dependências de
-sistema e as toolchains usadas neste repositório. Ele instala Rust stable,
-`protoc`, Podman para serviços opcionais de integração, Python 3.13, Node.js 24,
-pnpm, uv e as ferramentas de desenvolvimento. O script não inicia containers
-nem instala sidecars ou dependências dos produtos consumidores.
+No Linux, prepare os pré-requisitos do sistema e as toolchains do projeto com:
 
 ```bash
-./dotfiles.sh --check
 ./dotfiles.sh
 ```
 
-Use `./dotfiles.sh --toolchain-only` para instalar apenas os pré-requisitos do
-host. Em macOS e Windows, instale os requisitos de `CONTRIBUTING.md` diretamente
-e execute `scons install`. Esse alvo sincroniza as dependências bloqueadas,
-compila a extensão Python e instala as dependências pnpm do binding TypeScript.
+O script reconhece a distribuição, instala `protoc` e as bibliotecas de build,
+configura Rust, Python 3.13, Node.js 24, pnpm e uv, e termina executando
+`scons install`. `./dotfiles.sh --check` somente verifica o ambiente.
+
+No macOS e Windows, instale Rust stable com `rustup` (incluindo `rustfmt` e
+`clippy`), `uv` com Python 3.13, Node.js 24 com a versão pnpm fixada no
+`bindings/typescript/package.json` e `protoc`. No macOS, `brew install
+protobuf`; no Windows, instale a release oficial de Protocol Buffers e deixe o
+executável no `PATH`.
+
+```bash
+scons install
+```
+
+Em Linux, o alvo também chama `dotfiles.sh --toolchain-only` se a toolchain
+estiver incompleta. Ele baixa as dependências Cargo conforme o `Cargo.lock`,
+prepara o ambiente Python, compila e instala a extensão Python e instala as
+dependências Node do binding TypeScript. Ele não instala dependências dos apps
+consumidores, navegadores Playwright ou sidecars de produto.
 
 ## Comandos
 
