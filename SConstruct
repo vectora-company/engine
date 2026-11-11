@@ -177,11 +177,29 @@ def _install_nats_sidecar() -> None:
     print(f">> NATS sidecar instalado: {destination}")
 
 
-def _build(target, source, env):
-    """Compile Rust and each language binding, reusing persistent tool caches."""
+def _configure_build_cache() -> None:
+    """Share Cargo artifacts between core and language binding builds."""
     os.environ.setdefault("CARGO_TARGET_DIR", os.path.join(ROOT, "target"))
     os.environ.setdefault("CARGO_INCREMENTAL", "1")
-    _run("cargo", "build", "--workspace", "--all-targets", "--all-features", "--locked")
+
+
+def _build_core(target, source, env):
+    """Build the reusable Rust core without compiling test harnesses."""
+    _configure_build_cache()
+    _run(
+        "cargo",
+        "build",
+        "-p",
+        "vectora-engine",
+        "--all-features",
+        "--release",
+        "--locked",
+    )
+
+
+def _build_python(target, source, env):
+    """Build the Python package and its PyO3 extension."""
+    _configure_build_cache()
     _run(
         "uv",
         "run",
@@ -194,8 +212,16 @@ def _build(target, source, env):
         os.path.join(ROOT, "target", "wheels"),
         cwd=os.path.join(ROOT, "bindings", "python"),
     )
+
+
+def _build_typescript(target, source, env):
+    """Build the TypeScript package and its N-API extension."""
+    _configure_build_cache()
     _pnpm("build", cwd=os.path.join(ROOT, "bindings", "typescript"))
 
+
+def _build_go(target, source, env):
+    """Build Go bindings when that package has been added to the repository."""
     go_manifest = os.path.join(ROOT, "bindings", "go", "go.mod")
     if os.path.isfile(go_manifest):
         if shutil.which("go") is None:
@@ -203,6 +229,14 @@ def _build(target, source, env):
                 "Go bindings exist, but Go is not installed. Install Go and retry."
             )
         _run("go", "build", "-mod=readonly", "./...", cwd=os.path.dirname(go_manifest))
+
+
+def _build(target, source, env):
+    """Build core and bindings sequentially into the shared Cargo cache."""
+    _build_core(target, source, env)
+    _build_python(target, source, env)
+    _build_typescript(target, source, env)
+    _build_go(target, source, env)
 
 
 def _lint(target, source, env):
@@ -281,7 +315,12 @@ Vectora Engine — alvos SCons (rodar da raiz do repositório)
 
 Setup
   scons install    instala dependências e sidecars de desenvolvimento
-  scons build      compila Rust e bindings Python/TypeScript (e Go quando existir)
+  scons build      compila core Rust e bindings Python/TypeScript (e Go quando existir)
+
+Build focado
+  scons build-core       compila só o core Rust, sem testes
+  scons build-python     compila só o binding Python/PyO3
+  scons build-typescript compila só o binding TypeScript/N-API
 
 Qualidade
   scons lint       Rust (rustfmt + Clippy) e Python (Ruff + ty + Bandit)
@@ -305,6 +344,9 @@ def _ci(target, source, env):
 env = Environment(ENV=os.environ)
 env.Command("_help", [], _help)
 env.Command("_install", [], _install)
+env.Command("_build_core", [], _build_core)
+env.Command("_build_python", [], _build_python)
+env.Command("_build_typescript", [], _build_typescript)
 env.Command("_build", [], _build)
 env.Command("_lint", [], _lint)
 env.Command("_tests", [], _tests)
@@ -315,6 +357,9 @@ env.Command("_clean", [], _clean)
 Default("_help")
 for alias, target in {
     "install": "_install",
+    "build-core": "_build_core",
+    "build-python": "_build_python",
+    "build-typescript": "_build_typescript",
     "build": "_build",
     "lint": "_lint",
     "tests": "_tests",
