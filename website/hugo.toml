@@ -81,7 +81,7 @@ disableKinds = ['taxonomy', 'term']
   displayTitle = true
   displayLogo = true
   [params.navbar.logo]
-    path = 'img/vectora-logo.svg'
+    path = 'engine.svg'
     link = '/engine/'
 
 [params.page]
@@ -101,8 +101,7 @@ disableKinds = ['taxonomy', 'term']
 [params]
   title = 'Vectora Engine'
   description = 'Documentation for the reusable Rust agent harness and framework from Vectora.'
-  images = ['https://vectora-ltda.github.io/engine/img/vectora-logo.svg']
-  keywords = ['Vectora Engine', 'Rust', 'agent harness', 'framework', 'Python bindings', 'TypeScript bindings']
+  images = ['https://vectora-ltda.github.io/engine/engine.png']
 
 [params.author]
   name = 'Vectora Ltda.'
