@@ -340,6 +340,18 @@ export interface PolicyEvaluation {
   decisions: ToolAuthorizationDecision[];
   dispatch?: ToolDispatch;
 }
+export interface DurableToolPolicyState {
+  contract_version: number;
+  scope: string;
+  ledger_sequence: number;
+  snapshot: PolicySnapshot;
+  approval_requests: ApprovalRequest[];
+  approval_grants: ApprovalGrant[];
+}
+export interface DurablePolicyEvaluation {
+  state: DurableToolPolicyState;
+  evaluation: PolicyEvaluation;
+}
 
 export interface ModelToolLoopSettings {
   max_model_turns?: number;
@@ -569,6 +581,10 @@ interface NativeBinding {
     policyJson: string,
     operationId: string,
   ): Promise<string>;
+  sqliteToolPolicySave(path: string, scope: string, runJson: string, snapshotJson: string, operationId: string, nowMs: number): Promise<string>;
+  sqliteToolPolicyLoad(path: string, scope: string, runId: string, turnId: string): Promise<string | null>;
+  sqliteToolPolicyAuthorize(path: string, scope: string, stateJson: string, runJson: string, completionJson: string, contractsJson: string, settingsJson: string, operationId: string, nowMs: number): Promise<string>;
+  sqliteToolPolicyRecordApproval(path: string, scope: string, stateJson: string, requestJson: string, grantJson: string, operationId: string, nowMs: number): Promise<string>;
   resilientLedgerAppend(
     path: string,
     draftJson: string,
@@ -1195,6 +1211,46 @@ export async function sqliteModelToolLoopVerify(
       operationId,
     ),
   ) as DurableModelToolLoopState;
+}
+
+/** Persist a host-compiled policy snapshot before any tool dispatch. */
+export async function sqliteToolPolicySave(
+  path: string, scope: string, run: RunLifecycle, snapshot: PolicySnapshot,
+  operationId: string, nowMs: number,
+): Promise<DurableToolPolicyState> {
+  return JSON.parse(await native.sqliteToolPolicySave(
+    path, scope, JSON.stringify(run), JSON.stringify(snapshot), operationId, nowMs,
+  )) as DurableToolPolicyState;
+}
+
+export async function sqliteToolPolicyLoad(
+  path: string, scope: string, runId: string, turnId: string,
+): Promise<DurableToolPolicyState | null> {
+  const result = await native.sqliteToolPolicyLoad(path, scope, runId, turnId);
+  return result === null ? null : JSON.parse(result) as DurableToolPolicyState;
+}
+
+/** Persist approval requests before returning them to the host for authentication. */
+export async function sqliteToolPolicyAuthorize(
+  path: string, scope: string, state: DurableToolPolicyState,
+  run: RunLifecycle, completion: ChatCompletion, contracts: ToolContract[],
+  settings: ToolDispatchSettings, operationId: string, nowMs: number,
+): Promise<DurablePolicyEvaluation> {
+  return JSON.parse(await native.sqliteToolPolicyAuthorize(
+    path, scope, JSON.stringify(state), JSON.stringify(run), JSON.stringify(completion),
+    JSON.stringify(contracts), JSON.stringify(settings), operationId, nowMs,
+  )) as DurablePolicyEvaluation;
+}
+
+/** Store a grant already authenticated by the consuming host. */
+export async function sqliteToolPolicyRecordApproval(
+  path: string, scope: string, state: DurableToolPolicyState,
+  request: ApprovalRequest, grant: ApprovalGrant, operationId: string, nowMs: number,
+): Promise<DurableToolPolicyState> {
+  return JSON.parse(await native.sqliteToolPolicyRecordApproval(
+    path, scope, JSON.stringify(state), JSON.stringify(request), JSON.stringify(grant),
+    operationId, nowMs,
+  )) as DurableToolPolicyState;
 }
 
 export interface DurableLedgerAppend {

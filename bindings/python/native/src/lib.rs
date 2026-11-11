@@ -35,9 +35,7 @@ use vectora_engine::llm::{
     },
 };
 use vectora_engine::storage::sqlite_loop::{DurableModelToolLoopState, SqliteModelToolLoopStore};
-use vectora_engine::storage::sqlite_policy::{
-    DurableToolPolicyState, SqliteToolPolicyStore,
-};
+use vectora_engine::storage::sqlite_policy::{DurableToolPolicyState, SqliteToolPolicyStore};
 use vectora_engine::storage::{messaging::KvStore, vector::VectorStore};
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String, String>>>>;
@@ -1565,6 +1563,13 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_verify, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_tool_policy_save, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_tool_policy_load, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_tool_policy_authorize, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sqlite_tool_policy_record_approval,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_upsert, module)?)?;

@@ -40,6 +40,10 @@ import {
   sqliteModelToolLoopCancel,
   sqliteModelToolLoopStart,
   sqliteModelToolLoopVerify,
+  sqliteToolPolicyAuthorize,
+  sqliteToolPolicyLoad,
+  sqliteToolPolicyRecordApproval,
+  sqliteToolPolicySave,
   sqliteAdmitRun,
   sqliteRunAdmit,
   sqliteRunLoadLatest,
@@ -540,6 +544,66 @@ test("policy approval is bound to the model call and withheld until granted", ()
     () => authorizeToolDispatch(run, changed, [contract], policy, [grant], 1500),
     /approval grant does not match/,
   );
+});
+
+test("SQLite tool policy persists approvals, rejects stale states, and reopens", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-tool-policy-"));
+  try {
+    const path = join(dir, "policy.db");
+    const run = transitionRun(createRun({
+      contract_version: 1, run_id: "run-durable-policy", idempotency_key: "key",
+      thread_id: "thread", turn_id: "turn", actor_id: "actor",
+      scope_id: "workspace", capabilities: ["file.write"],
+    }), "running");
+    const snapshot = {
+      contract_version: 1, run_id: run.identity.run_id, thread_id: "thread",
+      turn_id: "turn", actor_id: "actor", scope_id: "workspace",
+      policy_digest: "digest-v1", revision: "1", approval_mode: "require_all_effects",
+      expires_at_ms: 10_000,
+    };
+    const completion = { contract_version: 1, content: "", tool_calls: [{
+      id: "call", name: "write_file",
+      arguments: { state: "object", value: { path: "src/lib.rs" } },
+    }] };
+    const contract = {
+      contract_version: 1, schema_version: "write.v1", name: "write_file",
+      input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false },
+      required_capability: "file.write", timeout_ms: 1000,
+      effect: "external_effect", idempotency: "requires_key",
+    };
+    const initial = await sqliteToolPolicySave(path, "workspace", run, snapshot, "save", 100);
+    const pending = await sqliteToolPolicyAuthorize(
+      path, "workspace", initial, run, completion, [contract], {}, "authorize", 100,
+    );
+    assert.equal(pending.evaluation.status, "awaiting_approval");
+    const request = pending.state.approval_requests[0];
+    const grant = {
+      contract_version: 1, binding_digest: request.binding_digest,
+      approved_by: "host-user", issued_at_ms: 101, expires_at_ms: 500,
+    };
+    const approved = await sqliteToolPolicyRecordApproval(
+      path, "workspace", pending.state, request, grant, "grant", 102,
+    );
+    assert.deepEqual(await sqliteToolPolicyLoad(path, "workspace", "run-durable-policy", "turn"), approved);
+    const replay = await sqliteToolPolicyRecordApproval(
+      path, "workspace", pending.state, request, grant, "grant", 102,
+    );
+    assert.deepEqual(replay, approved);
+    const ready = await sqliteToolPolicyAuthorize(
+      path, "workspace", approved, run, completion, [contract], {}, "ready", 200,
+    );
+    assert.equal(ready.evaluation.status, "ready");
+    await assert.rejects(
+      sqliteToolPolicyAuthorize(path, "workspace", pending.state, run, completion, [contract], {}, "stale", 200),
+      /version conflict/,
+    );
+    await assert.rejects(
+      sqliteToolPolicyRecordApproval(path, "workspace", ready.state, request, grant, "expired", 600),
+      /expired/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("model/tool loop round trip is exposed through the Node binding", () => {

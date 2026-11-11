@@ -246,11 +246,6 @@ impl SqliteToolPolicyStore {
         let latest = self
             .load_latest(&state.snapshot.run_id, &state.snapshot.turn_id)?
             .ok_or(SqliteToolPolicyStoreError::InvalidState)?;
-        if latest != *state {
-            return Err(SqliteToolPolicyStoreError::Ledger(
-                LedgerError::VersionConflict,
-            ));
-        }
         if !state.approval_requests.contains(request)
             || request.contract_version != TOOL_POLICY_CONTRACT_VERSION
             || request.run_id != state.snapshot.run_id
@@ -263,6 +258,21 @@ impl SqliteToolPolicyStore {
             return Err(SqliteToolPolicyStoreError::ApprovalRequestMismatch);
         }
         validate_approval_grant(&grant, now_ms)?;
+        if latest != *state {
+            if let Some(prior) = latest
+                .approval_grants
+                .iter()
+                .find(|prior| prior.binding_digest == grant.binding_digest)
+            {
+                if prior == &grant {
+                    return Ok(latest);
+                }
+                return Err(SqliteToolPolicyStoreError::ApprovalConflict);
+            }
+            return Err(SqliteToolPolicyStoreError::Ledger(
+                LedgerError::VersionConflict,
+            ));
+        }
         if let Some(prior) = state
             .approval_grants
             .iter()
@@ -486,7 +496,7 @@ mod tests {
             tool_calls: vec![ToolCall {
                 id: "call-1".into(),
                 name: "write_file".into(),
-                arguments: ToolArguments::from_json(json!({"path": path}).to_string()),
+                arguments: ToolArguments::from_json(&json!({"path": path}).to_string()),
             }],
             usage: None,
         }
@@ -623,6 +633,101 @@ mod tests {
         assert!(replaced.approval_requests.is_empty());
         assert!(replaced.approval_grants.is_empty());
         drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn stale_approval_retries_are_idempotent_but_invalid_or_expired_grants_fail() {
+        let path = database_path();
+        let run = active_run();
+        let mut store = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();
+        let policy = store
+            .save_snapshot(&run, snapshot(), "policy", 100)
+            .unwrap();
+        let pending = store
+            .authorize(
+                &policy,
+                &run,
+                &completion("src/lib.rs"),
+                &[contract()],
+                ToolDispatchSettings::default(),
+                "evaluate",
+                100,
+            )
+            .unwrap();
+        let request = pending.state.approval_requests[0].clone();
+        let grant = ApprovalGrant {
+            contract_version: TOOL_POLICY_CONTRACT_VERSION,
+            binding_digest: request.binding_digest.clone(),
+            approved_by: "user-1".into(),
+            issued_at_ms: 100,
+            expires_at_ms: 500,
+        };
+        let saved = store
+            .record_approval(&pending.state, &request, grant.clone(), "grant", 101)
+            .unwrap();
+        let replay = store
+            .record_approval(&pending.state, &request, grant.clone(), "grant", 101)
+            .unwrap();
+        assert_eq!(replay, saved);
+
+        let mut expired = grant.clone();
+        expired.expires_at_ms = 101;
+        assert!(matches!(
+            store.record_approval(&saved, &request, expired, "expired", 101),
+            Err(SqliteToolPolicyStoreError::Policy(
+                ToolPolicyError::InvalidApproval
+            ))
+        ));
+
+        let mut mismatched = request.clone();
+        mismatched.binding_digest = "different-binding".into();
+        assert!(matches!(
+            store.record_approval(&saved, &mismatched, grant, "mismatch", 101),
+            Err(SqliteToolPolicyStoreError::ApprovalRequestMismatch)
+        ));
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn competing_policy_writers_reject_a_stale_snapshot() {
+        let path = database_path();
+        let run = active_run();
+        let mut first = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();
+        let policy = first
+            .save_snapshot(&run, snapshot(), "policy", 100)
+            .unwrap();
+        let mut second = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();
+        let first_pending = first
+            .authorize(
+                &policy,
+                &run,
+                &completion("src/lib.rs"),
+                &[contract()],
+                ToolDispatchSettings::default(),
+                "evaluate-first",
+                100,
+            )
+            .unwrap();
+        let stale_attempt = second.authorize(
+            &policy,
+            &run,
+            &completion("src/lib.rs"),
+            &[contract()],
+            ToolDispatchSettings::default(),
+            "evaluate-stale",
+            100,
+        );
+        assert!(matches!(
+            stale_attempt,
+            Err(SqliteToolPolicyStoreError::Ledger(
+                LedgerError::VersionConflict
+            ))
+        ));
+        drop(first);
+        drop(second);
+        let _ = first_pending;
         std::fs::remove_file(path).unwrap();
     }
 }

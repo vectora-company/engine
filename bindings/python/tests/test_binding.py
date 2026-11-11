@@ -46,6 +46,10 @@ from vectora_engine import (
     sqlite_run_transition,
     sqlite_run_verify,
     sqlite_save_checkpoint,
+    sqlite_tool_policy_authorize,
+    sqlite_tool_policy_load,
+    sqlite_tool_policy_record_approval,
+    sqlite_tool_policy_save,
     start_model_tool_loop,
     submit_tool_result,
     tool_chat_definitions,
@@ -627,6 +631,140 @@ def test_policy_gate_binds_approval_to_the_exact_call_and_policy() -> None:
         authorize_tool_dispatch(
             run, changed_completion, [contract], policy, [grant], now_ms=1500
         )
+
+
+def test_sqlite_tool_policy_is_registered_and_survives_reopen(tmp_path: Any) -> None:
+    async def exercise() -> None:
+        path = str(tmp_path / "tool-policy.db")
+        run = transition_run(
+            create_run(
+                {
+                    "contract_version": 1,
+                    "run_id": "run-durable-policy",
+                    "idempotency_key": "key",
+                    "thread_id": "thread",
+                    "turn_id": "turn",
+                    "actor_id": "actor",
+                    "scope_id": "workspace",
+                    "capabilities": ["file.write"],
+                }
+            ),
+            "running",
+        )
+        snapshot = {
+            "contract_version": 1,
+            "run_id": run["identity"]["run_id"],
+            "thread_id": "thread",
+            "turn_id": "turn",
+            "actor_id": "actor",
+            "scope_id": "workspace",
+            "policy_digest": "digest-v1",
+            "revision": "1",
+            "approval_mode": "require_all_effects",
+            "expires_at_ms": 10_000,
+        }
+        completion = {
+            "contract_version": 1,
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call",
+                    "name": "write_file",
+                    "arguments": {"state": "object", "value": {"path": "src/lib.rs"}},
+                }
+            ],
+        }
+        contract = {
+            "contract_version": 1,
+            "schema_version": "write.v1",
+            "name": "write_file",
+            "input_schema": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+            "required_capability": "file.write",
+            "timeout_ms": 1000,
+            "effect": "external_effect",
+            "idempotency": "requires_key",
+        }
+        initial = await sqlite_tool_policy_save(
+            path, "workspace", run, snapshot, "save", 100
+        )
+        pending = await sqlite_tool_policy_authorize(
+            path,
+            "workspace",
+            initial,
+            run,
+            completion,
+            [contract],
+            {},
+            "authorize",
+            100,
+        )
+        assert pending["evaluation"]["status"] == "awaiting_approval"
+        request = pending["state"]["approval_requests"][0]
+        grant = {
+            "contract_version": 1,
+            "binding_digest": request["binding_digest"],
+            "approved_by": "host-user",
+            "issued_at_ms": 101,
+            "expires_at_ms": 500,
+        }
+        approved = await sqlite_tool_policy_record_approval(
+            path,
+            "workspace",
+            pending["state"],
+            request,
+            grant,
+            "grant",
+            102,
+        )
+        assert (
+            await sqlite_tool_policy_load(
+                path, "workspace", "run-durable-policy", "turn"
+            )
+            == approved
+        )
+        assert (
+            await sqlite_tool_policy_record_approval(
+                path,
+                "workspace",
+                pending["state"],
+                request,
+                grant,
+                "grant",
+                102,
+            )
+            == approved
+        )
+        ready = await sqlite_tool_policy_authorize(
+            path,
+            "workspace",
+            approved,
+            run,
+            completion,
+            [contract],
+            {},
+            "ready",
+            200,
+        )
+        assert ready["evaluation"]["status"] == "ready"
+        with pytest.raises(RuntimeError, match="version conflict"):
+            await sqlite_tool_policy_authorize(
+                path,
+                "workspace",
+                pending["state"],
+                run,
+                completion,
+                [contract],
+                {},
+                "stale",
+                200,
+            )
+
+    asyncio.run(exercise())
 
 
 def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:

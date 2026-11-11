@@ -403,6 +403,80 @@ def tool_policy_contract_version() -> int:
     return _native.tool_policy_contract_version()
 
 
+async def sqlite_tool_policy_save(
+    path: str,
+    scope: str,
+    run: JsonObject,
+    snapshot: JsonObject,
+    operation_id: str,
+    now_ms: int,
+) -> dict[str, Any]:
+    """Persist the host-compiled policy snapshot before tool authorization."""
+    encoded = await _native.sqlite_tool_policy_save(
+        path, scope, json.dumps(run), json.dumps(snapshot), operation_id, now_ms
+    )
+    return json.loads(encoded)
+
+
+async def sqlite_tool_policy_load(
+    path: str,
+    scope: str,
+    run_id: str,
+    turn_id: str,
+) -> dict[str, Any] | None:
+    """Load the latest durable policy snapshot and its approval receipts."""
+    encoded = await _native.sqlite_tool_policy_load(path, scope, run_id, turn_id)
+    return json.loads(encoded) if encoded is not None else None
+
+
+async def sqlite_tool_policy_authorize(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    run: JsonObject,
+    completion: JsonObject,
+    contracts: Sequence[JsonObject],
+    settings: JsonObject,
+    operation_id: str,
+    now_ms: int,
+) -> dict[str, Any]:
+    """Persist approval requests before returning a policy evaluation."""
+    encoded = await _native.sqlite_tool_policy_authorize(
+        path,
+        scope,
+        json.dumps(state),
+        json.dumps(run),
+        json.dumps(completion),
+        json.dumps(contracts),
+        json.dumps(settings),
+        operation_id,
+        now_ms,
+    )
+    return json.loads(encoded)
+
+
+async def sqlite_tool_policy_record_approval(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    request: JsonObject,
+    grant: JsonObject,
+    operation_id: str,
+    now_ms: int,
+) -> dict[str, Any]:
+    """Persist a host-authenticated receipt bound to a pending request."""
+    encoded = await _native.sqlite_tool_policy_record_approval(
+        path,
+        scope,
+        json.dumps(state),
+        json.dumps(request),
+        json.dumps(grant),
+        operation_id,
+        now_ms,
+    )
+    return json.loads(encoded)
+
+
 def prepare_tool_dispatch(
     lifecycle: JsonObject,
     completion: JsonObject,
@@ -717,6 +791,10 @@ __all__ = [
     "sqlite_run_transition",
     "sqlite_run_verify",
     "sqlite_save_checkpoint",
+    "sqlite_tool_policy_authorize",
+    "sqlite_tool_policy_load",
+    "sqlite_tool_policy_record_approval",
+    "sqlite_tool_policy_save",
     "start_model_tool_loop",
     "submit_tool_result",
     "tool_chat_definitions",
