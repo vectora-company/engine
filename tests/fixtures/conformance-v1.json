@@ -1,0 +1,95 @@
+{
+  "run_lifecycle": {
+    "identity": {
+      "contract_version": 1,
+      "run_id": "conformance-run-1",
+      "idempotency_key": "conformance-key-1",
+      "thread_id": "conformance-thread-1",
+      "turn_id": "conformance-turn-1",
+      "actor_id": "host-user-1",
+      "scope_id": "workspace-1",
+      "provider": "fixture-provider",
+      "model": "fixture-model",
+      "capabilities": ["chat"]
+    },
+    "planned": {
+      "contract_version": 1,
+      "identity": {
+        "contract_version": 1,
+        "run_id": "conformance-run-1",
+        "idempotency_key": "conformance-key-1",
+        "thread_id": "conformance-thread-1",
+        "turn_id": "conformance-turn-1",
+        "actor_id": "host-user-1",
+        "scope_id": "workspace-1",
+        "provider": "fixture-provider",
+        "model": "fixture-model",
+        "capabilities": ["chat"]
+      },
+      "status": "planned",
+      "sequence": 0
+    },
+    "running": {
+      "contract_version": 1,
+      "identity": {
+        "contract_version": 1,
+        "run_id": "conformance-run-1",
+        "idempotency_key": "conformance-key-1",
+        "thread_id": "conformance-thread-1",
+        "turn_id": "conformance-turn-1",
+        "actor_id": "host-user-1",
+        "scope_id": "workspace-1",
+        "provider": "fixture-provider",
+        "model": "fixture-model",
+        "capabilities": ["chat"]
+      },
+      "status": "running",
+      "sequence": 1
+    }
+  },
+  "verification": {
+    "report": {
+      "contract_version": 1,
+      "run_id": "conformance-run-1",
+      "evaluated_at_unix_ms": 1000,
+      "checks": [
+        {
+          "check_id": "unit-tests",
+          "outcome": "passed",
+          "evidence": [
+            {
+              "evidence_id": "unit-tests-result",
+              "origin": "fixture-runner",
+              "artifact_ref": "artifact:unit-tests-result",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "redacted": true,
+              "expires_at_unix_ms": 2000
+            }
+          ]
+        }
+      ]
+    },
+    "policy": {
+      "contract_version": 1,
+      "required_checks": ["unit-tests"],
+      "require_evidence": true,
+      "failed_check": "blocked",
+      "inconclusive": "unverified"
+    },
+    "evaluation": {
+      "contract_version": 1,
+      "run_id": "conformance-run-1",
+      "verification_status": "passed",
+      "verdict": "passed",
+      "reason_code": "all_required_checks_passed"
+    }
+  },
+  "storage_selection": {
+    "contract_version": 1,
+    "sql": "sqlite",
+    "vector": "qdrant",
+    "kv": "redis",
+    "queue": "nats_jetstream",
+    "pubsub": "nats_core"
+  }
+}

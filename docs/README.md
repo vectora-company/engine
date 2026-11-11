@@ -22,6 +22,10 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
   para planos, análises de referências e checklists completos por etapa.
 - [Auditoria de review do PR #3](analyses/01-auditoria-review-pr3.md): findings
   revalidados contra a implementação atual, com evidências e limitações.
+- [Matriz de conformidade das capabilities](analyses/02-matriz-conformidade-capabilities.md):
+  contratos, APIs Rust/Python/TypeScript, testes existentes, maturidade e gaps.
+- [Checklist da matriz de conformidade](checklists/02-matriz-conformidade-capabilities.md):
+  inventário concluído e trabalho pendente antes da próxima etapa do plano.
 
 ## Planos
 

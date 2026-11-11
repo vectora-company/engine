@@ -1,5 +1,17 @@
 # Conversas, streaming e threads na engine
 
+## Maturidade atual
+
+O core implementa eventos de streaming de provider, montagem de turno, IDs de
+run/thread, ledger/checkpoints SQLite e cancelamento/recovery do loop modelo/tool.
+Isso não implementa o contrato de Conversation/Session descrito nesta spec: não
+há API genérica de admission de turnos/conversas, histórico paginado por cursor,
+replay de stream após reconnect, channel adapter, projeção de timeline nem
+contrato separado de cancelamento do assinante. A
+[`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
+registra os limites observados. Até essas APIs e testes existirem, o suporte é
+**parcial** e não se deve anunciar retomada de conversa ou replay de eventos.
+
 ## Objetivo
 
 Definir contratos reutilizáveis para conversas, turnos de agente, eventos de execução, streaming, retomada e cancelamento sem vincular a engine a um chat frontend. Consumidores diferentes podem apresentar a mesma execução como chat no Vectora, comentário/review no GH Bot, interação de voz ou interface de assistente pessoal, ou fluxo de geração em um construtor de apps.

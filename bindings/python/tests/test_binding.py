@@ -3,6 +3,7 @@
 import asyncio
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Thread
 from typing import Any
 
@@ -70,6 +71,27 @@ def test_storage_selection_is_validated_by_rust() -> None:
     assert selection["vector"] is None
     with pytest.raises(RuntimeError, match="unsupported storage contract version"):
         validate_storage_selection({"contract_version": 99})
+
+
+def test_shared_conformance_fixture() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/conformance-v1.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    run = create_run(fixture["run_lifecycle"]["identity"])
+    assert run == fixture["run_lifecycle"]["planned"]
+    assert transition_run(run, "running") == fixture["run_lifecycle"]["running"]
+
+    verification = fixture["verification"]
+    assert (
+        evaluate_verification(verification["report"], verification["policy"])
+        == verification["evaluation"]
+    )
+    assert (
+        validate_storage_selection(fixture["storage_selection"])
+        == fixture["storage_selection"]
+    )
 
 
 def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:

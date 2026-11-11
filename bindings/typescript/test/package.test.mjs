@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -90,6 +90,22 @@ test("verification gate distinguishes check result from final verdict", () => {
   assert.throws(
     () => evaluateVerification({ ...report, run_id: "" }, policy),
     /run ID must not be empty/,
+  );
+});
+
+test("shared JSON fixture conforms to run, verification, and storage contracts", async () => {
+  const fixtureUrl = new URL("../../../tests/fixtures/conformance-v1.json", import.meta.url);
+  const fixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+
+  const run = createRun(fixture.run_lifecycle.identity);
+  assert.deepEqual(run, fixture.run_lifecycle.planned);
+  assert.deepEqual(transitionRun(run, "running"), fixture.run_lifecycle.running);
+
+  const { report, policy, evaluation } = fixture.verification;
+  assert.deepEqual(evaluateVerification(report, policy), evaluation);
+  assert.deepEqual(
+    validateStorageSelection(fixture.storage_selection),
+    fixture.storage_selection,
   );
 });
 

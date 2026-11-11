@@ -2,18 +2,19 @@
 
 ## Maturidade da implementação
 
-O ciclo de vida de execução, a montagem de turno, a preparação de dispatch,
-coordenação em memória de rodadas, avaliação experimental de policy/aprovação,
-protocolo conservador de reconciliação e adapter SQLite para persistência
-atômica de eventos/checkpoints do loop estão implementados como fundação. O
-adapter SQLite persiste cada transição antes de devolver sua ação, mas não
-torna efeitos externos atômicos nem fornece exactly-once. O consumidor ainda
-executa adapters, autentica o reconciliador e coordena providers. Persistência
-e revalidação de policy/concessões, reserva integrada à identidade do run,
-adapter equivalente para PostgreSQL, coordenação operacional de restart,
-aplicação de hooks/egress e sandbox, verificação e gates ainda não estão
-implementados. A avaliação de policy não autentica o host nem o aprovador. A
-sequência incremental está em
+O ciclo de vida de run, montagem de turno, preparo de dispatch, loop modelo/tool,
+avaliação de policy/aprovação e gates de verificação existem no core Rust e nos
+bindings Python e TypeScript. Stores SQLite separados persistem estado do loop,
+lifecycle/verificação e snapshots/pedidos/recibos de policy. São fundações
+experimentais, não um runtime operacional completo: o host executa adapters,
+autentica identidade/aprovador/reconciliador e coordena providers/processos. A
+engine não torna efeitos externos atômicos nem fornece exactly-once. Não há
+adapter PostgreSQL equivalente para lifecycle, loop ou policy, coordenação
+operacional de restart, execução sandbox, aplicação de hooks/egress, subagentes,
+skills, plugins ou orquestração multiagente. A avaliação de policy não autentica
+o host nem o aprovador. Consulte a
+[`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
+e a sequência incremental em
 [`docs/plans/02-plano-loop-agentico.md`](../plans/02-plano-loop-agentico.md).
 
 ## Objetivo
@@ -68,7 +69,7 @@ O modelo propõe ações. A engine controla a execução e só invoca uma tool d
 - Subagentes são novas execuções relacionadas por parent ID, com escopo, capacidades, orçamento, prazo, cancelamento e formato de retorno limitados.
 - Delegação não cria permissões novas nem transfere automaticamente ownership do host.
 - Decision Models têm interface própria para classificação, score, seleção e resposta tipada; registrar provider/capability/versão, limites e validação, sem alegar equivalência entre modelos.
-- Suportar verificação genérica de evidências e gates fornecidos/configurados pelo consumidor: `passed`, `failed`, `infra_error`, `not_run`; o veredito pode ser `passed`, `degraded`, `blocked` ou `unverified`. O contrato experimental está em [`15-verification-gates.md`](15-verification-gates.md); ele ainda não persiste report/decisão no lifecycle.
+- Suportar verificação genérica de evidências e gates fornecidos/configurados pelo consumidor: `passed`, `failed`, `infra_error`, `not_run`; o veredito pode ser `passed`, `degraded`, `blocked` ou `unverified`. O contrato experimental está em [`15-verification-gates.md`](15-verification-gates.md); stores SQLite específicos persistem report/avaliação, sem unificar lifecycle e loop num único contrato.
 - Evidências devem apontar para artifacts/saídas concretos, ter origem e digest quando aplicável, e respeitar redação/expiração.
 
 ## Responsabilidades do consumidor
