@@ -36,7 +36,6 @@ pub enum VectorBackend {
 pub enum KvBackend {
     Redis,
     NatsJetstream,
-    Memory,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -44,7 +43,6 @@ pub enum KvBackend {
 pub enum QueueBackend {
     RedisStreams,
     NatsJetstream,
-    Memory,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -52,7 +50,6 @@ pub enum QueueBackend {
 pub enum PubSubBackend {
     Redis,
     NatsCore,
-    Memory,
 }
 
 /// Independent selections; absence means the capability is not requested.
@@ -130,5 +127,16 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn memory_is_not_a_public_storage_backend() {
+        for field in ["kv", "queue", "pubsub"] {
+            let selection = format!(r#"{{"contract_version":1,"{field}":"memory"}}"#);
+            assert!(
+                serde_json::from_str::<StorageSelection>(&selection).is_err(),
+                "{field} must reject an unimplemented public memory backend"
+            );
+        }
     }
 }

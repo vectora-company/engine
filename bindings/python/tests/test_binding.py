@@ -71,6 +71,9 @@ def test_storage_selection_is_validated_by_rust() -> None:
     assert selection["vector"] is None
     with pytest.raises(RuntimeError, match="unsupported storage contract version"):
         validate_storage_selection({"contract_version": 99})
+    for field in ("kv", "queue", "pubsub"):
+        with pytest.raises(RuntimeError, match="invalid storage selection"):
+            validate_storage_selection({"contract_version": 1, field: "memory"})
 
 
 def test_shared_conformance_fixture() -> None:

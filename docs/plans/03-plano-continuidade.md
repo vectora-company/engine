@@ -187,12 +187,13 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Iniciar a auditoria S0–S5 do plano de storage, considerando a cobertura
-service-real condicional já inventariada. A matriz
+Continuar a auditoria S0–S5 do plano de storage, considerando a cobertura
+service-real condicional já inventariada. A seleção pública de backend
+`memory` foi removida e testada nos bindings; permanecem os gaps de capacidade,
+conformidade service-real e recuperação listados no plano específico. A matriz
 [`02-matriz-conformidade-capabilities.md`](../analyses/02-matriz-conformidade-capabilities.md)
-já evidencia gaps que mudam a etapa seguinte: `memory` selecionável sem adapter,
-ausência de contratos de memória/contexto/RAG e ausência de testes service-real
-completos. Não
+já evidencia os gaps que mudam a etapa seguinte: ausência de contratos de
+memória/contexto/RAG e de testes service-real completos. Não
 começar adoção no Vectora nem reescrita ampla do backend Python antes desses
 gates.
 

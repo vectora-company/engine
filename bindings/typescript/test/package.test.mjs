@@ -221,6 +221,9 @@ test("storage selection validates independent backends in Rust", () => {
   assert.equal(selection.sql, "sqlite");
   assert.equal(selection.queue, "nats_jetstream");
   assert.throws(() => validateStorageSelection({ contract_version: 99 }));
+  for (const field of ["kv", "queue", "pubsub"]) {
+    assert.throws(() => validateStorageSelection({ contract_version: 1, [field]: "memory" }));
+  }
 });
 
 const settings = {

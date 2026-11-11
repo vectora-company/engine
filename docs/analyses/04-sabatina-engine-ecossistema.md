@@ -128,7 +128,7 @@ confundidos com capacidades utilizáveis.
 97. **Como evitar vazamento entre projetos?** Escopo/ACL devem chegar ao storage adapter e ser testados negativamente; filtragem apenas no prompt é insuficiente. Tenant/workspace não pode ser campo opcional em operações sensíveis.
 98. **Como equilibrar contexto e custo?** Orçar por categoria, medir tokens, priorizar instruções e evidências, recuperar sob demanda e testar qualidade. Truncamento cego pode remover justamente o dado decisivo.
 99. **Como dar continuidade após restart?** Persistir identidade da conversa, mensagens, estado relevante e referência a tools/artefatos em schema compatível; revalidar credenciais e efeitos externos no resume.
-100. **Memória deve ser universal na Engine?** Mecanismos e contratos potencialmente sim; política de que fatos lembrar, por quanto tempo e para qual usuário pertence ao host e à configuração explícita.
+100.  **Memória deve ser universal na Engine?** Mecanismos e contratos potencialmente sim; política de que fatos lembrar, por quanto tempo e para qual usuário pertence ao host e à configuração explícita.
 
 ## F. Tools, extensibilidade e integrações (101–120)
 
@@ -164,7 +164,7 @@ confundidos com capacidades utilizáveis.
 127. **LanceDB e Qdrant são intercambiáveis?** Só no subconjunto contratual testado. Índices, filtros, persistência, deploy e semântica de distância podem divergir; adapters devem publicar capacidades.
 128. **NATS e Redis são equivalentes?** Não integralmente. NATS/JetStream e Redis têm modelos diferentes de streams, ACK, KV, retenção e distribuição. API comum precisa nomear garantias mínimas e features extras.
 129. **Queue e pub/sub são a mesma coisa?** Não. Queue distribui trabalho a consumidores e requer ack/retry/dedup; pub/sub distribui eventos a assinantes e pode ter entrega efêmera ou persistente conforme backend.
-130. **O adapter `memory` é implementado?** A matriz prévia indica seleção que pode serializar `memory`, mas adapter retorna `Unsupported` em certas operações. Conferir branch atual antes de afirmar; seleção configurável não prova execução.
+130. **`memory` é um backend público de storage?** Não. A configuração pública limita-se aos seis backends concretos: SQLite/PostgreSQL, LanceDB/Qdrant e NATS/Redis. Doubles em memória podem ser usados internamente em testes, mas não são selecionáveis pelos consumidores nem prometem uma capability de runtime.
 131. **Como tratar entrega duplicada?** Projetar pelo menos uma vez como possibilidade, usar message IDs/dedupe e consumidores idempotentes. Exactly-once ponta a ponta é uma afirmação forte que não decorre do broker.
 132. **Como lidar com ordem de mensagens?** Definir escopo da ordenação (global, partição, run) e não presumir ordem entre workers. Sequence numbers e optimistic concurrency ajudam em stores, mas não ordenam qualquer broker.
 133. **O que acontece se Redis/NATS cai?** Política por operação: fail fast, buffer durável local, retry bounded ou degradar. Ledger crítico não deve depender apenas do cache/broker.
@@ -214,7 +214,7 @@ confundidos com capacidades utilizáveis.
 171. **Como manter schema comum?** Fonte canônica ou geração automatizada, fixture de conformidade e verificação contra drift. Stubs devem ser gerados e comparados, não editados divergentes sem motivo.
 172. **Como definir API pública mínima?** Expor apenas conceitos com consumer, semântica, erros, ownership, compatibilidade, cancelamento e evidência. APIs exploratórias devem permanecer internas/feature-gated.
 173. **Quando usar API sync vs async?** Sync para transformações determinísticas sem I/O; async para rede/stream/espera. Não bloquear runtime com operação de longa duração escondida em função sync.
-174. **Como evitar binding que promete demais?** Documentar capability por método e backend; retornar `Unsupported` cedo se necessário. Não sinalizar genericamente `storage=memory` quando certas operações falham somente depois.
+174. **Como evitar binding que promete demais?** Documentar capability por método e backend; retornar `Unsupported` cedo se necessário. Configuração pública rejeita `storage=memory`, que não é um backend de produto; doubles em memória permanecem restritos aos testes.
 175. **Como testar pacote distribuído?** Empacotar, instalar em ambiente limpo por OS/arch/Python/Node suportados, executar smoke real e validar loader/nativo. Workspace com dependências não detecta arquivos ausentes no tarball.
 176. **Go deve ter binding?** É uma proposta registrada como issue/documentação, ainda não capability. Avaliar cgo/FFI, cross-compilation, async, distribuição e casos consumer antes de assumir prioridade.
 177. **Como lidar com ABI do core Rust?** Versionar API e formato de artefatos, fixar toolchain e testar consumers; preferir fronteira C/N-API/PyO3 mantida por tooling suportado em vez de expor layout Rust interno.
