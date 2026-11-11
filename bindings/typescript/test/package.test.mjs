@@ -35,6 +35,9 @@ import {
   validateStorageSelection,
   sqliteLedgerAppend,
   sqliteLedgerAppendCheckpointed,
+  sqliteModelToolLoopAcceptModelTurn,
+  sqliteModelToolLoopStart,
+  sqliteModelToolLoopVerify,
   sqliteAdmitRun,
   sqliteRunAdmit,
   sqliteRunLoadLatest,
@@ -562,6 +565,53 @@ test("model/tool loop round trip is exposed through the Node binding", () => {
   assert.equal(next.state.phase, "awaiting_model");
   assert.equal(next.action.action, "continue_with_tool_results");
   assert.equal(next.action.results[0].output, "found");
+});
+
+test("durable loop verification is exposed and idempotent through Node", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-loop-verification-"));
+  try {
+    const path = join(dir, "loop.db");
+    let state = await sqliteModelToolLoopStart(
+      path, "workspace", "run-1", "turn-1", {}, "start",
+    );
+    state = (await sqliteModelToolLoopAcceptModelTurn(
+      path,
+      "workspace",
+      state,
+      { contract_version: 1, content: "done", tool_calls: [] },
+      {
+        contract_version: 1,
+        run_id: "run-1",
+        turn_id: "turn-1",
+        execution_mode: "concurrent_read_only",
+        decisions: [],
+      },
+      "complete",
+    )).state;
+    const report = {
+      contract_version: 1,
+      run_id: "run-1",
+      evaluated_at_unix_ms: 100,
+      checks: [{ check_id: "tests", outcome: "passed", evidence: [] }],
+    };
+    const policy = {
+      contract_version: 1,
+      required_checks: ["tests"],
+      require_evidence: false,
+      failed_check: "blocked",
+      inconclusive: "unverified",
+    };
+    const saved = await sqliteModelToolLoopVerify(
+      path, "workspace", state, report, policy, "verify",
+    );
+    assert.equal(saved.verification.evaluation.verdict, "passed");
+    assert.deepEqual(
+      await sqliteModelToolLoopVerify(path, "workspace", state, report, policy, "verify"),
+      saved,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("streamed turn assembly reaches the Rust core through the Node binding", () => {

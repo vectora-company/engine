@@ -35,6 +35,9 @@ from vectora_engine import (
     sqlite_ledger_append,
     sqlite_ledger_append_checkpointed,
     sqlite_ledger_read,
+    sqlite_model_tool_loop_accept_model_turn,
+    sqlite_model_tool_loop_start,
+    sqlite_model_tool_loop_verify,
     sqlite_reserve_run,
     sqlite_run_admit,
     sqlite_run_load_latest,
@@ -652,6 +655,56 @@ def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:
     assert result["state"]["phase"] == "awaiting_model"
     assert result["action"]["action"] == "continue_with_tool_results"
     assert result["action"]["results"][0]["output"] == "found"
+
+
+def test_durable_loop_verification_is_exposed_and_idempotent(tmp_path: Any) -> None:
+    path = str(tmp_path / "loop-verification.db")
+    state = asyncio.run(
+        sqlite_model_tool_loop_start(path, "workspace", "run-1", "turn-1", {}, "start")
+    )
+    state = asyncio.run(
+        sqlite_model_tool_loop_accept_model_turn(
+            path,
+            "workspace",
+            state,
+            {"contract_version": 1, "content": "done", "tool_calls": []},
+            {
+                "contract_version": 1,
+                "run_id": "run-1",
+                "turn_id": "turn-1",
+                "execution_mode": "concurrent_read_only",
+                "decisions": [],
+            },
+            "complete",
+        )
+    )["state"]
+    report = {
+        "contract_version": 1,
+        "run_id": "run-1",
+        "evaluated_at_unix_ms": 100,
+        "checks": [{"check_id": "tests", "outcome": "passed", "evidence": []}],
+    }
+    policy = {
+        "contract_version": 1,
+        "required_checks": ["tests"],
+        "require_evidence": False,
+        "failed_check": "blocked",
+        "inconclusive": "unverified",
+    }
+    saved = asyncio.run(
+        sqlite_model_tool_loop_verify(
+            path, "workspace", state, report, policy, "verify"
+        )
+    )
+    assert saved["verification"]["evaluation"]["verdict"] == "passed"
+    assert (
+        asyncio.run(
+            sqlite_model_tool_loop_verify(
+                path, "workspace", state, report, policy, "verify"
+            )
+        )
+        == saved
+    )
 
 
 def test_streamed_turn_assembly_uses_rust_core_and_preserves_tool_arguments() -> None:

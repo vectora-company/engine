@@ -55,6 +55,8 @@ Motivos são códigos estáveis: `required_check_failed`,
 - TypeScript: `evaluateVerification` e `evidenceGateContractVersion`.
 - Lifecycle SQLite: `SqliteRunLifecycleStore::verify`, `sqlite_run_verify` e
   `sqliteRunVerify`.
+- Loop SQLite: `SqliteModelToolLoopStore::verify`,
+  `sqlite_model_tool_loop_verify` e `sqliteModelToolLoopVerify`.
 
 Os bindings serializam os mesmos contratos e chamam a implementação Rust.
 
@@ -62,6 +64,14 @@ Os bindings serializam os mesmos contratos e chamam a implementação Rust.
 
 - Persistência de report e decisão está disponível no adapter SQLite; outros
   adapters de lifecycle ainda não implementam este contrato.
+- A verificação do loop durável exige fase `completed`, correlaciona `run_id`
+  e grava report, policy e avaliação no checkpoint/evento do loop. Ela não
+  altera o status de `RunLifecycle`; são dois contratos persistentes distintos.
+- Cada loop aceita um único registro de verificação. Repetir a mesma operação
+  com conteúdo idêntico é idempotente; outra operação não substitui a evidência.
+- O contrato do snapshot do loop avançou para v2. Checkpoints v1 sem
+  verificação continuam legíveis e são atualizados na próxima gravação; v1
+  nunca pode carregar um registro de verificação.
 - A engine não executa checks, não baixa nem valida o conteúdo referenciado,
   não autentica o host e não prova que `redacted: true` é verdadeiro.
 - A verificação persiste apenas referências opacas, nunca conteúdo de logs ou
@@ -73,6 +83,9 @@ Os bindings serializam os mesmos contratos e chamam a implementação Rust.
   única operação. Um run inconclusivo pode ser retomado e receber um novo
   report; o ledger mantém cada evento e o checkpoint guarda a verificação mais
   recente.
+- `SqliteModelToolLoopStore::verify` é uma operação separada: registra a
+  avaliação depois da conclusão do loop, sem executar checks nem encerrar um
+  run lifecycle.
 - Transições usam o snapshot mais recente persistido. Um snapshot alterado ou
   desatualizado é rejeitado mesmo quando sua sequência numérica coincide.
 

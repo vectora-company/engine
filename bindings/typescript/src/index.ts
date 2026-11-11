@@ -422,6 +422,13 @@ export interface DurableModelToolLoopState {
   scope: string;
   ledger_sequence: number;
   loop_state: ModelToolLoopState;
+  verification?: DurableModelToolLoopVerificationRecord;
+}
+export interface DurableModelToolLoopVerificationRecord {
+  operation_id: string;
+  report: VerificationReport;
+  policy: EvidenceDispositionPolicy;
+  evaluation: GateEvaluation;
 }
 export interface DurableModelToolLoopTransition {
   state: DurableModelToolLoopState;
@@ -537,6 +544,14 @@ interface NativeBinding {
     scope: string,
     stateJson: string,
     resultJson: string,
+    operationId: string,
+  ): Promise<string>;
+  sqliteModelToolLoopVerify(
+    path: string,
+    scope: string,
+    stateJson: string,
+    reportJson: string,
+    policyJson: string,
     operationId: string,
   ): Promise<string>;
   resilientLedgerAppend(
@@ -1126,6 +1141,27 @@ export async function sqliteModelToolLoopReconcileToolResult(
       operationId,
     ),
   ) as DurableModelToolLoopTransition;
+}
+
+/** Evaluate and durably attach gate evidence to a completed model/tool loop. */
+export async function sqliteModelToolLoopVerify(
+  path: string,
+  scope: string,
+  state: DurableModelToolLoopState,
+  report: VerificationReport,
+  policy: EvidenceDispositionPolicy,
+  operationId: string,
+): Promise<DurableModelToolLoopState> {
+  return JSON.parse(
+    await native.sqliteModelToolLoopVerify(
+      path,
+      scope,
+      JSON.stringify(state),
+      JSON.stringify(report),
+      JSON.stringify(policy),
+      operationId,
+    ),
+  ) as DurableModelToolLoopState;
 }
 
 export interface DurableLedgerAppend {

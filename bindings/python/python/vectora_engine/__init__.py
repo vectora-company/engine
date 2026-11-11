@@ -215,6 +215,26 @@ async def sqlite_model_tool_loop_reconcile_tool_result(
     return json.loads(encoded)
 
 
+async def sqlite_model_tool_loop_verify(
+    path: str,
+    scope: str,
+    state: JsonObject,
+    report: JsonObject,
+    policy: JsonObject,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Evaluate and durably attach gate evidence to a completed model/tool loop."""
+    encoded = await _native.sqlite_model_tool_loop_verify(
+        path,
+        scope,
+        json.dumps(state, separators=(",", ":")),
+        json.dumps(report, separators=(",", ":")),
+        json.dumps(policy, separators=(",", ":")),
+        operation_id,
+    )
+    return json.loads(encoded)
+
+
 async def resilient_ledger_append(
     path: str, event: JsonObject, postgres_url: str | None = None
 ) -> dict[str, Any]:
@@ -669,6 +689,7 @@ __all__ = [
     "sqlite_model_tool_loop_recover",
     "sqlite_model_tool_loop_start",
     "sqlite_model_tool_loop_submit_tool_result",
+    "sqlite_model_tool_loop_verify",
     "sqlite_reserve_run",
     "sqlite_run_admit",
     "sqlite_run_load_latest",

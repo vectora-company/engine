@@ -10,15 +10,17 @@ use thiserror::Error;
 use crate::{
     chat::ChatCompletion,
     harness::{
-        ModelToolLoopAction, ModelToolLoopError, ModelToolLoopSettings, ModelToolLoopState,
-        ModelToolLoopTransition, ToolDispatch, ToolResult, advance_model_turn, advance_tool_result,
+        EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy, GateEvaluation,
+        ModelToolLoopAction, ModelToolLoopError, ModelToolLoopPhase, ModelToolLoopSettings,
+        ModelToolLoopState, ModelToolLoopTransition, ToolDispatch, ToolResult, VerificationError,
+        VerificationReport, advance_model_turn, advance_tool_result, evaluate_verification,
         reconcile_tool_result, recover_model_tool_loop, validate_model_tool_loop_state,
     },
 };
 
 use super::sqlite::{EventDraft, LedgerError, SqliteLedger};
 
-pub const SQLITE_LOOP_STORE_CONTRACT_VERSION: u16 = 1;
+pub const SQLITE_LOOP_STORE_CONTRACT_VERSION: u16 = 2;
 const MAX_OPERATION_ID_BYTES: usize = 256;
 
 /// Durable envelope carrying the event sequence needed for optimistic writes.
@@ -29,6 +31,17 @@ pub struct DurableModelToolLoopState {
     pub scope: String,
     pub ledger_sequence: u64,
     pub loop_state: ModelToolLoopState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<DurableLoopVerificationRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DurableLoopVerificationRecord {
+    pub operation_id: String,
+    pub report: VerificationReport,
+    pub policy: EvidenceDispositionPolicy,
+    pub evaluation: GateEvaluation,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -53,6 +66,18 @@ pub enum SqliteModelToolLoopError {
     SequenceOverflow,
     #[error("durable loop serialization failed")]
     Serialization,
+    #[error(transparent)]
+    Verification(#[from] VerificationError),
+    #[error("verification report run ID does not match the loop run ID")]
+    VerificationRunMismatch,
+    #[error("model/tool loop must be complete before it can be verified")]
+    VerificationRequiresCompletedLoop,
+    #[error("verification operation ID was already used with different input")]
+    VerificationOperationConflict,
+    #[error("verification has already been recorded for this model/tool loop")]
+    VerificationAlreadyRecorded,
+    #[error("persisted loop verification does not match its report, policy, or state")]
+    InvalidVerificationRecord,
 }
 
 pub struct SqliteModelToolLoopStore {
@@ -90,6 +115,7 @@ impl SqliteModelToolLoopStore {
             scope: self.scope.clone(),
             ledger_sequence: 1,
             loop_state,
+            verification: None,
         };
         let payload = json!({
             "contract_version": SQLITE_LOOP_STORE_CONTRACT_VERSION,
@@ -170,6 +196,68 @@ impl SqliteModelToolLoopStore {
         self.persist_transition(state, transition, operation_id, "tool_result_reconciled")
     }
 
+    /// Evaluate and persist a gate only after the durable model/tool loop completes.
+    pub fn verify(
+        &mut self,
+        state: &DurableModelToolLoopState,
+        report: VerificationReport,
+        policy: EvidenceDispositionPolicy,
+        operation_id: &str,
+    ) -> Result<DurableModelToolLoopState, SqliteModelToolLoopError> {
+        self.validate_state(state)?;
+        validate_operation_id(operation_id)?;
+        if report.run_id != state.loop_state.run_id {
+            return Err(SqliteModelToolLoopError::VerificationRunMismatch);
+        }
+        if state.loop_state.phase != ModelToolLoopPhase::Completed {
+            return Err(SqliteModelToolLoopError::VerificationRequiresCompletedLoop);
+        }
+        let evaluation = evaluate_verification(&report, &policy)?;
+
+        let latest = self
+            .load_latest(&state.loop_state.run_id, &state.loop_state.turn_id)?
+            .ok_or(SqliteModelToolLoopError::InvalidState)?;
+        if latest != *state {
+            if let Some(prior) = latest.verification.as_ref()
+                && prior.operation_id == operation_id
+            {
+                if prior.report == report && prior.policy == policy {
+                    return Ok(latest);
+                }
+                return Err(SqliteModelToolLoopError::VerificationOperationConflict);
+            }
+            return Err(SqliteModelToolLoopError::Ledger(
+                LedgerError::VersionConflict,
+            ));
+        }
+        if let Some(prior) = state.verification.as_ref() {
+            if prior.operation_id == operation_id {
+                if prior.report == report && prior.policy == policy {
+                    return Ok(state.clone());
+                }
+                return Err(SqliteModelToolLoopError::VerificationOperationConflict);
+            }
+            return Err(SqliteModelToolLoopError::VerificationAlreadyRecorded);
+        }
+
+        let record = DurableLoopVerificationRecord {
+            operation_id: operation_id.to_owned(),
+            report,
+            policy,
+            evaluation,
+        };
+        let mut next = state.clone();
+        next.contract_version = SQLITE_LOOP_STORE_CONTRACT_VERSION;
+        next.ledger_sequence = next
+            .ledger_sequence
+            .checked_add(1)
+            .ok_or(SqliteModelToolLoopError::SequenceOverflow)?;
+        next.verification = Some(record);
+        let payload =
+            serde_json::to_value(&next).map_err(|_| SqliteModelToolLoopError::Serialization)?;
+        self.persist(next, operation_id, "model_tool_loop_verified", payload)
+    }
+
     fn persist_transition(
         &mut self,
         prior: &DurableModelToolLoopState,
@@ -185,6 +273,7 @@ impl SqliteModelToolLoopStore {
                 .checked_add(1)
                 .ok_or(SqliteModelToolLoopError::SequenceOverflow)?,
             loop_state: transition.state,
+            verification: prior.verification.clone(),
         };
         let payload = serde_json::to_value(&DurableModelToolLoopTransition {
             state: state.clone(),
@@ -245,15 +334,33 @@ impl SqliteModelToolLoopStore {
         &self,
         state: &DurableModelToolLoopState,
     ) -> Result<(), SqliteModelToolLoopError> {
-        if state.contract_version != SQLITE_LOOP_STORE_CONTRACT_VERSION {
+        // Version 1 snapshots predate the optional verification record. They
+        // remain readable and can be upgraded by their next persisted write.
+        if !matches!(
+            state.contract_version,
+            1 | SQLITE_LOOP_STORE_CONTRACT_VERSION
+        ) {
             return Err(SqliteModelToolLoopError::UnsupportedContractVersion(
                 state.contract_version,
             ));
+        }
+        if state.contract_version == 1 && state.verification.is_some() {
+            return Err(SqliteModelToolLoopError::InvalidState);
         }
         if state.scope != self.scope || state.ledger_sequence == 0 {
             return Err(SqliteModelToolLoopError::InvalidState);
         }
         validate_model_tool_loop_state(&state.loop_state)?;
+        if let Some(record) = state.verification.as_ref() {
+            validate_operation_id(&record.operation_id)?;
+            if state.loop_state.phase != ModelToolLoopPhase::Completed
+                || record.report.run_id != state.loop_state.run_id
+                || record.evaluation != evaluate_verification(&record.report, &record.policy)?
+                || record.evaluation.contract_version != EVIDENCE_GATE_CONTRACT_VERSION
+            {
+                return Err(SqliteModelToolLoopError::InvalidVerificationRecord);
+            }
+        }
         Ok(())
     }
 }
@@ -280,7 +387,11 @@ mod tests {
         sync::atomic::{AtomicU64, Ordering},
     };
 
-    use crate::harness::{MODEL_TOOL_LOOP_CONTRACT_VERSION, ToolExecutionMode};
+    use crate::harness::{
+        EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDisposition, FailureDisposition,
+        MODEL_TOOL_LOOP_CONTRACT_VERSION, ToolExecutionMode, VerificationCheck,
+        VerificationOutcome, VerificationReport,
+    };
 
     use super::*;
 
@@ -315,6 +426,53 @@ mod tests {
             execution_mode: ToolExecutionMode::ConcurrentReadOnly,
             decisions: Vec::new(),
         }
+    }
+
+    fn verification_report(run_id: &str, outcome: VerificationOutcome) -> VerificationReport {
+        VerificationReport {
+            contract_version: EVIDENCE_GATE_CONTRACT_VERSION,
+            run_id: run_id.into(),
+            evaluated_at_unix_ms: 100,
+            checks: vec![VerificationCheck {
+                check_id: "tests".into(),
+                outcome,
+                evidence: Vec::new(),
+            }],
+        }
+    }
+
+    fn verification_policy() -> EvidenceDispositionPolicy {
+        EvidenceDispositionPolicy {
+            contract_version: EVIDENCE_GATE_CONTRACT_VERSION,
+            required_checks: vec!["tests".into()],
+            require_evidence: false,
+            failed_check: FailureDisposition::Blocked,
+            inconclusive: EvidenceDisposition::Unverified,
+        }
+    }
+
+    fn completed_loop(store: &mut SqliteModelToolLoopStore) -> DurableModelToolLoopState {
+        let state = store
+            .start(
+                "run-verify",
+                "turn-verify",
+                ModelToolLoopSettings::default(),
+                "start-verify",
+            )
+            .unwrap();
+        store
+            .accept_model_turn(
+                &state,
+                empty_completion(),
+                ToolDispatch {
+                    run_id: "run-verify".into(),
+                    turn_id: "turn-verify".into(),
+                    ..empty_dispatch()
+                },
+                "complete-verify",
+            )
+            .unwrap()
+            .state
     }
 
     #[test]
@@ -404,6 +562,114 @@ mod tests {
             latest.loop_state.contract_version,
             MODEL_TOOL_LOOP_CONTRACT_VERSION
         );
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn verification_is_gated_by_completed_loop_and_persisted_for_replay() {
+        let path = database_path();
+        let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let initial = store
+            .start(
+                "run-verify",
+                "turn-verify",
+                ModelToolLoopSettings::default(),
+                "start-verify",
+            )
+            .unwrap();
+        let report = verification_report("run-verify", VerificationOutcome::Passed);
+        let policy = verification_policy();
+        assert!(matches!(
+            store.verify(
+                &initial,
+                report.clone(),
+                policy.clone(),
+                "verify-before-complete"
+            ),
+            Err(SqliteModelToolLoopError::VerificationRequiresCompletedLoop)
+        ));
+        assert!(matches!(
+            store.verify(
+                &initial,
+                verification_report("another-run", VerificationOutcome::Passed),
+                policy.clone(),
+                "verify-wrong-run",
+            ),
+            Err(SqliteModelToolLoopError::VerificationRunMismatch)
+        ));
+
+        let completed = store
+            .accept_model_turn(
+                &initial,
+                empty_completion(),
+                ToolDispatch {
+                    run_id: "run-verify".into(),
+                    turn_id: "turn-verify".into(),
+                    ..empty_dispatch()
+                },
+                "complete-verify",
+            )
+            .unwrap()
+            .state;
+        let verified = store
+            .verify(&completed, report.clone(), policy.clone(), "verify-passed")
+            .unwrap();
+        assert_eq!(verified.ledger_sequence, completed.ledger_sequence + 1);
+        assert_eq!(
+            verified.verification.as_ref().unwrap().evaluation.verdict,
+            crate::harness::GateVerdict::Passed
+        );
+        assert_eq!(
+            store
+                .verify(&completed, report.clone(), policy.clone(), "verify-passed")
+                .unwrap(),
+            verified
+        );
+        assert!(matches!(
+            store.verify(
+                &completed,
+                verification_report("run-verify", VerificationOutcome::Failed),
+                policy.clone(),
+                "verify-passed",
+            ),
+            Err(SqliteModelToolLoopError::VerificationOperationConflict)
+        ));
+        drop(store);
+
+        let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let restored = store
+            .load_latest("run-verify", "turn-verify")
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored, verified);
+        assert!(matches!(
+            store.verify(&restored, report, policy, "verify-second-operation",),
+            Err(SqliteModelToolLoopError::VerificationAlreadyRecorded)
+        ));
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn loop_verification_records_nonpassing_gate_without_claiming_success() {
+        let path = database_path();
+        let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let completed = completed_loop(&mut store);
+        let verified = store
+            .verify(
+                &completed,
+                verification_report("run-verify", VerificationOutcome::InfraError),
+                verification_policy(),
+                "verify-infra-error",
+            )
+            .unwrap();
+        let evaluation = &verified.verification.as_ref().unwrap().evaluation;
+        assert_eq!(
+            evaluation.verification_status,
+            crate::harness::VerificationStatus::InfraError
+        );
+        assert_eq!(evaluation.verdict, crate::harness::GateVerdict::Unverified);
         drop(store);
         std::fs::remove_file(path).unwrap();
     }
