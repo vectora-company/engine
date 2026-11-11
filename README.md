@@ -1,5 +1,7 @@
 # Vectora Engine
 
+![Engine](assets/branding/engine-banner.png)
+
 Núcleo em Rust para capacidades reutilizáveis de execução de agentes nos
 produtos Vectora. O repositório está em bootstrap: os contratos e limites das
 APIs ainda estão sendo definidos, portanto esta crate ainda não é um destino
