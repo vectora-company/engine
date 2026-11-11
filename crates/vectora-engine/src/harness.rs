@@ -22,7 +22,7 @@ pub use model_tool_loop::{
 pub use policy::{
     ApprovalGrant, ApprovalMode, ApprovalRequest, PolicyEvaluation, PolicyEvaluationStatus,
     PolicySnapshot, TOOL_POLICY_CONTRACT_VERSION, ToolAuthorizationDecision, ToolPolicyError,
-    authorize_tool_dispatch,
+    authorize_tool_dispatch, validate_approval_grant, validate_policy_snapshot,
 };
 pub use tool_dispatch::{
     TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDecision,

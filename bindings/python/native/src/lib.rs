@@ -16,7 +16,7 @@ use vectora_engine::chat::{
     OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
-    ApprovalGrant, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
+    ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
     MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot,
     RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
     TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch,
@@ -35,6 +35,9 @@ use vectora_engine::llm::{
     },
 };
 use vectora_engine::storage::sqlite_loop::{DurableModelToolLoopState, SqliteModelToolLoopStore};
+use vectora_engine::storage::sqlite_policy::{
+    DurableToolPolicyState, SqliteToolPolicyStore,
+};
 use vectora_engine::storage::{messaging::KvStore, vector::VectorStore};
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String, String>>>>;
@@ -450,6 +453,136 @@ fn sqlite_model_tool_loop_reconcile_tool_result<'py>(
         .map_err(|_| py_error("loop store worker failed"))?
         .map_err(py_error)?;
         encode_json(&transition)
+    })
+}
+
+#[pyfunction]
+fn sqlite_tool_policy_save<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    run_json: String,
+    snapshot_json: String,
+    operation_id: String,
+    now_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let run: RunLifecycle =
+            serde_json::from_str(&run_json).map_err(|_| py_error("invalid run lifecycle"))?;
+        let snapshot: PolicySnapshot = serde_json::from_str(&snapshot_json)
+            .map_err(|_| py_error("invalid policy snapshot"))?;
+        let state = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteToolPolicyStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .save_snapshot(&run, snapshot, &operation_id, now_ms)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("policy store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&state)
+    })
+}
+
+#[pyfunction]
+fn sqlite_tool_policy_load<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    run_id: String,
+    turn_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let store =
+                SqliteToolPolicyStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .load_latest(&run_id, &turn_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("policy store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&state)
+    })
+}
+
+#[pyfunction]
+fn sqlite_tool_policy_authorize<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    run_json: String,
+    completion_json: String,
+    contracts_json: String,
+    settings_json: String,
+    operation_id: String,
+    now_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableToolPolicyState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable policy state"))?;
+        let run: RunLifecycle =
+            serde_json::from_str(&run_json).map_err(|_| py_error("invalid run lifecycle"))?;
+        let completion: ChatCompletion = serde_json::from_str(&completion_json)
+            .map_err(|_| py_error("invalid chat completion"))?;
+        let contracts: Vec<ToolContract> = serde_json::from_str(&contracts_json)
+            .map_err(|_| py_error("invalid tool contracts"))?;
+        let settings: ToolDispatchSettings = serde_json::from_str(&settings_json)
+            .map_err(|_| py_error("invalid dispatch settings"))?;
+        let result = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteToolPolicyStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .authorize(
+                    &state,
+                    &run,
+                    &completion,
+                    &contracts,
+                    settings,
+                    &operation_id,
+                    now_ms,
+                )
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("policy store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
+fn sqlite_tool_policy_record_approval<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    request_json: String,
+    grant_json: String,
+    operation_id: String,
+    now_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableToolPolicyState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable policy state"))?;
+        let request: ApprovalRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid approval request"))?;
+        let grant: ApprovalGrant =
+            serde_json::from_str(&grant_json).map_err(|_| py_error("invalid approval grant"))?;
+        let saved = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteToolPolicyStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .record_approval(&state, &request, grant, &operation_id, now_ms)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("policy store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&saved)
     })
 }
 

@@ -182,7 +182,7 @@ pub fn authorize_tool_dispatch(
     now_ms: u64,
 ) -> Result<PolicyEvaluation, ToolPolicyError> {
     run.validate()?;
-    validate_snapshot(run, snapshot, now_ms)?;
+    validate_policy_snapshot(run, snapshot, now_ms)?;
     let dispatch = prepare_tool_dispatch(run, completion, contracts, settings)?;
     let contracts_by_name: HashMap<&str, &ToolContract> = contracts
         .iter()
@@ -198,15 +198,7 @@ pub fn authorize_tool_dispatch(
     let mut grants_by_call = HashMap::with_capacity(grants.len());
 
     for grant in grants {
-        if grant.contract_version != TOOL_POLICY_CONTRACT_VERSION
-            || grant.approved_by.trim().is_empty()
-            || grant.binding_digest.trim().is_empty()
-            || grant.issued_at_ms > now_ms
-            || grant.expires_at_ms <= now_ms
-            || grant.expires_at_ms <= grant.issued_at_ms
-        {
-            return Err(ToolPolicyError::InvalidApproval);
-        }
+        validate_approval_grant(grant, now_ms)?;
         if grants_by_call
             .insert(grant.binding_digest.as_str(), grant)
             .is_some()
@@ -324,7 +316,7 @@ pub fn authorize_tool_dispatch(
     })
 }
 
-fn validate_snapshot(
+pub fn validate_policy_snapshot(
     run: &RunLifecycle,
     snapshot: &PolicySnapshot,
     now_ms: u64,
@@ -371,6 +363,19 @@ fn validate_snapshot(
         })
     {
         return Err(ToolPolicyError::InvalidPolicyEntry);
+    }
+    Ok(())
+}
+
+pub fn validate_approval_grant(grant: &ApprovalGrant, now_ms: u64) -> Result<(), ToolPolicyError> {
+    if grant.contract_version != TOOL_POLICY_CONTRACT_VERSION
+        || grant.approved_by.trim().is_empty()
+        || grant.binding_digest.trim().is_empty()
+        || grant.issued_at_ms > now_ms
+        || grant.expires_at_ms <= now_ms
+        || grant.expires_at_ms <= grant.issued_at_ms
+    {
+        return Err(ToolPolicyError::InvalidApproval);
     }
     Ok(())
 }
