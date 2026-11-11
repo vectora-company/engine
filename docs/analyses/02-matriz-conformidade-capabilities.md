@@ -28,7 +28,7 @@ abertas são listadas separadamente e não são atribuídas à base.
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Chat comum, mensagens, completion e eventos — `CHAT_CONTRACT_VERSION=1`         | `chat/types.rs`, `chat/openai_compatible.rs`                                            | `chat_complete`, `chat_stream`                    | `chatComplete`, `chatStream`                    | Rust `chat/*`; Python/TS têm testes locais de protocolo                                                                           | **Implementada experimentalmente.** Transporte OpenAI-compatible e SSE. Revisões de redirects, headers e campos nulos presentes na branch de correção não fazem parte do SHA auditado.                                                                  |
 | Providers nativos Anthropic, Google e Cohere — contrato de chat v1              | `chat/native_providers.rs`                                                              | `native_chat_complete`, `native_chat_stream`      | `nativeChatComplete`, `nativeChatStream`        | Conversão request/response/stream nos três níveis de teste                                                                        | **Implementada experimentalmente.** Sem catálogo, descoberta de credenciais, billing ou policy de produto.                                                                                                                                              |
-| Fallback de chat                                                                | `chat/fallback.rs`                                                                      | `fallback_chat_complete`, `fallback_chat_stream`  | `fallbackChatComplete`, `fallbackChatStream`    | `main`: Python/TS cobrem ordem e saída parcial; branch desta matriz adiciona fixture comum de completion/stream nos três bindings | **Implementada experimentalmente.** Candidatos são explícitos e fornecidos pelo host; não há decisão automática de provider. Cancelamento explícito e cenários adicionais ainda não são demonstrados pela fixture comum.                                |
+| Fallback de chat                                                                | `chat/fallback.rs`                                                                      | `fallback_chat_complete`, `fallback_chat_stream`  | `fallbackChatComplete`, `fallbackChatStream`    | Fixture comum de completion, stream e interrupção da iteração nos três bindings; testes locais passaram                           | **Implementada experimentalmente.** Candidatos são explícitos e fornecidos pelo host; não há decisão automática de provider. Interromper a leitura do stream não comprova tempo de cancelamento do socket upstream.                                |
 | Montagem de turno streaming — chat v1                                           | `chat/turn.rs::assemble_turn`                                                           | `assemble_turn`                                   | `assembleTurn`                                  | Testes Rust e casos de binding para fragmentos, limites e evento terminal                                                         | **Implementada experimentalmente.** Acumula eventos em completion; não é armazenamento de conversa, sessão ou replay.                                                                                                                                   |
 | Embeddings — `EMBEDDING_CONTRACT_VERSION=1`                                     | `llm/embeddings.rs`                                                                     | `embed`, `fallback_embed`                         | `embed`, `fallbackEmbed`                        | Adaptadores de protocolo e fallback local em Python/TS, testes unitários Rust                                                     | **Implementada experimentalmente.** Fallback e limites de cada provider precisam manter cobertura por protocolo. Não há pipeline de indexação ou memória.                                                                                               |
 | Rerank — `RERANK_CONTRACT_VERSION=1`                                            | `llm/rerank.rs`                                                                         | `rerank`, `fallback_rerank`                       | `rerank`, `fallbackRerank`                      | Protocolo, ordenação e respostas vazias cobertos localmente                                                                       | **Implementada experimentalmente.** Não define recuperação ou RAG por si só.                                                                                                                                                                            |
@@ -59,35 +59,43 @@ abertas são listadas separadamente e não são atribuídas à base.
   **28 testes Node** em `bindings/typescript/test/package.test.mjs`. A contagem
   indica volume, não cobertura completa.
 - A branch desta matriz adiciona uma fixture versionada compartilhada para
-  lifecycle, verificação, seleção de storage e fallback de completion/stream.
-  Isso cobre cenários escolhidos, não uma suite completa das três entradas.
+  lifecycle, verificação, seleção de storage, fallback, policy, loop e append
+  do ledger. A fixture passou em Rust, Python e Node. O teste Node revelou que
+  o teste Node revelou artefatos N-API locais desatualizados em relação ao
+  código-fonte. A compilação padrão `napi build --platform --esm
+  --manifest-path native/Cargo.toml` concluiu e gerou o loader e o stub atuais;
+  a variante anterior com `--profile dev` procurava o artefato no diretório
+  errado. A suíte de pacote passou com o addon gerado. Isso cobre cenários
+  escolhidos, não uma suite completa das três entradas nem uma instalação limpa
+  do pacote Node.
 - Não foi evidenciada nesta auditoria uma suite de integração que inicie todos
   os serviços reais (PostgreSQL, Qdrant, Redis e NATS) e prove a matriz completa
   de failure/restart/retention. Código adapter e unit tests não bastam para
-  afirmar isso.
+  afirmar isso. Os testes existentes são condicionais às variáveis
+  `VECTORA_TEST_POSTGRES_URL`, `VECTORA_TEST_QDRANT_URL`,
+  `VECTORA_TEST_REDIS_URL` e `VECTORA_TEST_NATS_URL`; quando ausentes, retornam
+  sem validar conectividade nem comportamento do serviço.
 - Os testes de providers usam servidores locais/fakes ou transformações puras;
   não demonstram disponibilidade, performance ou compatibilidade de todos os
   serviços externos.
 - Os wrappers Python e TypeScript chamam o mesmo core Rust para as superfícies
-  listadas, mas assinatura/serialização e comportamento de cancelamento ainda
-  precisam ser comparados por fixtures comuns. A paridade global não está
-  demonstrada.
+  listadas. A fixture comum compara policy/loop/ledger nos três bindings; a
+  paridade global não está demonstrada.
 
 ## Gaps que alimentam o plano
 
-1. Expandir a fixture JSON atual com casos de loop/policy e ledger, executando
-   contratos serializáveis equivalentes via Rust/Python/TypeScript.
-2. Cobrir cancelamento explícito; a branch desta matriz adiciona fallback
-   completion/stream com servidores locais nos três bindings. A classificação e
-   a regra de não repetir saída parcial já foram comparadas com código e testes.
-3. Adicionar testes de integração reproduzíveis por serviço e por backend, com
+1. A iteração do stream é interrompida nos três bindings após o primeiro delta;
+   isso verifica a superfície do consumidor, mas não o prazo de fechamento do
+   socket/upstream. A classificação e a regra de não repetir saída parcial já
+   foram comparadas com código e testes.
+2. Adicionar testes de integração reproduzíveis por serviço e por backend, com
    falha, reconnect, restart, ACK/redelivery, TTL/retention e encerramento.
-4. Resolver a seleção de backend `memory`: implementar adapter genuíno ou
+3. Resolver a seleção de backend `memory`: implementar adapter genuíno ou
    rejeitá-la como seleção não suportada, sem deixar o consumidor descobrir
    somente ao conectar.
-5. Desenhar as APIs de conversa/sessão/replay, memória/contexto/RAG, execução de
+4. Desenhar as APIs de conversa/sessão/replay, memória/contexto/RAG, execução de
    tools e extensões antes de anunciar essas capacidades como harness completo.
-6. Planejar stores PostgreSQL para lifecycle/loop/policy somente após definir as
+5. Planejar stores PostgreSQL para lifecycle/loop/policy somente após definir as
    garantias e a relação com o ledger SQLite-first.
 
 ## Estado de branches de revisão
@@ -103,8 +111,25 @@ substituto de auditoria local.
 
 A branch desta análise acrescenta
 [`conformance-v1.json`](../../tests/fixtures/conformance-v1.json), exercitada
-pelos três bindings para run lifecycle, gate de verificação, seleção de storage
-e fallback de completion/stream. Isso é uma amostra de contratos serializáveis,
-não cobertura de todas as APIs nem evidência de paridade geral. A fixture não
-existia no SHA `main` auditado acima; os resultados dos testes locais desta
-branch ficam registrados no checklist.
+para run lifecycle, gate de verificação, seleção de storage, fallback, policy,
+loop e ledger. Ela passou nos três bindings. A verificação também encontrou
+artefatos locais N-API de Node desatualizados frente às funções existentes no
+core. A compilação padrão via `napi build --platform --esm --manifest-path
+native/Cargo.toml` regenerou loader e stub; o problema anterior ocorria ao
+informar `--profile dev`, que apontava o empacotador para o diretório incorreto.
+A suíte do pacote passou com o addon gerado. Isso é uma amostra de contratos
+serializáveis, não cobertura de todas as APIs nem evidência de paridade geral.
+A fixture não existia no SHA `main` auditado acima; resultados locais ficam no
+checklist.
+
+### Cobertura service-real observada
+
+Há testes condicionais de PostgreSQL (ledger e lifecycle/checkpoint), projeção
+SQLite-first, Qdrant (isolamento por scope e upsert/search/delete), Redis
+(KV/TTL, pub/sub e redelivery de Redis Streams) e NATS (KV, pub/sub e
+redelivery de JetStream). Eles não iniciam os serviços; ausência da variável de
+ambiente correspondente faz o teste retornar sem executar as asserções de
+serviço. Não foi encontrada cobertura integrada de indisponibilidade/reconnect,
+restart, retenção e falhas combinadas nos quatro serviços. Esse inventário
+prepara a auditoria S0–S5; não substitui essa auditoria nem demonstra paridade
+operacional.

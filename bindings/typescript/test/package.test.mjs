@@ -101,12 +101,47 @@ test("shared JSON fixture conforms to run, verification, and storage contracts",
   assert.deepEqual(run, fixture.run_lifecycle.planned);
   assert.deepEqual(transitionRun(run, "running"), fixture.run_lifecycle.running);
 
-  const { report, policy, evaluation } = fixture.verification;
-  assert.deepEqual(evaluateVerification(report, policy), evaluation);
+  const {
+    report,
+    policy,
+    evaluation: verificationEvaluation,
+  } = fixture.verification;
+  assert.deepEqual(evaluateVerification(report, policy), verificationEvaluation);
   assert.deepEqual(
     validateStorageSelection(fixture.storage_selection),
     fixture.storage_selection,
   );
+
+  const policyFixture = fixture.tool_policy;
+  const running = transitionRun(createRun(policyFixture.run), "running");
+  const policyEvaluation = authorizeToolDispatch(
+    running,
+    policyFixture.completion,
+    policyFixture.contracts,
+    policyFixture.snapshot,
+    [],
+    policyFixture.now_ms,
+  );
+  assert.equal(policyEvaluation.status, policyFixture.expected_status);
+  assert.equal(policyEvaluation.dispatch ?? null, policyFixture.expected_dispatch);
+
+  const loopFixture = fixture.model_tool_loop;
+  const initial = startModelToolLoop(loopFixture.run_id, loopFixture.turn_id);
+  assert.equal(initial.phase, loopFixture.expected_initial_phase);
+  const cancelled = cancelModelToolLoop(initial);
+  assert.equal(cancelled.state.phase, loopFixture.expected_cancel_phase);
+  assert.equal(
+    cancelled.state.cancellation_requested,
+    loopFixture.expected_cancel_requested,
+  );
+
+  const dir = await mkdtemp(join(tmpdir(), "vectora-conformance-"));
+  try {
+    const event = await sqliteLedgerAppend(join(dir, "ledger.db"), fixture.ledger.draft);
+    assert.equal(event.sequence, fixture.ledger.expected_sequence);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("verification gate rejects sensitive or expired required evidence", () => {

@@ -201,6 +201,36 @@ def test_shared_fallback_fixture_conforms_to_completion_and_streaming() -> None:
         == fallback["stream"]["expected_text"]
     )
 
+    first, first_thread, _ = serve(
+        response_bytes(fallback["rate_limited_response"]),
+        fallback["rate_limited_response"]["content_type"],
+        status=fallback["rate_limited_response"]["status"],
+    )
+    second, second_thread, _ = serve(
+        response_bytes(fallback["stream"]["response"]),
+        fallback["stream"]["response"]["content_type"],
+        status=fallback["stream"]["response"]["status"],
+    )
+
+    async def collect_until_cancel() -> list[dict[str, Any]]:
+        observed = []
+        async for event in fallback_chat_stream(make_settings(first, second), request):
+            observed.append(event)
+            if event["type"] == fallback["stream"]["cancel_after_event_type"]:
+                break
+        return observed
+
+    try:
+        cancelled_events = asyncio.run(collect_until_cancel())
+    finally:
+        for server, thread in ((first, first_thread), (second, second_thread)):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert [event["type"] for event in cancelled_events] == fallback["stream"][
+        "expected_cancelled_event_types"
+    ]
+
 
 def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     path = str(tmp_path / "ledger.db")
@@ -761,6 +791,38 @@ def test_policy_gate_binds_approval_to_the_exact_call_and_policy() -> None:
         authorize_tool_dispatch(
             run, changed_completion, [contract], policy, [grant], now_ms=1500
         )
+
+
+def test_shared_conformance_fixture_covers_policy_loop_and_ledger(tmp_path: Any) -> None:
+    fixture_path = Path(__file__).parents[3] / "tests/fixtures/conformance-v1.json"
+    fixture = json.loads(fixture_path.read_text())
+
+    policy_fixture = fixture["tool_policy"]
+    run = transition_run(create_run(policy_fixture["run"]), "running")
+    evaluation = authorize_tool_dispatch(
+        run,
+        policy_fixture["completion"],
+        policy_fixture["contracts"],
+        policy_fixture["snapshot"],
+        now_ms=policy_fixture["now_ms"],
+    )
+    assert evaluation["status"] == policy_fixture["expected_status"]
+    assert evaluation.get("dispatch") == policy_fixture["expected_dispatch"]
+
+    loop_fixture = fixture["model_tool_loop"]
+    initial = start_model_tool_loop(loop_fixture["run_id"], loop_fixture["turn_id"])
+    assert initial["phase"] == loop_fixture["expected_initial_phase"]
+    cancelled = cancel_model_tool_loop(initial)
+    assert cancelled["state"]["phase"] == loop_fixture["expected_cancel_phase"]
+    assert cancelled["state"]["cancellation_requested"] is loop_fixture[
+        "expected_cancel_requested"
+    ]
+
+    ledger_fixture = fixture["ledger"]
+    event = asyncio.run(
+        sqlite_ledger_append(str(tmp_path / "conformance.db"), ledger_fixture["draft"])
+    )
+    assert event["sequence"] == ledger_fixture["expected_sequence"]
 
 
 def test_sqlite_tool_policy_is_registered_and_survives_reopen(tmp_path: Any) -> None:

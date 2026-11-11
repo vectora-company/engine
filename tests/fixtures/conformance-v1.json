@@ -92,6 +92,76 @@
     "queue": "nats_jetstream",
     "pubsub": "nats_core"
   },
+  "tool_policy": {
+    "run": {
+      "contract_version": 1,
+      "run_id": "conformance-policy-run",
+      "idempotency_key": "conformance-policy-key",
+      "thread_id": "conformance-policy-thread",
+      "turn_id": "conformance-policy-turn",
+      "actor_id": "host-user-1",
+      "scope_id": "workspace-1",
+      "capabilities": ["file.write"]
+    },
+    "completion": {
+      "contract_version": 1,
+      "content": "",
+      "tool_calls": [{
+        "id": "conformance-write-call",
+        "name": "write_file",
+        "arguments": {"state": "object", "value": {"path": "src/main.rs"}}
+      }]
+    },
+    "contracts": [{
+      "contract_version": 1,
+      "schema_version": "write.v1",
+      "name": "write_file",
+      "input_schema": {
+        "type": "object",
+        "properties": {"path": {"type": "string"}},
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "required_capability": "file.write",
+      "timeout_ms": 5000,
+      "effect": "external_effect",
+      "idempotency": "requires_key"
+    }],
+    "snapshot": {
+      "contract_version": 1,
+      "run_id": "conformance-policy-run",
+      "thread_id": "conformance-policy-thread",
+      "turn_id": "conformance-policy-turn",
+      "actor_id": "host-user-1",
+      "scope_id": "workspace-1",
+      "policy_digest": "conformance-policy-digest",
+      "revision": "1",
+      "approval_mode": "require_all_effects",
+      "expires_at_ms": 5000
+    },
+    "now_ms": 1000,
+    "expected_status": "awaiting_approval",
+    "expected_dispatch": null
+  },
+  "model_tool_loop": {
+    "run_id": "conformance-loop-run",
+    "turn_id": "conformance-loop-turn",
+    "expected_initial_phase": "awaiting_model",
+    "expected_cancel_phase": "cancelled",
+    "expected_cancel_requested": true
+  },
+  "ledger": {
+    "draft": {
+      "scope": "conformance",
+      "aggregate": "run-1",
+      "event_id": "conformance-event-1",
+      "idempotency_key": "conformance-event-key-1",
+      "event_type": "run_started",
+      "payload": {"source": "shared_fixture"},
+      "expected_version": 0
+    },
+    "expected_sequence": 1
+  },
   "fallback_chat": {
     "candidate_model_ids": ["openrouter:primary", "cohere:backup"],
     "rate_limited_response": {
@@ -140,7 +210,9 @@
         "from_model_id": "openrouter:primary",
         "to_model_id": "cohere:backup"
       },
-      "expected_text": "streamed answer"
+      "expected_text": "streamed answer",
+      "cancel_after_event_type": "text_delta",
+      "expected_cancelled_event_types": ["model_switched", "text_delta"]
     }
   }
 }

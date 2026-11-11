@@ -36,6 +36,8 @@ export declare function kvStorePut(configJson: string, key: string, valueJson: s
 
 export declare function modelToolLoopAcceptModelTurn(stateJson: string, completionJson: string, dispatchJson: string): string
 
+export declare function modelToolLoopCancel(stateJson: string): string
+
 export declare function modelToolLoopContractVersion(): number
 
 export declare function modelToolLoopReconcileToolResult(stateJson: string, resultJson: string): string
@@ -92,6 +94,8 @@ export declare function sqliteLedgerRead(path: string, scope: string, aggregate:
 
 export declare function sqliteModelToolLoopAcceptModelTurn(path: string, scope: string, stateJson: string, completionJson: string, dispatchJson: string, operationId: string): Promise<string>
 
+export declare function sqliteModelToolLoopCancel(path: string, scope: string, stateJson: string, operationId: string): Promise<string>
+
 export declare function sqliteModelToolLoopLoad(path: string, scope: string, runId: string, turnId: string): Promise<string | null>
 
 export declare function sqliteModelToolLoopReconcileToolResult(path: string, scope: string, stateJson: string, resultJson: string, operationId: string): Promise<string>
@@ -101,6 +105,8 @@ export declare function sqliteModelToolLoopRecover(path: string, scope: string, 
 export declare function sqliteModelToolLoopStart(path: string, scope: string, runId: string, turnId: string, settingsJson: string, operationId: string): Promise<string>
 
 export declare function sqliteModelToolLoopSubmitToolResult(path: string, scope: string, stateJson: string, resultJson: string, operationId: string): Promise<string>
+
+export declare function sqliteModelToolLoopVerify(path: string, scope: string, stateJson: string, reportJson: string, policyJson: string, operationId: string): Promise<string>
 
 export declare function sqliteReserveRun(path: string, inputJson: string): Promise<string>
 
@@ -113,6 +119,14 @@ export declare function sqliteRunTransition(path: string, scope: string, stateJs
 export declare function sqliteRunVerify(path: string, scope: string, stateJson: string, reportJson: string, policyJson: string, operationId: string): Promise<string>
 
 export declare function sqliteSaveCheckpoint(path: string, inputJson: string): Promise<string>
+
+export declare function sqliteToolPolicyAuthorize(path: string, scope: string, stateJson: string, runJson: string, completionJson: string, contractsJson: string, settingsJson: string, operationId: string, nowMs: number): Promise<string>
+
+export declare function sqliteToolPolicyLoad(path: string, scope: string, runId: string, turnId: string): Promise<string | null>
+
+export declare function sqliteToolPolicyRecordApproval(path: string, scope: string, stateJson: string, requestJson: string, grantJson: string, operationId: string, nowMs: number): Promise<string>
+
+export declare function sqliteToolPolicySave(path: string, scope: string, runJson: string, snapshotJson: string, operationId: string, nowMs: number): Promise<string>
 
 export declare function storageValidateSelection(selectionJson: string): string
 

@@ -114,3 +114,39 @@ test("shared fallback fixture conforms to completion and streaming", async () =>
     await Promise.all([streamFirst.close(), streamSecond.close()]);
   }
 });
+
+test("shared stream fixture permits the consumer to cancel after a delta", async () => {
+  const fixtureUrl = new URL(
+    "../../../tests/fixtures/conformance-v1.json",
+    import.meta.url,
+  );
+  const fallback = JSON.parse(await readFile(fixtureUrl, "utf8")).fallback_chat;
+  const first = await startFixtureServer(fallback.rate_limited_response);
+  const second = await startFixtureServer(fallback.stream.response);
+  const settings = {
+    candidates: fallback.candidate_model_ids.map((model_id, index) => ({
+      model_id,
+      client: {
+        protocol: "open_ai_compatible",
+        settings: {
+          base_url: [first.baseUrl, second.baseUrl][index],
+          api_key: "fixture-token",
+        },
+      },
+    })),
+  };
+  try {
+    const observed = [];
+    for await (const event of fallbackChatStream(settings, {
+      contract_version: 1,
+      model: "ignored-model",
+      messages: [{ role: "user", content: "fixture prompt" }],
+    })) {
+      observed.push(event.type);
+      if (event.type === fallback.stream.cancel_after_event_type) break;
+    }
+    assert.deepEqual(observed, fallback.stream.expected_cancelled_event_types);
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+  }
+});

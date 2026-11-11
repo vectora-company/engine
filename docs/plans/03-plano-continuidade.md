@@ -67,20 +67,26 @@ como pendente.
 1. **Review do PR #3:** findings classificados; três correções e cobertura
    local estão nesta branch, duas correções já estavam em `main`. Resultado
    final e comandos ficam na análise/checklist desta etapa.
-2. **Matriz:** inventário por capability foi criado; a fixture de run,
-   verificação, storage e fallback de completion/stream está implementada para
-   os três bindings. Ainda faltam fixtures de policy/loop/ledger e cancelamento
-   explícito. A auditoria de semântica de fallback não encontrou divergência;
-   os limites de cobertura estão registrados. A matriz não presume paridade.
-3. Expandir fixtures determinísticas para loop/policy, ledger e demais
-   contratos públicos, distinguindo cobertura de protocolo de diferenças de
-   runtime; sem credenciais, rede paga ou efeitos externos.
+2. **Matriz:** inventário por capability criado; fixtures de run, verificação,
+   storage, fallback, policy, loop e ledger implementadas e executadas nos três
+   bindings. Cancelamento explícito da iteração de stream também está coberto.
+   O teste de pacote Node passou com addon gerado pelo comando padrão
+   `napi build --platform --esm --manifest-path native/Cargo.toml`; a tentativa
+   anterior com `--profile dev` apontava para o diretório de saída incorreto.
+   A análise de cobertura
+   service-real identificou testes condicionais e ausência de matriz integrada
+   de falha/restart nos quatro serviços. A auditoria de fallback não encontrou
+   divergência; a matriz não presume paridade.
+3. **Estado:** etapa da matriz concluída com os limites acima documentados.
+   Não foram usados serviços remotos nem CI como evidência.
 4. Semântica de fallback foi comparada com implementação e testes locais sem
    divergência reproduzida; manter gaps de cobertura explícitos e não atribuir
    alterações desta branch ao comportamento de `main`.
 
 **Saída:** gaps atuais reproduzíveis, feedback de review triado, fixtures
-compartilhadas e uma linha de base de conformidade para cada binding.
+compartilhadas e uma linha de base de conformidade para cada binding. Concluída
+nesta branch, com instalação limpa Node e integração service-real permanecendo
+sem comprovação.
 
 ### 1. Auditar maturidade de storage e ledger
 
@@ -181,12 +187,12 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Concluir fixtures compartilhadas Rust/Python/TypeScript e conferir a semântica
-de fallback contra o código e os testes; só então fechar a etapa 0. A matriz
+Iniciar a auditoria S0–S5 do plano de storage, considerando a cobertura
+service-real condicional já inventariada. A matriz
 [`02-matriz-conformidade-capabilities.md`](../analyses/02-matriz-conformidade-capabilities.md)
 já evidencia gaps que mudam a etapa seguinte: `memory` selecionável sem adapter,
 ausência de contratos de memória/contexto/RAG e ausência de testes service-real
-completos. Em seguida, reconciliar S0-S5 do plano de storage com o código. Não
+completos. Não
 começar adoção no Vectora nem reescrita ampla do backend Python antes desses
 gates.
 
