@@ -54,6 +54,8 @@ PostgreSQL, vetores, KV, filas e pub/sub permanecem planejados.
 - Garantir atomicidade entre eventos relacionados somente onde o adapter/contrato realmente a oferecer; declarar fronteiras transacionais entre SQL, vector stores e message bus.
 - Payload grande fica fora do ledger com referência, hash, tamanho, classificação, expiração e política de acesso.
 - Checkpoints são versionados e restauráveis; checkpoint incompatível falha com erro explícito, não inicia estado novo silenciosamente.
+- SQLite permite append de evento e checkpoint na mesma transação por `sqlite_ledger_append_checkpointed`; o snapshot e o evento devem representar o mesmo sequence.
+- Antes de entregar uma tool com efeito externo ao adapter, persista um evento/checkpoint `effect_started`; após o resultado, persista o resultado e novo checkpoint. Uma execução interrompida nesse intervalo é incerta e requer reconciliação explícita.
 
 ## Memória, contexto e RAG
 

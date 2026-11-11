@@ -32,6 +32,7 @@ import {
   submitToolResult,
   validateStorageSelection,
   sqliteLedgerAppend,
+  sqliteLedgerAppendCheckpointed,
   sqliteAdmitRun,
   sqliteLedgerRead,
   sqliteReserveRun,
@@ -55,6 +56,26 @@ test("sqlite ledger persists and retries safely through Node", async () => {
     assert.deepEqual(await sqliteSaveCheckpoint(path, checkpoint), checkpoint);
     assert.deepEqual(await sqliteLatestCheckpoint(path, "team", "run"), checkpoint);
     assert.equal(await sqliteLatestCheckpoint(path, "other", "run"), null);
+    const checkpointed = await sqliteLedgerAppendCheckpointed(
+      path,
+      {
+        scope: "team",
+        aggregate: "thread-recovery",
+        event_id: "effect-started",
+        idempotency_key: "effect-started-key",
+        event_type: "tool_effect_started",
+        payload: { call_id: "call-1" },
+        expected_version: 0,
+      },
+      "recovery-1",
+      { phase: "effect_started", call_id: "call-1" },
+    );
+    assert.equal(checkpointed.event.sequence, 1);
+    assert.equal(checkpointed.checkpoint.sequence, 1);
+    assert.deepEqual(
+      await sqliteLatestCheckpoint(path, "team", "thread-recovery"),
+      checkpointed.checkpoint,
+    );
     const admission = { scope: "team", thread_id: "thread-2", turn_id: "turn-2", run_id: "run-2", idempotency_key: "key-2", request: {} };
     const admissionEvent = { scope: "team", aggregate: "thread-2", event_id: "admitted-2", idempotency_key: "event-2", event_type: "admitted", payload: {}, expected_version: 0 };
     const result = await sqliteAdmitRun(path, admission, admissionEvent);

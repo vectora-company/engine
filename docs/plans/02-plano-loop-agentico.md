@@ -41,8 +41,12 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    retomada continuam para a fase 5.
 5. **Persistência e recovery** — integrar com os contratos de storage planejados
    em `docs/plans/01-plano-portabilidade-llm-rust.md`: reserva atômica por
-   thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. Recovery
-   nunca repete silenciosamente um efeito de resultado incerto.
+   thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. O SQLite
+   agora oferece append de evento e checkpoint na mesma transação; bindings
+   Python e TypeScript expõem essa operação. A coordenação do runtime, a
+   classificação de efeitos incertos após restart e a integração equivalente
+   com PostgreSQL ainda precisam ser concluídas. Recovery nunca repete
+   silenciosamente um efeito de resultado incerto.
 6. **Verificação e conformidade** — separar resultado da verificação do veredito
    do gate; verificar replay, cancelamento, redaction, restart e dois perfis de
    consumidor antes de qualquer alegação de paridade ou adoção.

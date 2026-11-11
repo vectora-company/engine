@@ -31,6 +31,7 @@ from vectora_engine import (
     sqlite_admit_run,
     sqlite_latest_checkpoint,
     sqlite_ledger_append,
+    sqlite_ledger_append_checkpointed,
     sqlite_ledger_read,
     sqlite_reserve_run,
     sqlite_save_checkpoint,
@@ -92,6 +93,28 @@ def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     assert asyncio.run(sqlite_save_checkpoint(path, checkpoint)) == checkpoint
     assert asyncio.run(sqlite_latest_checkpoint(path, "team", "run")) == checkpoint
     assert asyncio.run(sqlite_latest_checkpoint(path, "other", "run")) is None
+    checkpointed = asyncio.run(
+        sqlite_ledger_append_checkpointed(
+            path,
+            {
+                "scope": "team",
+                "aggregate": "thread-recovery",
+                "event_id": "effect-started",
+                "idempotency_key": "effect-started-key",
+                "event_type": "tool_effect_started",
+                "payload": {"call_id": "call-1"},
+                "expected_version": 0,
+            },
+            "recovery-1",
+            {"phase": "effect_started", "call_id": "call-1"},
+        )
+    )
+    assert checkpointed["event"]["sequence"] == 1
+    assert checkpointed["checkpoint"]["sequence"] == 1
+    assert (
+        asyncio.run(sqlite_latest_checkpoint(path, "team", "thread-recovery"))
+        == checkpointed["checkpoint"]
+    )
     admission = {
         "scope": "team",
         "thread_id": "thread-2",

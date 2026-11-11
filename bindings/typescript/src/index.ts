@@ -399,6 +399,12 @@ interface NativeBinding {
   pubsubReceive(subscriptionId: string, timeoutMs: number): Promise<string>;
   pubsubUnsubscribe(subscriptionId: string): void;
   sqliteLedgerAppend(path: string, draftJson: string): Promise<string>;
+  sqliteLedgerAppendCheckpointed(
+    path: string,
+    draftJson: string,
+    checkpointId: string,
+    stateJson: string,
+  ): Promise<string>;
   resilientLedgerAppend(
     path: string,
     draftJson: string,
@@ -702,6 +708,10 @@ export interface LedgerCheckpoint {
   sequence: number;
   state: JsonValue;
 }
+export interface CheckpointedLedgerEvent {
+  event: LedgerEvent;
+  checkpoint: LedgerCheckpoint;
+}
 
 export async function sqliteAdmitRun(
   path: string,
@@ -751,6 +761,23 @@ export async function sqliteLedgerAppend(
   return JSON.parse(
     await native.sqliteLedgerAppend(path, JSON.stringify(event)),
   ) as LedgerEvent;
+}
+
+/** Atomically append a ledger event and its immutable recovery snapshot. */
+export async function sqliteLedgerAppendCheckpointed(
+  path: string,
+  event: LedgerDraft,
+  checkpointId: string,
+  state: JsonValue,
+): Promise<CheckpointedLedgerEvent> {
+  return JSON.parse(
+    await native.sqliteLedgerAppendCheckpointed(
+      path,
+      JSON.stringify(event),
+      checkpointId,
+      JSON.stringify(state),
+    ),
+  ) as CheckpointedLedgerEvent;
 }
 
 export interface DurableLedgerAppend {
