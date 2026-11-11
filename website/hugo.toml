@@ -1,0 +1,108 @@
+baseURL = 'https://vectora-ltda.github.io/engine/'
+title = 'Vectora Engine'
+defaultContentLanguage = 'en'
+defaultContentLanguageInSubdir = true
+enableEmoji = false
+enableRobotsTXT = true
+disableKinds = ['taxonomy', 'term']
+
+[outputs]
+  home = ['HTML', 'RSS']
+  section = ['HTML', 'RSS']
+
+[module]
+  [[module.imports]]
+    path = 'github.com/imfing/hextra'
+
+[markup.goldmark.renderer]
+  unsafe = false
+
+[markup.highlight]
+  noClasses = false
+
+[languages]
+  [languages.en]
+    label = 'English'
+    locale = 'en-US'
+    weight = 1
+    title = 'Vectora Engine'
+    [languages.en.params]
+      description = 'Documentation for the reusable Rust agent harness and framework from Vectora.'
+    [[languages.en.menu.main]]
+      identifier = 'repository'
+      name = 'GitHub'
+      url = 'https://github.com/vectora-ltda/engine'
+      weight = 1
+    [[languages.en.menu.main]]
+      identifier = 'language-switch'
+      weight = 2
+      [languages.en.menu.main.params]
+        type = 'language-switch'
+    [[languages.en.menu.main]]
+      identifier = 'search'
+      weight = 3
+      [languages.en.menu.main.params]
+        type = 'search'
+    [[languages.en.menu.main]]
+      identifier = 'theme-toggle'
+      weight = 4
+      [languages.en.menu.main.params]
+        type = 'theme-toggle'
+
+  [languages.pt]
+    label = 'Português'
+    locale = 'pt-BR'
+    weight = 2
+    title = 'Vectora Engine'
+    [languages.pt.params]
+      description = 'Documentação do harness agêntico e framework reutilizável em Rust da Vectora.'
+    [[languages.pt.menu.main]]
+      identifier = 'repository'
+      name = 'GitHub'
+      url = 'https://github.com/vectora-ltda/engine'
+      weight = 1
+    [[languages.pt.menu.main]]
+      identifier = 'language-switch'
+      weight = 2
+      [languages.pt.menu.main.params]
+        type = 'language-switch'
+    [[languages.pt.menu.main]]
+      identifier = 'search'
+      weight = 3
+      [languages.pt.menu.main.params]
+        type = 'search'
+    [[languages.pt.menu.main]]
+      identifier = 'theme-toggle'
+      weight = 4
+      [languages.pt.menu.main.params]
+        type = 'theme-toggle'
+
+[params.navbar]
+  displayTitle = true
+  displayLogo = true
+  [params.navbar.logo]
+    path = 'img/vectora-logo.svg'
+    link = '/engine/'
+
+[params.page]
+  width = 'normal'
+
+[params.toc]
+  displayToc = true
+
+[params.footer]
+  displayCopyright = true
+  displayPoweredBy = true
+
+[params.theme]
+  default = 'system'
+  displayToggle = true
+
+[params]
+  title = 'Vectora Engine'
+  description = 'Documentation for the reusable Rust agent harness and framework from Vectora.'
+  images = ['https://vectora-ltda.github.io/engine/img/vectora-logo.svg']
+  keywords = ['Vectora Engine', 'Rust', 'agent harness', 'framework', 'Python bindings', 'TypeScript bindings']
+
+[params.author]
+  name = 'Vectora Ltda.'

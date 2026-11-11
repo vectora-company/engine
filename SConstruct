@@ -343,6 +343,23 @@ def _clean(target, source, env):
             os.remove(os.path.join(native_dir, name))
 
 
+def _docs_build(target, source, env):
+    """Build the public Hugo documentation site."""
+    _run("hugo", "--source", os.path.join(ROOT, "website"), "--gc", "--minify")
+
+
+def _docs_serve(target, source, env):
+    """Serve the public Hugo documentation site for local authoring."""
+    _run(
+        "hugo",
+        "server",
+        "--source",
+        os.path.join(ROOT, "website"),
+        "--buildDrafts",
+        "--disableFastRender",
+    )
+
+
 def _help(target, source, env):
     print(
         """
@@ -365,6 +382,10 @@ Qualidade
 Manutenção
   scons update     atualiza Cargo e uv.lock; revise os lockfiles
   scons clean      remove target/ e logs do SCons
+
+Documentação pública
+  scons docs-serve  inicia o preview local do Hugo + Hextra
+  scons docs-build gera o site estático em website/public/
 """.strip()
     )
 
@@ -388,6 +409,8 @@ env.Command("_tests", [], _tests)
 env.Command("_ci", [], _ci)
 env.Command("_update", [], _update)
 env.Command("_clean", [], _clean)
+env.Command("_docs_build", [], _docs_build)
+env.Command("_docs_serve", [], _docs_serve)
 
 Default("_help")
 for alias, target in {
@@ -401,5 +424,7 @@ for alias, target in {
     "ci": "_ci",
     "update": "_update",
     "clean": "_clean",
+    "docs-build": "_docs_build",
+    "docs-serve": "_docs_serve",
 }.items():
     Alias(alias, target)
