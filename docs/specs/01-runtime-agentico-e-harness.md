@@ -3,12 +3,14 @@
 ## Maturidade da implementação
 
 O ciclo de vida de execução, a montagem de turno, a preparação de dispatch,
-coordenação em memória de rodadas e a avaliação experimental de policy e
-aprovação estão implementados como fundação. O consumidor ainda executa
-adapters. Persistência/replay de policy e concessões, reserva idempotente para
-todo o loop, recovery após efeitos incertos, aplicação de hooks/egress e
-sandbox, verificação e gates ainda não estão implementados. A avaliação de
-policy não autentica o host nem o aprovador. A sequência incremental está em
+coordenação em memória de rodadas, avaliação experimental de policy/aprovação
+e protocolo conservador de reconciliação após interrupção estão implementados
+como fundação. O consumidor ainda executa adapters e coordena sua persistência.
+Persistência/replay de policy e concessões, reserva idempotente para todo o
+loop, vínculo automático entre checkpoint e transições, autenticação do
+reconciliador, aplicação de hooks/egress e sandbox, verificação e gates ainda
+não estão implementados. A avaliação de policy não autentica o host nem o
+aprovador. A sequência incremental está em
 [`docs/plans/02-plano-loop-agentico.md`](../plans/02-plano-loop-agentico.md).
 
 ## Objetivo

@@ -321,6 +321,21 @@ def submit_tool_result(state: JsonObject, result: JsonObject) -> dict[str, Any]:
     return json.loads(encoded)
 
 
+def recover_model_tool_loop(state: JsonObject) -> dict[str, Any]:
+    """Mark pending calls for explicit reconciliation; no tool is replayed."""
+    encoded = _native.model_tool_loop_recover(json.dumps(state, separators=(",", ":")))
+    return json.loads(encoded)
+
+
+def reconcile_tool_result(state: JsonObject, result: JsonObject) -> dict[str, Any]:
+    """Record a host-confirmed outcome for an interrupted tool call."""
+    encoded = _native.model_tool_loop_reconcile_tool_result(
+        json.dumps(state, separators=(",", ":")),
+        json.dumps(result, separators=(",", ":")),
+    )
+    return json.loads(encoded)
+
+
 def chat_contract_version() -> int:
     """Return the version of the shared chat contract."""
     return _native.chat_contract_version()
@@ -478,6 +493,8 @@ __all__ = [
     "queue_enqueue",
     "queue_receive",
     "queue_release",
+    "reconcile_tool_result",
+    "recover_model_tool_loop",
     "rerank",
     "rerank_contract_version",
     "resilient_ledger_append",

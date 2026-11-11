@@ -20,7 +20,8 @@ use vectora_engine::harness::{
     PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
     TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
     ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, advance_model_turn,
-    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, tool_chat_definitions,
+    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, reconcile_tool_result,
+    recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -790,6 +791,25 @@ fn model_tool_loop_submit_tool_result(state_json: String, result_json: String) -
 }
 
 #[pyfunction]
+fn model_tool_loop_recover(state_json: String) -> PyResult<String> {
+    let state: ModelToolLoopState =
+        serde_json::from_str(&state_json).map_err(|_| py_error("invalid model/tool loop state"))?;
+    encode_json(&recover_model_tool_loop(&state).map_err(py_error)?)
+}
+
+#[pyfunction]
+fn model_tool_loop_reconcile_tool_result(
+    state_json: String,
+    result_json: String,
+) -> PyResult<String> {
+    let state: ModelToolLoopState =
+        serde_json::from_str(&state_json).map_err(|_| py_error("invalid model/tool loop state"))?;
+    let result: ToolResult =
+        serde_json::from_str(&result_json).map_err(|_| py_error("invalid tool result"))?;
+    encode_json(&reconcile_tool_result(&state, result).map_err(py_error)?)
+}
+
+#[pyfunction]
 fn embed<'py>(
     py: Python<'py>,
     settings_json: String,
@@ -1071,6 +1091,11 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(model_tool_loop_accept_model_turn, module)?)?;
     module.add_function(wrap_pyfunction!(
         model_tool_loop_submit_tool_result,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(model_tool_loop_recover, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        model_tool_loop_reconcile_tool_result,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(embedding_contract_version, module)?)?;

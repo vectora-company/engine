@@ -264,6 +264,8 @@ pub enum ModelToolLoopError {
     ToolResultsTooLarge,
     #[error("loop snapshot contains inconsistent pending state")]
     InvalidState,
+    #[error("model/tool loop has no pending tool invocation to recover")]
+    NotRecoverable,
 }
 
 /// Consume a model completion and an already-authorized dispatch decision.
@@ -553,6 +555,134 @@ pub fn advance_tool_result(
     Ok(ModelToolLoopTransition { state, action })
 }
 
+/// Require explicit reconciliation for every unresolved invocation after a restart.
+/// This function never returns an action that re-executes a tool.
+pub fn recover_model_tool_loop(
+    state: &ModelToolLoopState,
+) -> Result<ModelToolLoopTransition, ModelToolLoopError> {
+    validate_state(state)?;
+    let mut next = state.clone();
+    match next.phase {
+        ModelToolLoopPhase::AwaitingToolResults => {
+            next.phase = ModelToolLoopPhase::RecoveryRequired;
+        }
+        ModelToolLoopPhase::RecoveryRequired => {}
+        _ => return Err(ModelToolLoopError::NotRecoverable),
+    }
+    let action = recovery_action(&next)?;
+    Ok(ModelToolLoopTransition {
+        state: next,
+        action,
+    })
+}
+
+/// Record a host's explicit reconciliation of an invocation after interruption.
+/// The host is responsible for establishing whether the external effect occurred.
+pub fn reconcile_tool_result(
+    state: &ModelToolLoopState,
+    result: ToolResult,
+) -> Result<ModelToolLoopTransition, ModelToolLoopError> {
+    validate_state(state)?;
+    if state.phase != ModelToolLoopPhase::RecoveryRequired {
+        return Err(ModelToolLoopError::NotRecoverable);
+    }
+    if result.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
+        return Err(ModelToolLoopError::UnsupportedToolResultContractVersion {
+            received: result.contract_version,
+        });
+    }
+    if result.run_id != state.run_id || result.turn_id != state.turn_id {
+        return Err(ModelToolLoopError::ResultIdentityMismatch);
+    }
+    if result.output.len() > state.settings.max_tool_result_bytes {
+        return Err(ModelToolLoopError::ToolResultTooLarge);
+    }
+    validate_result_shape(&result)?;
+    if result.effect_state == ToolEffectState::Unknown {
+        return Err(ModelToolLoopError::InvalidToolResult);
+    }
+
+    let mut next = state.clone();
+    let pending = next
+        .pending_results
+        .iter_mut()
+        .find(|pending| pending.call_id == result.call_id)
+        .ok_or(ModelToolLoopError::UnexpectedToolResult)?;
+    if pending.tool_name != result.tool_name {
+        return Err(ModelToolLoopError::ResultToolMismatch);
+    }
+    if pending
+        .result
+        .as_ref()
+        .is_some_and(|prior| prior.effect_state != ToolEffectState::Unknown)
+    {
+        return Err(ModelToolLoopError::UnexpectedToolResult);
+    }
+    validate_effect_state(pending.effect, result.status, result.effect_state)?;
+    pending.result = Some(result);
+
+    if has_unresolved_invocations(&next) {
+        let action = recovery_action(&next)?;
+        return Ok(ModelToolLoopTransition {
+            state: next,
+            action,
+        });
+    }
+
+    let result_bytes = next
+        .pending_results
+        .iter()
+        .filter_map(|item| item.result.as_ref())
+        .map(|item| item.output.len())
+        .try_fold(0usize, usize::checked_add)
+        .ok_or(ModelToolLoopError::ToolResultsTooLarge)?;
+    if result_bytes > next.settings.max_tool_results_bytes_per_turn {
+        return Err(ModelToolLoopError::ToolResultsTooLarge);
+    }
+    let results = ordered_results(&next.pending_results)?;
+    let assistant_completion = next
+        .pending_completion
+        .take()
+        .ok_or(ModelToolLoopError::InvalidState)?;
+    next.pending_results.clear();
+    next.phase = ModelToolLoopPhase::AwaitingModel;
+    let action = ModelToolLoopAction::ContinueWithToolResults {
+        assistant_completion,
+        results,
+        next_model_turn: next.model_turns + 1,
+    };
+    Ok(ModelToolLoopTransition {
+        state: next,
+        action,
+    })
+}
+
+fn has_unresolved_invocations(state: &ModelToolLoopState) -> bool {
+    state.pending_results.iter().any(|pending| {
+        pending
+            .result
+            .as_ref()
+            .is_none_or(|result| result.effect_state == ToolEffectState::Unknown)
+    })
+}
+
+fn recovery_action(state: &ModelToolLoopState) -> Result<ModelToolLoopAction, ModelToolLoopError> {
+    let pending = state
+        .pending_results
+        .iter()
+        .find(|pending| {
+            pending
+                .result
+                .as_ref()
+                .is_none_or(|result| result.effect_state == ToolEffectState::Unknown)
+        })
+        .ok_or(ModelToolLoopError::InvalidState)?;
+    Ok(ModelToolLoopAction::RecoveryRequired {
+        call_id: pending.call_id.clone(),
+        tool_name: pending.tool_name.clone(),
+    })
+}
+
 fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> {
     if state.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
         return Err(ModelToolLoopError::UnsupportedLoopContractVersion {
@@ -638,7 +768,8 @@ fn validate_pending(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError
     }
     if result_bytes > state.settings.max_tool_results_bytes_per_turn
         || (state.phase == ModelToolLoopPhase::AwaitingToolResults && has_unknown_effect)
-        || (state.phase == ModelToolLoopPhase::RecoveryRequired && !has_unknown_effect)
+        || (state.phase == ModelToolLoopPhase::RecoveryRequired
+            && !has_unresolved_invocations(state))
     {
         return Err(ModelToolLoopError::InvalidState);
     }

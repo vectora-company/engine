@@ -14,7 +14,8 @@ pub use model_tool_loop::{
     MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopAction, ModelToolLoopError, ModelToolLoopPhase,
     ModelToolLoopSettings, ModelToolLoopState, ModelToolLoopStopReason, ModelToolLoopTransition,
     PendingToolResult, ToolEffectState, ToolResult, ToolResultStatus, accept_model_turn,
-    advance_model_turn, advance_tool_result, submit_tool_result,
+    advance_model_turn, advance_tool_result, reconcile_tool_result, recover_model_tool_loop,
+    submit_tool_result,
 };
 pub use policy::{
     ApprovalGrant, ApprovalMode, ApprovalRequest, PolicyEvaluation, PolicyEvaluationStatus,

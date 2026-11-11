@@ -43,8 +43,10 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    em `docs/plans/01-plano-portabilidade-llm-rust.md`: reserva atômica por
    thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. O SQLite
    agora oferece append de evento e checkpoint na mesma transação; bindings
-   Python e TypeScript expõem essa operação. A coordenação do runtime, a
-   classificação de efeitos incertos após restart e a integração equivalente
+   Python e TypeScript expõem essa operação. O loop também fornece uma entrada
+   conservadora de recovery que bloqueia replay e exige resultado reconciliado
+   para cada chamada pendente. A coordenação automática do runtime com o ledger,
+   autenticação do reconciliador, revalidação de policy e integração equivalente
    com PostgreSQL ainda precisam ser concluídas. Recovery nunca repete
    silenciosamente um efeito de resultado incerto.
 6. **Verificação e conformidade** — separar resultado da verificação do veredito
