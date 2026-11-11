@@ -27,6 +27,13 @@ backends.
 - Recovery persiste `recovery_required`; ele não repete adapters. O host ainda
   deve autenticar o reconciliador e confirmar o efeito externo antes de chamar
   `reconcile_tool_result`.
+- `verify` aceita somente um loop na fase `completed`, exige que o `run_id` do
+  report corresponda e persiste report, policy e avaliação no mesmo evento e
+  checkpoint. A execução dos checks e a autenticação de suas evidências
+  continuam sob responsabilidade do consumidor. Uma verificação registrada é
+  imutável; replay idêntico é idempotente.
+- Snapshots v1 sem verificação continuam legíveis. A gravação seguinte os
+  atualiza para o contrato v2, que inclui o campo opcional `verification`.
 
 ## Limites e responsabilidades
 
@@ -51,8 +58,9 @@ backends.
   `sqlite_model_tool_loop_accept_model_turn`,
   `sqlite_model_tool_loop_submit_tool_result`,
   `sqlite_model_tool_loop_recover` e
-  `sqlite_model_tool_loop_reconcile_tool_result`.
+  `sqlite_model_tool_loop_reconcile_tool_result`,
+  `sqlite_model_tool_loop_verify`.
 - TypeScript: `sqliteModelToolLoopStart`, `sqliteModelToolLoopLoad`,
   `sqliteModelToolLoopAcceptModelTurn`,
   `sqliteModelToolLoopSubmitToolResult`, `sqliteModelToolLoopRecover` e
-  `sqliteModelToolLoopReconcileToolResult`.
+  `sqliteModelToolLoopReconcileToolResult`, `sqliteModelToolLoopVerify`.

@@ -81,6 +81,14 @@ async def sqlite_model_tool_loop_reconcile_tool_result(
     result_json: str,
     operation_id: str,
 ) -> str: ...
+async def sqlite_model_tool_loop_verify(
+    path: str,
+    scope: str,
+    state_json: str,
+    report_json: str,
+    policy_json: str,
+    operation_id: str,
+) -> str: ...
 async def resilient_ledger_append(
     path: str, postgres_url: str | None, draft_json: str
 ) -> str: ...

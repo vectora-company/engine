@@ -429,6 +429,37 @@ fn sqlite_model_tool_loop_reconcile_tool_result<'py>(
 }
 
 #[pyfunction]
+fn sqlite_model_tool_loop_verify<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    report_json: String,
+    policy_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable loop state"))?;
+        let report: VerificationReport = serde_json::from_str(&report_json)
+            .map_err(|_| py_error("invalid verification report"))?;
+        let policy: EvidenceDispositionPolicy = serde_json::from_str(&policy_json)
+            .map_err(|_| py_error("invalid verification policy"))?;
+        let verified = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .verify(&state, report, policy, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&verified)
+    })
+}
+
+#[pyfunction]
 fn resilient_ledger_append<'py>(
     py: Python<'py>,
     path: String,
@@ -1367,6 +1398,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         sqlite_model_tool_loop_reconcile_tool_result,
         module
     )?)?;
+    module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_verify, module)?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_upsert, module)?)?;

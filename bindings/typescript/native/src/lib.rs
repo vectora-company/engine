@@ -410,6 +410,34 @@ pub async fn sqlite_model_tool_loop_reconcile_tool_result(
 }
 
 #[napi]
+pub async fn sqlite_model_tool_loop_verify(
+    path: String,
+    scope: String,
+    state_json: String,
+    report_json: String,
+    policy_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable loop state"))?;
+    let report: VerificationReport = serde_json::from_str(&report_json)
+        .map_err(|_| Error::from_reason("invalid verification report"))?;
+    let policy: EvidenceDispositionPolicy = serde_json::from_str(&policy_json)
+        .map_err(|_| Error::from_reason("invalid verification policy"))?;
+    let verified = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .verify(&state, report, policy, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&verified)
+}
+
+#[napi]
 pub async fn resilient_ledger_append(
     path: String,
     draft_json: String,

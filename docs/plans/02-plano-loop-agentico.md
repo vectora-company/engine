@@ -60,11 +60,14 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    em `docs/specs/15-verification-gates.md`. `SqliteRunLifecycleStore` grava
    report, policy, avaliação e transição terminal no mesmo evento/checkpoint;
    `completed` exige veredito `passed`, `unverified` vai para
-   `recovery_required`, e os bindings Python/TypeScript usam a mesma operação
-   Rust. O consumidor ainda executa e autentica os checks. A fase segue aberta
-   para ligar verificação ao recovery do loop completo e validar replay,
-   cancelamento, redaction, restart e dois perfis de consumidor antes de
-   qualquer alegação de paridade ou adoção.
+   `recovery_required`. Separadamente, `SqliteModelToolLoopStore::verify`
+   exige loop concluído e grava report, policy e avaliação no checkpoint do
+   loop; o consumidor ainda executa e autentica os checks. Ambos os caminhos
+   estão expostos pelos bindings Python/TypeScript. O contrato de snapshot do
+   loop é v2, com leitura compatível de snapshots v1 sem verificação. A fase
+   segue aberta para validar replay cruzado de restart, cancelamento,
+   redaction, dois perfis de consumidor e integração com o fluxo completo antes
+   de qualquer alegação de paridade ou adoção.
 
 Cada parte do plano deve ser entregue em PR próprio empilhado sobre o anterior.
 Todo contrato público é implementado uma vez no Rust e coberto pelos bindings
