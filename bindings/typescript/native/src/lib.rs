@@ -11,9 +11,9 @@ use napi::{Error, Result};
 use napi_derive::napi;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
-    CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
-    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
-    TurnAccumulatorSettings, assemble_turn,
+    CHAT_CONTRACT_VERSION, ChatCompletion, ChatEvent, ChatRequest, FallbackChatClient,
+    FallbackChatSettings, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
+    OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
     ApprovalGrant, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
@@ -33,6 +33,7 @@ use vectora_engine::llm::{
         RerankRequest,
     },
 };
+use vectora_engine::storage::sqlite_loop::{DurableModelToolLoopState, SqliteModelToolLoopStore};
 use vectora_engine::storage::{messaging::KvStore, vector::VectorStore};
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String>>>>;
@@ -245,6 +246,150 @@ pub async fn sqlite_ledger_append_checkpointed(
         .map_err(|_| Error::from_reason("ledger worker failed"))?
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&saved)
+}
+
+#[napi]
+pub async fn sqlite_model_tool_loop_start(
+    path: String,
+    scope: String,
+    run_id: String,
+    turn_id: String,
+    settings_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let settings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid loop settings"))?;
+    let state = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .start(run_id, turn_id, settings, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&state)
+}
+
+#[napi]
+pub async fn sqlite_model_tool_loop_load(
+    path: String,
+    scope: String,
+    run_id: String,
+    turn_id: String,
+) -> Result<Option<String>> {
+    let state = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .load_latest(&run_id, &turn_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    state.as_ref().map(encode_json).transpose()
+}
+
+#[napi]
+pub async fn sqlite_model_tool_loop_accept_model_turn(
+    path: String,
+    scope: String,
+    state_json: String,
+    completion_json: String,
+    dispatch_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable loop state"))?;
+    let completion: ChatCompletion = serde_json::from_str(&completion_json)
+        .map_err(|_| Error::from_reason("invalid chat completion"))?;
+    let dispatch: ToolDispatch = serde_json::from_str(&dispatch_json)
+        .map_err(|_| Error::from_reason("invalid tool dispatch"))?;
+    let transition = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .accept_model_turn(&state, completion, dispatch, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub async fn sqlite_model_tool_loop_submit_tool_result(
+    path: String,
+    scope: String,
+    state_json: String,
+    result_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable loop state"))?;
+    let result: ToolResult = serde_json::from_str(&result_json)
+        .map_err(|_| Error::from_reason("invalid tool result"))?;
+    let transition = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .submit_tool_result(&state, result, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub async fn sqlite_model_tool_loop_recover(
+    path: String,
+    scope: String,
+    state_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable loop state"))?;
+    let transition = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .recover(&state, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub async fn sqlite_model_tool_loop_reconcile_tool_result(
+    path: String,
+    scope: String,
+    state_json: String,
+    result_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable loop state"))?;
+    let result: ToolResult = serde_json::from_str(&result_json)
+        .map_err(|_| Error::from_reason("invalid tool result"))?;
+    let transition = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .reconcile_tool_result(&state, result, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&transition)
 }
 
 #[napi]

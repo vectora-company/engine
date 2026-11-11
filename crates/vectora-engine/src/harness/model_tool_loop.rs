@@ -726,6 +726,13 @@ fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> 
     Ok(())
 }
 
+/// Validate a deserialized loop snapshot before a host restores or persists it.
+pub fn validate_model_tool_loop_state(
+    state: &ModelToolLoopState,
+) -> Result<(), ModelToolLoopError> {
+    validate_state(state)
+}
+
 fn validate_pending(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> {
     let completion = state
         .pending_completion

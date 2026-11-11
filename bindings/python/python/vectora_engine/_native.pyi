@@ -45,6 +45,42 @@ async def sqlite_ledger_append(path: str, draft_json: str) -> str: ...
 async def sqlite_ledger_append_checkpointed(
     path: str, draft_json: str, checkpoint_id: str, state_json: str
 ) -> str: ...
+async def sqlite_model_tool_loop_start(
+    path: str,
+    scope: str,
+    run_id: str,
+    turn_id: str,
+    settings_json: str,
+    operation_id: str,
+) -> str: ...
+async def sqlite_model_tool_loop_load(
+    path: str, scope: str, run_id: str, turn_id: str
+) -> str | None: ...
+async def sqlite_model_tool_loop_accept_model_turn(
+    path: str,
+    scope: str,
+    state_json: str,
+    completion_json: str,
+    dispatch_json: str,
+    operation_id: str,
+) -> str: ...
+async def sqlite_model_tool_loop_submit_tool_result(
+    path: str,
+    scope: str,
+    state_json: str,
+    result_json: str,
+    operation_id: str,
+) -> str: ...
+async def sqlite_model_tool_loop_recover(
+    path: str, scope: str, state_json: str, operation_id: str
+) -> str: ...
+async def sqlite_model_tool_loop_reconcile_tool_result(
+    path: str,
+    scope: str,
+    state_json: str,
+    result_json: str,
+    operation_id: str,
+) -> str: ...
 async def resilient_ledger_append(
     path: str, postgres_url: str | None, draft_json: str
 ) -> str: ...

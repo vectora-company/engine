@@ -11,9 +11,9 @@ use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
-    CHAT_CONTRACT_VERSION, ChatEvent, ChatRequest, FallbackChatClient, FallbackChatSettings,
-    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
-    TurnAccumulatorSettings, assemble_turn,
+    CHAT_CONTRACT_VERSION, ChatCompletion, ChatEvent, ChatRequest, FallbackChatClient,
+    FallbackChatSettings, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
+    OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
     ApprovalGrant, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
@@ -33,6 +33,7 @@ use vectora_engine::llm::{
         RerankRequest,
     },
 };
+use vectora_engine::storage::sqlite_loop::{DurableModelToolLoopState, SqliteModelToolLoopStore};
 use vectora_engine::storage::{messaging::KvStore, vector::VectorStore};
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String, String>>>>;
@@ -246,6 +247,168 @@ fn sqlite_ledger_append_checkpointed<'py>(
         .map_err(|_| py_error("ledger worker failed"))?
         .map_err(py_error)?;
         encode_json(&saved)
+    })
+}
+
+#[pyfunction]
+fn sqlite_model_tool_loop_start<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    run_id: String,
+    turn_id: String,
+    settings_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let settings: ModelToolLoopSettings =
+            serde_json::from_str(&settings_json).map_err(|_| py_error("invalid loop settings"))?;
+        let state = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .start(run_id, turn_id, settings, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&state)
+    })
+}
+
+#[pyfunction]
+fn sqlite_model_tool_loop_load<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    run_id: String,
+    turn_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let result = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .load_latest(&run_id, &turn_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
+fn sqlite_model_tool_loop_accept_model_turn<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    completion_json: String,
+    dispatch_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable loop state"))?;
+        let completion: ChatCompletion = serde_json::from_str(&completion_json)
+            .map_err(|_| py_error("invalid chat completion"))?;
+        let dispatch: ToolDispatch =
+            serde_json::from_str(&dispatch_json).map_err(|_| py_error("invalid tool dispatch"))?;
+        let transition = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .accept_model_turn(&state, completion, dispatch, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&transition)
+    })
+}
+
+#[pyfunction]
+fn sqlite_model_tool_loop_submit_tool_result<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    result_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable loop state"))?;
+        let result: ToolResult =
+            serde_json::from_str(&result_json).map_err(|_| py_error("invalid tool result"))?;
+        let transition = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .submit_tool_result(&state, result, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&transition)
+    })
+}
+
+#[pyfunction]
+fn sqlite_model_tool_loop_recover<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable loop state"))?;
+        let transition = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .recover(&state, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&transition)
+    })
+}
+
+#[pyfunction]
+fn sqlite_model_tool_loop_reconcile_tool_result<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    result_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable loop state"))?;
+        let result: ToolResult =
+            serde_json::from_str(&result_json).map_err(|_| py_error("invalid tool result"))?;
+        let transition = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .reconcile_tool_result(&state, result, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&transition)
     })
 }
 
@@ -1059,6 +1222,21 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append_checkpointed, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_start, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_load, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sqlite_model_tool_loop_accept_model_turn,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        sqlite_model_tool_loop_submit_tool_result,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_recover, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sqlite_model_tool_loop_reconcile_tool_result,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_upsert, module)?)?;

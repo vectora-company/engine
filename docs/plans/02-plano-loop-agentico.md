@@ -41,14 +41,17 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    retomada continuam para a fase 5.
 5. **Persistência e recovery** — integrar com os contratos de storage planejados
    em `docs/plans/01-plano-portabilidade-llm-rust.md`: reserva atômica por
-   thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. O SQLite
-   agora oferece append de evento e checkpoint na mesma transação; bindings
-   Python e TypeScript expõem essa operação. O loop também fornece uma entrada
-   conservadora de recovery que bloqueia replay e exige resultado reconciliado
-   para cada chamada pendente. A coordenação automática do runtime com o ledger,
-   autenticação do reconciliador, revalidação de policy e integração equivalente
-   com PostgreSQL ainda precisam ser concluídas. Recovery nunca repete
-   silenciosamente um efeito de resultado incerto.
+   thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. O adapter
+   experimental `SqliteModelToolLoopStore` agora persiste o par
+   evento/checkpoint em uma transação antes de devolver cada ação ao host; os
+   bindings Python e TypeScript expõem o mesmo adapter. Seu contrato e seus
+   limites estão em `docs/specs/13-sqlite-model-tool-loop-store.md`. Ele não
+   torna efeitos externos atômicos, não fornece exactly-once e não autentica o
+   host. Integração genérica com PostgreSQL, reserva integrada com a identidade
+   do run, persistência/revalidação de policy e concessões, coordenação do
+   provider/adapters, reconciliação autenticada e recuperação operacional ainda
+   precisam ser concluídas. Recovery nunca repete silenciosamente um efeito de
+   resultado incerto.
 6. **Verificação e conformidade** — separar resultado da verificação do veredito
    do gate; verificar replay, cancelamento, redaction, restart e dois perfis de
    consumidor antes de qualquer alegação de paridade ou adoção.
