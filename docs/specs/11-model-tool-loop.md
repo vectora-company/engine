@@ -40,6 +40,16 @@ chamar o provider, executar adapters e persistir snapshots/ledger.
   previamente marcada `unknown`. Quando todas as chamadas têm resultado
   conhecido, devolve os resultados na ordem original para a próxima rodada do
   modelo. Um resultado ainda `unknown` permanece bloqueado.
+- `cancel_model_tool_loop` registra cancelamento separadamente do cancelamento
+  do stream/provider. Durante `awaiting_model`, conclui imediatamente como
+  `cancelled`. Durante `awaiting_tool_results`, muda para `cancelling` e retorna
+  a lista de chamadas que o host deve interromper. O loop só se torna terminal
+  depois que cada adapter informa um resultado conhecido. Se uma chamada tiver
+  efeito `unknown`, o estado passa por `recovery_required`; a reconciliação
+  continua obrigatória e, ao terminar, fecha como `cancelled` sem retomar o
+  modelo.
+- O snapshot do loop é contrato v2. Snapshots v1 sem os estados de cancelamento
+  continuam aceitos. Resultados de tool permanecem no contrato v1.
 - Se o limite de rodadas for atingido numa resposta que pede tools, o loop para
   antes de pedir sua execução. Assim, não inicia efeitos sem espaço orçado para
   consultar o modelo depois.
@@ -49,7 +59,9 @@ chamar o provider, executar adapters e persistir snapshots/ledger.
 O consumidor impõe timeout e cancelamento, redige outputs, chama o gate de
 [`12-policy-and-approval.md`](12-policy-and-approval.md) imediatamente antes
 de executar adapters e persiste estado/ledger de forma durável quando
-necessário. O host precisa autenticar quem reconcilia e confirmar o resultado
+necessário. Ao receber `cancel_pending_tools`, o host deve propagar interrupção
+às tasks/adapters e submeter um resultado para cada chamada; o estado não prova
+que a task parou. O host precisa autenticar quem reconcilia e confirmar o resultado
 com a fonte de verdade do adapter; a engine valida formato e correlação, mas
 não consegue provar que a afirmação do host é verdadeira. O host também deve
 persistir cada transição antes de executar efeitos. Esta máquina de loop não
@@ -60,10 +72,11 @@ forjados; isto não é por si só uma fronteira de segurança ou autorização.
 ## APIs
 
 - Rust: `ModelToolLoopState::new`, `advance_model_turn` e
-  `advance_tool_result`, `recover_model_tool_loop` e `reconcile_tool_result`.
+  `advance_tool_result`, `cancel_model_tool_loop`, `recover_model_tool_loop` e
+  `reconcile_tool_result`.
 - Python: `start_model_tool_loop`, `accept_model_turn`, `submit_tool_result`,
-  `recover_model_tool_loop` e `reconcile_tool_result`.
+  `cancel_model_tool_loop`, `recover_model_tool_loop` e `reconcile_tool_result`.
 - TypeScript: `startModelToolLoop`, `acceptModelTurn`, `submitToolResult`,
-  `recoverModelToolLoop` e `reconcileToolResult`.
+  `cancelModelToolLoop`, `recoverModelToolLoop` e `reconcileToolResult`.
 
 Os dois bindings chamam o mesmo núcleo Rust e têm testes do ciclo completo.

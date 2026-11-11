@@ -350,9 +350,11 @@ export interface ModelToolLoopSettings {
 export type ModelToolLoopPhase =
   | "awaiting_model"
   | "awaiting_tool_results"
+  | "cancelling"
+  | "cancelled"
+  | "recovery_required"
   | "completed"
-  | "stopped"
-  | "recovery_required";
+  | "stopped";
 export type ToolResultStatus =
   "succeeded" | "failed" | "denied" | "cancelled" | "timed_out";
 export type ToolEffectState =
@@ -374,11 +376,16 @@ export interface PendingToolResult {
   effect: ToolEffect;
   result: ToolResult | null;
 }
+export interface PendingToolCancellation {
+  call_id: string;
+  tool_name: string;
+}
 export interface ModelToolLoopState {
   contract_version: number;
   run_id: string;
   turn_id: string;
   phase: ModelToolLoopPhase;
+  cancellation_requested?: boolean;
   settings: Required<ModelToolLoopSettings>;
   model_turns: number;
   tool_calls: number;
@@ -412,7 +419,9 @@ export type ModelToolLoopAction =
       model_turns: number;
       tool_calls: number;
     }
-  | { action: "recovery_required"; call_id: string; tool_name: string };
+  | { action: "recovery_required"; call_id: string; tool_name: string }
+  | { action: "cancel_pending_tools"; calls: PendingToolCancellation[] }
+  | { action: "cancelled"; model_turns: number; tool_calls: number };
 export interface ModelToolLoopTransition {
   state: ModelToolLoopState;
   action: ModelToolLoopAction;
@@ -539,6 +548,12 @@ interface NativeBinding {
     stateJson: string,
     operationId: string,
   ): Promise<string>;
+  sqliteModelToolLoopCancel(
+    path: string,
+    scope: string,
+    stateJson: string,
+    operationId: string,
+  ): Promise<string>;
   sqliteModelToolLoopReconcileToolResult(
     path: string,
     scope: string,
@@ -641,6 +656,7 @@ interface NativeBinding {
   ): string;
   modelToolLoopSubmitToolResult(stateJson: string, resultJson: string): string;
   modelToolLoopRecover(stateJson: string): string;
+  modelToolLoopCancel(stateJson: string): string;
   modelToolLoopReconcileToolResult(
     stateJson: string,
     resultJson: string,
@@ -1125,6 +1141,23 @@ export async function sqliteModelToolLoopRecover(
   ) as DurableModelToolLoopTransition;
 }
 
+/** Persist cancellation before the host interrupts active tool adapters. */
+export async function sqliteModelToolLoopCancel(
+  path: string,
+  scope: string,
+  state: DurableModelToolLoopState,
+  operationId: string,
+): Promise<DurableModelToolLoopTransition> {
+  return JSON.parse(
+    await native.sqliteModelToolLoopCancel(
+      path,
+      scope,
+      JSON.stringify(state),
+      operationId,
+    ),
+  ) as DurableModelToolLoopTransition;
+}
+
 export async function sqliteModelToolLoopReconcileToolResult(
   path: string,
   scope: string,
@@ -1327,6 +1360,15 @@ export function recoverModelToolLoop(
 ): ModelToolLoopTransition {
   return JSON.parse(
     native.modelToolLoopRecover(JSON.stringify(state)),
+  ) as ModelToolLoopTransition;
+}
+
+/** Request cancellation; adapters listed by the action should be interrupted by the host. */
+export function cancelModelToolLoop(
+  state: ModelToolLoopState,
+): ModelToolLoopTransition {
+  return JSON.parse(
+    native.modelToolLoopCancel(JSON.stringify(state)),
   ) as ModelToolLoopTransition;
 }
 

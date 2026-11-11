@@ -11,6 +11,7 @@ from vectora_engine import (
     accept_model_turn,
     assemble_turn,
     authorize_tool_dispatch,
+    cancel_model_tool_loop,
     chat_complete,
     chat_contract_version,
     chat_stream,
@@ -36,6 +37,7 @@ from vectora_engine import (
     sqlite_ledger_append_checkpointed,
     sqlite_ledger_read,
     sqlite_model_tool_loop_accept_model_turn,
+    sqlite_model_tool_loop_cancel,
     sqlite_model_tool_loop_start,
     sqlite_model_tool_loop_verify,
     sqlite_reserve_run,
@@ -628,7 +630,7 @@ def test_policy_gate_binds_approval_to_the_exact_call_and_policy() -> None:
 
 
 def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:
-    assert model_tool_loop_contract_version() == 1
+    assert model_tool_loop_contract_version() == 2
     state = start_model_tool_loop("run-1", "turn-1")
     assert state["phase"] == "awaiting_model"
     assert state["settings"]["max_model_turns"] == 50
@@ -694,6 +696,78 @@ def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:
     assert result["state"]["phase"] == "awaiting_model"
     assert result["action"]["action"] == "continue_with_tool_results"
     assert result["action"]["results"][0]["output"] == "found"
+
+
+def test_model_tool_loop_cancel_waits_for_inflight_tool_result() -> None:
+    state = start_model_tool_loop("run-cancel", "turn-cancel")
+    completion = {
+        "contract_version": 1,
+        "content": "",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "name": "write",
+                "arguments": {"state": "object", "value": {}},
+            }
+        ],
+    }
+    dispatch = {
+        "contract_version": 1,
+        "run_id": "run-cancel",
+        "turn_id": "turn-cancel",
+        "execution_mode": "sequential",
+        "decisions": [
+            {
+                "decision": "invoke",
+                "call": completion["tool_calls"][0],
+                "schema_version": "write.v1",
+                "required_capability": "write",
+                "timeout_ms": 1000,
+                "effect": "external_effect",
+                "idempotency": "requires_key",
+                "idempotency_key": "key-1",
+            }
+        ],
+    }
+    state = accept_model_turn(state, completion, dispatch)["state"]
+    cancellation = cancel_model_tool_loop(state)
+    assert cancellation["state"]["phase"] == "cancelling"
+    assert cancellation["action"] == {
+        "action": "cancel_pending_tools",
+        "calls": [{"call_id": "call-1", "tool_name": "write"}],
+    }
+    result = submit_tool_result(
+        cancellation["state"],
+        {
+            "contract_version": 1,
+            "run_id": "run-cancel",
+            "turn_id": "turn-cancel",
+            "call_id": "call-1",
+            "tool_name": "write",
+            "status": "cancelled",
+            "effect_state": "not_applied",
+            "output": "cancelled",
+        },
+    )
+    assert result["state"]["phase"] == "cancelled"
+    assert result["action"]["action"] == "cancelled"
+
+
+def test_durable_loop_cancellation_is_persisted(tmp_path: Any) -> None:
+    path = str(tmp_path / "loop-cancel.db")
+    state = asyncio.run(
+        sqlite_model_tool_loop_start(
+            path, "workspace", "run-cancel", "turn-cancel", {}, "start"
+        )
+    )
+    cancelled = asyncio.run(
+        sqlite_model_tool_loop_cancel(path, "workspace", state, "cancel")
+    )
+    assert cancelled["state"]["loop_state"]["phase"] == "cancelled"
+    assert (
+        asyncio.run(sqlite_model_tool_loop_cancel(path, "workspace", state, "cancel"))
+        == cancelled
+    )
 
 
 def test_durable_loop_verification_is_exposed_and_idempotent(tmp_path: Any) -> None:

@@ -21,8 +21,8 @@ use vectora_engine::harness::{
     RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
     TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch,
     ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
-    authorize_tool_dispatch, evaluate_verification, prepare_tool_dispatch, reconcile_tool_result,
-    recover_model_tool_loop, tool_chat_definitions,
+    authorize_tool_dispatch, cancel_model_tool_loop, evaluate_verification, prepare_tool_dispatch,
+    reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -376,6 +376,28 @@ pub async fn sqlite_model_tool_loop_recover(
             SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
         store
             .recover(&state, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("loop store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub async fn sqlite_model_tool_loop_cancel(
+    path: String,
+    scope: String,
+    state_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable loop state"))?;
+    let transition = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+        store
+            .cancel(&state, &operation_id)
             .map_err(|error| error.to_string())
     })
     .await
@@ -1051,6 +1073,15 @@ pub fn model_tool_loop_recover(state_json: String) -> Result<String> {
         .map_err(|_| Error::from_reason("invalid model/tool loop state"))?;
     let transition =
         recover_model_tool_loop(&state).map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&transition)
+}
+
+#[napi]
+pub fn model_tool_loop_cancel(state_json: String) -> Result<String> {
+    let state: ModelToolLoopState = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid model/tool loop state"))?;
+    let transition =
+        cancel_model_tool_loop(&state).map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&transition)
 }
 

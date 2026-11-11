@@ -21,8 +21,8 @@ use vectora_engine::harness::{
     RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
     TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch,
     ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
-    authorize_tool_dispatch, evaluate_verification, prepare_tool_dispatch, reconcile_tool_result,
-    recover_model_tool_loop, tool_chat_definitions,
+    authorize_tool_dispatch, cancel_model_tool_loop, evaluate_verification, prepare_tool_dispatch,
+    reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -391,6 +391,31 @@ fn sqlite_model_tool_loop_recover<'py>(
                 SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
             store
                 .recover(&state, &operation_id)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("loop store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&transition)
+    })
+}
+
+#[pyfunction]
+fn sqlite_model_tool_loop_cancel<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    state_json: String,
+    operation_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let state: DurableModelToolLoopState = serde_json::from_str(&state_json)
+            .map_err(|_| py_error("invalid durable loop state"))?;
+        let transition = tokio::task::spawn_blocking(move || -> Result<_, String> {
+            let mut store =
+                SqliteModelToolLoopStore::open(path, scope).map_err(|error| error.to_string())?;
+            store
+                .cancel(&state, &operation_id)
                 .map_err(|error| error.to_string())
         })
         .await
@@ -1120,6 +1145,13 @@ fn model_tool_loop_recover(state_json: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn model_tool_loop_cancel(state_json: String) -> PyResult<String> {
+    let state: ModelToolLoopState =
+        serde_json::from_str(&state_json).map_err(|_| py_error("invalid model/tool loop state"))?;
+    encode_json(&cancel_model_tool_loop(&state).map_err(py_error)?)
+}
+
+#[pyfunction]
 fn model_tool_loop_reconcile_tool_result(
     state_json: String,
     result_json: String,
@@ -1394,6 +1426,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_recover, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_cancel, module)?)?;
     module.add_function(wrap_pyfunction!(
         sqlite_model_tool_loop_reconcile_tool_result,
         module
@@ -1438,6 +1471,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(model_tool_loop_recover, module)?)?;
+    module.add_function(wrap_pyfunction!(model_tool_loop_cancel, module)?)?;
     module.add_function(wrap_pyfunction!(
         model_tool_loop_reconcile_tool_result,
         module
