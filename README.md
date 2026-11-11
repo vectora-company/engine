@@ -1,11 +1,11 @@
 # Vectora Engine
 
-![Engine](website/public/engine-banner.png)
-
 Núcleo em Rust para capacidades reutilizáveis de execução de agentes nos
 produtos Vectora. O repositório está em bootstrap: os contratos e limites das
 APIs ainda estão sendo definidos, portanto esta crate ainda não é um destino
 estável de integração.
+
+Documentação pública: [docs.vectora.company/engine](https://docs.vectora.company/engine/).
 
 O desenvolvimento é incremental e guiado por contratos. Cada capacidade deve
 ter comportamento de referência, casos de conformidade entre implementações,

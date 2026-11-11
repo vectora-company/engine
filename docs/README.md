@@ -43,16 +43,15 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 - [Continuidade](plans/03-plano-continuidade.md)
 - [Storage e ledger](plans/04-plano-storage-ledger.md)
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
-- [Site público de documentação](plans/06-site-documentacao-engine.md)
 
-## Site público
+## Documentação pública
 
-O código-fonte e a documentação pública Hugo + Hextra ficam em `website/`, com
-conteúdo em português e inglês sobre instalação, arquitetura, capacidades,
-contratos, Rust, Python e TypeScript/Node. Planos, auditorias, sabatina e specs
-internas em `docs/` não são publicados automaticamente. O site ainda não tem
-workflow de publicação; consulte [o plano do site](plans/06-site-documentacao-engine.md)
-antes de habilitar hosting público.
+A documentação pública da Engine é mantida no portal central da organização:
+[docs.vectora.company/engine](https://docs.vectora.company/engine/). O site e o
+workflow de publicação pertencem ao repositório
+[`documentation`](https://github.com/vectora-ltda/documentation); este
+repositório mantém planos, auditorias, sabatina e especificações internas em
+`docs/`.
 
 ## Especificações
 
