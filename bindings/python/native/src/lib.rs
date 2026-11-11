@@ -16,11 +16,12 @@ use vectora_engine::chat::{
     OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
-    ApprovalGrant, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
-    PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
-    TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
-    ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, advance_model_turn,
-    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, reconcile_tool_result,
+    ApprovalGrant, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
+    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot,
+    RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
+    TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch,
+    ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
+    authorize_tool_dispatch, evaluate_verification, prepare_tool_dispatch, reconcile_tool_result,
     recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
@@ -197,6 +198,21 @@ fn rerank_contract_version() -> u16 {
 #[pyfunction]
 fn run_contract_version() -> u16 {
     RUN_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn evidence_gate_contract_version() -> u16 {
+    EVIDENCE_GATE_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn evaluate_verification_json(report_json: &str, policy_json: &str) -> PyResult<String> {
+    let report: VerificationReport =
+        serde_json::from_str(report_json).map_err(|_| py_error("invalid verification report"))?;
+    let policy: EvidenceDispositionPolicy =
+        serde_json::from_str(policy_json).map_err(|_| py_error("invalid evidence gate policy"))?;
+    let evaluation = evaluate_verification(&report, &policy).map_err(py_error)?;
+    encode_json(&evaluation)
 }
 
 #[pyfunction]
@@ -1299,6 +1315,8 @@ fn fallback_chat_stream_start<'py>(
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(evidence_gate_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(evaluate_verification_json, module)?)?;
     module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append_checkpointed, module)?)?;

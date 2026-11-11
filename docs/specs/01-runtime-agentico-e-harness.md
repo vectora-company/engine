@@ -68,7 +68,7 @@ O modelo propõe ações. A engine controla a execução e só invoca uma tool d
 - Subagentes são novas execuções relacionadas por parent ID, com escopo, capacidades, orçamento, prazo, cancelamento e formato de retorno limitados.
 - Delegação não cria permissões novas nem transfere automaticamente ownership do host.
 - Decision Models têm interface própria para classificação, score, seleção e resposta tipada; registrar provider/capability/versão, limites e validação, sem alegar equivalência entre modelos.
-- Suportar verificação genérica de evidências e gates fornecidos/configurados pelo consumidor: passed, failed, infra_error, not_run. O gate pode resultar em passed, degraded, blocked ou unverified.
+- Suportar verificação genérica de evidências e gates fornecidos/configurados pelo consumidor: `passed`, `failed`, `infra_error`, `not_run`; o veredito pode ser `passed`, `degraded`, `blocked` ou `unverified`. O contrato experimental está em [`15-verification-gates.md`](15-verification-gates.md); ele ainda não persiste report/decisão no lifecycle.
 - Evidências devem apontar para artifacts/saídas concretos, ter origem e digest quando aplicável, e respeitar redação/expiração.
 
 ## Responsabilidades do consumidor

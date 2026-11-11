@@ -16,11 +16,12 @@ use vectora_engine::chat::{
     OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
-    ApprovalGrant, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState,
-    PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
-    TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
-    ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, advance_model_turn,
-    advance_tool_result, authorize_tool_dispatch, prepare_tool_dispatch, reconcile_tool_result,
+    ApprovalGrant, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
+    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot,
+    RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
+    TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch,
+    ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
+    authorize_tool_dispatch, evaluate_verification, prepare_tool_dispatch, reconcile_tool_result,
     recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
@@ -200,6 +201,22 @@ pub fn rerank_contract_version() -> u32 {
 #[napi]
 pub fn run_contract_version() -> u32 {
     u32::from(RUN_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn evidence_gate_contract_version() -> u32 {
+    u32::from(EVIDENCE_GATE_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn evaluate_verification_json(report_json: String, policy_json: String) -> Result<String> {
+    let report: VerificationReport = serde_json::from_str(&report_json)
+        .map_err(|_| Error::from_reason("invalid verification report"))?;
+    let policy: EvidenceDispositionPolicy = serde_json::from_str(&policy_json)
+        .map_err(|_| Error::from_reason("invalid evidence gate policy"))?;
+    let evaluation = evaluate_verification(&report, &policy)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&evaluation)
 }
 
 #[napi]
