@@ -27,11 +27,12 @@ Estados desta etapa: `feito`, `pendente`, `bloqueado` ou `não aplicável`.
 - [x] `pnpm typecheck` em `bindings/typescript` com a declaração versionada.
 - [x] Typecheck com `native/index.js` temporariamente ausente; o arquivo foi
       restaurado após a verificação.
-- [ ] Revisar `git diff`, lista staged e arquivos ignorados antes do commit.
+- [x] Revisar `git diff`, lista staged e arquivos ignorados antes do commit;
+      nenhum arquivo ignorado ou artefato incidental entrou no commit.
 
 ## Evidência desta etapa
 
-Base: `main` em `22c861f`; implementação ainda não commitada nesta branch.
+Base: `main` em `22c861f`; commit da implementação `c2d0358`.
 
 - `cargo fmt --all -- --check` — passou.
 - `cargo clippy -p vectora-engine --all-targets --locked -- -D warnings` — passou.
