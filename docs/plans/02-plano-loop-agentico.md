@@ -65,9 +65,14 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    loop; o consumidor ainda executa e autentica os checks. Ambos os caminhos
    estão expostos pelos bindings Python/TypeScript. O contrato de snapshot do
    loop é v2, com leitura compatível de snapshots v1 sem verificação. A fase
-   segue aberta para validar replay cruzado de restart, cancelamento,
-   redaction, dois perfis de consumidor e integração com o fluxo completo antes
-   de qualquer alegação de paridade ou adoção.
+   tem replay de verificação e cancelamento cobertos após reabertura SQLite,
+   inclusive replay idempotente da mesma operação nos bindings Python e
+   TypeScript. Cancelar a lifecycle não interrompe tasks nem efeitos externos;
+   o consumidor continua responsável por sinalizar cancelamento e reconciliar
+   chamadas incertas antes de escolher entre `cancelled` e
+   `recovery_required`. Redaction, dois perfis de consumidor e integração com
+   o fluxo completo seguem abertas antes de qualquer alegação de paridade ou
+   adoção.
 
 Cada parte do plano deve ser entregue em PR próprio empilhado sobre o anterior.
 Todo contrato público é implementado uma vez no Rust e coberto pelos bindings

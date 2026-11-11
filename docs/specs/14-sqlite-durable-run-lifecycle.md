@@ -25,6 +25,11 @@ transições ordenadas e leitura do checkpoint mais recente para um escopo.
   obsoleto retorna conflito de versão. Uma transição para o estado já atual é
   um no-op somente quando o snapshot fornecido ainda corresponde ao último
   checkpoint.
+- `cancelled` é um estado terminal durável da lifecycle. A transição para esse
+  estado usa a mesma chave de operação, sequência esperada e checkpoint das
+  demais transições; sua leitura após reabrir o banco e o replay da mesma
+  operação devem produzir o mesmo resultado. A engine registra o estado, mas
+  não interrompe tarefas do host nem cancela adapters externos.
 - Os bindings encaminham as operações para esse mesmo código Rust e transportam
   os contratos como JSON versionado.
 
@@ -38,6 +43,10 @@ transições ordenadas e leitura do checkpoint mais recente para um escopo.
   não concede capabilities e não autoriza tools.
 - O host deve remover segredos e conteúdo sensível de `request` antes de
   persistir, além de definir retenção, backup e permissões do arquivo SQLite.
+- O host interrompe tarefas de provider/tool e reconcilia efeitos externos.
+  Se uma tool puder ter produzido efeito e o resultado for incerto, o host deve
+  usar `recovery_required` até reconciliar; marcar o run como `cancelled` não
+  prova que o efeito foi interrompido ou revertido.
 - O adapter não substitui `SqliteModelToolLoopStore` e ainda não conecta
   automaticamente lifecycle, policy, execução de tools, cancelamento ou
   recovery do loop completo.
