@@ -43,6 +43,13 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 - [Continuidade](plans/03-plano-continuidade.md)
 - [Storage e ledger](plans/04-plano-storage-ledger.md)
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
+- [Site público de documentação](plans/06-site-documentacao-engine.md)
+
+## Site público
+
+O código-fonte do site Hugo + Hextra fica em `website/`. O conteúdo público
+começará vazio, com índices em inglês e português; planos, auditorias e specs
+internas em `docs/` não são publicados automaticamente.
 
 ## Especificações
 
