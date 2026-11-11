@@ -27,6 +27,12 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
   revalidados contra a implementação atual, com evidências e limitações.
 - [Matriz de conformidade das capabilities](analyses/02-matriz-conformidade-capabilities.md):
   contratos, APIs Rust/Python/TypeScript, testes existentes, maturidade e gaps.
+- [Análise cruzada: Akita, Engine, Vectora e GH Bot](analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md):
+  livro, snapshots de código, capacidades comparadas, fronteiras e sabatina.
+- [Sabatina da Engine e do ecossistema](analyses/04-sabatina-engine-ecossistema.md):
+  200 perguntas e respostas sobre arquitetura, implementação, lacunas,
+  consumidores e frameworks/harnesses relacionados. Atualize-a em cada ciclo
+  do goal loop conforme o [prompt](plans/00-prompt-loop-goal.md).
 - [Checklist da matriz de conformidade](checklists/02-matriz-conformidade-capabilities.md):
   inventário concluído e trabalho pendente antes da próxima etapa do plano.
 
@@ -37,6 +43,13 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 - [Continuidade](plans/03-plano-continuidade.md)
 - [Storage e ledger](plans/04-plano-storage-ledger.md)
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
+- [Site público de documentação](plans/06-site-documentacao-engine.md)
+
+## Site público
+
+O código-fonte do site Hugo + Hextra fica em `website/`. O conteúdo público
+começará vazio, com índices em inglês e português; planos, auditorias e specs
+internas em `docs/` não são publicados automaticamente.
 
 ## Especificações
 

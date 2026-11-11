@@ -42,3 +42,8 @@ coverage/
 dist/
 bindings/typescript/native/index.js
 bindings/typescript/native/*.node
+
+# Hugo generated output
+website/public/
+website/resources/
+website/.hugo_build.lock

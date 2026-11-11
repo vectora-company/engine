@@ -4,6 +4,10 @@ Este conjunto define os documentos que orientam um goal contínuo de
 implementação. O [prompt curto](../plans/00-prompt-loop-goal.md) é o ponto de
 entrada; os documentos abaixo contêm o processo completo.
 
+A [sabatina da Engine e do ecossistema](../analyses/04-sabatina-engine-ecossistema.md)
+é uma referência viva: revise as respostas afetadas a cada ciclo e reconcilie
+implementação, specs, planos, consumidores, referências e evidências.
+
 ## Documentos
 
 - [Plano operacional](01-plano-operacional.md): início de sessão, seleção da
