@@ -41,5 +41,4 @@ node_modules/
 coverage/
 dist/
 bindings/typescript/native/index.js
-bindings/typescript/native/index.d.ts
 bindings/typescript/native/*.node

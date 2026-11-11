@@ -332,7 +332,9 @@ def _clean(target, source, env):
         if os.path.isdir(path):
             shutil.rmtree(path)
     native_dir = os.path.join(ROOT, "bindings", "typescript", "native")
-    for name in ("index.js", "index.d.ts"):
+    # Keep the checked-in declaration available for typechecking without a
+    # native build. NAPI regenerates it during scons build-typescript.
+    for name in ("index.js",):
         generated_file = os.path.join(native_dir, name)
         if os.path.isfile(generated_file):
             os.remove(generated_file)

@@ -1,14 +1,13 @@
-# Prompt curto para o goal de desenvolvimento
+# Prompt para o goal loop
 
-Trabalhe na próxima etapa pendente e aprovada da Engine. Siga `AGENTS.md` e
-consulte o [plano do loop](05-loop-de-desenvolvimento.md), o
+Continue a próxima etapa pendente do plano ativo. Siga `AGENTS.md` e use o
+[plano do loop](05-loop-de-desenvolvimento.md), o
 [checklist](../checklists/00-checklist-de-implementacao.md), a
-[análise e referências](../analyses/00-analise-e-referencias-de-desenvolvimento.md)
-e a spec e o plano da capability ativa. Revalide a documentação contra o código,
-implemente incrementalmente, verifique a mudança e atualize esses documentos.
+[análise](../analyses/00-analise-e-referencias-de-desenvolvimento.md) e a
+spec/plano da capability como fontes de trabalho. Revalide o código, implemente,
+verifique e atualize esses documentos.
 
-Encerre somente quando: (1) o plano ativo estiver concluído e documentado;
-(2) uma decisão vital depender de `brunosrz` — registre opções e impactos,
-pergunte e aguarde; ou (3) um bloqueio externo impedir qualquer avanço
-independente — registre evidências e condição de retomada. Informe o motivo e
-pare; não encerre por conveniência ou falta de contexto.
+Encerre apenas quando o plano ativo estiver concluído, uma decisão vital exigir
+resposta de `brunosrz`, ou um bloqueio externo impedir todo avanço independente.
+Nos dois últimos casos, registre pergunta/evidências e condição de retomada,
+aguarde a resposta ou mudança externa e pare. Não encerre por conveniência.

@@ -1,24 +1,25 @@
 # Plano de continuidade da Vectora Engine
 
-**Levantamento:** 9 de novembro de 2026
-**Referência remota:** branch `main`, commit `43a2655`
+**Estado revalidado:** 11 de novembro de 2026
+**Referência remota:** branch `main`, commit `22c861f`
 **Objetivo:** transformar as capabilities experimentais já implementadas numa
 engine distribuível e adotável com segurança, sem substituir o backend Python
 nem presumir paridade.
 
 ## Resumo executivo
 
-A engine já deixou o bootstrap: o core Rust implementa chat OpenAI-compatible,
-adapters nativos Anthropic/Google/Cohere, fallback, embeddings/rerank e uma
-fundação experimental de Harness. Os bindings Python e TypeScript/Node chamam o
-mesmo core e passam por CI.
+A engine já contém adapters de chat, embeddings/rerank, storage/mensageria e um
+Harness experimental. Desde a fotografia anterior, o main recebeu storage e
+ledger, lifecycle e loop SQLite duráveis, gates de verificação, cancelamento com
+reconciliação e policy/aprovação persistidas. Os bindings Python e
+TypeScript/Node expõem essas capacidades do mesmo core.
 
-O bloqueio para adoção não é falta de mais providers. É que execução, loop e
-dispatch de tools ainda são contratos em memória: não há reserva idempotente
-atômica, ledger/checkpoint durável, policy de autorização ou recovery após
-restart. O dispatch prepara decisões, mas o consumer ainda executa as tools e
-precisa revalidar a policy antes de efeitos. As APIs continuam marcadas como
-experimentais.
+O bloqueio para adoção é agora a maturidade operacional e a comprovação de
+conformidade: efeitos externos continuam sob execução do host, o SQLite não
+torna esses efeitos atômicos, e não há integração comprovada no Vectora App nem
+no GH Bot. A maior parte das APIs continua experimental. A revisão dos cinco
+findings históricos do PR #3 foi revalidada; veja
+[`01-auditoria-review-pr3.md`](../analyses/01-auditoria-review-pr3.md).
 
 O app consumidor segue no backend Python e não declara dependência nem uso de
 `vectora-engine` nos manifests ou caminhos de runtime examinados. Portanto, o
@@ -29,66 +30,39 @@ migração ampla nem mais superfície de provider.
 
 ## Estado observado
 
-| Área                | Estado em `main`                                                                | Limite relevante                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Core e automação    | Workspace Rust, CI multiplataforma, tooling e crate `0.1.0`                     | Não há workflow de release nos workflows examinados.                                                  |
-| Chat                | OpenAI-compatible, Anthropic, Google, Cohere e fallback explícito               | Contrato experimental; fallback/seleção de produto continuam no consumer.                             |
-| Embeddings/rerank   | Adapters e fallback explícito no Rust, expostos pelos bindings                  | Experimental; não migra storage, indexação nem o RAG do produto.                                      |
-| Run lifecycle       | Estados e transições locais determinísticas                                     | A chave de idempotência não é reservada; snapshots não são persistidos.                               |
-| Turn assembly       | Acumula eventos, tool calls, usage e limites                                    | Não persiste, autoriza nem executa tools.                                                             |
-| Tool dispatch       | Valida schema/capabilities e produz decisões default-deny                       | Não autentica o host, executa adapters, impõe timeout, policy completa ou aprovação.                  |
-| Model/tool loop     | Coordena turns e resultados, limita orçamento e interrompe efeito incerto       | Em memória; snapshots recarregados não são confiáveis e recovery durável não existe.                  |
-| Storage/memória/RAG | Especificação e sequência de implementação propostas                            | Não há crate/adapters de storage da engine implementados.                                             |
-| Distribuição        | Configuração local de Python/PyO3 e TypeScript/N-API                            | Publicação não comprovada nesta auditoria; issue npm aberta e sem workflow de release no repositório. |
-| Vectora App         | Backend Python mantém `run_conversation`, registry de tools e clients/fallbacks | Nenhum uso da binding Rust foi encontrado nos manifests/caminhos examinados.                          |
+| Área | Estado em `main` | Limite relevante |
+| --- | --- | --- |
+| Core e distribuição local | Workspace Rust `0.1.0`; `scons install`, builds focados e cache Cargo separados. | Publicação versionada dos crates/bindings não está comprovada. |
+| Chat e modelos | OpenAI-compatible, Anthropic, Google, Cohere, fallback, embeddings e rerank nos bindings. | Contratos experimentais; seleção, credenciais e fallback de produto pertencem ao consumer. |
+| Storage e mensageria | SQLite/PostgreSQL, LanceDB/Qdrant, NATS/Redis; ledger SQLite-first e fila/pub-sub com contratos distintos. | Garantias são específicas de cada adapter/configuração; revisar S0-S5 em `04-plano-storage-ledger.md`. |
+| Lifecycle e loop | Stores SQLite persistem admissão, transições, eventos/checkpoints do loop e recuperação. | Não dão exactly-once a efeitos externos nem autenticam o host. |
+| Verificação e cancelamento | Reports/gates e pedido de cancelamento são duráveis; resultados incertos exigem reconciliação. | O host executa checks, interrompe adapters e comprova seu término. |
+| Policy e aprovação | `SqliteToolPolicyStore` persiste snapshots, pedidos e recibos, com verificação de estado/binding. | A autenticação do aprovador e a execução da tool permanecem no host. |
+| Consumidores | Backend Python do Vectora e GH Bot seguem como projetos consumidores. | Não foi encontrado uso de `vectora-engine` nos manifests/caminhos atuais examinados. |
 
-O checkout do app observado estava em `feat/ssh-client-server-tailwind`, com
-19 commits à frente e 19 atrás de seu upstream; os commits locais mais recentes
-eram de 8 de novembro e tratavam de setup/build desktop, não de integração da
-engine. Sincronizar e identificar a base de integração antes de abrir um PR no
-app.
+## Fotografia de entregas
 
-## Auditoria do GitHub
+O histórico em `main` inclui o bootstrap e bindings (#1–#14), storage e ledger
+(#15), policy/aprovação duráveis (#16) e as etapas posteriores de lifecycle,
+verificação, cancelamento, build e persistência do Harness até o PR #30. A lista
+e os detalhes por capability estão no walkthrough e nos planos específicos; o
+número do PR não substitui evidência de código nem de conformidade.
 
-Foi encontrada uma issue pública: [#2 — publicar a binding TypeScript no
-npm](https://github.com/vectora-ltda/engine/issues/2), ainda aberta e sem
-comentários. Seu escopo inclui mais capacidades do que a engine oferece hoje
-(por exemplo, storage e Decision Models); dividir a entrega por APIs realmente
-implementadas e não declarar aceite por cobertura futura.
-
-Os 11 PRs encontrados estão fechados e merged:
-
-| PRs                                                                                                       | Entrega                                                        |
-| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| [#1](https://github.com/vectora-ltda/engine/pull/1)                                                       | Bootstrap Rust, CI e tooling.                                  |
-| [#3](https://github.com/vectora-ltda/engine/pull/3)–[#4](https://github.com/vectora-ltda/engine/pull/4)   | Bindings e chat OpenAI-compatible/perfis.                      |
-| [#5](https://github.com/vectora-ltda/engine/pull/5)–[#6](https://github.com/vectora-ltda/engine/pull/6)   | Protocolos nativos Anthropic, Google e Cohere.                 |
-| [#7](https://github.com/vectora-ltda/engine/pull/7)–[#8](https://github.com/vectora-ltda/engine/pull/8)   | Fallback, embeddings e rerank.                                 |
-| [#9](https://github.com/vectora-ltda/engine/pull/9)–[#12](https://github.com/vectora-ltda/engine/pull/12) | Lifecycle, turn assembly, dispatch e coordenação modelo/tools. |
-
-Os checks de CI reportados pelos PRs merged passaram nas plataformas Rust e nos
-jobs de tooling/bindings aplicáveis. O histórico de review merece uma ação
-específica: PR #1 recebeu aprovação; PR #3 foi marcado `CHANGES_REQUESTED` pelo
-CodeRabbit e ainda tem cinco threads de review não resolvidas no GitHub; PRs
-#4–#12 não têm review formal registrado. As observações do PR #3 incluem
-redirecionamentos HTTP, validação do valor da API key, serialização de campos
-opcionais, `null` em usage/tool calls e a ordem de build/typecheck no SCons.
-Reproduzir cada observação contra `main` antes de tratá-la como bug atual ou
-descartá-la como obsoleta.
-
-O plano de portabilidade já prevê gates para bindings, conformidade, adoção e
-rollback; o plano do Harness coloca policy/aprovação, persistência/recovery e
-verificação depois das fundações já entregues. A especificação de storage
-continua sendo proposta: a issue local é fonte de requisitos, não contrato
-Rust pronto.
+O PR #3 teve cinco observações de review que permaneceram sem resolução formal.
+Elas foram revalidadas contra o `main` atual e classificadas em
+[`01-auditoria-review-pr3.md`](../analyses/01-auditoria-review-pr3.md). Três
+foram reproduzidas e corrigidas nesta etapa; duas já estavam corrigidas em
+`main`. A ordem S0-S5 de storage em `04-plano-storage-ledger.md` precisa ser
+reconciliada com os adapters já presentes antes de qualquer etapa ser descrita
+como pendente.
 
 ## Plano priorizado
 
 ### 0. Fechar a fotografia de conformidade e review
 
-1. Reproduzir e classificar as cinco threads não resolvidas do PR #3 contra o
-   `main` atual; resolver, justificar ou abrir trabalho rastreável para cada
-   uma.
+1. **Review do PR #3:** findings classificados; três correções e cobertura
+   local estão nesta branch, duas correções já estavam em `main`. Resultado
+   final e comandos ficam na análise/checklist desta etapa.
 2. Consolidar uma matriz por capability com versão do contrato, APIs Rust,
    Python e TypeScript, maturidade, limites, erros, timeout, cancelamento,
    ownership e fallback.
@@ -103,29 +77,26 @@ Rust pronto.
 **Saída:** gaps atuais reproduzíveis, feedback de review triado e uma linha de
 base de conformidade para cada binding.
 
-### 1. Especificar storage durável (S0), antes de implementá-lo
+### 1. Auditar maturidade de storage e ledger
 
-Usar a issue local de storage como levantamento e adaptar a intenção para uma
-especificação Rust própria. Mapear consumidores/dados e escolher o primeiro
-backend somente após identificar as necessidades reais. Definir o contrato de
-store para reserva atômica por thread/turn/idempotency key, ledger ordenado,
-checkpoint, compare-and-set, migração, retenção, redaction e falhas.
+O PR #15 implementou contratos e adapters SQLite/PostgreSQL, LanceDB/Qdrant,
+NATS/Redis, filas/pub-sub e ledger SQLite-first. O plano
+[`04-plano-storage-ledger.md`](04-plano-storage-ledger.md) ainda conserva S0-S5
+como propostas e precisa registrar, item a item, o que está implementado e o
+que falta provar. Confrontar testes e adapters reais com garantias de
+consistência, concorrência, restart, retenção, redaction, limites e falhas.
+Não reimplementar adapters existentes nem assumir que sua presença comprova
+paridade operacional.
 
-Implementar depois um recorte mínimo para persistir lifecycle e coordenação do
-Harness. Testar concorrência, reinício, replay, duplicatas, migração e
-rollback. Estado incompatível ou checkpoint ausente deve falhar explicitamente;
-não criar uma execução nova como fallback silencioso.
+**Saída:** matriz de cobertura por adapter/contrato e lista de gaps reproduzidos
+que orienta o próximo trabalho de storage.
 
-**Saída:** uma capability durável com garantias declaradas, sem dual-write nem
-migração dos dados de produto.
+### 2. Completar a integração host/runtime de policy e aprovação
 
-### 2. Tornar policy e aprovação uma fronteira efetiva
-
-Definir snapshot versionado emitido pelo host confiável; ligar aprovação a
-tool, argumentos normalizados, escopo, digest de policy e expiração; invalidar
-aprovação após mudança relevante. Revalidar imediatamente antes de cada efeito
-e depois de retomada. Separar estado do run, resultado da verificação e
-veredito do gate.
+Os contratos e store SQLite existem experimentalmente; o passo restante é
+provar a integração do host que recompila policy, autentica cada recibo,
+recarrega estado atual após restart e revalida imediatamente antes de efeitos.
+Separar estado do run, resultado da verificação e veredito do gate.
 
 O core não deve autenticar usuários nem importar RBAC do Vectora. O consumer
 continua responsável por identidade, policy de produto e adapters. Capability
@@ -135,13 +106,12 @@ contratos testáveis.
 **Saída:** nenhuma tool com efeito externo é executável com base apenas em
 capabilities do modelo ou em snapshot não confiável.
 
-### 3. Completar cancelamento e recovery antes de efeitos
+### 3. Completar cancelamento e recovery no host antes de efeitos
 
-Especificar deadlines e cancelamento de run distintos de cancelamento de
-assinante/stream; propagar cancelamento aos providers e adapters; persistir o
-resultado terminal. Modelar resultado incerto, reconciliação e retomada sem
-repetir cegamente um efeito. Impor timeout no ponto de execução, não apenas
-transportar o timeout declarado pelo contrato.
+O core persiste pedido e estado de reconciliação, mas o host precisa propagar
+cancelamento a providers/processos/adapters, confirmar término ou registrar
+resultado incerto e retomar sem repetir efeito. Separar cancelamento de run e
+cancelamento de assinante/stream; impor timeout no ponto de execução.
 
 **Saída:** testes com falha parcial, restart, timeout, cancelamento, resultado
 `unknown` e reconciliação sem duplicação de efeitos.
@@ -206,16 +176,15 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Abrir o próximo PR como **triagem dos cinco comentários pendentes do PR #3 e
-conformidade compartilhada dos contratos já implementados**. Isso reduz risco
-antes de estabilizar/publicar API; em paralelo, produzir a especificação S0 de
-storage a partir dos consumidores reais. Não começar pela substituição do
-loop Python, pela execução de tools com efeitos ou por mais adapters LLM.
+Concluir a verificação local da triagem do PR #3 e, em seguida, produzir a
+matriz de conformidade compartilhada. A trilha de storage seguinte é auditoria
+de cobertura S0-S5, pois adapters e ledger já existem. Em paralelo, identificar
+um piloto reversível com um consumer real e definir evidência de adoção. Não
+começar por reescrita ampla do backend Python nem por duplicação de providers.
 
 ## Nota de proveniência local
 
-Durante esta auditoria, a branch `audit/main-commit-walkthrough` partiu do
-commit `43a2655` de `main`. Ela corrige a política de fallback identificada
-acima, alinha sua spec e registra o walkthrough em
-`docs/audits/01-auditoria-e-walkthrough-da-main.md`. `scons ci` passou nessa
-branch; o CI do GitHub ainda deve validar o PR.
+O walkthrough histórico registra entregas até o commit `43a2655`. Esta
+fotografia foi atualizada para `22c861f`; consulte a auditoria do PR #3 e os
+planos específicos para a evidência posterior. Nenhum estado de CI remoto é
+usado como evidência nesta atualização.

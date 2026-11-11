@@ -44,10 +44,15 @@ verify that the consumer actually displayed an approval prompt. A grant is a
 binding, not a signature. The consumer must authenticate and persist its
 approval evidence and must recompile policy before resumed execution.
 
-This contract does not persist snapshots, grants or decisions; it does not
-reserve a grant against replay, implement product RBAC, enforce sandbox/egress,
-cancel adapters, or execute effects. It is not a complete security boundary.
-Those guarantees require the later durable run/recovery and host-adapter work.
+The pure `authorize_tool_dispatch` operation is stateless. The opt-in
+`SqliteToolPolicyStore` extension persists snapshots, pending requests,
+evaluations and host-validated receipts in the SQLite ledger/checkpoint; its
+contract and limits are specified in
+[`16-sqlite-durable-tool-policy.md`](16-sqlite-durable-tool-policy.md). The
+store rejects stale state and conflicting receipt bindings, but it does not
+authenticate the host, turn grants into cryptographic signatures, guarantee
+exactly-once effects, enforce sandbox/egress, cancel adapters, or execute
+effects. It is not a complete security boundary.
 
 ## Conformance
 
