@@ -725,6 +725,9 @@ fn denial_code(code: ToolDenialCode) -> &'static str {
         ToolDenialCode::InvalidArguments => "invalid_arguments",
         ToolDenialCode::SchemaMismatch => "schema_mismatch",
         ToolDenialCode::TurnCallLimitExceeded => "turn_call_limit_exceeded",
+        ToolDenialCode::PolicyToolDisabled => "policy_tool_disabled",
+        ToolDenialCode::PolicyCapabilityDenied => "policy_capability_denied",
+        ToolDenialCode::UntrustedContentEffect => "untrusted_content_effect",
     }
 }
 

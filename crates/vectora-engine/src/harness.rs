@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 mod model_tool_loop;
+mod policy;
 mod tool_dispatch;
 
 pub use model_tool_loop::{
@@ -14,6 +15,11 @@ pub use model_tool_loop::{
     ModelToolLoopSettings, ModelToolLoopState, ModelToolLoopStopReason, ModelToolLoopTransition,
     PendingToolResult, ToolEffectState, ToolResult, ToolResultStatus, accept_model_turn,
     advance_model_turn, advance_tool_result, submit_tool_result,
+};
+pub use policy::{
+    ApprovalGrant, ApprovalMode, ApprovalRequest, PolicyEvaluation, PolicyEvaluationStatus,
+    PolicySnapshot, TOOL_POLICY_CONTRACT_VERSION, ToolAuthorizationDecision, ToolPolicyError,
+    authorize_tool_dispatch,
 };
 pub use tool_dispatch::{
     TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDecision,

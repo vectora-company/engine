@@ -167,6 +167,9 @@ pub enum ToolDenialCode {
     InvalidArguments,
     SchemaMismatch,
     TurnCallLimitExceeded,
+    PolicyToolDisabled,
+    PolicyCapabilityDenied,
+    UntrustedContentEffect,
 }
 
 /// Prepared, ordered decisions for one assistant turn.

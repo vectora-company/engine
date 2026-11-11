@@ -43,5 +43,7 @@ recovery durável não são prometidos por aquele contrato.
 
 ## Próxima parte do plano
 
-Implementar política, aprovação e revisão de autorização antes de efeitos,
-conforme a etapa seguinte do plano.
+Use o gate experimental de [`12-policy-and-approval.md`](12-policy-and-approval.md)
+antes de executar os adapters. A função aqui continua sendo uma primitiva de
+preparação; ela isoladamente não prova que uma tool passou pela policy nem por
+aprovação humana.

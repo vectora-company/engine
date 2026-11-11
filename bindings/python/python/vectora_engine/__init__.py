@@ -211,6 +211,11 @@ def tool_dispatch_contract_version() -> int:
     return _native.tool_dispatch_contract_version()
 
 
+def tool_policy_contract_version() -> int:
+    """Return the version of the policy and approval contract."""
+    return _native.tool_policy_contract_version()
+
+
 def prepare_tool_dispatch(
     lifecycle: JsonObject,
     completion: JsonObject,
@@ -225,6 +230,32 @@ def prepare_tool_dispatch(
         json.dumps(completion, separators=(",", ":")),
         json.dumps(contracts, separators=(",", ":")),
         json.dumps(settings, separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
+def authorize_tool_dispatch(
+    lifecycle: JsonObject,
+    completion: JsonObject,
+    contracts: Sequence[JsonObject],
+    snapshot: JsonObject,
+    grants: Sequence[JsonObject] = (),
+    *,
+    now_ms: int,
+    max_calls_per_turn: int = 32,
+) -> dict[str, Any]:
+    """Evaluate a tool batch against a run-bound policy before execution.
+
+    The host must authenticate approval receipts before passing them here.
+    """
+    result = _native.authorize_tool_dispatch_json(
+        json.dumps(lifecycle, separators=(",", ":")),
+        json.dumps(completion, separators=(",", ":")),
+        json.dumps(contracts, separators=(",", ":")),
+        json.dumps({"max_calls_per_turn": max_calls_per_turn}, separators=(",", ":")),
+        json.dumps(snapshot, separators=(",", ":")),
+        json.dumps(grants, separators=(",", ":")),
+        now_ms,
     )
     return json.loads(result)
 
@@ -411,6 +442,7 @@ async def fallback_chat_stream(
 __all__ = [
     "accept_model_turn",
     "assemble_turn",
+    "authorize_tool_dispatch",
     "chat_complete",
     "chat_contract_version",
     "chat_stream",
@@ -450,6 +482,7 @@ __all__ = [
     "tool_chat_definitions",
     "tool_contract_version",
     "tool_dispatch_contract_version",
+    "tool_policy_contract_version",
     "transition_run",
     "validate_storage_selection",
     "vector_store_delete",
