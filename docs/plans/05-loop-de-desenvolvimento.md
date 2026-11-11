@@ -5,6 +5,8 @@ contratos ou critérios de conclusão. Use junto com o [checklist de
 implementação](../checklists/00-checklist-de-implementacao.md) e a [análise e
 referências](../analyses/00-analise-e-referencias-de-desenvolvimento.md). Para
 iniciar um goal com instruções compactas, use o [prompt curto](00-prompt-loop-goal.md).
+Para criar os artefatos de uma etapa, copie os [templates de plano, análise e
+checklist](../templates/README.md).
 
 ## Fonte de verdade
 
@@ -15,6 +17,8 @@ iniciar um goal com instruções compactas, use o [prompt curto](00-prompt-loop-
 - `docs/checklists/`: critérios verificáveis de preparação, implementação e
   entrega.
 - `docs/analyses/`: investigação, fontes, evidências e decisões.
+- `docs/templates/`: modelos para criar esses artefatos por capability sem
+  deixar escopo, evidência ou critérios de saída implícitos.
 - `../issues/`: requisitos originais locais quando disponíveis; não substituem
   as specs da Engine.
 - Código e testes atuais: evidência do comportamento implementado, nunca
@@ -27,8 +31,9 @@ iniciar um goal com instruções compactas, use o [prompt curto](00-prompt-loop-
 3. Revalidar no código e nos testes as afirmações documentadas; marcar findings
    antigos como resolvidos, atuais ou não reproduzidos.
 4. Selecionar a menor etapa pendente e aprovada no plano ativo.
-5. Se não existir etapa, spec, análise ou checklist suficiente, preparar esses
-   documentos antes de uma implementação ampla.
+5. Se não existir etapa, spec, análise ou checklist suficiente, criar os
+   documentos aplicáveis a partir dos templates antes de uma implementação
+   ampla. Um artefato geral não substitui o checklist específico da etapa.
 
 ## Loop por etapa
 

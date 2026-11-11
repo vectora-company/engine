@@ -18,6 +18,8 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 - [Análise e referências de desenvolvimento](analyses/00-analise-e-referencias-de-desenvolvimento.md):
   hierarquia das fontes, investigação obrigatória, registro de decisões e
   limites para inferências.
+- [Templates de desenvolvimento](templates/README.md): modelos reutilizáveis
+  para planos, análises de referências e checklists completos por etapa.
 - [Auditoria de review do PR #3](analyses/01-auditoria-review-pr3.md): findings
   revalidados contra a implementação atual, com evidências e limitações.
 
