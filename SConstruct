@@ -79,11 +79,14 @@ def _install(target, source, env):
             "stable, rustfmt, and clippy."
         )
     if not os.environ.get("PROTOC") and shutil.which("protoc") is None:
+        guidance = (
+            "Run ./dotfiles.sh --toolchain-only, then retry scons install."
+            if sys.platform.startswith("linux")
+            else "Install the Protocol Buffers compiler and retry scons install."
+        )
         raise SystemExit(
             "Protocol Buffers compiler 'protoc' is required by the LanceDB "
-            "dependency. Install protobuf-compiler (Linux), protobuf (macOS), "
-            "or the Protocol Buffers release for your OS, then rerun "
-            "scons install."
+            f"dependency. {guidance}"
         )
     _run("rustup", "component", "add", "rustfmt", "clippy")
     _run("cargo", "fetch", "--locked")

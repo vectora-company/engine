@@ -772,6 +772,76 @@ pub fn run_transition(lifecycle_json: String, next_status: String) -> Result<Str
 }
 
 #[napi]
+pub async fn sqlite_run_admit(
+    path: String,
+    scope: String,
+    identity_json: String,
+    request_json: String,
+) -> Result<String> {
+    let identity: RunIdentity = serde_json::from_str(&identity_json)
+        .map_err(|_| Error::from_reason("invalid run identity"))?;
+    let request = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid run admission request"))?;
+    let admitted = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                .map_err(|error| error.to_string())?;
+        store
+            .admit(identity, request)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("run store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&admitted)
+}
+
+#[napi]
+pub async fn sqlite_run_load_latest(
+    path: String,
+    scope: String,
+    run_id: String,
+) -> Result<Option<String>> {
+    let state = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let store = vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+            .map_err(|error| error.to_string())?;
+        store
+            .load_latest(&run_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("run store worker failed"))?
+    .map_err(Error::from_reason)?;
+    state.as_ref().map(encode_json).transpose()
+}
+
+#[napi]
+pub async fn sqlite_run_transition(
+    path: String,
+    scope: String,
+    state_json: String,
+    next_status: String,
+    operation_id: String,
+) -> Result<String> {
+    let state = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable run state"))?;
+    let next_status: RunStatus = serde_json::from_value(serde_json::Value::String(next_status))
+        .map_err(|_| Error::from_reason("unknown run status"))?;
+    let transition = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                .map_err(|error| error.to_string())?;
+        store
+            .transition(&state, next_status, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("run store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&transition)
+}
+
+#[napi]
 pub fn tool_contract_version() -> u32 {
     u32::from(TOOL_CONTRACT_VERSION)
 }

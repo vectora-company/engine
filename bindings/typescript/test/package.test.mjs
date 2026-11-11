@@ -34,6 +34,9 @@ import {
   sqliteLedgerAppend,
   sqliteLedgerAppendCheckpointed,
   sqliteAdmitRun,
+  sqliteRunAdmit,
+  sqliteRunLoadLatest,
+  sqliteRunTransition,
   sqliteLedgerRead,
   sqliteReserveRun,
   sqliteSaveCheckpoint,
@@ -125,6 +128,66 @@ test("run lifecycle contract is exposed through the Node binding", () => {
   assert.equal(transitionRun(started, "running").sequence, 1);
   assert.throws(() => transitionRun(run, "completed"), /invalid run transition/);
   assert.throws(() => transitionRun(run, "not-a-status"), /unknown run status/);
+});
+
+test("SQLite run lifecycle admission and transitions survive retries and reopen", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-run-lifecycle-"));
+  try {
+    const path = join(dir, "ledger.db");
+    const identity = {
+      contract_version: 1,
+      run_id: "run-durable-1",
+      idempotency_key: "admit-durable-1",
+      thread_id: "thread-durable-1",
+      turn_id: "turn-durable-1",
+      scope_id: "workspace-durable-1",
+      capabilities: ["tools.read"],
+    };
+    const request = { input_digest: "redacted-digest" };
+    const admitted = await sqliteRunAdmit(
+      path,
+      "workspace-durable-1",
+      identity,
+      request,
+    );
+    assert.equal(admitted.state.lifecycle.status, "planned");
+    assert.equal(admitted.state.ledger_sequence, 1);
+    assert.equal(admitted.admission_event.sequence, 1);
+    assert.deepEqual(
+      await sqliteRunAdmit(path, "workspace-durable-1", identity, request),
+      admitted,
+    );
+    assert.deepEqual(
+      await sqliteRunLoadLatest(path, "workspace-durable-1", identity.run_id),
+      admitted.state,
+    );
+
+    const running = await sqliteRunTransition(
+      path,
+      "workspace-durable-1",
+      admitted.state,
+      "running",
+      "run-started-1",
+    );
+    assert.equal(running.state.lifecycle.status, "running");
+    assert.equal(running.state.ledger_sequence, 2);
+    await assert.rejects(
+      sqliteRunTransition(
+        path,
+        "workspace-durable-1",
+        admitted.state,
+        "cancelled",
+        "stale-cancel-1",
+      ),
+      /version conflict/,
+    );
+    assert.deepEqual(
+      await sqliteRunLoadLatest(path, "workspace-durable-1", identity.run_id),
+      running.state,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("tool dispatch validates schemas and trusted capabilities in Rust", () => {

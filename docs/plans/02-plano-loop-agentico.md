@@ -45,10 +45,14 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    experimental `SqliteModelToolLoopStore` agora persiste o par
    evento/checkpoint em uma transação antes de devolver cada ação ao host; os
    bindings Python e TypeScript expõem o mesmo adapter. Seu contrato e seus
-   limites estão em `docs/specs/13-sqlite-model-tool-loop-store.md`. Ele não
-   torna efeitos externos atômicos, não fornece exactly-once e não autentica o
-   host. Integração genérica com PostgreSQL, reserva integrada com a identidade
-   do run, persistência/revalidação de policy e concessões, coordenação do
+   limites estão em `docs/specs/13-sqlite-model-tool-loop-store.md`. O adapter
+   `SqliteRunLifecycleStore` também reserva run/thread/turn e grava o evento de
+   admissão, o estado inicial e o checkpoint na mesma transação; suas
+   transições usam sequência esperada e checkpoints duráveis. O contrato está
+   em `docs/specs/14-sqlite-durable-run-lifecycle.md`. Esses adapters não
+   tornam efeitos externos atômicos, não fornecem exactly-once e não autenticam
+   o host. Integração genérica com PostgreSQL, persistência/revalidação de
+   policy e concessões, coordenação do
    provider/adapters, reconciliação autenticada e recuperação operacional ainda
    precisam ser concluídas. Recovery nunca repete silenciosamente um efeito de
    resultado incerto.
