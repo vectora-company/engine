@@ -56,13 +56,15 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    provider/adapters, reconciliação autenticada e recuperação operacional ainda
    precisam ser concluídas. Recovery nunca repete silenciosamente um efeito de
    resultado incerto.
-6. **Verificação e conformidade** — contrato experimental de resultados e
-   vereditos implementado em `docs/specs/15-verification-gates.md`, com
-   bindings Python/TypeScript e avaliação determinística. Persistência de
-   reports/decisões no lifecycle, execução dos checks pelo host e evidência
-   autenticada ainda faltam. A fase segue aberta para integrar o gate ao
-   recovery e validar replay, cancelamento, redaction, restart e dois perfis de
-   consumidor antes de qualquer alegação de paridade ou adoção.
+6. **Verificação e conformidade** — o contrato de resultados e vereditos está
+   em `docs/specs/15-verification-gates.md`. `SqliteRunLifecycleStore` grava
+   report, policy, avaliação e transição terminal no mesmo evento/checkpoint;
+   `completed` exige veredito `passed`, `unverified` vai para
+   `recovery_required`, e os bindings Python/TypeScript usam a mesma operação
+   Rust. O consumidor ainda executa e autentica os checks. A fase segue aberta
+   para ligar verificação ao recovery do loop completo e validar replay,
+   cancelamento, redaction, restart e dois perfis de consumidor antes de
+   qualquer alegação de paridade ou adoção.
 
 Cada parte do plano deve ser entregue em PR próprio empilhado sobre o anterior.
 Todo contrato público é implementado uma vez no Rust e coberto pelos bindings

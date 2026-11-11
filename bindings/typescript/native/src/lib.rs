@@ -859,6 +859,35 @@ pub async fn sqlite_run_transition(
 }
 
 #[napi]
+pub async fn sqlite_run_verify(
+    path: String,
+    scope: String,
+    state_json: String,
+    report_json: String,
+    policy_json: String,
+    operation_id: String,
+) -> Result<String> {
+    let state = serde_json::from_str(&state_json)
+        .map_err(|_| Error::from_reason("invalid durable run state"))?;
+    let report = serde_json::from_str(&report_json)
+        .map_err(|_| Error::from_reason("invalid verification report"))?;
+    let policy = serde_json::from_str(&policy_json)
+        .map_err(|_| Error::from_reason("invalid verification policy"))?;
+    let verification = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                .map_err(|error| error.to_string())?;
+        store
+            .verify(&state, report, policy, &operation_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("run store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&verification)
+}
+
+#[napi]
 pub fn tool_contract_version() -> u32 {
     u32::from(TOOL_CONTRACT_VERSION)
 }

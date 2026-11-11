@@ -1,7 +1,8 @@
 # Resultados de verificação e gates
 
 **Estado:** contrato experimental v1, implementado no núcleo Rust e exposto
-pelos bindings Python e TypeScript/Node.
+pelos bindings Python e TypeScript/Node. O adapter SQLite do lifecycle persiste
+report, policy, avaliação e transição no mesmo evento/checkpoint.
 
 ## Responsabilidade
 
@@ -52,26 +53,34 @@ Motivos são códigos estáveis: `required_check_failed`,
 - Rust: `evaluate_verification` e `EVIDENCE_GATE_CONTRACT_VERSION`.
 - Python: `evaluate_verification` e `evidence_gate_contract_version`.
 - TypeScript: `evaluateVerification` e `evidenceGateContractVersion`.
+- Lifecycle SQLite: `SqliteRunLifecycleStore::verify`, `sqlite_run_verify` e
+  `sqliteRunVerify`.
 
 Os bindings serializam os mesmos contratos e chamam a implementação Rust.
 
 ## Limites
 
-- O report e a decisão ainda não são persistidos no ledger/run lifecycle.
+- Persistência de report e decisão está disponível no adapter SQLite; outros
+  adapters de lifecycle ainda não implementam este contrato.
 - A engine não executa checks, não baixa nem valida o conteúdo referenciado,
   não autentica o host e não prova que `redacted: true` é verdadeiro.
-- O consumidor deve persistir report e decisão de forma durável antes de
-  tratar o gate como autoridade de retomada. Isso será integrado ao lifecycle
-  em uma fase posterior.
+- A verificação persiste apenas referências opacas, nunca conteúdo de logs ou
+  artefatos. O consumidor controla sua retenção e disponibilidade.
 - O timestamp vem do consumidor para manter a avaliação determinística; o
   host é responsável por uma fonte de tempo confiável.
-- A avaliação não muda automaticamente o estado do run; o host controla a
-  transição correspondente após persistir o resultado.
+- `evaluate_verification` é uma avaliação pura. `SqliteRunLifecycleStore::verify`
+  persiste o report, a policy, o veredito e a transição correspondente em uma
+  única operação. Um run inconclusivo pode ser retomado e receber um novo
+  report; o ledger mantém cada evento e o checkpoint guarda a verificação mais
+  recente.
+- Transições usam o snapshot mais recente persistido. Um snapshot alterado ou
+  desatualizado é rejeitado mesmo quando sua sequência numérica coincide.
 
 ## Conformidade
 
 Testes cobrem precedência, checks opcionais, falha funcional, falha de
 infraestrutura, check não executado, evidência faltante/expirada, digest
-inválido, redação obrigatória, decisões configuráveis e chamadas pelos dois
-bindings. Eles validam o contrato, não a autenticidade dos resultados nem a
-execução de pipelines externos.
+inválido, redação obrigatória, decisões configuráveis, persistência atômica,
+replay idempotente, isolamento entre runs e chamadas pelos dois bindings. Eles
+validam o contrato, não a autenticidade dos resultados nem a execução de
+pipelines externos.

@@ -29,6 +29,9 @@ rustc-ice-*.txt
 .venv/
 __pycache__/
 *.so
+resources/nats-server
+resources/nats-server.exe
+resources/.nats-server-version
 .pytest_cache/
 .ruff_cache/
 

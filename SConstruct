@@ -91,15 +91,6 @@ def _install(target, source, env):
     _run("rustup", "component", "add", "rustfmt", "clippy")
     _run("cargo", "fetch", "--locked")
     _run("uv", "sync", "--locked", "--all-groups")
-    _run(
-        "uv",
-        "run",
-        "--project",
-        ROOT,
-        "maturin",
-        "develop",
-        cwd=os.path.join(ROOT, "bindings", "python"),
-    )
     _pnpm(
         "ci",
         cwd=os.path.join(ROOT, "bindings", "typescript"),
