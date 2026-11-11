@@ -1,7 +1,7 @@
 # Política de segurança
 
 Não publique detalhes de uma vulnerabilidade em uma issue pública. Use um
-[GitHub Security Advisory privado](https://github.com/vectora-ltda/engine/security/advisories/new)
+[GitHub Security Advisory privado](https://github.com/vectora-company/engine/security/advisories/new)
 para reportar o problema. Inclua o commit afetado, o impacto observado e os
 passos necessários para reproduzi-lo, removendo tokens, dados pessoais e
 segredos.

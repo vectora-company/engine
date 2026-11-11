@@ -9,7 +9,7 @@ não é promessa de produto nem uma lista para implementar integralmente. Use-a
 para detectar lacunas, orientar contratos e evitar que nomes de módulos sejam
 confundidos com capacidades utilizáveis.
 
-**Fotografia local da Engine:** `44963ce` (`docs: cruzar Akita, Engine, Vectora e GH Bot`), topo da branch `docs/engine-vectora-akita-analysis`, PR [#36](https://github.com/vectora-ltda/engine/pull/36), que inclui a base de conformidade #34. As respostas sobre implementação se referem ao código dessa fotografia, salvo quando indicarem outra fonte. A auditoria anterior de conformidade registra `main` em `22c861f`; ela é evidência histórica e precisa ser reconciliada com o checkout atual antes de afirmar que representa a `main` corrente.
+**Fotografia local da Engine:** `44963ce` (`docs: cruzar Akita, Engine, Vectora e GH Bot`), topo da branch `docs/engine-vectora-akita-analysis`, PR [#36](https://github.com/vectora-company/engine/pull/36), que inclui a base de conformidade #34. As respostas sobre implementação se referem ao código dessa fotografia, salvo quando indicarem outra fonte. A auditoria anterior de conformidade registra `main` em `22c861f`; ela é evidência histórica e precisa ser reconciliada com o checkout atual antes de afirmar que representa a `main` corrente.
 
 **Fotografias dos consumidores registradas na análise cruzada:** Vectora `origin/master` em `bf1732ac92eac21671881cc34a530c2ddb7186de`; GH Bot `main` em `b489b90263e3a4ace94cfdce45763489918a3671`. São snapshots distintos, não garantias de estado atual. A leitura do livro _Competente o Suficiente_ e suas limitações está documentada em [03 — análise cruzada](03-analise-cruzada-akita-engine-vectora-gh-bot.md).
 
@@ -298,5 +298,5 @@ independente de performance ou qualidade.
 - [DSPy](https://dspy.ai/)
 - [Microsoft Semantic Kernel: agent functions/plugins](https://learn.microsoft.com/en-us/semantic-kernel/frameworks/agent/agent-functions)
 - [CrewAI: Flows](https://docs.crewai.com/en/concepts/flows)
-- [Vectora issue #387](https://github.com/vectora-ltda/vectora/issues/387), usada como contexto de produto e confrontada com os snapshots de código.
+- [Vectora issue #387](https://github.com/vectora-company/vectora/issues/387), usada como contexto de produto e confrontada com os snapshots de código.
 - [Análise cruzada local: Akita, Engine, Vectora e GH Bot](03-analise-cruzada-akita-engine-vectora-gh-bot.md), incluindo escopo e limites da leitura do livro.
