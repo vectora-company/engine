@@ -11,6 +11,7 @@ pub mod postgres;
 pub mod resilient_ledger;
 pub mod sqlite;
 pub mod sqlite_loop;
+pub mod sqlite_policy;
 pub mod sqlite_run;
 pub mod vector;
 

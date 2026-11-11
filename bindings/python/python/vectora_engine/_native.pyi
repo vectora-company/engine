@@ -93,6 +93,40 @@ async def sqlite_model_tool_loop_verify(
     policy_json: str,
     operation_id: str,
 ) -> str: ...
+async def sqlite_tool_policy_save(
+    path: str,
+    scope: str,
+    run_json: str,
+    snapshot_json: str,
+    operation_id: str,
+    now_ms: int,
+) -> str: ...
+async def sqlite_tool_policy_load(
+    path: str,
+    scope: str,
+    run_id: str,
+    turn_id: str,
+) -> str | None: ...
+async def sqlite_tool_policy_authorize(
+    path: str,
+    scope: str,
+    state_json: str,
+    run_json: str,
+    completion_json: str,
+    contracts_json: str,
+    settings_json: str,
+    operation_id: str,
+    now_ms: int,
+) -> str: ...
+async def sqlite_tool_policy_record_approval(
+    path: str,
+    scope: str,
+    state_json: str,
+    request_json: str,
+    grant_json: str,
+    operation_id: str,
+    now_ms: int,
+) -> str: ...
 async def resilient_ledger_append(
     path: str, postgres_url: str | None, draft_json: str
 ) -> str: ...

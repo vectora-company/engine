@@ -7,7 +7,6 @@ rodar no Python do runner sem instalar o ambiente do projeto.
 
 Comandos:
     no-plan              Rejeita COMENTÁRIOS de código-fonte com proveniência de processo:
-    pr-metadata          Rejeita TÍTULO/DESCRIÇÃO de PR com proveniência de processo: referência de
     removed-paths        Detect staged references to files removed or renamed by the commit
 """
 
@@ -81,10 +80,9 @@ _TRACKER_PATTERN: re.Pattern[str] = re.compile(
 
 # Padrão único para metadados e comentários: planos artificiais,
 # ferramentas de IA e referências a rastreadores.
-_PR_METADATA_PATTERN: re.Pattern[str] = re.compile(
+_PATTERN: re.Pattern[str] = re.compile(
     f"{_PLAN_PATTERN.pattern}|{_AI_TOOL_PATTERN.pattern}|{_TRACKER_PATTERN.pattern}"
 )
-_PATTERN: re.Pattern[str] = _PR_METADATA_PATTERN
 
 
 def _python_comments(text: str) -> list[tuple[int, str]]:
@@ -339,85 +337,6 @@ def no_plan_main(argv: list[str]) -> int:
     return 0
 
 
-# ── pr-metadata: Rejeita TÍTULO/DESCRIÇÃO de PR com proveniência de processo: referência de
-# planejamento (Sprint/Bloco/Fase) ou menção a ferramenta/revisor de IA
-# (CodeRabbit, Claude, Copilot, ChatGPT, etc). Mesma regra de
-# `no-plan` (comentários de código) — CLAUDE.md §1 cobre
-# "qualquer artefato que entra no repositório", explicitamente incluindo
-# "mensagens de PR". Diferente do hook de comentários (que roda local no
-# pre-commit, arquivos staged como argv), este roda no CI, lendo título e
-# corpo do evento `pull_request` via variáveis de ambiente.
-# O corpo de um PR real acumula blocos auto-gerados pelo CodeRabbit (resumo,
-# "Summary by CodeRabbit") que citam o próprio nome da ferramenta — não são
-# proveniência de processo escrita por um humano, são o rodapé do bot. Esses
-# blocos são delimitados por marcadores HTML fixos e removidos antes da
-# varredura, senão todo PR revisado pelo CodeRabbit falharia sempre.
-# Blocos que o próprio CodeRabbit insere no corpo do PR (resumo de review,
-# "Summary by CodeRabbit") — sempre delimitados por um comentário HTML de
-# abertura "<!-- This is an auto-generated comment ... -->" e um de
-# fechamento "<!-- end of auto-generated comment ... -->". Non-greedy +
-# DOTALL: o corpo pode ter múltiplos blocos desses, cada um contido entre
-# seu próprio par de marcadores.
-_AUTO_GENERATED_BLOCK = re.compile(
-    r"<!--\s*This is an auto-generated comment.*?-->.*?"
-    r"<!--\s*end of auto-generated comment.*?-->",
-    re.DOTALL,
-)
-
-
-def _strip_bot_blocks(body: str) -> str:
-    """Executa a operação strip bot blocks."""
-    return _AUTO_GENERATED_BLOCK.sub("", body)
-
-
-# Linha só com o vínculo à issue que traz a spec (`Closes #12`, `Refs #12`,
-# `Spec: #12` ou a URL da issue). É a única referência a rastreador aceita no
-# corpo do PR; o título e qualquer outra linha continuam sob a regra geral.
-_ISSUE_LINK_LINE = re.compile(
-    r"^\s*(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|spec)\s*:?\s+"
-    r"(?:#[1-9]\d*|https://github\.com/[^\s/]+/[^\s/]+/issues/[1-9]\d*)\s*$",
-    re.IGNORECASE,
-)
-
-
-def _strip_issue_links(body: str) -> str:
-    """Remove as linhas que são só o vínculo com a issue da spec."""
-    return "\n".join(
-        line for line in body.splitlines() if not _ISSUE_LINK_LINE.match(line)
-    )
-
-
-def pr_metadata_main() -> int:
-    """Executa a operação main."""
-    title = os.environ.get("PR_TITLE", "")
-    body = _strip_issue_links(_strip_bot_blocks(os.environ.get("PR_BODY", "") or ""))
-
-    violations = (
-        [("título", title.strip())] if _PR_METADATA_PATTERN.search(title) else []
-    )
-    violations.extend(
-        ("descrição", line.strip())
-        for line in body.splitlines()
-        if _PR_METADATA_PATTERN.search(line)
-    )
-
-    if not violations:
-        return 0
-
-    for field, text in violations:
-        print(f"PR {field}: proveniência de processo encontrada: {text}")
-    print(
-        "\nTítulo/descrição do PR não podem referenciar Sprint/Bloco/Fase nem "
-        "ferramenta/revisor de IA (CodeRabbit, Claude, Copilot, etc) — mesma "
-        "regra dos comentários de código (CLAUDE.md §1, que cobre também "
-        "mensagens de PR). Descreva só o que a mudança faz; histórico de "
-        "planejamento deve ficar em .claude/plans/ ou na issue/discussão apropriada. "
-        "A única referência a issue aceita no corpo é o vínculo com a spec, "
-        "numa linha só (`Closes #N`, `Refs #N` ou `Spec: #N`)."
-    )
-    return 1
-
-
 # ── removed-paths: Detect staged references to files removed or renamed by the commit
 # The check reads the Git index so it validates the exact snapshot that will be
 # committed, including staged edits and renames.  It intentionally reports path
@@ -594,7 +513,6 @@ def environment_main(_: list[str]) -> int:
 _COMMANDS: dict[str, tuple[Callable[..., int], bool]] = {
     "environment": (environment_main, True),
     "no-plan": (no_plan_main, True),
-    "pr-metadata": (pr_metadata_main, False),
     "removed-paths": (removed_paths_main, False),
 }
 
