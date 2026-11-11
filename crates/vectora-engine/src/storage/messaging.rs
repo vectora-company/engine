@@ -312,7 +312,6 @@ impl KvStoreAdapter {
             super::KvBackend::NatsJetstream => Ok(Self::Nats(Box::new(
                 NatsStore::connect(&config.endpoint, &config.namespace).await?,
             ))),
-            super::KvBackend::Memory => Err(MessagingError::Unsupported),
         }
     }
 }
@@ -710,7 +709,6 @@ impl QueueAdapter {
                 )
                 .await?,
             }),
-            super::QueueBackend::Memory => Err(MessagingError::Unsupported),
         }
     }
 
@@ -789,7 +787,6 @@ impl PubSubAdapter {
             super::PubSubBackend::NatsCore => Ok(Self::Nats(
                 NatsCorePubSub::connect(&config.endpoint, &config.namespace).await?,
             )),
-            super::PubSubBackend::Memory => Err(MessagingError::Unsupported),
         }
     }
 
