@@ -507,6 +507,9 @@ fn sqlite_tool_policy_load<'py>(
 }
 
 #[pyfunction]
+// PyO3 exposes these as flat Python keyword arguments; grouping them here
+// would change the public binding signature.
+#[allow(clippy::too_many_arguments)]
 fn sqlite_tool_policy_authorize<'py>(
     py: Python<'py>,
     path: String,
@@ -553,6 +556,7 @@ fn sqlite_tool_policy_authorize<'py>(
 }
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
 fn sqlite_tool_policy_record_approval<'py>(
     py: Python<'py>,
     path: String,

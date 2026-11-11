@@ -507,6 +507,9 @@ pub async fn sqlite_tool_policy_load(
 }
 
 #[napi]
+// N-API exports each field as a direct JavaScript argument for a stable,
+// explicit binding contract.
+#[allow(clippy::too_many_arguments)]
 pub async fn sqlite_tool_policy_authorize(
     path: String,
     scope: String,
@@ -551,6 +554,7 @@ pub async fn sqlite_tool_policy_authorize(
 }
 
 #[napi]
+#[allow(clippy::too_many_arguments)]
 pub async fn sqlite_tool_policy_record_approval(
     path: String,
     scope: String,
