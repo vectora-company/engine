@@ -43,7 +43,10 @@ mais rápido ou barato.
 
 Instale Rust stable por meio do `rustup`; o `rust-toolchain.toml` seleciona
 também `rustfmt` e `clippy`. `uv` e Python 3.13 são usados pelo tooling
-compartilhado em `utils/`.
+compartilhado em `utils/`. Instale também `protoc` (Protocol Buffers compiler),
+necessário pela dependência LanceDB: use `protobuf-compiler` no Linux, execute
+`brew install protobuf` no macOS ou instale a release oficial de Protocol
+Buffers no Windows e adicione o executável ao `PATH`.
 
 ```bash
 scons install
@@ -53,8 +56,9 @@ Esse alvo instala os componentes Rust selecionados, baixa as dependências
 Cargo conforme o `Cargo.lock`, prepara o ambiente Python do tooling, compila e
 instala a extensão Python no ambiente virtual do projeto e instala as
 dependências Node do binding TypeScript. Node.js e pnpm precisam estar
-instalados. Ele não instala dependências dos apps consumidores, navegadores
-Playwright ou sidecars de produto.
+instalados. O alvo verifica a presença de `protoc` antes de compilar. Ele não
+instala dependências dos apps consumidores, navegadores Playwright ou sidecars
+de produto.
 
 ## Comandos
 

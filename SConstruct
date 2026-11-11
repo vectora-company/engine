@@ -43,6 +43,13 @@ def _install(target, source, env):
             "Install Rust with rustup first; rust-toolchain.toml selects "
             "stable, rustfmt, and clippy."
         )
+    if not os.environ.get("PROTOC") and shutil.which("protoc") is None:
+        raise SystemExit(
+            "Protocol Buffers compiler 'protoc' is required by the LanceDB "
+            "dependency. Install protobuf-compiler (Linux), protobuf (macOS), "
+            "or the Protocol Buffers release for your OS, then rerun "
+            "scons install."
+        )
     _run("rustup", "component", "add", "rustfmt", "clippy")
     _run("cargo", "fetch", "--locked")
     _run("uv", "sync", "--locked", "--all-groups")

@@ -11,3 +11,4 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod chat;
 pub mod harness;
 pub mod llm;
+pub mod storage;

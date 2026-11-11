@@ -11,6 +11,155 @@ from . import _native
 JsonObject = Mapping[str, Any]
 
 
+def validate_storage_selection(selection: JsonObject) -> dict[str, Any]:
+    """Validate independent storage choices; this does not open any adapter."""
+    return json.loads(_native.storage_validate_selection(json.dumps(selection)))
+
+
+async def vector_store_upsert(
+    config: JsonObject, collection: str, record: JsonObject
+) -> None:
+    """Upsert a scoped vector record in the selected LanceDB or Qdrant adapter."""
+    await _native.vector_store_upsert(
+        json.dumps(config), collection, json.dumps(record)
+    )
+
+
+async def vector_store_search(
+    config: JsonObject,
+    collection: str,
+    scope: str,
+    vector: Sequence[float],
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Search vectors inside the exact supplied scope."""
+    return json.loads(
+        await _native.vector_store_search(
+            json.dumps(config), collection, scope, list(vector), limit
+        )
+    )
+
+
+async def vector_store_delete(
+    config: JsonObject, collection: str, scope: str, record_id: int
+) -> None:
+    """Delete one vector record without crossing its scope."""
+    await _native.vector_store_delete(json.dumps(config), collection, scope, record_id)
+
+
+async def kv_store_put(
+    config: JsonObject, key: str, value: Any, ttl_seconds: int | None = None
+) -> None:
+    """Persist JSON in Redis or NATS KV; NATS rejects per-key TTL."""
+    await _native.kv_store_put(json.dumps(config), key, json.dumps(value), ttl_seconds)
+
+
+async def kv_store_get(config: JsonObject, key: str) -> Any:
+    """Read JSON from the selected KV adapter, returning None when absent."""
+    return json.loads(await _native.kv_store_get(json.dumps(config), key))
+
+
+async def queue_enqueue(config: JsonObject, payload: bytes) -> str:
+    """Enqueue bytes using the configured durable queue adapter."""
+    return await _native.queue_enqueue(json.dumps(config), json.dumps(list(payload)))
+
+
+async def queue_receive(
+    config: JsonObject, consumer: str, group: str, timeout_ms: int = 30_000
+) -> dict[str, Any] | None:
+    """Receive one durable delivery; call queue_ack after processing it."""
+    result = json.loads(
+        await _native.queue_receive(json.dumps(config), consumer, group, timeout_ms)
+    )
+    if result is not None:
+        result["payload"] = bytes(result["payload"])
+    return result
+
+
+async def queue_ack(delivery_id: str) -> None:
+    """Acknowledge a delivery previously returned by queue_receive."""
+    await _native.queue_ack(delivery_id)
+
+
+def queue_release(delivery_id: str) -> None:
+    """Drop the local delivery handle without ACK; provider redelivery follows its visibility timeout."""
+    _native.queue_release(delivery_id)
+
+
+async def pubsub_publish(config: JsonObject, topic: str, payload: bytes) -> None:
+    """Publish an ephemeral byte message."""
+    await _native.pubsub_publish(json.dumps(config), topic, json.dumps(list(payload)))
+
+
+async def pubsub_subscribe(config: JsonObject, topic: str) -> str:
+    """Create a process-local subscription and return its handle."""
+    return await _native.pubsub_subscribe(json.dumps(config), topic)
+
+
+async def pubsub_receive(
+    subscription_id: str, timeout_ms: int = 30_000
+) -> bytes | None:
+    """Receive one ephemeral message, or return None when the timeout expires."""
+    result = json.loads(await _native.pubsub_receive(subscription_id, timeout_ms))
+    return bytes(result) if result is not None else None
+
+
+def pubsub_unsubscribe(subscription_id: str) -> None:
+    """Drop and close a process-local pub/sub subscription."""
+    _native.pubsub_unsubscribe(subscription_id)
+
+
+async def sqlite_ledger_append(path: str, event: JsonObject) -> dict[str, Any]:
+    """Append an event; the caller must authorize scope and redact payloads."""
+    return json.loads(await _native.sqlite_ledger_append(path, json.dumps(event)))
+
+
+async def resilient_ledger_append(
+    path: str, event: JsonObject, postgres_url: str | None = None
+) -> dict[str, Any]:
+    """Commit to SQLite first and mirror to PostgreSQL when configured/available."""
+    return json.loads(
+        await _native.resilient_ledger_append(path, postgres_url, json.dumps(event))
+    )
+
+
+async def sqlite_reserve_run(path: str, reservation: JsonObject) -> dict[str, Any]:
+    """Reserve an idempotent run; the host authorizes and redacts input."""
+    return json.loads(await _native.sqlite_reserve_run(path, json.dumps(reservation)))
+
+
+async def sqlite_admit_run(
+    path: str, reservation: JsonObject, event: JsonObject
+) -> dict[str, Any]:
+    """Atomically reserve a run and append an event to its thread ledger."""
+    return json.loads(
+        await _native.sqlite_admit_run(path, json.dumps(reservation), json.dumps(event))
+    )
+
+
+async def sqlite_save_checkpoint(path: str, checkpoint: JsonObject) -> dict[str, Any]:
+    """Persist an immutable versioned checkpoint for an existing event."""
+    return json.loads(
+        await _native.sqlite_save_checkpoint(path, json.dumps(checkpoint))
+    )
+
+
+async def sqlite_latest_checkpoint(
+    path: str, scope: str, aggregate: str
+) -> dict[str, Any] | None:
+    """Read the latest compatible checkpoint in an authorized scope."""
+    return json.loads(await _native.sqlite_latest_checkpoint(path, scope, aggregate))
+
+
+async def sqlite_ledger_read(
+    path: str, scope: str, aggregate: str, *, after: int = 0, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Read ordered events after a sequence in a trusted scope."""
+    return json.loads(
+        await _native.sqlite_ledger_read(path, scope, aggregate, after, limit)
+    )
+
+
 def assemble_turn(
     turn_id: str,
     events: Sequence[JsonObject],
@@ -272,17 +421,38 @@ __all__ = [
     "fallback_chat_stream",
     "fallback_embed",
     "fallback_rerank",
+    "kv_store_get",
+    "kv_store_put",
     "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_stream",
     "prepare_tool_dispatch",
+    "pubsub_publish",
+    "pubsub_receive",
+    "pubsub_subscribe",
+    "pubsub_unsubscribe",
+    "queue_ack",
+    "queue_enqueue",
+    "queue_receive",
+    "queue_release",
     "rerank",
     "rerank_contract_version",
+    "resilient_ledger_append",
     "run_contract_version",
+    "sqlite_admit_run",
+    "sqlite_latest_checkpoint",
+    "sqlite_ledger_append",
+    "sqlite_ledger_read",
+    "sqlite_reserve_run",
+    "sqlite_save_checkpoint",
     "start_model_tool_loop",
     "submit_tool_result",
     "tool_chat_definitions",
     "tool_contract_version",
     "tool_dispatch_contract_version",
     "transition_run",
+    "validate_storage_selection",
+    "vector_store_delete",
+    "vector_store_search",
+    "vector_store_upsert",
 ]

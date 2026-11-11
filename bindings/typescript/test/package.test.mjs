@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   assembleTurn,
   acceptModelTurn,
@@ -25,7 +28,45 @@ import {
   toolDispatchContractVersion,
   startModelToolLoop,
   submitToolResult,
+  validateStorageSelection,
+  sqliteLedgerAppend,
+  sqliteAdmitRun,
+  sqliteLedgerRead,
+  sqliteReserveRun,
+  sqliteSaveCheckpoint,
+  sqliteLatestCheckpoint,
 } from "../dist/index.js";
+
+test("sqlite ledger persists and retries safely through Node", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-ledger-"));
+  try {
+    const path = join(dir, "ledger.db");
+    const event = { scope: "team", aggregate: "run", event_id: "one", idempotency_key: "key", event_type: "started", payload: {}, expected_version: 0 };
+    assert.equal((await sqliteLedgerAppend(path, event)).sequence, 1);
+    assert.equal((await sqliteLedgerAppend(path, event)).sequence, 1);
+    assert.equal((await sqliteLedgerRead(path, "team", "run")).length, 1);
+    assert.deepEqual(await sqliteLedgerRead(path, "other", "run"), []);
+    const reservation = { scope: "team", thread_id: "thread", turn_id: "turn", run_id: "run", idempotency_key: "key", request: {} };
+    assert.deepEqual(await sqliteReserveRun(path, reservation), reservation);
+    assert.deepEqual(await sqliteReserveRun(path, reservation), reservation);
+    const checkpoint = { contract_version: 1, scope: "team", aggregate: "run", checkpoint_id: "cp", sequence: 1, state: { status: "running" } };
+    assert.deepEqual(await sqliteSaveCheckpoint(path, checkpoint), checkpoint);
+    assert.deepEqual(await sqliteLatestCheckpoint(path, "team", "run"), checkpoint);
+    assert.equal(await sqliteLatestCheckpoint(path, "other", "run"), null);
+    const admission = { scope: "team", thread_id: "thread-2", turn_id: "turn-2", run_id: "run-2", idempotency_key: "key-2", request: {} };
+    const admissionEvent = { scope: "team", aggregate: "thread-2", event_id: "admitted-2", idempotency_key: "event-2", event_type: "admitted", payload: {}, expected_version: 0 };
+    const result = await sqliteAdmitRun(path, admission, admissionEvent);
+    assert.equal(result.event.sequence, 1);
+    assert.deepEqual(await sqliteAdmitRun(path, admission, admissionEvent), result);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("storage selection validates independent backends in Rust", () => {
+  const selection = validateStorageSelection({ contract_version: 1, sql: "sqlite", queue: "nats_jetstream" });
+  assert.equal(selection.sql, "sqlite");
+  assert.equal(selection.queue, "nats_jetstream");
+  assert.throws(() => validateStorageSelection({ contract_version: 99 }));
+});
 
 const settings = {
   base_url: "file:///invalid",

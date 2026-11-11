@@ -31,6 +31,7 @@ use vectora_engine::llm::{
         RerankRequest,
     },
 };
+use vectora_engine::storage::{messaging::KvStore, vector::VectorStore};
 
 type EventReceiver = Arc<tokio::sync::Mutex<mpsc::Receiver<Result<String>>>>;
 
@@ -41,9 +42,35 @@ struct StreamState {
 
 static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
 static STREAMS: OnceLock<Mutex<HashMap<String, StreamState>>> = OnceLock::new();
+static STORAGE_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
+static QUEUE_DELIVERIES: OnceLock<
+    Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>>,
+> = OnceLock::new();
+static PUBSUB_SUBSCRIPTIONS: OnceLock<
+    Mutex<
+        HashMap<
+            String,
+            Arc<tokio::sync::Mutex<vectora_engine::storage::messaging::PubSubSubscription>>,
+        >,
+    >,
+> = OnceLock::new();
 
 fn streams() -> &'static Mutex<HashMap<String, StreamState>> {
     STREAMS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn queue_deliveries()
+-> &'static Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>> {
+    QUEUE_DELIVERIES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn pubsub_subscriptions() -> &'static Mutex<
+    HashMap<
+        String,
+        Arc<tokio::sync::Mutex<vectora_engine::storage::messaging::PubSubSubscription>>,
+    >,
+> {
+    PUBSUB_SUBSCRIPTIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn parse_inputs(
@@ -170,6 +197,390 @@ pub fn rerank_contract_version() -> u32 {
 #[napi]
 pub fn run_contract_version() -> u32 {
     u32::from(RUN_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn storage_validate_selection(selection_json: String) -> Result<String> {
+    let selection: vectora_engine::storage::StorageSelection =
+        serde_json::from_str(&selection_json)
+            .map_err(|_| Error::from_reason("invalid storage selection"))?;
+    selection
+        .validate()
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&selection)
+}
+
+#[napi]
+pub async fn sqlite_ledger_append(path: String, draft_json: String) -> Result<String> {
+    let draft = serde_json::from_str(&draft_json)
+        .map_err(|_| Error::from_reason("invalid ledger event"))?;
+    let event = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.append(draft)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&event)
+}
+
+#[napi]
+pub async fn resilient_ledger_append(
+    path: String,
+    draft_json: String,
+    postgres_url: Option<String>,
+) -> Result<String> {
+    let draft = serde_json::from_str(&draft_json)
+        .map_err(|_| Error::from_reason("invalid ledger event"))?;
+    let runtime = tokio::runtime::Handle::current();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut ledger =
+            vectora_engine::storage::resilient_ledger::ResilientLedger::open(path, postgres_url)?;
+        runtime.block_on(ledger.append(draft))
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
+pub async fn sqlite_ledger_read(
+    path: String,
+    scope: String,
+    aggregate: String,
+    after: u32,
+    limit: u32,
+) -> Result<String> {
+    let events = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.read(
+            &scope,
+            &aggregate,
+            u64::from(after),
+            limit,
+        )
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&events)
+}
+
+#[napi]
+pub async fn vector_store_upsert(
+    config_json: String,
+    collection: String,
+    record_json: String,
+) -> Result<()> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid vector-store config"))?;
+    let record = serde_json::from_str(&record_json)
+        .map_err(|_| Error::from_reason("invalid vector record"))?;
+    let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    store
+        .upsert(&collection, record)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))
+}
+
+#[napi]
+pub async fn vector_store_search(
+    config_json: String,
+    collection: String,
+    scope: String,
+    vector: Vec<f64>,
+    limit: u32,
+) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid vector-store config"))?;
+    let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    let hits = store
+        .search(
+            &collection,
+            &scope,
+            vector.into_iter().map(|value| value as f32).collect(),
+            limit,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&hits)
+}
+
+#[napi]
+pub async fn vector_store_delete(
+    config_json: String,
+    collection: String,
+    scope: String,
+    record_id: i64,
+) -> Result<()> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid vector-store config"))?;
+    let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let record_id =
+        u64::try_from(record_id).map_err(|_| Error::from_reason("invalid vector record id"))?;
+    store
+        .delete(&collection, &scope, record_id)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
+pub async fn kv_store_put(
+    config_json: String,
+    key: String,
+    value_json: String,
+    ttl_seconds: Option<u32>,
+) -> Result<()> {
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&value_json).map_err(|_| Error::from_reason("invalid KV value"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    let bytes = serde_json::to_vec(&value).map_err(|_| Error::from_reason("invalid KV value"))?;
+    store
+        .put(
+            &key,
+            bytes,
+            ttl_seconds.map(|value| std::time::Duration::from_secs(u64::from(value))),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))
+}
+
+#[napi]
+pub async fn kv_store_get(config_json: String, key: String) -> Result<String> {
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    match store
+        .get(&key)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?
+    {
+        Some(value) => {
+            let parsed: serde_json::Value = serde_json::from_slice(&value)
+                .map_err(|_| Error::from_reason("stored KV value is invalid"))?;
+            encode_json(&parsed)
+        }
+        None => Ok("null".into()),
+    }
+}
+
+#[napi]
+pub async fn queue_enqueue(config_json: String, payload_json: String) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid queue config"))?;
+    let payload: Vec<u8> = serde_json::from_str(&payload_json)
+        .map_err(|_| Error::from_reason("invalid queue payload"))?;
+    let queue = vectora_engine::storage::messaging::QueueAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    queue
+        .enqueue(payload)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
+pub async fn queue_receive(
+    config_json: String,
+    consumer: String,
+    group: String,
+    timeout_ms: u32,
+) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid queue config"))?;
+    let queue = vectora_engine::storage::messaging::QueueAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let Some(delivery) = queue
+        .receive(
+            &consumer,
+            &group,
+            std::time::Duration::from_millis(u64::from(timeout_ms)),
+        )
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?
+    else {
+        return Ok("null".to_owned());
+    };
+    let payload = delivery.payload().to_vec();
+    let handle = format!(
+        "queue-{}",
+        STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    queue_deliveries()
+        .lock()
+        .map_err(|_| Error::from_reason("queue handle lock failed"))?
+        .insert(handle.clone(), delivery);
+    encode_json(&serde_json::json!({"delivery_id": handle, "payload": payload}))
+}
+
+#[napi]
+pub async fn queue_ack(delivery_id: String) -> Result<()> {
+    let delivery = queue_deliveries()
+        .lock()
+        .map_err(|_| Error::from_reason("queue handle lock failed"))?
+        .remove(&delivery_id)
+        .ok_or_else(|| Error::from_reason("unknown queue delivery"))?;
+    delivery
+        .ack()
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
+pub fn queue_release(delivery_id: String) -> Result<()> {
+    queue_deliveries()
+        .lock()
+        .map_err(|_| Error::from_reason("queue handle lock failed"))?
+        .remove(&delivery_id)
+        .ok_or_else(|| Error::from_reason("unknown queue delivery"))?;
+    Ok(())
+}
+
+#[napi]
+pub async fn pubsub_publish(
+    config_json: String,
+    topic: String,
+    payload_json: String,
+) -> Result<()> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid pub/sub config"))?;
+    let payload: Vec<u8> = serde_json::from_str(&payload_json)
+        .map_err(|_| Error::from_reason("invalid pub/sub payload"))?;
+    let pubsub = vectora_engine::storage::messaging::PubSubAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    pubsub
+        .publish(&topic, payload)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
+pub async fn pubsub_subscribe(config_json: String, topic: String) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid pub/sub config"))?;
+    let pubsub = vectora_engine::storage::messaging::PubSubAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let subscription = Arc::new(tokio::sync::Mutex::new(
+        pubsub
+            .subscribe(&topic)
+            .await
+            .map_err(|error| Error::from_reason(error.to_string()))?,
+    ));
+    let handle = format!(
+        "pubsub-{}",
+        STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    pubsub_subscriptions()
+        .lock()
+        .map_err(|_| Error::from_reason("pub/sub handle lock failed"))?
+        .insert(handle.clone(), subscription);
+    Ok(handle)
+}
+
+#[napi]
+pub async fn pubsub_receive(subscription_id: String, timeout_ms: u32) -> Result<String> {
+    let subscription = pubsub_subscriptions()
+        .lock()
+        .map_err(|_| Error::from_reason("pub/sub handle lock failed"))?
+        .get(&subscription_id)
+        .cloned()
+        .ok_or_else(|| Error::from_reason("unknown pub/sub subscription"))?;
+    match subscription
+        .lock()
+        .await
+        .receive(std::time::Duration::from_millis(u64::from(timeout_ms)))
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?
+    {
+        Some(payload) => encode_json(&payload),
+        None => Ok("null".to_owned()),
+    }
+}
+
+#[napi]
+pub fn pubsub_unsubscribe(subscription_id: String) -> Result<()> {
+    pubsub_subscriptions()
+        .lock()
+        .map_err(|_| Error::from_reason("pub/sub handle lock failed"))?
+        .remove(&subscription_id)
+        .ok_or_else(|| Error::from_reason("unknown pub/sub subscription"))?;
+    Ok(())
+}
+
+#[napi]
+pub async fn sqlite_admit_run(
+    path: String,
+    reservation_json: String,
+    event_json: String,
+) -> Result<String> {
+    let reservation = serde_json::from_str(&reservation_json)
+        .map_err(|_| Error::from_reason("invalid run reservation"))?;
+    let event = serde_json::from_str(&event_json)
+        .map_err(|_| Error::from_reason("invalid ledger event"))?;
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+            .admit_run(reservation, event)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
+pub async fn sqlite_reserve_run(path: String, input_json: String) -> Result<String> {
+    let input = serde_json::from_str(&input_json)
+        .map_err(|_| Error::from_reason("invalid run reservation"))?;
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.reserve_run(input)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
+pub async fn sqlite_save_checkpoint(path: String, input_json: String) -> Result<String> {
+    let input =
+        serde_json::from_str(&input_json).map_err(|_| Error::from_reason("invalid checkpoint"))?;
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?.save_checkpoint(input)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
+}
+
+#[napi]
+pub async fn sqlite_latest_checkpoint(
+    path: String,
+    scope: String,
+    aggregate: String,
+) -> Result<String> {
+    let result = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+            .latest_checkpoint(&scope, &aggregate)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&result)
 }
 
 #[napi]

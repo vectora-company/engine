@@ -9,6 +9,10 @@ capability correspondente demonstrar conformidade e rollback.
 
 - Rust stable via `rustup`, com `rustfmt` e `clippy` (selecionados por
   `rust-toolchain.toml`).
+- `protoc` (Protocol Buffers compiler), necessário para compilar a dependência
+  LanceDB e os bindings nativos. Em Linux, instale `protobuf-compiler`; no
+  macOS, `brew install protobuf`; em Windows, instale o compilador da release
+  oficial de Protocol Buffers e deixe-o no `PATH`.
 - `scons` para os alvos de desenvolvimento.
 - `uv` e Python 3.13 para tooling e verificações dos bindings Python.
 - `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
@@ -22,7 +26,8 @@ scons install
 O comando instala os componentes Rust selecionados, baixa dependências Cargo
 conforme `Cargo.lock`, sincroniza o tooling Python, compila a extensão Python
 local e instala as dependências pnpm do binding Node. Não instala dependências
-do app Vectora nem sidecars de produto.
+do app Vectora nem sidecars de produto. O alvo verifica se `protoc` está
+disponível e informa o requisito antes de iniciar a compilação.
 
 ## Verificações
 
