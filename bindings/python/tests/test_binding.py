@@ -793,7 +793,9 @@ def test_policy_gate_binds_approval_to_the_exact_call_and_policy() -> None:
         )
 
 
-def test_shared_conformance_fixture_covers_policy_loop_and_ledger(tmp_path: Any) -> None:
+def test_shared_conformance_fixture_covers_policy_loop_and_ledger(
+    tmp_path: Any,
+) -> None:
     fixture_path = Path(__file__).parents[3] / "tests/fixtures/conformance-v1.json"
     fixture = json.loads(fixture_path.read_text())
 
@@ -814,9 +816,10 @@ def test_shared_conformance_fixture_covers_policy_loop_and_ledger(tmp_path: Any)
     assert initial["phase"] == loop_fixture["expected_initial_phase"]
     cancelled = cancel_model_tool_loop(initial)
     assert cancelled["state"]["phase"] == loop_fixture["expected_cancel_phase"]
-    assert cancelled["state"]["cancellation_requested"] is loop_fixture[
-        "expected_cancel_requested"
-    ]
+    assert (
+        cancelled["state"]["cancellation_requested"]
+        is loop_fixture["expected_cancel_requested"]
+    )
 
     ledger_fixture = fixture["ledger"]
     event = asyncio.run(
