@@ -204,6 +204,45 @@ def test_sqlite_run_lifecycle_admission_and_transitions_survive_reopen(
         )
         == running["state"]
     )
+    cancelled = asyncio.run(
+        sqlite_run_transition(
+            path,
+            "workspace-durable-1",
+            running["state"],
+            "cancelled",
+            "cancel-run-1",
+        )
+    )
+    assert cancelled["state"]["lifecycle"]["status"] == "cancelled"
+    assert cancelled["state"]["ledger_sequence"] == 3
+    assert (
+        asyncio.run(
+            sqlite_run_load_latest(path, "workspace-durable-1", identity["run_id"])
+        )
+        == cancelled["state"]
+    )
+    assert (
+        asyncio.run(
+            sqlite_run_transition(
+                path,
+                "workspace-durable-1",
+                running["state"],
+                "cancelled",
+                "cancel-run-1",
+            )
+        )
+        == cancelled
+    )
+    with pytest.raises(RuntimeError, match="invalid run transition"):
+        asyncio.run(
+            sqlite_run_transition(
+                path,
+                "workspace-durable-1",
+                cancelled["state"],
+                "running",
+                "resume-cancelled-1",
+            )
+        )
 
 
 def test_sqlite_run_verification_persists_evidence_and_gate_before_completion(

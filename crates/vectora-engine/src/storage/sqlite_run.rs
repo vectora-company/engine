@@ -627,6 +627,58 @@ mod tests {
     }
 
     #[test]
+    fn cancellation_is_durable_and_idempotent_across_restart() {
+        let path = database_path();
+        let mut store = SqliteRunLifecycleStore::open(&path, "workspace-1").unwrap();
+        let admitted = store
+            .admit(
+                identity("run-cancelled", "turn-cancelled", "admit-cancelled"),
+                json!({}),
+            )
+            .unwrap();
+        let running = store
+            .transition(&admitted.state, RunStatus::Running, "start-cancelled")
+            .unwrap();
+        let cancelled = store
+            .transition(&running.state, RunStatus::Cancelled, "cancel-run")
+            .unwrap();
+        assert_eq!(cancelled.state.lifecycle.status, RunStatus::Cancelled);
+        assert_eq!(
+            cancelled.state.ledger_sequence,
+            running.state.ledger_sequence + 1
+        );
+        assert_eq!(
+            cancelled.transition.as_ref().unwrap().from,
+            RunStatus::Running
+        );
+        assert_eq!(
+            cancelled.transition.as_ref().unwrap().to,
+            RunStatus::Cancelled
+        );
+
+        drop(store);
+        let mut reopened = SqliteRunLifecycleStore::open(&path, "workspace-1").unwrap();
+        assert_eq!(
+            reopened.load_latest("run-cancelled").unwrap(),
+            Some(cancelled.state.clone())
+        );
+        assert_eq!(
+            reopened
+                .transition(&running.state, RunStatus::Cancelled, "cancel-run")
+                .unwrap(),
+            cancelled
+        );
+        assert!(matches!(
+            reopened.transition(&cancelled.state, RunStatus::Running, "resume-cancelled"),
+            Err(SqliteRunStoreError::Run(
+                crate::harness::RunError::InvalidTransition { .. }
+            ))
+        ));
+        drop(reopened);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn admission_rejects_scope_mismatch_without_reserving_a_run() {
         let path = database_path();
         let mut store = SqliteRunLifecycleStore::open(&path, "workspace-1").unwrap();

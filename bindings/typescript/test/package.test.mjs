@@ -257,6 +257,39 @@ test("SQLite run lifecycle admission and transitions survive retries and reopen"
       await sqliteRunLoadLatest(path, "workspace-durable-1", identity.run_id),
       running.state,
     );
+    const cancelled = await sqliteRunTransition(
+      path,
+      "workspace-durable-1",
+      running.state,
+      "cancelled",
+      "cancel-run-1",
+    );
+    assert.equal(cancelled.state.lifecycle.status, "cancelled");
+    assert.equal(cancelled.state.ledger_sequence, 3);
+    assert.deepEqual(
+      await sqliteRunLoadLatest(path, "workspace-durable-1", identity.run_id),
+      cancelled.state,
+    );
+    assert.deepEqual(
+      await sqliteRunTransition(
+        path,
+        "workspace-durable-1",
+        running.state,
+        "cancelled",
+        "cancel-run-1",
+      ),
+      cancelled,
+    );
+    await assert.rejects(
+      sqliteRunTransition(
+        path,
+        "workspace-durable-1",
+        cancelled.state,
+        "running",
+        "resume-cancelled-1",
+      ),
+      /invalid run transition/,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
