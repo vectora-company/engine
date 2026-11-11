@@ -38,15 +38,22 @@ A interface comum expõe somente o menor denominador seguro. Recursos próprios 
 
 ## Ledger e estado de execução
 
-Estado experimental atual: a Engine oferece append e leitura paginada de
-eventos em SQLite, com sequência por escopo/agregado, versão esperada e chave
-idempotente. Inclui reserva idempotente de run e checkpoints versionados
-imutáveis vinculados a uma sequência existente. A admissão pode reservar um run
-e adicionar seu evento de thread na mesma transação, com retry idempotente. O host autoriza o escopo e
-redige o payload antes de gravar; a Engine ainda não garante redação automática,
-outbox, retomada de execução ou recovery. As operações dos bindings abrem conexões por chamada e
-exigem arquivo persistente; SQLite em memória não é aceito nesses bindings.
-PostgreSQL, vetores, KV, filas e pub/sub permanecem planejados.
+Estado experimental revalidado em `main` (`22c861f`): há ledger/checkpoints em
+SQLite, stores SQLite especializados de lifecycle, loop e policy, um
+`PostgresLedger` usado como projeção, e `ResilientLedger` que grava localmente
+com outbox antes de projetar para PostgreSQL. Também existem adapters vetoriais
+LanceDB/Qdrant e messaging Redis/NATS para KV, fila e pub/sub. Consulte a
+[`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
+para APIs, bindings, testes e limites por adapter.
+
+Isso não equivale a uma interface SQL genérica: PostgreSQL ainda não é adapter
+de lifecycle/loop/policy nem substitui a autoridade SQLite do append resiliente.
+A seleção `memory` de KV/queue/pub-sub é serializável, mas os adapters atuais
+retornam `Unsupported`. Não há ainda APIs de Memory, Context Planner,
+compactação/context engineering, indexação documental ou RAG. Os bindings de
+ledger exigem arquivo SQLite persistente. A presença de adapters não prova
+paridade operacional: testes de integração service-real, falhas/restart e
+retention continuam gaps.
 
 - Separar registro append-only de eventos, projeções consultáveis, checkpoints, cursor e referências a artifacts.
 - Envelope deve carregar `event_id`, sequência por agregado/stream, versão do schema, idempotency key, run/turno e escopo confiável do consumidor.

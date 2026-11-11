@@ -55,3 +55,20 @@ Esta API não substitui a política de seleção de providers do Vectora nem
 implementa descoberta automática de credenciais ou modelos. A adoção pelo
 Vectora Backend e pelo GH Bot é uma etapa posterior, reversível e própria de
 cada consumidor.
+
+## Auditoria da implementação atual
+
+O código Rust corresponde à classificação acima: quota (402), rate limit (429),
+falha de conexão, timeout, overload reconhecido, incompatibilidade de
+`tool_plan`, incompatibilidade multimodal explícita e respostas 503/529 são
+elegíveis. Autenticação, demais erros de provider/servidor, resposta inválida,
+protocolo e cancelamento não tentam outro candidato. O fluxo de streaming
+propaga falha depois de emitir qualquer evento e mantém a resposta parcial sem
+replay.
+
+Python e TypeScript têm testes locais com servidores HTTP de fixture para troca
+antes da saída e ausência de replay após saída parcial. Rust testa diretamente
+a classificação e elegibilidade, mas ainda não testa o fluxo completo com
+servidores locais. Os três bindings ainda não consomem uma fixture comum para
+fallback, e falta um caso explícito de cancelamento no fallback de streaming.
+Esses limites impedem afirmar conformidade completa da capability.

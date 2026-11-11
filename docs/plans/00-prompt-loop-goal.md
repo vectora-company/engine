@@ -1,13 +1,19 @@
 # Goal loop
 
-Siga [`AGENTS.md`](../../AGENTS.md), o [protocolo](05-loop-de-desenvolvimento.md),
-os [templates](../templates/README.md), o [checklist geral](../checklists/00-checklist-de-implementacao.md),
-a [análise de referências](../analyses/00-analise-e-referencias-de-desenvolvimento.md)
-e a spec/plano ativos. Retome a menor etapa aprovada; revalide o código,
-implemente, verifique e atualize os documentos da etapa.
+Siga [`AGENTS.md`](../../AGENTS.md) e o [guia do loop](../goal-loop/README.md).
+Leia o [plano operacional](../goal-loop/01-plano-operacional.md), o
+[checklist](../goal-loop/02-checklist-do-loop.md), as
+[regras de evidência](../goal-loop/03-fontes-e-evidencias.md) e os
+[critérios de encerramento](../goal-loop/04-criterios-de-encerramento.md).
+Retome a próxima etapa aprovada do plano ativo e leia sua spec, análise e
+checklist. Implemente, verifique localmente e atualize os documentos da etapa.
+Leia também a [sabatina do ecossistema](../analyses/04-sabatina-engine-ecossistema.md).
+Mantenha suas respostas sempre atuais: após cada mudança de código, contrato,
+teste, plano, referência ou snapshot de consumidor, revise e atualize as Q&As
+afetadas, cite evidências e marque claramente implementação, parcialidade,
+planejamento, decisão ou ausência. Antes de encerrar cada ciclo, confira o SHA,
+a data e se nenhuma resposta confunde spec/roadmap com comportamento verificado.
 
-**Encerre apenas se:** (1) o plano ativo estiver concluído e documentado; (2)
-uma decisão vital depender de `brunosrz` — registre opções/impacto, pergunte e
-aguarde; ou (3) um bloqueio externo impedir qualquer avanço independente —
-registre evidência/condição de retomada e aguarde. Não pare por conveniência nem
-avance enquanto decisão ou bloqueio exigir resposta/mudança.
+**Encerre somente** quando o plano ativo estiver concluído, uma decisão vital
+estiver documentada e aguardando `brunosrz`, ou um bloqueio externo impedir todo
+avanço independente. Nos dois últimos casos, registre o que falta e aguarde.

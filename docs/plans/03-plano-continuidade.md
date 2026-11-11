@@ -20,6 +20,10 @@ torna esses efeitos atômicos, e não há integração comprovada no Vectora App
 no GH Bot. A maior parte das APIs continua experimental. A revisão dos cinco
 findings históricos do PR #3 foi revalidada; veja
 [`01-auditoria-review-pr3.md`](../analyses/01-auditoria-review-pr3.md).
+O inventário de APIs, bindings, testes e gaps está na
+[`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md);
+seu checklist específico está em
+[`02-matriz-conformidade-capabilities.md`](../checklists/02-matriz-conformidade-capabilities.md).
 
 O app consumidor segue no backend Python e não declara dependência nem uso de
 `vectora-engine` nos manifests ou caminhos de runtime examinados. Portanto, o
@@ -30,15 +34,15 @@ migração ampla nem mais superfície de provider.
 
 ## Estado observado
 
-| Área | Estado em `main` | Limite relevante |
-| --- | --- | --- |
-| Core e distribuição local | Workspace Rust `0.1.0`; `scons install`, builds focados e cache Cargo separados. | Publicação versionada dos crates/bindings não está comprovada. |
-| Chat e modelos | OpenAI-compatible, Anthropic, Google, Cohere, fallback, embeddings e rerank nos bindings. | Contratos experimentais; seleção, credenciais e fallback de produto pertencem ao consumer. |
-| Storage e mensageria | SQLite/PostgreSQL, LanceDB/Qdrant, NATS/Redis; ledger SQLite-first e fila/pub-sub com contratos distintos. | Garantias são específicas de cada adapter/configuração; revisar S0-S5 em `04-plano-storage-ledger.md`. |
-| Lifecycle e loop | Stores SQLite persistem admissão, transições, eventos/checkpoints do loop e recuperação. | Não dão exactly-once a efeitos externos nem autenticam o host. |
-| Verificação e cancelamento | Reports/gates e pedido de cancelamento são duráveis; resultados incertos exigem reconciliação. | O host executa checks, interrompe adapters e comprova seu término. |
-| Policy e aprovação | `SqliteToolPolicyStore` persiste snapshots, pedidos e recibos, com verificação de estado/binding. | A autenticação do aprovador e a execução da tool permanecem no host. |
-| Consumidores | Backend Python do Vectora e GH Bot seguem como projetos consumidores. | Não foi encontrado uso de `vectora-engine` nos manifests/caminhos atuais examinados. |
+| Área                       | Estado em `main`                                                                                           | Limite relevante                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Core e distribuição local  | Workspace Rust `0.1.0`; `scons install`, builds focados e cache Cargo separados.                           | Publicação versionada dos crates/bindings não está comprovada.                                         |
+| Chat e modelos             | OpenAI-compatible, Anthropic, Google, Cohere, fallback, embeddings e rerank nos bindings.                  | Contratos experimentais; seleção, credenciais e fallback de produto pertencem ao consumer.             |
+| Storage e mensageria       | SQLite/PostgreSQL, LanceDB/Qdrant, NATS/Redis; ledger SQLite-first e fila/pub-sub com contratos distintos. | Garantias são específicas de cada adapter/configuração; revisar S0-S5 em `04-plano-storage-ledger.md`. |
+| Lifecycle e loop           | Stores SQLite persistem admissão, transições, eventos/checkpoints do loop e recuperação.                   | Não dão exactly-once a efeitos externos nem autenticam o host.                                         |
+| Verificação e cancelamento | Reports/gates e pedido de cancelamento são duráveis; resultados incertos exigem reconciliação.             | O host executa checks, interrompe adapters e comprova seu término.                                     |
+| Policy e aprovação         | `SqliteToolPolicyStore` persiste snapshots, pedidos e recibos, com verificação de estado/binding.          | A autenticação do aprovador e a execução da tool permanecem no host.                                   |
+| Consumidores               | Backend Python do Vectora e GH Bot seguem como projetos consumidores.                                      | Não foi encontrado uso de `vectora-engine` nos manifests/caminhos atuais examinados.                   |
 
 ## Fotografia de entregas
 
@@ -63,19 +67,26 @@ como pendente.
 1. **Review do PR #3:** findings classificados; três correções e cobertura
    local estão nesta branch, duas correções já estavam em `main`. Resultado
    final e comandos ficam na análise/checklist desta etapa.
-2. Consolidar uma matriz por capability com versão do contrato, APIs Rust,
-   Python e TypeScript, maturidade, limites, erros, timeout, cancelamento,
-   ownership e fallback.
-3. Criar/compartilhar fixtures determinísticas para os contratos públicos e
-   exercitá-las pelas três entradas. Distinguir cobertura de protocolo de
-   diferenças específicas de runtime; sem credenciais, rede paga ou efeitos
-   externos.
-4. Reconciliar a semântica de fallback documentada e implementada antes de
-   congelar o contrato. Registrar alterações locais não merged como trabalho em
-   andamento, não como comportamento de `main`.
+2. **Matriz:** inventário por capability criado; fixtures de run, verificação,
+   storage, fallback, policy, loop e ledger implementadas e executadas nos três
+   bindings. Cancelamento explícito da iteração de stream também está coberto.
+   O teste de pacote Node passou com addon gerado pelo comando padrão
+   `napi build --platform --esm --manifest-path native/Cargo.toml`; a tentativa
+   anterior com `--profile dev` apontava para o diretório de saída incorreto.
+   A análise de cobertura
+   service-real identificou testes condicionais e ausência de matriz integrada
+   de falha/restart nos quatro serviços. A auditoria de fallback não encontrou
+   divergência; a matriz não presume paridade.
+3. **Estado:** etapa da matriz concluída com os limites acima documentados.
+   Não foram usados serviços remotos nem CI como evidência.
+4. Semântica de fallback foi comparada com implementação e testes locais sem
+   divergência reproduzida; manter gaps de cobertura explícitos e não atribuir
+   alterações desta branch ao comportamento de `main`.
 
-**Saída:** gaps atuais reproduzíveis, feedback de review triado e uma linha de
-base de conformidade para cada binding.
+**Saída:** gaps atuais reproduzíveis, feedback de review triado, fixtures
+compartilhadas e uma linha de base de conformidade para cada binding. Concluída
+nesta branch, com instalação limpa Node e integração service-real permanecendo
+sem comprovação.
 
 ### 1. Auditar maturidade de storage e ledger
 
@@ -176,11 +187,14 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Concluir a verificação local da triagem do PR #3 e, em seguida, produzir a
-matriz de conformidade compartilhada. A trilha de storage seguinte é auditoria
-de cobertura S0-S5, pois adapters e ledger já existem. Em paralelo, identificar
-um piloto reversível com um consumer real e definir evidência de adoção. Não
-começar por reescrita ampla do backend Python nem por duplicação de providers.
+Iniciar a auditoria S0–S5 do plano de storage, considerando a cobertura
+service-real condicional já inventariada. A matriz
+[`02-matriz-conformidade-capabilities.md`](../analyses/02-matriz-conformidade-capabilities.md)
+já evidencia gaps que mudam a etapa seguinte: `memory` selecionável sem adapter,
+ausência de contratos de memória/contexto/RAG e ausência de testes service-real
+completos. Não
+começar adoção no Vectora nem reescrita ampla do backend Python antes desses
+gates.
 
 ## Nota de proveniência local
 

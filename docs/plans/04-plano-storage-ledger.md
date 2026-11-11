@@ -53,6 +53,24 @@ Adapters em memória podem apoiar testes e modo local explicitamente escolhido,
 sem reivindicar durabilidade ou semântica distribuída. Garantias dependem da
 configuração do serviço; não inferir durabilidade apenas pelo nome do backend.
 
+## Estado revalidado contra `main` (`22c861f`)
+
+As fases abaixo foram escritas como plano de implementação original. A tabela
+separa o que já existe do que ainda precisa ser implementado ou provado; não
+interprete uma fase marcada como implementada como pronta para produção.
+
+| Fase | Estado atual | Trabalho que continua pendente |
+| --- | --- | --- |
+| S0 — contratos | **Parcial.** Seleção versionada independente e contratos de ledger/vector/messaging existem. | Fixtures comuns entre bindings; capability/readiness observável; resolver `memory` selecionável mas sem adapter. |
+| S1 — SQLite e ledger | **Implementada experimentalmente.** Ledger, reserva/admissão, checkpoints, stores de lifecycle, loop e policy expostos em Rust/Python/TS. | Backup/restore, concorrência multi-processo e recovery operacional com evidência; completar conformidade compartilhada. |
+| S2 — PostgreSQL | **Parcial.** `PostgresLedger` e projeção via `ResilientLedger` existem; SQLite continua autoridade local do append resiliente. | Não existe SQL genérico nem store Postgres para lifecycle/loop/policy; provar serviço real, conflitos, restart e recovery. |
+| S3 — Redis/NATS | **Implementada experimentalmente.** KV, Redis Streams/NATS JetStream queues e Redis/NATS Core pub/sub existem. | Memory adapter não existe; testes integrados comuns de desconexão, restart, redelivery, ACK, retention, TTL e shutdown. |
+| S4 — LanceDB/Qdrant | **Implementada experimentalmente.** `VectorStore` tem adapters de LanceDB e Qdrant e bindings. | Cobrir filtros/isolamento e falhas contra serviços reais; explicitar diferenças de score e limites sem alegar equivalência. |
+| S5 — recuperação/contexto/adoção | **Parcial no recovery; planejada em contexto/adoção.** Run/loop têm persistência/reconciliação SQLite. | Efeitos externos seguem sob o host; Memory/Context Planner/RAG e integração com GH Bot/Vectora não existem como capabilities adotadas. |
+
+A matriz detalhada por contrato e binding está em
+[`02-matriz-conformidade-capabilities.md`](../analyses/02-matriz-conformidade-capabilities.md).
+
 Os contratos de vetores (`VectorStore`) e KV (`KvStore`) têm adapters que
 selecionam uma implementação por configuração. Filas duráveis e pub/sub também
 possuem APIs distintas (`DurableQueue` e `EphemeralPubSub`): a fila entrega um

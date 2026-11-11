@@ -3,6 +3,7 @@
 import asyncio
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Thread
 from typing import Any
 
@@ -70,6 +71,165 @@ def test_storage_selection_is_validated_by_rust() -> None:
     assert selection["vector"] is None
     with pytest.raises(RuntimeError, match="unsupported storage contract version"):
         validate_storage_selection({"contract_version": 99})
+
+
+def test_shared_conformance_fixture() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/conformance-v1.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    run = create_run(fixture["run_lifecycle"]["identity"])
+    assert run == fixture["run_lifecycle"]["planned"]
+    assert transition_run(run, "running") == fixture["run_lifecycle"]["running"]
+
+    verification = fixture["verification"]
+    assert (
+        evaluate_verification(verification["report"], verification["policy"])
+        == verification["evaluation"]
+    )
+    assert (
+        validate_storage_selection(fixture["storage_selection"])
+        == fixture["storage_selection"]
+    )
+
+
+def test_shared_fallback_fixture_conforms_to_completion_and_streaming() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[3] / "tests/fixtures/conformance-v1.json"
+    )
+    fallback = json.loads(fixture_path.read_text(encoding="utf-8"))["fallback_chat"]
+    model_ids = fallback["candidate_model_ids"]
+    request = {
+        "contract_version": 1,
+        "model": "ignored-model",
+        "messages": [{"role": "user", "content": "fixture prompt"}],
+    }
+
+    def make_settings(first: ThreadingHTTPServer, second: ThreadingHTTPServer) -> dict:
+        return {
+            "candidates": [
+                {
+                    "model_id": model_id,
+                    "client": {
+                        "protocol": "open_ai_compatible",
+                        "settings": {
+                            "base_url": endpoint(server),
+                            "api_key": "fixture-token",
+                        },
+                    },
+                }
+                for model_id, server in zip(model_ids, (first, second), strict=True)
+            ]
+        }
+
+    def response_bytes(response: dict[str, Any]) -> bytes:
+        body = response["body"]
+        return body.encode() if isinstance(body, str) else json.dumps(body).encode()
+
+    first, first_thread, first_capture = serve(
+        response_bytes(fallback["rate_limited_response"]),
+        fallback["rate_limited_response"]["content_type"],
+        status=fallback["rate_limited_response"]["status"],
+    )
+    second, second_thread, second_capture = serve(
+        response_bytes(fallback["completion"]["response"]),
+        fallback["completion"]["response"]["content_type"],
+        status=fallback["completion"]["response"]["status"],
+    )
+    try:
+        completion = asyncio.run(
+            fallback_chat_complete(make_settings(first, second), request)
+        )
+    finally:
+        for server, thread in ((first, first_thread), (second, second_thread)):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert [first_capture["body"]["model"], second_capture["body"]["model"]] == (
+        fallback["completion"]["expected_request_models"]
+    )
+    assert (
+        completion["selected_model_id"]
+        == fallback["completion"]["expected_selected_model_id"]
+    )
+    assert completion["content"] == fallback["completion"]["expected_content"]
+
+    first, first_thread, first_capture = serve(
+        response_bytes(fallback["rate_limited_response"]),
+        fallback["rate_limited_response"]["content_type"],
+        status=fallback["rate_limited_response"]["status"],
+    )
+    second, second_thread, second_capture = serve(
+        response_bytes(fallback["stream"]["response"]),
+        fallback["stream"]["response"]["content_type"],
+        status=fallback["stream"]["response"]["status"],
+    )
+
+    async def collect() -> list[dict[str, Any]]:
+        return [
+            event
+            async for event in fallback_chat_stream(
+                make_settings(first, second), request
+            )
+        ]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        for server, thread in ((first, first_thread), (second, second_thread)):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert [first_capture["body"]["model"], second_capture["body"]["model"]] == (
+        fallback["stream"]["expected_request_models"]
+    )
+    assert [event["type"] for event in events] == fallback["stream"][
+        "expected_event_types"
+    ]
+    assert (
+        events[0]["from_model_id"]
+        == fallback["stream"]["expected_switch"]["from_model_id"]
+    )
+    assert (
+        events[0]["to_model_id"] == fallback["stream"]["expected_switch"]["to_model_id"]
+    )
+    assert (
+        "".join(
+            event.get("text", "") for event in events if event["type"] == "text_delta"
+        )
+        == fallback["stream"]["expected_text"]
+    )
+
+    first, first_thread, _ = serve(
+        response_bytes(fallback["rate_limited_response"]),
+        fallback["rate_limited_response"]["content_type"],
+        status=fallback["rate_limited_response"]["status"],
+    )
+    second, second_thread, _ = serve(
+        response_bytes(fallback["stream"]["response"]),
+        fallback["stream"]["response"]["content_type"],
+        status=fallback["stream"]["response"]["status"],
+    )
+
+    async def collect_until_cancel() -> list[dict[str, Any]]:
+        observed = []
+        async for event in fallback_chat_stream(make_settings(first, second), request):
+            observed.append(event)
+            if event["type"] == fallback["stream"]["cancel_after_event_type"]:
+                break
+        return observed
+
+    try:
+        cancelled_events = asyncio.run(collect_until_cancel())
+    finally:
+        for server, thread in ((first, first_thread), (second, second_thread)):
+            server.shutdown()
+            thread.join()
+            server.server_close()
+    assert [event["type"] for event in cancelled_events] == fallback["stream"][
+        "expected_cancelled_event_types"
+    ]
 
 
 def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
@@ -631,6 +791,41 @@ def test_policy_gate_binds_approval_to_the_exact_call_and_policy() -> None:
         authorize_tool_dispatch(
             run, changed_completion, [contract], policy, [grant], now_ms=1500
         )
+
+
+def test_shared_conformance_fixture_covers_policy_loop_and_ledger(
+    tmp_path: Any,
+) -> None:
+    fixture_path = Path(__file__).parents[3] / "tests/fixtures/conformance-v1.json"
+    fixture = json.loads(fixture_path.read_text())
+
+    policy_fixture = fixture["tool_policy"]
+    run = transition_run(create_run(policy_fixture["run"]), "running")
+    evaluation = authorize_tool_dispatch(
+        run,
+        policy_fixture["completion"],
+        policy_fixture["contracts"],
+        policy_fixture["snapshot"],
+        now_ms=policy_fixture["now_ms"],
+    )
+    assert evaluation["status"] == policy_fixture["expected_status"]
+    assert evaluation.get("dispatch") == policy_fixture["expected_dispatch"]
+
+    loop_fixture = fixture["model_tool_loop"]
+    initial = start_model_tool_loop(loop_fixture["run_id"], loop_fixture["turn_id"])
+    assert initial["phase"] == loop_fixture["expected_initial_phase"]
+    cancelled = cancel_model_tool_loop(initial)
+    assert cancelled["state"]["phase"] == loop_fixture["expected_cancel_phase"]
+    assert (
+        cancelled["state"]["cancellation_requested"]
+        is loop_fixture["expected_cancel_requested"]
+    )
+
+    ledger_fixture = fixture["ledger"]
+    event = asyncio.run(
+        sqlite_ledger_append(str(tmp_path / "conformance.db"), ledger_fixture["draft"])
+    )
+    assert event["sequence"] == ledger_fixture["expected_sequence"]
 
 
 def test_sqlite_tool_policy_is_registered_and_survives_reopen(tmp_path: Any) -> None:

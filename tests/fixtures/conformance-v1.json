@@ -1,0 +1,218 @@
+{
+  "run_lifecycle": {
+    "identity": {
+      "contract_version": 1,
+      "run_id": "conformance-run-1",
+      "idempotency_key": "conformance-key-1",
+      "thread_id": "conformance-thread-1",
+      "turn_id": "conformance-turn-1",
+      "actor_id": "host-user-1",
+      "scope_id": "workspace-1",
+      "provider": "fixture-provider",
+      "model": "fixture-model",
+      "capabilities": ["chat"]
+    },
+    "planned": {
+      "contract_version": 1,
+      "identity": {
+        "contract_version": 1,
+        "run_id": "conformance-run-1",
+        "idempotency_key": "conformance-key-1",
+        "thread_id": "conformance-thread-1",
+        "turn_id": "conformance-turn-1",
+        "actor_id": "host-user-1",
+        "scope_id": "workspace-1",
+        "provider": "fixture-provider",
+        "model": "fixture-model",
+        "capabilities": ["chat"]
+      },
+      "status": "planned",
+      "sequence": 0
+    },
+    "running": {
+      "contract_version": 1,
+      "identity": {
+        "contract_version": 1,
+        "run_id": "conformance-run-1",
+        "idempotency_key": "conformance-key-1",
+        "thread_id": "conformance-thread-1",
+        "turn_id": "conformance-turn-1",
+        "actor_id": "host-user-1",
+        "scope_id": "workspace-1",
+        "provider": "fixture-provider",
+        "model": "fixture-model",
+        "capabilities": ["chat"]
+      },
+      "status": "running",
+      "sequence": 1
+    }
+  },
+  "verification": {
+    "report": {
+      "contract_version": 1,
+      "run_id": "conformance-run-1",
+      "evaluated_at_unix_ms": 1000,
+      "checks": [
+        {
+          "check_id": "unit-tests",
+          "outcome": "passed",
+          "evidence": [
+            {
+              "evidence_id": "unit-tests-result",
+              "origin": "fixture-runner",
+              "artifact_ref": "artifact:unit-tests-result",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "redacted": true,
+              "expires_at_unix_ms": 2000
+            }
+          ]
+        }
+      ]
+    },
+    "policy": {
+      "contract_version": 1,
+      "required_checks": ["unit-tests"],
+      "require_evidence": true,
+      "failed_check": "blocked",
+      "inconclusive": "unverified"
+    },
+    "evaluation": {
+      "contract_version": 1,
+      "run_id": "conformance-run-1",
+      "verification_status": "passed",
+      "verdict": "passed",
+      "reason_code": "all_required_checks_passed"
+    }
+  },
+  "storage_selection": {
+    "contract_version": 1,
+    "sql": "sqlite",
+    "vector": "qdrant",
+    "kv": "redis",
+    "queue": "nats_jetstream",
+    "pubsub": "nats_core"
+  },
+  "tool_policy": {
+    "run": {
+      "contract_version": 1,
+      "run_id": "conformance-policy-run",
+      "idempotency_key": "conformance-policy-key",
+      "thread_id": "conformance-policy-thread",
+      "turn_id": "conformance-policy-turn",
+      "actor_id": "host-user-1",
+      "scope_id": "workspace-1",
+      "capabilities": ["file.write"]
+    },
+    "completion": {
+      "contract_version": 1,
+      "content": "",
+      "tool_calls": [{
+        "id": "conformance-write-call",
+        "name": "write_file",
+        "arguments": {"state": "object", "value": {"path": "src/main.rs"}}
+      }]
+    },
+    "contracts": [{
+      "contract_version": 1,
+      "schema_version": "write.v1",
+      "name": "write_file",
+      "input_schema": {
+        "type": "object",
+        "properties": {"path": {"type": "string"}},
+        "required": ["path"],
+        "additionalProperties": false
+      },
+      "required_capability": "file.write",
+      "timeout_ms": 5000,
+      "effect": "external_effect",
+      "idempotency": "requires_key"
+    }],
+    "snapshot": {
+      "contract_version": 1,
+      "run_id": "conformance-policy-run",
+      "thread_id": "conformance-policy-thread",
+      "turn_id": "conformance-policy-turn",
+      "actor_id": "host-user-1",
+      "scope_id": "workspace-1",
+      "policy_digest": "conformance-policy-digest",
+      "revision": "1",
+      "approval_mode": "require_all_effects",
+      "expires_at_ms": 5000
+    },
+    "now_ms": 1000,
+    "expected_status": "awaiting_approval",
+    "expected_dispatch": null
+  },
+  "model_tool_loop": {
+    "run_id": "conformance-loop-run",
+    "turn_id": "conformance-loop-turn",
+    "expected_initial_phase": "awaiting_model",
+    "expected_cancel_phase": "cancelled",
+    "expected_cancel_requested": true
+  },
+  "ledger": {
+    "draft": {
+      "scope": "conformance",
+      "aggregate": "run-1",
+      "event_id": "conformance-event-1",
+      "idempotency_key": "conformance-event-key-1",
+      "event_type": "run_started",
+      "payload": {"source": "shared_fixture"},
+      "expected_version": 0
+    },
+    "expected_sequence": 1
+  },
+  "fallback_chat": {
+    "candidate_model_ids": ["openrouter:primary", "cohere:backup"],
+    "rate_limited_response": {
+      "status": 429,
+      "content_type": "application/json",
+      "body": { "error": { "message": "rate limited" } }
+    },
+    "completion": {
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "id": "fixture-completion",
+          "choices": [
+            {
+              "index": 0,
+              "message": { "role": "assistant", "content": "fallback answer" },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 1,
+            "completion_tokens": 2,
+            "total_tokens": 3
+          }
+        }
+      },
+      "expected_request_models": ["primary", "backup"],
+      "expected_selected_model_id": "cohere:backup",
+      "expected_content": "fallback answer"
+    },
+    "stream": {
+      "response": {
+        "status": 200,
+        "content_type": "text/event-stream",
+        "body": "data: {\"choices\":[{\"delta\":{\"content\":\"streamed answer\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\n\ndata: [DONE]\n\n"
+      },
+      "expected_request_models": ["primary", "backup"],
+      "expected_event_types": [
+        "model_switched",
+        "text_delta",
+        "usage",
+        "completed"
+      ],
+      "expected_switch": {
+        "from_model_id": "openrouter:primary",
+        "to_model_id": "cohere:backup"
+      },
+      "expected_text": "streamed answer",
+      "cancel_after_event_type": "text_delta",
+      "expected_cancelled_event_types": ["model_switched", "text_delta"]
+    }
+  }
+}

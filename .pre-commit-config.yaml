@@ -99,6 +99,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: svgo
+        name: Optimize and format SVG files (SVGO)
+        entry: svgo --multipass --pretty
+        language: node
+        additional_dependencies: [svgo@4.0.0]
+        files: \.svg$
+
       - id: prettier
         name: Prettier (TypeScript, JSON, Markdown)
         entry: prettier --write
