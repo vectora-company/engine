@@ -31,7 +31,9 @@ contratos, implementação, testes, revisão e entrega. Cada item usa um estado
 permitido e aponta evidência ou justificativa quando necessário.
 
 Os três arquivos precisam referenciar uns aos outros e estar ligados a partir
-do plano ativo e do índice `docs/README.md`.
+do plano ativo e do índice `docs/README.md`. Ao criar Markdown, atualize também
+`docs/plans/00-prompt-loop-goal.md` e os documentos do goal que o consultam.
+O texto de cada link mostra o caminho completo a partir da raiz da Engine.
 
 ## Registro de evidência
 

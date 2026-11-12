@@ -11,8 +11,15 @@ Leia o [plano operacional](../goal-loop/01-plano-operacional.md), o
 [checklist](../goal-loop/02-checklist-do-loop.md), as
 [regras de evidência](../goal-loop/03-fontes-e-evidencias.md) e os
 [critérios de encerramento](../goal-loop/04-criterios-de-encerramento.md).
+Aplique [`docs/plans/05-loop-de-desenvolvimento.md`](05-loop-de-desenvolvimento.md),
+[`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md)
+e [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 Retome a próxima etapa aprovada do plano ativo e leia sua spec, análise e
 checklist. Implemente, verifique localmente e atualize os documentos da etapa.
+Consulte o [registro da capability ativa](../goal-loop/README.md#capability-ativa).
+Ao criar um Markdown, inclua no mesmo PR seu caminho completo a partir da raiz
+como texto de link neste prompt, em `docs/README.md`, nos documentos do goal
+que o usam e nos artefatos da capability que dependem dele.
 Leia também a [sabatina do ecossistema](../analyses/04-sabatina-engine-ecossistema.md).
 Desenvolva a Engine e o GH Bot conjuntamente: consulte o [guia de integração do
 GH Bot](../../../gh-bot/docs/engine-integration.md) e exercite as capabilities no

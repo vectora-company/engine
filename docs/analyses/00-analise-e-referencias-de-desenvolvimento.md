@@ -88,6 +88,13 @@ Atualize os documentos junto com o código. O checklist precisa corresponder ao
 estado real: diferencie `feito`, `pendente`, `bloqueado` e `não aplicável`, sempre
 com uma nota curta para itens bloqueados ou não aplicáveis.
 
+Atualize plano, checklist e análise da capability em cada etapa, com o PR,
+a evidência obtida e o trabalho pendente. Ao criar um Markdown, no mesmo PR
+vincule-o no índice `docs/README.md`, no prompt
+`docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
+artefatos da capability que dependem dele. Use o caminho completo a partir
+da raiz do repositório no texto do link e um destino relativo válido.
+
 ## Decisões que exigem o mantenedor
 
 Pare antes de implementar a parte dependente quando uma resposta alterar de

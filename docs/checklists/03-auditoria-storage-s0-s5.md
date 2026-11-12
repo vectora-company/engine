@@ -27,9 +27,9 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Caracterizar a retenção inicial sem limite das filas duráveis em Redis Streams e NATS JetStream.
 - [x] Configurar limite finito comum de mensagens retidas (padrão 100000) em Redis e NATS; explicitar que mensagens mais antigas, inclusive pendentes, podem ser removidas quando o limite é atingido.
 - [x] Implementar tentativas limitadas (padrão 5) e DLQ consumível nos dois backends; testes service-real passam 14/14. Redis transfere e confirma a origem atomicamente; NATS publica com deduplicação antes do ACK (at-least-once).
-- [ ] Verificar em serviços reais a retomada da transferência para a DLQ no NATS e a corrida entre ACK e transferência no Redis. Correção empilhada sobre o PR #61.
-- [ ] Verificar que cada chamada de recebimento no JetStream reserva uma única mensagem e que um pedido ocioso expira no broker. A correção cobre a fila principal e a DLQ.
-- [ ] Verificar com JetStream real a preservação de opções do operador e a recusa de streams com subjects incompatíveis.
+- [ ] Verificar em serviços reais a retomada da transferência para a DLQ no NATS e a corrida entre ACK e transferência no Redis. Correção no PR #62.
+- [ ] Verificar que cada chamada de recebimento no JetStream reserva uma única mensagem e que um pedido ocioso expira no broker. O PR #63 cobre a fila principal e a DLQ.
+- [ ] Verificar com JetStream real a preservação de opções do operador e a recusa de streams com subjects incompatíveis (PR #64).
 - [ ] Shutdown gracioso dos consumers; o redrive é feito pelo consumidor da DLQ via `queue_enqueue` e não é transação atômica entre os streams.
 - [x] Cobrir ordenação, `limit`, direção do score, upsert idempotente, mesmo id em escopos distintos, delete por escopo e dimensão inválida em LanceDB e Qdrant (contrato comum).
 - [x] Cobrir os limites de entrada existentes: busca `limit` 1–1000, vetor 1–65536 dimensões (upsert), escopo/coleção (≤128, charset), chave KV ≤512, identificadores ≤128 e subjects (sem segmentos vazios nem `*`/`#`, ≤512), nos dois lados de cada fronteira.
@@ -57,7 +57,7 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 [`04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
 
 - [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local (branch do PR #57; não integrado em `main`).
-- [ ] Vetorial: verificar os extremos do limite compartilhado de 1 a 65536 dimensões na busca e gravação em LanceDB e Qdrant. A validação já está no core.
+- [ ] Vetorial: verificar os extremos do limite compartilhado de 1 a 65536 dimensões na busca e gravação em LanceDB e Qdrant. O core compilou no PR #65.
 - [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
 - [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens novas. CAS por revisão, incremento, prefixo e watch ainda faltam nos dois.
 - [ ] Filas: `max_deliver`/contagem de entregas, DLQ, NACK/atraso e deduplicação equivalentes nas duas.

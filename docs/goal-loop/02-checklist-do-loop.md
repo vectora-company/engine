@@ -60,6 +60,9 @@ item bloqueado ou não aplicável precisa de uma justificativa curta.
 - [ ] Revisar diff, arquivos staged e ausência de segredos/artefatos incidentais.
 - [ ] Registrar comandos, resultados, SHA, ambiente e limitações reproduzíveis.
 - [ ] Atualizar plano, análise e checklist com estado verdadeiro.
+- [ ] Para cada Markdown novo, conferir o link com caminho desde a raiz em
+      `docs/README.md`, `docs/plans/00-prompt-loop-goal.md`, nos documentos do
+      goal que o usam e nos artefatos da capability que dependem dele.
 - [ ] Rodar o Prettier nos Markdown alterados e repetir o `git add` se o hook
       reformatar.
 - [ ] Commitar e fazer push para a URL do GitHub (o `origin` local pode apontar

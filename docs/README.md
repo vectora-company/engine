@@ -3,6 +3,10 @@
 Use este índice para navegar da orientação geral às especificações de uma
 capability. `AGENTS.md` continua sendo a autoridade para as regras do repositório.
 
+## Capability ativa
+
+Consulte os [documentos de storage no goal loop](goal-loop/README.md#capability-ativa).
+
 ## Operação de desenvolvimento
 
 - [Prompt curto para o goal](plans/00-prompt-loop-goal.md): texto reutilizável

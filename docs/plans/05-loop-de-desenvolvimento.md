@@ -66,6 +66,13 @@ Não avance para trabalho fora do plano ativo, não faça alterações paralelas
 consumidores sem escopo e não declare paridade ou performance sem medições
 reproduzíveis.
 
+Atualize plano, checklist e análise da capability em cada etapa, com o PR,
+a evidência obtida e o trabalho pendente. Ao criar um Markdown, no mesmo PR
+vincule-o no índice `docs/README.md`, no prompt
+`docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
+artefatos da capability que dependem dele. Use o caminho completo a partir
+da raiz do repositório no texto do link e um destino relativo válido.
+
 ## Stack de PRs
 
 - Cada PR novo usa como base a branch do PR anterior (não `main`), para que o
@@ -75,14 +82,14 @@ reproduzíveis.
 - Faça push para `https://github.com/vectora-company/engine.git` e crie o PR com
   `gh pr create --base <branch do PR anterior> --head <branch nova>`. Título e
   descrição em português; a descrição lista a pilha, o que muda, a evidência
-  local e os limites, e termina com a linha de atribuição exigida.
+  local e os limites. Siga as regras de metadados em `AGENTS.md`.
 - Commit, push e abertura de PR são obrigatórios. Aprovar PRs e criar issues
   só ocorre quando `brunosrz` pedir.
 - Depois do push, siga para o próximo PR da stack. Falha de CI no PR anterior
   não interrompe o trabalho: corrija no PR afetado quando fizer sentido e
   continue a stack.
 - O hook de pre-commit executa a suíte Rust completa; o tempo depende do cache e
-  do host (nesta execução, a linkagem passou de 25 minutos). O Prettier pode
+  do host. Registre quais verificações rodaram e quais foram omitidas. O Prettier pode
   reformatar arquivos e abortar o commit. Rode
   `uv run pre-commit run prettier --files <arquivos .md>` antes, repita o
   `git add` se o hook reformatar, e execute commit, push e `gh pr create`

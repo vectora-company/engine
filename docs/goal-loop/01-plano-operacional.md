@@ -43,6 +43,8 @@ que permitam revisar o que foi feito e o que permanece pendente.
    deste loop.
 6. Revise o diff e atualize plano, análise e checklist para refletirem o código
    real. Não marque como concluído o que só está parcialmente implementado.
+   Ao criar Markdown, vincule seu caminho completo desde a raiz no índice,
+   no prompt e nos documentos do goal e da capability que o usam.
 7. Faça commit, push e abra o PR com base na branch do PR anterior da stack;
    é obrigatório e não depende de pedido. Inicie a próxima etapa já em uma nova
    branch empilhada, sem esperar aprovação nem CI. Aprovar PRs e criar issues

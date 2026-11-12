@@ -39,6 +39,24 @@ gerais relacionados são o [protocolo detalhado](../plans/05-loop-de-desenvolvim
 o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 [análise geral](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 
+## Capability ativa
+
+Storage, ledger e mensageria. O estado publicado da stack, as evidências e os
+itens pendentes são mantidos nos documentos abaixo.
+
+- Plano de continuidade: [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
+- Plano da capability: [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
+- Spec: [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md).
+- Checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
+- Análise: [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
+
+Atualize plano, checklist e análise da capability em cada etapa, com o PR,
+a evidência obtida e o trabalho pendente. Ao criar um Markdown, no mesmo PR
+vincule-o no índice `docs/README.md`, no prompt
+`docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
+artefatos da capability que dependem dele. Use o caminho completo a partir
+da raiz do repositório no texto do link e um destino relativo válido.
+
 ## Regras operacionais do mantenedor
 
 - Commit, push e PR são obrigatórios; só aprovar PR e criar issue exigem pedido.

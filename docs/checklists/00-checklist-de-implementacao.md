@@ -63,6 +63,9 @@ Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
       incidentais.
 - [ ] Registrar SHA, comandos, resultados e limitações reproduzíveis.
 - [ ] Atualizar o plano com itens restantes, riscos e próximo passo.
+- [ ] Para cada Markdown novo, conferir o link com caminho desde a raiz em
+      `docs/README.md`, `docs/plans/00-prompt-loop-goal.md`, nos documentos do
+      goal que o usam e nos artefatos da capability que dependem dele.
 - [ ] Executar Prettier nos Markdown alterados; reaplicar `git add` se formatar.
 - [ ] Fazer commit e push para o remoto GitHub; o `origin` local pode ser um
       clone auxiliar.
