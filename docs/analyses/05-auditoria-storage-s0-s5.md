@@ -101,18 +101,13 @@ sobrevivem à reabertura do arquivo; cursor/limite inválidos falham com
 nenhum defeito reproduzido. Limites: threads não substituem processos
 independentes, e backup/restore e recovery operacional não foram cobertos.
 
-## Bloqueio parcial: matriz service-real
+## Matriz service-real
 
-Verificado em 2026-11-11 nesta máquina: há `podman`, mas nenhum contêiner ou
-serviço Redis, NATS, Qdrant ou PostgreSQL em execução e nenhum binário local.
-A matriz service-real (reconnect, restart, ACK/redelivery, TTL/retention,
-shutdown, filtros/score vetoriais, projeção PostgreSQL) exige baixar imagens e
-subir serviços (`scons install` as prepara). Não foi feito sem autorização do
-mantenedor; esses itens seguem `não executado`, não aprovados. Condição para
-retomar: autorizar o download das imagens e ter recursos de CPU/memória para
-compilar e rodar os serviços (a máquina já apresentou swap alto). Backup/restore
-e concorrência entre processos independentes do ledger são etapas
-independentes ainda pendentes.
+Os serviços de teste (Redis, NATS com JetStream, Qdrant e PostgreSQL) existem
+como contêineres Podman locais (`vectora-engine-*`). Os testes condicionais
+leem `VECTORA_TEST_POSTGRES_URL`, `VECTORA_TEST_REDIS_URL`,
+`VECTORA_TEST_NATS_URL` e `VECTORA_TEST_QDRANT_URL`; sem elas retornam sem
+validar o serviço. Resultados desta execução: ver a seção seguinte.
 
 ## Trabalho que permanece
 
