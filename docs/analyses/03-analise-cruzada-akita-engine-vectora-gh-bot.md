@@ -19,12 +19,12 @@ direta dessas teses.
 
 ### Snapshots usados
 
-| Fonte            | Snapshot consultado                                                                                                        | Uso                                                                           |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Livro            | `CompetenteOSuficiente` em `b0e7e1c0ec1411113ae5e8d893ebe05ead89535e`                                                      | Argumentos e experiências do autor; edição local em `book/pt/`.               |
+| Fonte            | Snapshot consultado                                                                                                           | Uso                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Livro            | `CompetenteOSuficiente` em `b0e7e1c0ec1411113ae5e8d893ebe05ead89535e`                                                         | Argumentos e experiências do autor; edição local em `book/pt/`.               |
 | Engine           | topo da stack, PR [#34](https://github.com/vectora-company/engine/pull/34), commit `a2afb65dc898a6214dd83a6473967132b6a9ac79` | Contratos e fixture de conformidade disponíveis nesta etapa.                  |
-| Vectora          | `origin/master` em `bf1732ac92eac21671881cc34a530c2ddb7186de`                                                              | Implementação atual do backend consumidor para a comparação.                  |
-| GH Bot           | `main` em `b489b90263e3a4ace94cfdce45763489918a3671`                                                                       | Bootstrap e documentação atuais; integração com a Engine ainda é roadmap.     |
+| Vectora          | `origin/master` em `bf1732ac92eac21671881cc34a530c2ddb7186de`                                                                 | Implementação atual do backend consumidor para a comparação.                  |
+| GH Bot           | `main` em `b489b90263e3a4ace94cfdce45763489918a3671`                                                                          | Bootstrap e documentação atuais; integração com a Engine ainda é roadmap.     |
 | Contexto Vectora | issue [#387](https://github.com/vectora-company/vectora/issues/387)                                                           | Tese de produto e perguntas de arquitetura; não substitui inspeção do código. |
 
 Os snapshots são diferentes entre si e representam o estado consultado nesta
@@ -121,10 +121,13 @@ maior maturidade.
 3. **Persistência específica e independente de produto** para lifecycle,
    loop/cancelamento/reconciliação, policy/aprovação e ledger/checkpoints em
    SQLite. A Engine explicita que esses stores não equivalem a schema de
-   negócio nem a um SQL genérico.
+   negócio; que o PostgreSQL ainda não os tem é uma lacuna de equivalência a
+   fechar, não uma decisão.
 4. **Adapters reutilizáveis em múltiplas linguagens** para grupos de storage e
    messaging. Isso permite uma base compartilhada para GH Bot e Vectora, mas
-   não remove diferenças de durabilidade, TTL, ACK, filtros ou score.
+   ainda tem diferenças de TTL, ACK, filtros e score. Cada uma é lacuna a fechar
+   nos dois lados do par ou especialização com motivo de incompatibilidade, e
+   não difere por escolha.
 5. **Uma fixture compartilhada de conformidade entre Rust/Python/TypeScript**
    no topo do PR #34 para cenários selecionados. É ganho de disciplina
    contratual; não é paridade global.
@@ -283,7 +286,8 @@ permissão, ranking, Context Projection, consolidação ou política de confian�
 ### 6. Se há SQLite e PostgreSQL, o ledger é tolerante a qualquer falha?
 
 **Não.** `ResilientLedger` grava SQLite como fonte local e projeta ao
-PostgreSQL; isso não torna os stores de lifecycle, loop e policy equivalentes,
+PostgreSQL; isso ainda não torna os stores de lifecycle, loop e policy equivalentes entre
+SQLite e PostgreSQL (lacuna a fechar),
 nem garante consistência sob qualquer falha sem testes de serviço e
 recuperação.
 

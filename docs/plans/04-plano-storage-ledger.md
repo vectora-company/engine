@@ -32,8 +32,13 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
   nunca apaga nem desfaz o evento local. Índices, filas e notificações são
   projeções ou transporte. Pub/sub efêmero e filas duráveis são contratos
   distintos.
-- Especificar capabilities e diferenças reais de consistência, ordenação,
-  concorrência, retenção, TTL, ACK e replay. Doubles em memória são internos
+- Equivalência por par primeiro: o que existe nos dois lados de SQLite/PostgreSQL,
+  LanceDB/Qdrant, Redis/NATS KV, Redis Streams/JetStream e Redis Pub/Sub/NATS
+  Core é implementado nos dois, com a mesma semântica observável (a política
+  está na spec 02). Só depois vem a especialização do que for incompatível.
+  Especificar capabilities e as diferenças reais de consistência, ordenação,
+  concorrência, retenção, TTL, ACK e replay que restarem, cada uma como lacuna a
+  fechar ou especialização com motivo. Doubles em memória são internos
   aos testes; a configuração de produto não os seleciona. Indisponibilidade
   nunca troca silenciosamente o backend.
 - Erros tipados, timeouts, cancelamento, limites e observabilidade sem segredos
@@ -42,19 +47,45 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 
 ## Matriz de capacidades
 
-| Capacidade          | Adapters                                                 | Diferenças a declarar                                                             |
-| ------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Relacional e ledger | SQLite autoritativo; PostgreSQL selecionável e espelhado | Transações, isolamento, locks, conflitos, migrations, tipos e paginação.          |
-| Vetorial            | LanceDB, Qdrant                                          | Filtros, distância/score, índices, busca lexical/híbrida, consistência e limites. |
-| KV/cache            | Redis, NATS JetStream KV                                 | TTL, atomicidade, revisões, eviction, limites e persistência configurada.         |
-| Fila/stream durável | NATS JetStream, Redis Streams                            | Grupos/consumidores, ACK, redelivery, retenção, replay, ordenação e DLQ.          |
-| Pub/sub             | NATS Core, Redis Pub/Sub                                 | Entrega efêmera, reconexão, assinaturas e comportamento sem assinante.            |
+| Capacidade          | Adapters                                                 | Base equivalente exigida nos dois lados                                           | Diferença que só a configuração do serviço explica                 |
+| ------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Relacional e ledger | SQLite autoritativo; PostgreSQL selecionável e espelhado | Transações, conflitos, migrations, paginação, stores de run/loop/policy, backup.  | Isolamento e locks do motor; durabilidade conforme a configuração. |
+| Vetorial            | LanceDB, Qdrant                                          | Métrica e score alinhados, filtros, índices, quantização, busca híbrida, limites. | Consistência e durabilidade conforme o deployment.                 |
+| KV/cache            | Redis, NATS JetStream KV                                 | TTL, revisão/CAS, incremento atômico, prefixo, watch, limites.                    | Eviction e persistência conforme a configuração.                   |
+| Fila/stream durável | NATS JetStream, Redis Streams                            | Grupos, ACK/NACK, redelivery com teto, retenção, replay, ordenação e DLQ.         | Retenção física conforme a configuração do serviço.                |
+| Pub/sub             | NATS Core, Redis Pub/Sub                                 | Entrega efêmera, reconexão, assinaturas, comportamento sem assinante.             | Limites de buffer do serviço.                                      |
 
 Adapters em memória podem apoiar testes internos, mas não são backends públicos
 nem uma opção de configuração de produto. A configuração pública oferece os
 seis backends concretos desta spec e permite combiná-los por capability.
 Garantias dependem da configuração do serviço; não inferir durabilidade apenas
-pelo nome do backend.
+pelo nome do backend. A coluna "base equivalente" não é uma lista de
+diferenças aceitas: cada item ausente em um lado é lacuna na matriz abaixo.
+
+## Matriz de equivalência por par (estado verificado em 2026-11-12)
+
+Fonte: código dos adapters nas branches da stack e testes locais. "Lacuna"
+significa que o outro lado consegue e a Engine ainda não entrega; "base comum
+ausente" significa que nenhum dos dois lados expõe a capacidade hoje.
+
+| Par                       | Lacuna (um lado tem, o outro não)                                                                                                                                                                                                                                                                                  | Base comum ainda ausente nos dois lados                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite × PostgreSQL       | PostgreSQL não tem os stores de lifecycle, loop e policy; não tem backup/restore/verify equivalentes aos do SQLite; a outbox existe só no SQLite; o append resiliente usa SQLite como autoridade obrigatória.                                                                                                      | Interface SQL transacional tipada e limitada (spec 02) em ambos.                                                                   |
+| LanceDB × Qdrant          | Métrica: o LanceDB usa `nearest_to` sem métrica explícita (padrão L2) e o Qdrant é criado com `Cosine`; o score tem direção e escala diferentes. O upsert limita a dimensão a 65536 nos dois; a busca não aplica esse limite antes de chamar o backend, então dimensões inválidas podem produzir erros diferentes. | Filtro por metadado além do escopo, criação/parâmetros de índice ANN, quantização, busca lexical/híbrida, backup/snapshot, health. |
+| Redis × NATS JetStream KV | TTL por chave: Redis suporta; o adapter NATS retorna `Unsupported`. O serviço local é NATS 2.10; TTL por mensagem existe em versões mais novas, mas a disponibilidade/configuração em 2.10 não foi confirmada.                                                                                                     | Escrita condicional por revisão (CAS), incremento atômico, listagem por prefixo, observação de mudanças.                           |
+| Redis Streams × JetStream | `max_deliver`: o NATS expõe o teto (hoje ilimitado); o Redis precisa de contagem de entregas via `XPENDING`. Deduplicação: nativa no JetStream (`Nats-Msg-Id`), manual no Redis.                                                                                                                                   | Retenção e remoção após ACK (decisão do mantenedor pendente), DLQ, NACK/atraso de reentrega, shutdown gracioso.                    |
+| Redis Pub/Sub × NATS Core | Nenhuma lacuna de contrato conhecida (ambos efêmeros; mensagem sem assinante é descartada, provado por teste).                                                                                                                                                                                                     | Assinatura por padrão/curinga e reconexão observável.                                                                              |
+
+O relatório atual `capabilities()` enumera implementado/não implementado e
+notas, mas não tem um campo estruturado para diferenciar lacuna, emulação e
+especialização com justificativa de incompatibilidade. Essa parte do contrato
+de descoberta também precisa ser definida e implementada antes de anunciar
+especializações como suportadas.
+
+Escopo das lacunas: o par vetorial é o que mais afasta o contrato do
+comportamento real, porque a mesma consulta pode ordenar diferente quando os
+vetores não têm norma 1. O teste de contrato compartilhado hoje usa vetores
+unitários e não prova equivalência de ranking.
 
 ## Estado revalidado contra `main` (`22c861f`)
 
@@ -85,9 +116,11 @@ locais ao processo e não devem ser persistidos em configuração.
 Redis Streams recupera entregas pendentes com `XAUTOCLAIM`; NATS JetStream usa
 consumidores duráveis e `ack_wait`. KV Redis aceita TTL por chave; JetStream KV
 não implementa o mesmo contrato de TTL e retorna erro `Unsupported` quando ele
-é solicitado. LanceDB reporta distância (_menor é mais próximo_); Qdrant reporta
-similaridade cosseno (_maior é mais próximo_). Não comparar os scores entre
-adapters sem normalização explícita.
+é solicitado, o que é uma lacuna de equivalência. LanceDB reporta distância
+(_menor é mais próximo_, métrica padrão L2); Qdrant reporta similaridade cosseno
+(_maior é mais próximo_). Esse é o estado atual, não o contrato desejado: a
+meta é alinhar a métrica e normalizar o score para um contrato único. Até lá,
+não comparar os scores entre adapters.
 
 No ledger, `ResilientLedger` grava evento e outbox atomicamente em SQLite antes
 de tentar a projeção PostgreSQL. O resultado informa `synchronized`, `pending`
@@ -162,8 +195,9 @@ configuração e lifecycle nos dois bindings.
 
 **Aceite:** append continua disponível com PostgreSQL fora do ar e é confirmado
 no SQLite; a projeção pode ser retomada sem duplicar eventos após restart;
-divergências de isolamento e operação documentadas. Paridade é limitada aos
-casos medidos.
+divergências de isolamento e operação documentadas como lacunas ou como
+diferença de configuração do serviço. Equivalência é afirmada só para os casos
+medidos.
 
 ### 4. S3 — Redis e NATS: KV, filas e pub/sub
 
@@ -188,7 +222,8 @@ sem exigir provider externo e disponibilizar ambos os bindings.
 
 **Aceite:** testes com backends reais verificam filtros antes da recuperação,
 dimensão inválida, coleção ausente, ordenação/score, concorrência e falhas de
-indexação. Resultados não reivindicam equivalência numérica entre backends.
+indexação. O contrato exige métrica e score alinhados entre os backends; a
+equivalência numérica só é afirmada para os casos medidos.
 
 ### 6. S5 — recuperação, contexto e adoção progressiva
 

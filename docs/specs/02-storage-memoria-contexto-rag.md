@@ -27,14 +27,89 @@ O fato de o Vectora usar hoje determinadas tabelas ou diretórios não os torna 
 
 ## Capabilities e adapters
 
-| Interface       | Backends candidatos           | Contrato comum                                                                                                | Diferenças que precisam continuar explícitas                                                                                            |
+| Interface       | Backends candidatos           | Contrato comum                                                                                                | Onde a semântica observável deve ser igual nos dois lados do par                                                                        |
 | --------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | SQL durável     | SQLite, PostgreSQL            | Transações, consultas tipadas/limitadas, migrações, paginação, health e fechamento de pool.                   | Locks, concorrência, JSON, precisão/datas, isolamento, conflitos, constraints e comportamento de migration.                             |
 | Vector store    | LanceDB, Qdrant               | Coleções, upsert/delete idempotente, busca, filtros/metadata, top-k e health.                                 | Operadores/filtros suportados, métrica e direção do score, lexical/hybrid search, consistência, limites de payload e criação de índice. |
 | KV/cache        | NATS JetStream KV, Redis      | get/set/delete, TTL, namespace e operação atômica quando suportada.                                           | Durabilidade, atomicidade, eviction, TTL e escopo multi-processo.                                                                       |
 | Event bus/queue | NATS JetStream, Redis Streams | Envelope versionado, idempotency/task ID, publish/consume, timeout, cancelamento, estado de entrega e health. | ACK, consumer/group, redelivery, retenção, replay, ordenação, DLQ, deduplicação e semântica de shutdown.                                |
 
-A interface comum expõe somente o menor denominador seguro. Recursos próprios são capabilities opcionais verificáveis. Um adapter não simula uma capacidade ausente e não substitui automaticamente uma store durável por memória.
+Um adapter não simula em silêncio uma capacidade ausente e não substitui automaticamente uma store durável por memória.
+
+## Equivalência por par e especialização
+
+Os backends formam cinco **pares**: SQL (SQLite, PostgreSQL), vetorial
+(LanceDB, Qdrant), KV/cache (Redis, NATS JetStream KV), fila durável (Redis
+Streams, NATS JetStream) e pub/sub (Redis Pub/Sub, NATS Core). O storage é
+entregue em duas camadas, nesta ordem.
+
+### Camada 1: base funcional equivalente (obrigatória)
+
+Tudo o que **existe nos dois lados** de um par deve ser implementado nos dois,
+com a mesma API, o mesmo comportamento observável (erros, ordenação, escopo,
+limites, TTL, ACK, score) e a mesma suíte de conformidade executada contra cada
+backend. A base é o **maior denominador comum viável**, não o menor: se os dois
+backends conseguem fazer algo, os dois adapters fazem.
+
+- Uma capacidade presente em um lado e viável no outro é uma **lacuna**, não uma
+  "diferença a declarar". Lacunas ficam na matriz de equivalência do
+  [plano de storage](../plans/04-plano-storage-ledger.md) até serem fechadas.
+- A semântica visível ao consumidor é igual. Quando o serviço expõe valores
+  diferentes (por exemplo, a métrica de distância ou a direção do score), o
+  adapter alinha a configuração ou normaliza o resultado para o contrato comum.
+- Implementar um lado primeiro é aceitável como etapa, desde que o outro lado
+  entre na mesma stack de PRs e a lacuna esteja registrada. Prioridade, esforço
+  ou preferência por um backend não justificam deixar um lado sem a capacidade.
+- Diferença que vem só da **configuração do serviço** (por exemplo, durabilidade
+  conforme o volume do contêiner) é declarada, não corrigida pela Engine.
+
+### Camada 2: especialização (depois da base)
+
+Só depois de a base ser equivalente cada backend se especializa no que o outro
+**não consegue fazer por incompatibilidade técnica**. A especialização:
+
+- exige um motivo de incompatibilidade verificado na documentação e na versão
+  do projeto, registrado em `capabilities()`; não existe por decisão de
+  produto;
+- é uma capability opcional que consumidores descobrem antes de usar; chamá-la
+  no backend incompatível retorna erro tipado, nunca um resultado aproximado;
+- é emulada no outro lado quando houver emulação com a mesma semântica
+  observável; a emulação é declarada como tal;
+- deriva só do que a incompatibilidade impede: recursos derivados que ambos os
+  lados puderem sustentar continuam na base.
+
+Exemplos de **base a implementar e verificar** (não afirmação de que já estejam
+disponíveis nos adapters): busca vetorial com filtros por metadado, ANN
+configurável, quantização e busca híbrida; o consumidor pode compor qualquer
+adapter conforme para RAG e contexto do agente. LanceDB 0.22.3, versão da
+dependência Rust desta branch, contém builders IVF-HNSW-PQ e IVF-HNSW-SQ; isso
+não significa que o adapter já configure índices. O contêiner Qdrant em execução
+é 1.12.4; `SConstruct` provisiona 1.15.5, e Qdrant usa HNSW como índice denso
+padrão. Os tipos de índice e seus
+parâmetros precisam de um mapeamento comum testado, não só de nomes parecidos.
+No SQL, a base inclui transações, migrações, backup/restore e JSON. No KV,
+TTL, escrita condicional por revisão, incremento atômico, listagem por prefixo
+e observação de mudanças. Nas filas, ACK/NACK, redelivery com teto, DLQ,
+deduplicação e replay. A disponibilidade nativa ou emulada de cada item ainda
+deve ser confirmada por versão e registrada na matriz do plano.
+
+TurboQuant (arXiv:2504.19874) é quantização de vetores em geral. Qdrant só
+oferece a implementação nativa documentada a partir da versão 1.18.0, enquanto
+o contêiner em execução é 1.12.4 (`SConstruct` provisiona 1.15.5). O suporte equivalente no
+LanceDB 0.22.3 não está confirmado. Se a Engine implementar o método em camada
+comum, a capability pertence à base; se depender de implementação exclusiva
+de um backend, deve permanecer fora da base até haver equivalência ou uma
+incompatibilidade documentada. PolarQuant (arXiv:2502.02617) trata da
+quantização de KV cache de LLM, não do KV store Redis/NATS.
+
+Exemplos de **especialização** (só se a incompatibilidade for confirmada):
+compartilhar buckets vetoriais como arquivos em armazenamento de objetos
+(LanceDB, por ser embutido e baseado em arquivos), versionamento e _time
+travel_ nativo de tabelas (LanceDB), multi-tenancy por payload e sharding
+distribuído (Qdrant), Row-Level Security, `LISTEN/NOTIFY` e replicação lógica
+(PostgreSQL), request/reply nativo (NATS), estruturas como hashes e sorted sets
+(Redis). Cada item acima precisa de confirmação na documentação antes de virar
+especialização; se o outro lado puder oferecê-lo, volta para a base.
 
 ## Ledger e estado de execução
 
@@ -46,14 +121,15 @@ LanceDB/Qdrant e messaging Redis/NATS para KV, fila e pub/sub. Consulte a
 [`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
 para APIs, bindings, testes e limites por adapter.
 
-Isso não equivale a uma interface SQL genérica: PostgreSQL ainda não é adapter
-de lifecycle/loop/policy nem substitui a autoridade SQLite do append resiliente.
+Isso ainda não é equivalência entre SQLite e PostgreSQL: PostgreSQL não tem
+os stores de lifecycle/loop/policy nem backup/restore, e o append resiliente
+mantém a autoridade local em SQLite (lacunas na matriz do plano de storage).
 As seleções públicas aceitam apenas os seis backends definidos nesta spec;
 implementações em memória são doubles internos de teste e não fazem parte da
 configuração de produto. Não há ainda APIs de Memory, Context Planner,
 compactação/context engineering, indexação documental ou RAG. Os bindings de
 ledger exigem arquivo SQLite persistente. A presença de adapters não prova
-paridade operacional: testes de integração service-real, falhas/restart e
+equivalência operacional: testes de integração service-real, falhas/restart e
 retention continuam gaps.
 
 - Separar registro append-only de eventos, projeções consultáveis, checkpoints, cursor e referências a artifacts.
@@ -98,9 +174,9 @@ Cada operação deve permitir registrar adapter/capability escolhida, versão/co
 ## Fases de implementação
 
 1. **Contrato Rust:** criar tipos, capabilities, matriz semântica e suite comum; seleções públicas devem corresponder apenas aos seis backends concretos desta spec. Doubles em memória ficam restritos aos testes.
-2. **SQL:** implementar SQLite e PostgreSQL com casos comuns e específicos.
-3. **Vetorial:** implementar LanceDB e Qdrant sem forçar equivalência de busca/filtro.
-4. **KV/mensageria:** implementar Redis e NATS JetStream para usos descobertos, documentando semânticas distintas.
+2. **SQL:** implementar SQLite e PostgreSQL com a mesma base funcional; especializações só depois e com motivo de incompatibilidade.
+3. **Vetorial:** implementar LanceDB e Qdrant com a mesma base funcional (métrica e score alinhados, filtros, índices, quantização, busca híbrida); especializações só depois e com motivo de incompatibilidade.
+4. **KV/mensageria:** implementar Redis e NATS JetStream com a mesma base funcional (TTL, revisão, ACK, redelivery, retenção, DLQ); semânticas distintas só quando a incompatibilidade for confirmada e registrada.
 5. **Distribuição e adoção:** cada capability pública inclui bindings Python e TypeScript no mesmo PR. Preparar publicação e adotar de forma reversível, começando pelo GH Bot TypeScript e seguindo posteriormente com o backend Python do Vectora.
 6. **Migração de dados:** por entidade/capability, com métricas de integridade e rollback aprovados antes da troca de padrão.
 
@@ -109,6 +185,7 @@ A ordem pode mudar conforme dependências reais, mas não remove os gates de con
 ## Critérios de aceite
 
 - Todo adapter declara capabilities e passa pela suíte comum e por casos próprios.
+- Toda capability presente em um lado de um par e viável no outro está implementada nos dois e passa pela mesma suíte de conformidade; cada diferença restante tem motivo de incompatibilidade registrado.
 - Testes reais de serviços cobrem restart/reconnect, timeout, cancelamento, concorrência, idempotência e ciclo de vida; mocks não substituem esses testes.
 - SQL cobre transactions, migrations, lock/contention, conflicts, rollback, paginação e diferenças de tipos.
 - Vector stores cobrem IDs, upsert/delete, filtros, dimensões, ranking, score, ordenação, coleção ausente e erro de indexação.

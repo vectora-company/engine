@@ -34,15 +34,15 @@ migração ampla nem mais superfície de provider.
 
 ## Estado observado
 
-| Área                       | Estado em `main`                                                                                           | Limite relevante                                                                                       |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Core e distribuição local  | Workspace Rust `0.1.0`; `scons install`, builds focados e cache Cargo separados.                           | Publicação versionada dos crates/bindings não está comprovada.                                         |
-| Chat e modelos             | OpenAI-compatible, Anthropic, Google, Cohere, fallback, embeddings e rerank nos bindings.                  | Contratos experimentais; seleção, credenciais e fallback de produto pertencem ao consumer.             |
-| Storage e mensageria       | SQLite/PostgreSQL, LanceDB/Qdrant, NATS/Redis; ledger SQLite-first e fila/pub-sub com contratos distintos. | Garantias são específicas de cada adapter/configuração; revisar S0-S5 em `04-plano-storage-ledger.md`. |
-| Lifecycle e loop           | Stores SQLite persistem admissão, transições, eventos/checkpoints do loop e recuperação.                   | Não dão exactly-once a efeitos externos nem autenticam o host.                                         |
-| Verificação e cancelamento | Reports/gates e pedido de cancelamento são duráveis; resultados incertos exigem reconciliação.             | O host executa checks, interrompe adapters e comprova seu término.                                     |
-| Policy e aprovação         | `SqliteToolPolicyStore` persiste snapshots, pedidos e recibos, com verificação de estado/binding.          | A autenticação do aprovador e a execução da tool permanecem no host.                                   |
-| Consumidores               | Backend Python do Vectora e GH Bot seguem como projetos consumidores.                                      | Não foi encontrado uso de `vectora-engine` nos manifests/caminhos atuais examinados.                   |
+| Área                       | Estado em `main`                                                                                           | Limite relevante                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Core e distribuição local  | Workspace Rust `0.1.0`; `scons install`, builds focados e cache Cargo separados.                           | Publicação versionada dos crates/bindings não está comprovada.                                                                |
+| Chat e modelos             | OpenAI-compatible, Anthropic, Google, Cohere, fallback, embeddings e rerank nos bindings.                  | Contratos experimentais; seleção, credenciais e fallback de produto pertencem ao consumer.                                    |
+| Storage e mensageria       | SQLite/PostgreSQL, LanceDB/Qdrant, NATS/Redis; ledger SQLite-first e fila/pub-sub com contratos distintos. | Os pares devem ter a mesma base funcional; as lacunas atuais estão na matriz de equivalência de `04-plano-storage-ledger.md`. |
+| Lifecycle e loop           | Stores SQLite persistem admissão, transições, eventos/checkpoints do loop e recuperação.                   | Não dão exactly-once a efeitos externos nem autenticam o host.                                                                |
+| Verificação e cancelamento | Reports/gates e pedido de cancelamento são duráveis; resultados incertos exigem reconciliação.             | O host executa checks, interrompe adapters e comprova seu término.                                                            |
+| Policy e aprovação         | `SqliteToolPolicyStore` persiste snapshots, pedidos e recibos, com verificação de estado/binding.          | A autenticação do aprovador e a execução da tool permanecem no host.                                                          |
+| Consumidores               | Backend Python do Vectora e GH Bot seguem como projetos consumidores.                                      | Não foi encontrado uso de `vectora-engine` nos manifests/caminhos atuais examinados.                                          |
 
 ## Fotografia de entregas
 
@@ -101,6 +101,22 @@ paridade operacional.
 
 **Saída:** matriz de cobertura por adapter/contrato e lista de gaps reproduzidos
 que orienta o próximo trabalho de storage.
+
+### 1b. Equivalência dos pares de storage (base antes da especialização)
+
+Política em [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md):
+tudo que existe nos dois lados de SQLite/PostgreSQL, LanceDB/Qdrant, Redis/NATS
+KV, Redis Streams/JetStream e Redis Pub/Sub/NATS Core é implementado nos dois,
+com a mesma semântica observável e a mesma suíte de conformidade; só depois cada
+backend se especializa no que o outro não consegue por incompatibilidade
+verificada. As lacunas atuais estão na matriz do plano de storage. Ordem
+sugerida, cada item em PRs empilhados: (1) métrica e score alinhados no par
+vetorial; (2) TTL no NATS KV; (3) `max_deliver`/DLQ nas duas filas; (4) stores de
+lifecycle, loop e policy e backup no PostgreSQL; (5) base comum ainda ausente
+nos dois lados (filtros de metadado, índices/quantização, CAS, prefixo).
+
+**Saída:** matriz de equivalência sem lacunas na base e com cada especialização
+justificada por incompatibilidade.
 
 ### 2. Completar a integração host/runtime de policy e aprovação
 
@@ -192,7 +208,7 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Continuar a auditoria S0–S5 do plano de storage, considerando a cobertura
+Fechar as lacunas de equivalência dos pares de storage (seção 1b) e continuar a auditoria S0–S5 do plano de storage, considerando a cobertura
 service-real condicional já inventariada. A seleção pública de backend
 `memory` foi removida e testada nos bindings; permanecem os gaps de capacidade,
 conformidade service-real e recuperação listados no plano específico. A matriz

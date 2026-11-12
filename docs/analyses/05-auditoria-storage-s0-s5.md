@@ -23,14 +23,14 @@ podem continuar privados aos testes.
 
 ## Fotografia do código
 
-| Fase                          | Implementação encontrada                                                                                                              | Cobertura/limite observado                                                                                                                             |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S0 — contratos                | `StorageSelection` versionada seleciona SQL, vector, KV, queue e pub/sub independentemente.                                           | A seleção indica intenção; não comprova conexão, health ou garantias equivalentes. Esta etapa fecha a opção pública sem adapter.                       |
-| S1 — SQLite/ledger            | Ledger append-only, checkpoints e stores SQLite para run, loop e policy; `ResilientLedger` grava localmente antes da projeção remota. | Ainda faltam provas operacionais de backup/restore, concorrência entre processos e recovery. SQLite permanece a autoridade local do append resiliente. |
-| S2 — PostgreSQL               | `PostgresLedger` e projeção a partir do ledger SQLite.                                                                                | Não há SQL genérico nem stores Postgres para lifecycle, loop e policy. Serviço real, conflitos, restart e recovery requerem cobertura própria.         |
-| S3 — Redis/NATS               | Redis e NATS JetStream para KV; Redis Streams e JetStream para filas; Redis Pub/Sub e NATS Core para pub/sub.                         | TTL não é idêntico no KV; ACK, redelivery, retenção, reconexão e shutdown diferem. Integração service-real não é uma suíte comum completa.             |
-| S4 — LanceDB/Qdrant           | Adapters de upsert, busca e delete nos bindings.                                                                                      | Filtros, score, isolamento, limites de payload e falhas precisam de testes service-real específicos; os adapters não são semanticamente idênticos.     |
-| S5 — recuperação/consumidores | Recovery e reconciliação do runtime são SQLite-first.                                                                                 | Memory, Context Planner, RAG e adoção no Vectora/GH Bot não foram comprovados como capacidades integradas da engine.                                   |
+| Fase                          | Implementação encontrada                                                                                                              | Cobertura/limite observado                                                                                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S0 — contratos                | `StorageSelection` versionada seleciona SQL, vector, KV, queue e pub/sub independentemente.                                           | A seleção indica intenção; não comprova conexão, health ou garantias equivalentes. Esta etapa fecha a opção pública sem adapter.                                                                           |
+| S1 — SQLite/ledger            | Ledger append-only, checkpoints e stores SQLite para run, loop e policy; `ResilientLedger` grava localmente antes da projeção remota. | Ainda faltam provas operacionais de backup/restore, concorrência entre processos e recovery. SQLite permanece a autoridade local do append resiliente.                                                     |
+| S2 — PostgreSQL               | `PostgresLedger` e projeção a partir do ledger SQLite.                                                                                | Não há SQL genérico nem stores Postgres para lifecycle, loop e policy. Serviço real, conflitos, restart e recovery requerem cobertura própria.                                                             |
+| S3 — Redis/NATS               | Redis e NATS JetStream para KV; Redis Streams e JetStream para filas; Redis Pub/Sub e NATS Core para pub/sub.                         | TTL não é idêntico no KV; ACK, redelivery, retenção, reconexão e shutdown diferem. Integração service-real não é uma suíte comum completa.                                                                 |
+| S4 — LanceDB/Qdrant           | Adapters de upsert, busca e delete nos bindings.                                                                                      | Filtros, score, isolamento, limites de payload e falhas precisam de testes service-real específicos; a diferença semântica entre os adapters é lacuna de equivalência a fechar, não característica aceita. |
+| S5 — recuperação/consumidores | Recovery e reconciliação do runtime são SQLite-first.                                                                                 | Memory, Context Planner, RAG e adoção no Vectora/GH Bot não foram comprovados como capacidades integradas da engine.                                                                                       |
 
 ## Verificações desta correção
 
@@ -252,3 +252,20 @@ Pergunta: qual política de retenção e de redelivery as filas devem adotar?
 A escolha afeta perda de dados, replay e configuração pública. Trabalho
 dependente: implementar a política escolhida e os testes service-real
 correspondentes. Perguntado a `brunosrz` no chat; aguardar a resposta.
+
+## Política de equivalência por par (2026-11-12)
+
+O mantenedor definiu a regra: a base funcional dos pares de storage é
+equivalente (tudo que existe nos dois lados é implementado nos dois), e a
+especialização vem depois, apenas para o que for incompatível com o outro lado.
+Os documentos foram revisados nesse sentido (spec 02, planos 01, 03 e 04,
+análises 03 e 04, `AGENTS.md`). Isto corrige afirmações anteriores desta
+auditoria e dos PRs #46 e #47: o teste vetorial compartilhado usa vetores
+unitários, onde L2 e cosseno ordenam igual, e portanto não prova equivalência
+de ranking; o relatório `capabilities()` declara a diferença sem corrigi-la.
+
+A matriz de lacunas por par está no plano de storage. Uma pergunta de
+arquitetura depende do mantenedor: a autoridade local obrigatória em SQLite do
+ledger resiliente (PostgreSQL apenas como projeção) é compatível com a
+equivalência entre os dois, ou o PostgreSQL deve poder ser autoridade única
+quando selecionado? A pergunta está no chat; nada foi alterado no contrato.
