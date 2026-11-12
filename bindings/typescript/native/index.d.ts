@@ -75,12 +75,25 @@ export declare function fallbackRerank(
   requestJson: string,
 ): Promise<string>;
 
+export declare function kvStoreCompareAndSet(
+  configJson: string,
+  key: string,
+  revision: string,
+  valueJson: string,
+  ttlSeconds?: number | undefined | null,
+): Promise<boolean>;
+
 export declare function kvStoreDelete(
   configJson: string,
   key: string,
 ): Promise<void>;
 
 export declare function kvStoreGet(
+  configJson: string,
+  key: string,
+): Promise<string>;
+
+export declare function kvStoreGetWithRevision(
   configJson: string,
   key: string,
 ): Promise<string>;

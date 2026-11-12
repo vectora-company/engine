@@ -503,6 +503,14 @@ interface NativeBinding {
     ttlSeconds?: number,
   ): Promise<void>;
   kvStoreGet(configJson: string, key: string): Promise<string>;
+  kvStoreGetWithRevision(configJson: string, key: string): Promise<string>;
+  kvStoreCompareAndSet(
+    configJson: string,
+    key: string,
+    revision: string,
+    valueJson: string,
+    ttlSeconds?: number,
+  ): Promise<boolean>;
   kvStoreDelete(configJson: string, key: string): Promise<void>;
   kvStoreListKeys(
     configJson: string,
@@ -869,6 +877,36 @@ export async function kvStoreGet(
   return JSON.parse(
     await native.kvStoreGet(JSON.stringify(config), key),
   ) as JsonValue | null;
+}
+
+export interface KvEntry {
+  value: JsonValue;
+  revision: string;
+}
+
+export async function kvStoreGetWithRevision(
+  config: KvStoreConfig,
+  key: string,
+): Promise<KvEntry | null> {
+  return JSON.parse(
+    await native.kvStoreGetWithRevision(JSON.stringify(config), key),
+  ) as KvEntry | null;
+}
+
+export async function kvStoreCompareAndSet(
+  config: KvStoreConfig,
+  key: string,
+  revision: string,
+  value: JsonValue,
+  ttlSeconds?: number,
+): Promise<boolean> {
+  return native.kvStoreCompareAndSet(
+    JSON.stringify(config),
+    key,
+    revision,
+    JSON.stringify(value),
+    ttlSeconds,
+  );
 }
 
 /** Remove a key from the selected KV namespace. */

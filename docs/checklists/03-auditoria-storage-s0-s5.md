@@ -61,8 +61,9 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [x] Verificar listagem KV em Redis e NATS reais: prefixo literal, ordenação, limite, exclusão de chaves expiradas e isolamento do namespace, via addon Node.
 - [x] Expor remoção em Python e TypeScript. Verificar leitura e listagem após remoção explícita e repetida em Redis e NATS reais, com Node e wheel CPython 3.13.
 - [x] Verificar em NATS real a validação de chaves na leitura, remoção e escrita com ou sem TTL. Suíte Node 38/38.
+- [x] Verificar CAS com serviços reais nos dois backends: duas escritas concorrentes com a mesma revisão, invalidação após escrita comum, remoção/recriação, TTL e ausência da chave interna na listagem.
 - [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
-- [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens novas. CAS por revisão, incremento e watch ainda faltam nos dois.
+- [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens novas. Incremento e watch ainda faltam nos dois.
 - [ ] Filas: `max_deliver`/contagem de entregas, DLQ, NACK/atraso e deduplicação equivalentes nas duas.
 - [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL, com a mesma suíte do SQLite.
 - [x] Decisão do mantenedor: SQLite permanece cópia local obrigatória e autoridade de recovery para ledger e estado crítico interno; PostgreSQL recebe projeções/replicação retomável. Credenciais e autenticação/RBAC do produto ficam no host.

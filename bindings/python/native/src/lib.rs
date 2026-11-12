@@ -856,6 +856,56 @@ fn kv_store_get<'py>(
 }
 
 #[pyfunction]
+fn kv_store_get_with_revision<'py>(
+    py: Python<'py>,
+    config_json: String,
+    key: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid KV config"))?;
+        let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        let Some(entry) = store.get_with_revision(&key).await.map_err(py_error)? else {
+            return Ok("null".to_owned());
+        };
+        let value: serde_json::Value = serde_json::from_slice(&entry.value)
+            .map_err(|_| py_error("stored KV value is invalid"))?;
+        encode_json(&serde_json::json!({"value": value, "revision": entry.revision}))
+    })
+}
+
+#[pyfunction]
+fn kv_store_compare_and_set<'py>(
+    py: Python<'py>,
+    config_json: String,
+    key: String,
+    revision: String,
+    value_json: String,
+    ttl_seconds: Option<u64>,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid KV config"))?;
+        let value: serde_json::Value =
+            serde_json::from_str(&value_json).map_err(|_| py_error("invalid KV value"))?;
+        let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        store
+            .compare_and_set(
+                &key,
+                &revision,
+                serde_json::to_vec(&value).map_err(py_error)?,
+                ttl_seconds.map(std::time::Duration::from_secs),
+            )
+            .await
+            .map_err(py_error)
+    })
+}
+
+#[pyfunction]
 fn kv_store_delete<'py>(
     py: Python<'py>,
     config_json: String,
@@ -1737,6 +1787,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(vector_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_put, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_get, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_store_get_with_revision, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_store_compare_and_set, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_list_keys, module)?)?;
     module.add_function(wrap_pyfunction!(queue_enqueue, module)?)?;
