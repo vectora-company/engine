@@ -17,7 +17,8 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Inventariar ledger SQLite-first e projeção PostgreSQL.
 - [x] Inventariar adapters de KV, queue e pub/sub Redis/NATS.
 - [x] Inventariar adapters vetoriais LanceDB/Qdrant e diferenças conhecidas.
-- [ ] Cobrir concorrência, conflitos, backup/restore e recovery de ledger.
+- [x] Cobrir concorrência entre conexões (threads), conflito de versão/idempotência, retry idêntico concorrente, restart do arquivo e limites de leitura do ledger SQLite.
+- [ ] Cobrir backup/restore, concorrência entre processos independentes e recovery operacional do ledger.
 - [ ] Rodar matriz service-real de restart, falha, reconnect, ACK/redelivery,
       TTL/retention e shutdown.
 - [ ] Cobrir filtros, isolamento, score, payload e falhas dos stores vetoriais.

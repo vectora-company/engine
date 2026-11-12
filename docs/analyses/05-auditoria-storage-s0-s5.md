@@ -90,6 +90,17 @@ Exposto em Rust, Python (`storage_capabilities`) e TypeScript
 (`storageCapabilities`). Estado: ver checklist; testes ainda dependem de
 compilação nesta máquina.
 
+## Etapa S1: concorrência e restart do ledger SQLite
+
+Testes adicionados em `storage/sqlite.rs` (conexões independentes em threads
+sobre o mesmo arquivo): dois appends com a mesma `expected_version` confirmam
+exatamente um evento e o outro recebe `VersionConflict`; retries idênticos
+concorrentes devolvem o mesmo evento sem duplicar; eventos e idempotência
+sobrevivem à reabertura do arquivo; cursor/limite inválidos falham com
+`InvalidInput`. Resultado local: 12 testes de `storage::sqlite::tests` passam;
+nenhum defeito reproduzido. Limites: threads não substituem processos
+independentes, e backup/restore e recovery operacional não foram cobertos.
+
 ## Trabalho que permanece
 
 - Criar uma matriz de conformidade por backend com o mesmo corpus e as mesmas
