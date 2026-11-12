@@ -236,24 +236,25 @@ alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A st
 ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
 → #55 → #56 → #57. Não há PR #50 nessa cadeia.
 
-| PR                                                       | Entrega na branch do PR                                                             |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [#45](https://github.com/vectora-company/engine/pull/45) | Snapshot do runtime TypeScript.                                                     |
-| [#46](https://github.com/vectora-company/engine/pull/46) | Relatório estático de capabilities de storage e testes do ledger.                   |
-| [#47](https://github.com/vectora-company/engine/pull/47) | Matriz de integração service-real para storage.                                     |
-| [#48](https://github.com/vectora-company/engine/pull/48) | Recuperação de Redis/NATS após restart e projeção PostgreSQL durante queda/retorno. |
-| [#49](https://github.com/vectora-company/engine/pull/49) | Concorrência do ledger SQLite entre processos independentes.                        |
-| [#51](https://github.com/vectora-company/engine/pull/51) | Restart do Qdrant e erro explícito quando a coleção não existe.                     |
-| [#52](https://github.com/vectora-company/engine/pull/52) | Limites de entrada dos stores de storage.                                           |
-| [#53](https://github.com/vectora-company/engine/pull/53) | Backup/restore do ledger SQLite: cópia online e backup coordenado pelo host.        |
-| [#54](https://github.com/vectora-company/engine/pull/54) | Caracterização da retenção e redelivery atuais das filas.                           |
-| [#55](https://github.com/vectora-company/engine/pull/55) | Política de equivalência funcional dos pares e matriz de lacunas.                   |
-| [#56](https://github.com/vectora-company/engine/pull/56) | Loop operacional, stack de PRs e regras de decisão/evidência.                       |
-| [#57](https://github.com/vectora-company/engine/pull/57) | Alinhamento do ranking vetorial por cosseno e normalização do score.                |
-| [#59](https://github.com/vectora-company/engine/pull/59) | Atualização das dependências e TTL nativo por chave no NATS JetStream KV.           |
-| [#60](https://github.com/vectora-company/engine/pull/60) | Retenção finita configurável por quantidade em Redis Streams e NATS JetStream.      |
-| [#61](https://github.com/vectora-company/engine/pull/61) | Teto de tentativas, DLQ consumível e bindings Python/TypeScript para filas.         |
-| Em andamento                                             | Recuperação de falha na transferência para a DLQ em Redis Streams e NATS JetStream. |
+| PR                                                       | Entrega na branch do PR                                                                  |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [#45](https://github.com/vectora-company/engine/pull/45) | Snapshot do runtime TypeScript.                                                          |
+| [#46](https://github.com/vectora-company/engine/pull/46) | Relatório estático de capabilities de storage e testes do ledger.                        |
+| [#47](https://github.com/vectora-company/engine/pull/47) | Matriz de integração service-real para storage.                                          |
+| [#48](https://github.com/vectora-company/engine/pull/48) | Recuperação de Redis/NATS após restart e projeção PostgreSQL durante queda/retorno.      |
+| [#49](https://github.com/vectora-company/engine/pull/49) | Concorrência do ledger SQLite entre processos independentes.                             |
+| [#51](https://github.com/vectora-company/engine/pull/51) | Restart do Qdrant e erro explícito quando a coleção não existe.                          |
+| [#52](https://github.com/vectora-company/engine/pull/52) | Limites de entrada dos stores de storage.                                                |
+| [#53](https://github.com/vectora-company/engine/pull/53) | Backup/restore do ledger SQLite: cópia online e backup coordenado pelo host.             |
+| [#54](https://github.com/vectora-company/engine/pull/54) | Caracterização da retenção e redelivery atuais das filas.                                |
+| [#55](https://github.com/vectora-company/engine/pull/55) | Política de equivalência funcional dos pares e matriz de lacunas.                        |
+| [#56](https://github.com/vectora-company/engine/pull/56) | Loop operacional, stack de PRs e regras de decisão/evidência.                            |
+| [#57](https://github.com/vectora-company/engine/pull/57) | Alinhamento do ranking vetorial por cosseno e normalização do score.                     |
+| [#59](https://github.com/vectora-company/engine/pull/59) | Atualização das dependências e TTL nativo por chave no NATS JetStream KV.                |
+| [#60](https://github.com/vectora-company/engine/pull/60) | Retenção finita configurável por quantidade em Redis Streams e NATS JetStream.           |
+| [#61](https://github.com/vectora-company/engine/pull/61) | Teto de tentativas, DLQ consumível e bindings Python/TypeScript para filas.              |
+| [#62](https://github.com/vectora-company/engine/pull/62) | Recuperação de falha na transferência para a DLQ em Redis Streams e NATS JetStream.      |
+| Em andamento                                             | Recebimento de uma mensagem por chamada no JetStream, com expiração do pedido no broker. |
 
 O teste service-real combinado de storage passou 58/58 com Redis, NATS,
 Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros
