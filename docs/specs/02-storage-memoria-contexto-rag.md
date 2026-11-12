@@ -99,6 +99,10 @@ e observação de mudanças. Nas filas, ACK/NACK, redelivery com teto, DLQ,
 deduplicação e replay. A disponibilidade nativa ou emulada de cada item ainda
 deve ser confirmada por versão e registrada na matriz do plano.
 
+A remoção KV é idempotente, opera no namespace selecionado e fica disponível
+em Rust, Python e TypeScript. Uma chave removida deixa de aparecer na leitura
+e na listagem.
+
 A listagem KV recebe um prefixo literal, inclusive vazio, e um limite de 1 a 1000. Retorna até esse número de chaves distintas do namespace, em ordem
 lexicográfica por bytes. Chaves removidas ou expiradas antes da varredura
 ficam fora do resultado. Escritas concorrentes podem mudar o que a varredura

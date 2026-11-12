@@ -75,6 +75,11 @@ export declare function fallbackRerank(
   requestJson: string,
 ): Promise<string>;
 
+export declare function kvStoreDelete(
+  configJson: string,
+  key: string,
+): Promise<void>;
+
 export declare function kvStoreGet(
   configJson: string,
   key: string,

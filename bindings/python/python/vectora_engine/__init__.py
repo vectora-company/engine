@@ -64,6 +64,11 @@ async def kv_store_get(config: JsonObject, key: str) -> Any:
     return json.loads(await _native.kv_store_get(json.dumps(config), key))
 
 
+async def kv_store_delete(config: JsonObject, key: str) -> None:
+    """Remove a key from the selected KV namespace."""
+    await _native.kv_store_delete(json.dumps(config), key)
+
+
 async def kv_store_list_keys(
     config: JsonObject, prefix: str = "", limit: int = 100
 ) -> list[str]:
@@ -803,6 +808,7 @@ __all__ = [
     "fallback_chat_stream",
     "fallback_embed",
     "fallback_rerank",
+    "kv_store_delete",
     "kv_store_get",
     "kv_store_list_keys",
     "kv_store_put",

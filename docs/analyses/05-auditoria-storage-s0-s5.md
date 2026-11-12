@@ -369,7 +369,7 @@ em execução fica pendente.
 
 ## Listagem KV por prefixo
 
-A branch empilhada sobre #66 expõe listagem em Rust, Python e TypeScript.
+O PR #67 expõe listagem em Rust, Python e TypeScript.
 Redis usa [SCAN com MATCH e TYPE](https://redis.io/docs/latest/commands/scan/)
 e NATS usa [Keys do JetStream KV](https://docs.rs/async-nats/0.52.0/async_nats/jetstream/kv/struct.Store.html#method.keys).
 Os dois retornam um conjunto ordenado limitado, sem snapshot sob concorrência.
@@ -382,8 +382,19 @@ O build release do workspace passou. Um smoke test via addon Node verificou
 Redis 8.10.3 e NATS 2.15.3 com namespace vazio, ordenação, limite, prefixo
 vazio, TTL e isolamento. No Redis também confirmou prefixo contendo `[`
 literal. A wheel Maturin para CPython 3.13 também passou a listagem nos dois
-serviços. TypeScript, Ruff e ty passaram. A remoção explícita ainda precisa
-de uma verificação de integração dedicada.
+serviços. TypeScript, Ruff e ty passaram. A remoção explícita foi verificada na etapa seguinte.
+
+## Remoção KV pelos bindings
+
+O core já remove chaves com DEL no Redis e marca remoção no JetStream KV.
+A branch sobre #67 expõe a operação em Python e TypeScript. A verificação
+Node usa dois namespaces por serviço e cobre remoção repetida, leitura
+ausente, listagem sem a chave removida e preservação da chave homônima no
+outro namespace. A suíte Node passou 37/37 com Redis 8.10.3 e NATS 2.15.3,
+incluindo os dois cenários de remoção. A wheel Maturin de CPython 3.13 passou
+o smoke test de remoção repetida, leitura ausente e listagem vazia nos dois
+serviços. Typecheck TypeScript, Oxlint, Ruff e ty passaram. A suíte Rust
+completa não foi rodada.
 
 ## Verificação da branch empilhada sobre #57
 

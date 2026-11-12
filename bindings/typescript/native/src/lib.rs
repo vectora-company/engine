@@ -796,6 +796,19 @@ pub async fn kv_store_get(config_json: String, key: String) -> Result<String> {
 }
 
 #[napi]
+pub async fn kv_store_delete(config_json: String, key: String) -> Result<()> {
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    store
+        .delete(&key)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
 pub async fn kv_store_list_keys(
     config_json: String,
     prefix: String,
