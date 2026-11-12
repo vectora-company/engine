@@ -511,6 +511,12 @@ interface NativeBinding {
     valueJson: string,
     ttlSeconds?: number,
   ): Promise<boolean>;
+  kvStoreIncrement(
+    configJson: string,
+    key: string,
+    delta: number,
+    ttlSeconds?: number,
+  ): Promise<number>;
   kvStoreDelete(configJson: string, key: string): Promise<void>;
   kvStoreListKeys(
     configJson: string,
@@ -905,6 +911,21 @@ export async function kvStoreCompareAndSet(
     key,
     revision,
     JSON.stringify(value),
+    ttlSeconds,
+  );
+}
+
+/** Atomically add to a JSON integer, starting at zero for an absent key. */
+export async function kvStoreIncrement(
+  config: KvStoreConfig,
+  key: string,
+  delta: number,
+  ttlSeconds?: number,
+): Promise<number> {
+  return native.kvStoreIncrement(
+    JSON.stringify(config),
+    key,
+    delta,
     ttlSeconds,
   );
 }

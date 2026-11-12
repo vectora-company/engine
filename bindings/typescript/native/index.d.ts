@@ -98,6 +98,13 @@ export declare function kvStoreGetWithRevision(
   key: string,
 ): Promise<string>;
 
+export declare function kvStoreIncrement(
+  configJson: string,
+  key: string,
+  delta: number,
+  ttlSeconds?: number | undefined | null,
+): Promise<number>;
+
 export declare function kvStoreListKeys(
   configJson: string,
   prefix: string,

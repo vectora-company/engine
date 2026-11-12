@@ -113,6 +113,15 @@ interna. Escritas externas ao adapter e deploy misto com versões que não
 invalidam a revisão ficam fora da garantia. A conta Redis precisa de EVAL
 e acesso ao namespace interno de revisões `:vectora-kv-revision:`.
 
+O incremento KV soma um delta inteiro a um inteiro JSON. Para chave ausente,
+usa zero e cria o valor de forma condicional. O valor anterior, o delta e o
+resultado devem caber no intervalo de inteiros exatos do JavaScript
+(`-9007199254740991` a `9007199254740991`). Valor inválido ou overflow deixa
+a chave intacta. O TTL informado substitui o anterior. Quando omitido, o
+adapter grava sem TTL por chave. Após 32 conflitos, retorna erro de
+concorrência. Falhas de comunicação com resultado desconhecido não são
+repetidas automaticamente.
+
 A remoção KV é idempotente, opera no namespace selecionado e fica disponível
 em Rust, Python e TypeScript. Uma chave removida deixa de aparecer na leitura
 e na listagem.

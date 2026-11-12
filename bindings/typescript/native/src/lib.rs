@@ -841,6 +841,32 @@ pub async fn kv_store_compare_and_set(
 }
 
 #[napi]
+pub async fn kv_store_increment(
+    config_json: String,
+    key: String,
+    delta: f64,
+    ttl_seconds: Option<u32>,
+) -> Result<f64> {
+    if delta.fract() != 0.0 || delta.abs() > 9_007_199_254_740_991.0 {
+        return Err(Error::from_reason("invalid messaging request"));
+    }
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    store
+        .increment(
+            &key,
+            delta as i64,
+            ttl_seconds.map(|seconds| std::time::Duration::from_secs(seconds.into())),
+        )
+        .await
+        .map(|value| value as f64)
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
 pub async fn kv_store_delete(config_json: String, key: String) -> Result<()> {
     let config =
         serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
