@@ -35,6 +35,7 @@ import {
   startModelToolLoop,
   submitToolResult,
   validateStorageSelection,
+  storageCapabilities,
   sqliteLedgerAppend,
   sqliteLedgerAppendCheckpointed,
   sqliteModelToolLoopAcceptModelTurn,
@@ -215,6 +216,18 @@ test("sqlite ledger persists and retries safely through Node", async () => {
     assert.equal(result.event.sequence, 1);
     assert.deepEqual(await sqliteAdmitRun(path, admission, admissionEvent), result);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("storage capabilities state backend differences from Rust", () => {
+  const report = storageCapabilities({
+    contract_version: 1,
+    vector: "qdrant",
+    kv: "nats_jetstream",
+  });
+  assert.equal(report.backends[0].score_direction, "higher_is_closer");
+  assert.equal(report.backends[1].ttl, false);
+  assert.deepEqual(storageCapabilities({ contract_version: 1 }).backends, []);
+  assert.throws(() => storageCapabilities({ contract_version: 99 }));
 });
 
 test("storage selection validates independent backends in Rust", () => {

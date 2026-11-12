@@ -10,7 +10,7 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Limitar configurações públicas aos adapters reais do produto.
 - [x] Rejeitar seleção `memory` no core e nos bindings Python/TypeScript.
 - [x] Manter doubles em memória fora da API de configuração do consumidor.
-- [ ] Publicar uma matriz de readiness/capabilities por backend.
+- [x] Publicar relatório estático de capabilities por backend (Rust, Python, TypeScript); probe de readiness de serviço permanece fora de escopo.
 
 ## Ledger e adapters
 

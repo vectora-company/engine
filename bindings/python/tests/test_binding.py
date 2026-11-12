@@ -52,6 +52,7 @@ from vectora_engine import (
     sqlite_tool_policy_record_approval,
     sqlite_tool_policy_save,
     start_model_tool_loop,
+    storage_capabilities,
     submit_tool_result,
     tool_chat_definitions,
     tool_contract_version,
@@ -74,6 +75,18 @@ def test_storage_selection_is_validated_by_rust() -> None:
     for field in ("kv", "queue", "pubsub"):
         with pytest.raises(RuntimeError, match="invalid storage selection"):
             validate_storage_selection({"contract_version": 1, field: "memory"})
+
+
+def test_storage_capabilities_state_backend_differences() -> None:
+    report = storage_capabilities(
+        {"contract_version": 1, "vector": "qdrant", "kv": "nats_jetstream"}
+    )
+    vector, kv = report["backends"]
+    assert vector["score_direction"] == "higher_is_closer"
+    assert kv["ttl"] is False
+    assert storage_capabilities({"contract_version": 1})["backends"] == []
+    with pytest.raises(RuntimeError, match="unsupported storage contract version"):
+        storage_capabilities({"contract_version": 99})
 
 
 def test_shared_conformance_fixture() -> None:

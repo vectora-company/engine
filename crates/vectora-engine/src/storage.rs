@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod capabilities;
 pub mod messaging;
 pub mod postgres;
 pub mod resilient_ledger;

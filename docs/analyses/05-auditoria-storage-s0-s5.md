@@ -75,6 +75,21 @@ Esta auditoria não declara paridade operacional dos adapters nem substitui os
 testes com serviços reais. A identificação exata da revisão publicada fica no
 histórico Git e no pull request desta correção.
 
+## Etapa S0: relatório de capabilities (branch `feat/storage-readiness-matrix`)
+
+Decisão de contrato: `StorageSelection::capabilities()` devolve um relatório
+estático e versionado (`STORAGE_CONTRACT_VERSION`, aditivo) com, por backend
+selecionado, o que o adapter implementa, o que não implementa, suporte a TTL,
+direção do score vetorial e durabilidade. Os fatos vêm do código dos adapters
+(`messaging.rs`: TTL do JetStream KV retorna `Unsupported`; `vector.rs`:
+LanceDB devolve distância e Qdrant similaridade cosseno; `storage/postgres.rs`:
+somente projeção de ledger). O relatório não contata serviços, não é health
+check e não prova garantias operacionais. Alternativa descartada: probe ativo
+de serviço, por exigir credenciais/rede e misturar readiness com configuração.
+Exposto em Rust, Python (`storage_capabilities`) e TypeScript
+(`storageCapabilities`). Estado: ver checklist; testes ainda dependem de
+compilação nesta máquina.
+
 ## Trabalho que permanece
 
 - Criar uma matriz de conformidade por backend com o mesmo corpus e as mesmas
