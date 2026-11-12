@@ -222,17 +222,19 @@ PRs empilhados ainda sujeitos a revisão, não incorporados em `main`:
 - #47: matriz service-real de Redis, NATS, Qdrant e PostgreSQL.
 - #48: reinício de Redis/NATS e queda/retorno PostgreSQL.
 - #49: concorrência do ledger entre processos independentes.
+- #50: erro para coleção vetorial ausente e reinício do Qdrant, com resultado
+  atualizado na auditoria.
 
 Os itens de capabilities, testes de storage service-real, restart de Redis/NATS,
 recovery da projeção PostgreSQL (teste isolado) e concorrência do ledger estão
 implementados nas branches da stack e têm os resultados registrados em
 [`05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
 Não são ainda capacidades integradas em `main`. Restam backup/restore (decisão
-de contrato), shutdown gracioso, retenção/limites JetStream, restart Qdrant e
-limites/falhas de indexação vetorial. A execução combinada de 55 testes com
-restart teve uma falha causada por `podman stop` remover o PostgreSQL de teste;
-o teste foi corrigido e passou isoladamente, não se declara aprovada a execução
-combinada.
+de contrato), shutdown gracioso, retenção/limites JetStream e limites/falhas de
+indexação vetorial. A execução combinada inicial de 55 testes teve uma falha
+porque `podman stop` removeu o PostgreSQL auto-removível; após recriar o
+container sem remoção automática e proteger o teste, a execução mais recente
+passou 58/58 com os quatro serviços e reinícios habilitados.
 
 ## Decisões a fechar durante S0
 

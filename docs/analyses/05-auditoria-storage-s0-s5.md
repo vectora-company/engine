@@ -114,8 +114,9 @@ como contêineres Podman locais (`vectora-engine-*`) e precisam de
 sem elas retornam sem validar o serviço.
 
 Resultado local (2026-11-12, serviços reais ligados, `--test-threads=1`):
-`cargo test -p vectora-engine --lib --locked storage::` — 52 passaram, 0
-falharam. Testes adicionados nesta etapa:
+`cargo test -p vectora-engine --lib --locked storage::` — 58 passaram, 0
+falharam, incluindo os testes opt-in de reinício Redis, NATS, PostgreSQL e
+Qdrant. Testes adicionados nas etapas anteriores:
 
 - fila vazia expira sem entrega; job confirmado (ACK) não é reentregue
   (Redis Streams e NATS JetStream);
@@ -127,24 +128,28 @@ falharam. Testes adicionados nesta etapa:
   inválida falha, e direção do score (LanceDB distância/menor é mais próximo;
   Qdrant similaridade/maior é mais próximo), coerente com `capabilities()`.
 
-Reinício de serviços (`VECTORA_TEST_PODMAN_RESTART=1`): os dois testes de
-reinício de Redis e NATS passaram. KV/jobs sobreviveram ao `podman restart`, os
-adapters voltaram a operar e o ACK funcionou. O teste isolado de PostgreSQL
-também passou: o append SQLite permaneceu `Pending` durante a queda e a outbox
-drenou em ordem após o retorno. A execução combinada dos 55 testes teve 54
-passagens e uma falha: `podman stop` removeu o container PostgreSQL original
-por estar configurado com `AutoRemove=true`. Esse resultado combinado não é
-aprovado. O container foi recriado sem remoção automática, e o teste agora
-confere `AutoRemove=false` antes de pará-lo. A durabilidade observada depende
-da configuração de teste e não é uma garantia geral do adapter.
+Reinício de serviços (`VECTORA_TEST_PODMAN_RESTART=1`): Redis e NATS — KV/jobs
+sobreviveram a `podman restart`, os adapters voltaram a operar e o ACK
+funcionou; PostgreSQL — o append SQLite permaneceu `Pending` durante a queda e
+a outbox drenou em ordem; Qdrant — coleção e ponto continuaram disponíveis e a
+busca recuperou pelo mesmo adapter. O Qdrant foi reiniciado sem volume montado,
+no mesmo container; isso comprova o comportamento nessa configuração, não
+durabilidade após remoção ou recriação do container.
+
+Execução integrada inicial: 54 passaram e uma falhou porque `podman stop`
+removeu o container PostgreSQL original, configurado com `AutoRemove=true`.
+Após recriá-lo sem remoção automática e proteger o teste com verificação de
+`AutoRemove=false`, a execução combinada com os quatro serviços e todos os
+reinícios passou: 58/58. A durabilidade observada depende da configuração de
+teste e não é garantia geral dos adapters.
 
 Incidente: o contêiner `vectora-engine-pg-test` havia sido criado com remoção
 automática; `podman stop` o apagou. Foi recriado (mesma imagem, porta, usuário
 e banco; senha de teste nova, sem remoção automática). O teste confere a
 configuração antes de parar o serviço.
 
-Não coberto: shutdown gracioso do adapter, retenção JetStream, reinício do
-Qdrant, limites de payload e falhas de indexação. Permanecem `não executado`.
+Não coberto: shutdown gracioso do adapter, retenção/limites JetStream, limites
+de payload e falhas de indexação. Permanecem `não executado`.
 
 ## Estado do ledger multiprocesso (PR #49)
 
@@ -155,16 +160,45 @@ com `expected_version=0` confirma, dois recebem `VersionConflict`, e uma
 reabertura lê um único evento. Isso fecha a cobertura de concorrência entre
 processos, ainda sujeito à revisão/integração do PR #49.
 
+## Estado vetorial (PR #50)
+
+A suíte comum agora exige que uma coleção ausente resulte em
+`VectorError::Storage` em LanceDB e Qdrant. O teste opt-in de reinício do
+Qdrant cria uma coleção e um ponto, reinicia o contêiner explicitamente
+configurado e consulta o mesmo ponto com o mesmo adapter. A suíte vetorial
+passou com 6 testes, incluindo LanceDB local e Qdrant real. A execução
+integrada com os quatro serviços, `VECTORA_TEST_PODMAN_RESTART=1` e
+`--test-threads=1` passou com 58/58. Isso valida a retenção no reinício do
+mesmo contêiner de teste, sem volume montado, não após recriação do contêiner.
+
 ## Trabalho que permanece
 
 - Criar uma matriz de conformidade por backend com o mesmo corpus e as mesmas
   asserções onde as semânticas forem comuns.
 - Exercitar serviço real para desconexão, restart, falha parcial, retry,
-  redelivery, ACK, TTL/retention, isolamento e shutdown.
-- Definir e testar limites de filtros, scores e payloads de LanceDB/Qdrant.
-- Definir backup/restore e recovery operacional do ledger, além de concluir a
-  matriz de retenção/shutdown/restart do Qdrant. A cópia online do SQLite e
-  alternativas como fechar/pausar escritores têm garantias e impacto distintos;
-  a decisão de backup permanece pendente.
+  redelivery, ACK, TTL/retention, isolamento e shutdown; Redis, NATS,
+  PostgreSQL e Qdrant já têm cobertura local de reinício, com limites detalhados.
+- Definir e testar limites de payload e falhas de indexação de LanceDB/Qdrant;
+  filtros, escopo, dimensão, score, ordenação e coleção ausente têm cobertura.
+- Definir backup/restore e recovery operacional do ledger, além da matriz
+  retenção/shutdown JetStream. Backup/restore requer decisão do mantenedor
+  registrada a seguir.
 - Manter interfaces de Memory/Context/RAG e integração dos consumidores em
   etapas separadas, com contratos e fallback próprios.
+
+## Decisão vital aguardando `brunosrz`: backup/restore do ledger
+
+Pergunta: qual contrato de backup/restore SQLite implementar?
+
+1. API da Engine com snapshot online do SQLite: mantém consistência durante
+   escritores ativos; a Engine assume formato, lifecycle, restore e testes e
+   precisa avaliar a feature necessária no driver.
+2. Backup coordenado pelo host: o consumer pausa/fecha escritores e copia o
+   banco offline; evita API nova, mas exige downtime e procedimento em cada
+   produto consumidor.
+
+Não assumir cópia arbitrária do arquivo com SQLite ativo: WAL/sidecars podem
+deixar snapshot incompleto. A escolha afeta consistência, disponibilidade,
+ownership e compatibilidade. O trabalho dependente é implementar e testar
+backup/restore e documentar recovery. Perguntado a `brunosrz` no chat em
+2026-11-12; aguardar resposta antes de fixar o contrato.
