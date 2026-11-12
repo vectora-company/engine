@@ -212,14 +212,14 @@ Atualização do loop operacional está implementada na branch do PR #56.
 Alinhamento da métrica e do score vetorial está implementado e verificado na
 branch seguinte (PR #57). As próximas lacunas independentes da seção 1b são:
 (1) filtros, ANN, quantização e busca híbrida nos dois vector stores; (2) CAS,
-incremento, prefixo e watch nos dois KV stores. TTL por chave no NATS KV
-aguarda a escolha entre exigir NATS 2.11+ ou emular mantendo compatibilidade
-com 2.10.
-Contagem/teto de redelivery, retenção e DLQ dependem da decisão de filas;
-stores lifecycle/loop/policy e autoridade/backup PostgreSQL dependem da
-decisão de autoridade do ledger. As três decisões bloqueiam apenas as partes
-dependentes. Não iniciar adoção no Vectora nem reescrita ampla do backend Python
-antes dos gates.
+incremento, prefixo e watch nos dois KV stores. TTL por chave foi implementado
+na branch empilhada atual. O mantenedor definiu em 2026-11-12: TTL nativo exige
+NATS 2.11+; filas terão
+retenção finita configurável, teto de tentativas e DLQ recuperável; SQLite é a
+cópia local obrigatória para ledger e estado interno crítico, enquanto
+PostgreSQL recebe projeções retomáveis. ACK significa confirmação de job
+concluído com sucesso. Não iniciar adoção no Vectora nem reescrita ampla do
+backend Python antes dos gates.
 
 ## Nota de proveniência local
 
@@ -265,10 +265,7 @@ contract versions que lê da binding local. A branch local da Engine expõe
 `engineContractSnapshot()`; a substituição pertence a um PR próprio no
 repositório do Bot e fica fora desta stack da Engine.
 
-As decisões vitais ainda abertas são: TTL NATS por versão mínima ou emulação;
-política de retenção/redelivery das filas; e autoridade única PostgreSQL ou
-SQLite obrigatório no ledger. Estão registradas na análise de storage e devem
-ser perguntadas aqui no chat. Até a resposta, avance em trabalho independente;
-essas partes permanecem bloqueadas. A próxima
-entrega independente é implementar as lacunas de equivalência não bloqueadas
-por decisões vitais, sem esperar aprovação nem checks de CI.
+As decisões sobre TTL, política de filas e autoridade do ledger foram recebidas
+no chat em 2026-11-12. A branch seguinte empilha a atualização de dependências e
+TTL NATS; retenção/DLQ e replicação dos demais estados críticos continuam como
+etapas aprovadas, sem depender de nova resposta.

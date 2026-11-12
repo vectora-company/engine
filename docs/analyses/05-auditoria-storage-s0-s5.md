@@ -1,9 +1,10 @@
 # Auditoria de storage e ledger S0–S5
 
 **Estado revalidado:** auditoria S0–S5 em andamento; equivalência dos pares
-registrada no PR #55; métrica e score vetoriais corrigidos e testados na branch
-do PR #57. TTL do NATS KV, retenção de filas e autoridade do ledger aguardam
-decisão vital.
+registrada no PR #55; score vetorial comum no PR #57; TTL nativo de NATS KV e
+atualização das dependências na branch empilhada sobre #57. O mantenedor definiu
+SQLite como cópia local obrigatória do estado crítico, NATS 2.11+ para TTL nativo
+e autorizou escolher a política de filas.
 **Branch de origem:** `fix/storage-selection-contract`; o estado posterior está
 separado por PRs na fotografia ao fim desta análise.
 **Escopo:** alinhar o contrato público de seleção às implementações e registrar
@@ -231,7 +232,7 @@ Evidência local: 5 testes Rust em `sqlite::backup::tests` (snapshot consistente
 com escritor ativo, `Busy`, restore com `.replaced`, destino em uso, arquivos
 corrompidos/estrangeiros/esquema novo) e testes equivalentes em Python e Node.
 
-## Decisão vital aguardando `brunosrz`: retenção e redelivery das filas duráveis
+## Retenção e redelivery das filas duráveis
 
 Evidência (testes de caracterização contra Redis e NATS reais, 2026-11-12):
 
@@ -243,19 +244,11 @@ Evidência (testes de caracterização contra Redis e NATS reais, 2026-11-12):
   é reentregue indefinidamente, e `dead_letter_queue` consta como não
   implementado em `capabilities()`.
 
-Pergunta: qual política de retenção e de redelivery as filas devem adotar?
-
-1. Remover o job ao confirmar (WorkQueue no NATS; `XDEL`/`XACKDEL` no Redis):
-   sem crescimento, mas sem replay após o ACK.
-2. Manter com limite configurável pelo host (idade e/ou número máximo de
-   entradas, mais `max_deliver`): preserva replay limitado; o host escolhe
-   valores e responde por perda de dados ao ultrapassá-los.
-3. Manter como está: sem mudança de contrato, com crescimento ilimitado e
-   redelivery sem teto como limitação documentada.
-
-A escolha afeta perda de dados, replay e configuração pública. Trabalho
-dependente: implementar a política escolhida e os testes service-real
-correspondentes. Perguntado a `brunosrz` no chat; aguardar a resposta.
+Essa foi a caracterização inicial que levou à pergunta ao mantenedor. A resposta
+de 2026-11-12 escolheu retenção finita configurável, teto de tentativas e DLQ
+recuperável. A implementação nos dois backends continua pendente. ACK significa
+que o consumidor confirmou o sucesso do job; sem ACK, o adapter pode entregá-lo
+novamente após o timeout.
 
 ## Política de equivalência por par (2026-11-12)
 
@@ -279,27 +272,48 @@ Qdrant). `storage::capabilities` passou 4/4. O teste opt-in de restart do
 Qdrant não executou nesta rodada, pois não foram definidas as variáveis de
 reinício. Esses resultados são locais e não atribuem a correção a `main`.
 
-A matriz de lacunas por par está no plano de storage. Uma pergunta de
-arquitetura depende do mantenedor: a autoridade local obrigatória em SQLite do
-ledger resiliente (PostgreSQL apenas como projeção) é compatível com a
-equivalência entre os dois, ou o PostgreSQL deve poder ser autoridade única
-quando selecionado? A pergunta está no chat; nada foi alterado no contrato.
+A matriz de lacunas por par está no plano de storage. A decisão posterior do
+mantenedor determina SQLite como cópia local obrigatória e autoridade de
+recovery para o ledger e os demais estados internos críticos; PostgreSQL fica
+como projeção/replicação retomável.
 
-## Decisão vital aguardando `brunosrz`: TTL por chave em NATS KV
+## Decisões recebidas e execução autorizada
 
-O adapter NATS atual retorna `Unsupported` para TTL. O serviço instalado é
-`nats:2.10-alpine`; NATS documenta TTL por mensagem do JetStream a partir de
-2.11 e exige `AllowMsgTTL` no stream ([release notes 2.11](https://github.com/nats-io/nats.docs/blob/master/release_notes/whats_new_211.md), [configuração do stream](https://github.com/nats-io/nats.docs/blob/master/nats-concepts/jetstream/streams.md)). Portanto, a diferença não é incompatibilidade permanente, mas há uma decisão de compatibilidade do backend e do formato persistido.
+- **Estado crítico e PostgreSQL:** SQLite permanece cópia local obrigatória e
+  autoridade para o ledger e demais estados internos necessários à recuperação.
+  PostgreSQL pode receber projeções/replicação retomável; perder a conexão não
+  pode impedir a gravação local nem apagar o estado local. Isso inclui snapshots
+  internos de policy/grants e lifecycle quando replicados. Não inclui credenciais
+  em claro, autenticação de usuários nem RBAC do produto: esses pertencem ao host.
+- **TTL NATS:** exigir NATS Server 2.11+ e usar TTL por mensagem nativo. O
+  workspace passa a fixar NATS 2.15.3; o adapter ativa `AllowMsgTTL` e usa
+  tombstones por tempo limitado. O TTL tem resolução mínima de um segundo, como
+  no Redis adapter.
+- **Filas:** adotar retenção finita configurável pelo host e um teto de tentativas
+  com caminho de dead-letter. `ACK` (acknowledgement/confirmação) significa que o
+  consumidor terminou o job com sucesso; sem ACK, o broker pode entregá-lo de
+  novo depois do timeout. O conteúdo retido e falhas terminais devem ser
+  observáveis e recuperáveis, não descartados silenciosamente. Implementação
+  permanece como próxima lacuna; a escolha de produto já não bloqueia o loop.
 
-Qual caminho adotar?
+NATS 2.11 introduziu TTL por mensagem e exige `AllowMsgTTL` no stream ([release
+notes 2.11](https://github.com/nats-io/nats.docs/blob/master/release_notes/whats_new_211.md),
+[configuração do stream](https://github.com/nats-io/nats.docs/blob/master/nats-concepts/jetstream/streams.md)).
 
-1. Exigir NATS Server 2.11+ e usar o TTL nativo por mensagem; isso altera a
-   versão mínima suportada pelo adapter.
-2. Manter suporte a NATS 2.10 e emular TTL no adapter com metadados de expiração
-   persistidos junto ao valor; isso cria um formato de valor e exige regras de
-   leitura/migração e remoção concorrente.
+## Verificação da branch empilhada sobre #57
 
-Ambas as opções fecham a base funcional Redis/NATS; a escolha afeta
-compatibilidade de deployment ou formato durável. O código e os testes service-
-real que dependem da escolha aguardam a resposta. Perguntar a `brunosrz` aqui
-no chat, sem marcação em GitHub.
+Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:
+Cargo atualizou dependências lockadas compatíveis com MSRV 1.89; `uv.lock` foi
+atualizado dentro das faixas Python; pnpm atualizou o TypeScript para 7.0.2 e
+as demais dependências do binding. `scons install` concluiu, atualizou o NATS
+sidecar para 2.15.3 e baixou as imagens Postgres 18.6, Qdrant 1.18.0, Redis
+8.10.3 e NATS 2.15.3. Os containers antigos do usuário não foram recriados; a
+matriz usou containers descartáveis em portas alternativas.
+
+`cargo test -p vectora-engine --lib --locked storage:: -- --test-threads=1`
+passou 69/69 contra as quatro imagens novas, incluindo TTL NATS em chave já
+existente e expiração real. Rustfmt, typecheck/Oxlint TypeScript 7, Ruff,
+formatação Python, ty e Prettier passaram. O primeiro teste da matriz revelou
+uma asserção de índice incorreta em `capabilities`; após corrigi-la, os 69
+testes passaram. Restart de containers não foi executado nesta rodada porque
+`VECTORA_TEST_PODMAN_RESTART` não foi definido.

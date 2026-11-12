@@ -14,12 +14,18 @@ Uma aplicação pode começar local e embarcada (por exemplo, SQLite + LanceDB),
 - Ledger/checkpoints/eventos genéricos de execução, quando usados pelo runtime.
 - Interfaces de memória e recuperação com provenance, escopo e confiança.
 - Migrations versionadas dos schemas próprios da engine.
+- Persistir primeiro em SQLite todo estado interno necessário à continuidade
+  ou recuperação. Projeções PostgreSQL são retomáveis e nunca substituem essa
+  cópia local obrigatória.
 - Matriz de capabilities, readiness/health, telemetria e falhas/degradação.
 
 ### Produto consumidor
 
 - Tabelas e políticas de contas, autenticação, RBAC, billing, workspaces, settings e entidades de negócio.
 - Definição do tenant/principal/namespace confiável e das regras de retenção de produto.
+- Autenticação de usuários, credenciais e RBAC do produto. A Engine não guarda
+  credenciais em claro; persiste apenas estado técnico interno de policy quando
+  necessário à recuperação do runtime.
 - Origem e permissão de documentos, conversas e dados a indexar.
 - Operação/configuração dos serviços remotos, credenciais, backups de deployment e seleção de planos/licenças.
 
@@ -31,7 +37,7 @@ O fato de o Vectora usar hoje determinadas tabelas ou diretórios não os torna 
 | --------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | SQL durável     | SQLite, PostgreSQL            | Transações, consultas tipadas/limitadas, migrações, paginação, health e fechamento de pool.                                                | Locks, concorrência, JSON, precisão/datas, isolamento, conflitos, constraints e comportamento de migration. |
 | Vector store    | LanceDB, Qdrant               | Coleções, upsert/delete idempotente, busca cosseno, score de similaridade em `[-1, 1]` (maior é melhor), filtros/metadata, top-k e health. | Operadores/filtros suportados, lexical/hybrid search, consistência, limites de payload e criação de índice. |
-| KV/cache        | NATS JetStream KV, Redis      | get/set/delete, TTL, namespace e operação atômica quando suportada.                                                                        | Durabilidade, atomicidade, eviction, TTL e escopo multi-processo.                                           |
+| KV/cache        | NATS JetStream KV, Redis      | get/set/delete, TTL, namespace e operação atômica quando suportada. TTL por mensagem no NATS requer Server 2.11+ e `AllowMsgTTL`.          | Durabilidade, atomicidade, eviction, TTL e escopo multi-processo.                                           |
 | Event bus/queue | NATS JetStream, Redis Streams | Envelope versionado, idempotency/task ID, publish/consume, timeout, cancelamento, estado de entrega e health.                              | ACK, consumer/group, redelivery, retenção, replay, ordenação, DLQ, deduplicação e semântica de shutdown.    |
 
 Um adapter não simula em silêncio uma capacidade ausente e não substitui automaticamente uma store durável por memória.

@@ -13,11 +13,12 @@ import zipfile
 
 
 ROOT = Dir(".").abspath
-NATS_VERSION = "2.10.22"
+NATS_VERSION = "2.15.3"
 DEV_SERVICE_IMAGES = (
-    "docker.io/library/postgres:17-alpine",
-    "docker.io/qdrant/qdrant:v1.15.5",
-    "docker.io/library/redis:7.4-alpine",
+    "docker.io/library/postgres:18.6-alpine",
+    "docker.io/qdrant/qdrant:v1.18.0",
+    "docker.io/library/redis:8.10.3-alpine",
+    "docker.io/library/nats:2.15.3-alpine",
 )
 
 
@@ -318,6 +319,7 @@ def _tests(target, source, env):
 def _update(target, source, env):
     _run("cargo", "update")
     _run("uv", "lock", "--upgrade")
+    _pnpm("update", "--latest", cwd=os.path.join(ROOT, "bindings", "typescript"))
 
 
 def _clean(target, source, env):
@@ -363,8 +365,14 @@ Qualidade
   scons ci         install + build + lint + tests
 
 Manutenção
-  scons update     atualiza Cargo e uv.lock; revise os lockfiles
+  scons update     atualiza Cargo.lock, uv.lock e pnpm-lock.yaml; revise os lockfiles
   scons clean      remove target/ e logs do SCons
+
+O alvo update segue as faixas declaradas nos manifests Rust/Python e usa
+pnpm update --latest (inclusive major) no binding TypeScript. Versões de
+serviços e do sidecar NATS são pins explícitos em SConstruct e devem ser
+atualizados ali após revisar as notas de compatibilidade. `scons update --latest`
+não é uma opção SCons válida.
 
 """.strip()
     )

@@ -70,10 +70,10 @@ ausente" significa que nenhum dos dois lados expõe a capacidade hoje.
 
 | Par                       | Lacuna (um lado tem, o outro não)                                                                                                                                                                                                                                                                                                        | Base comum ainda ausente nos dois lados                                                                                            |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite × PostgreSQL       | PostgreSQL não tem os stores de lifecycle, loop e policy; não tem backup/restore/verify equivalentes aos do SQLite; a outbox existe só no SQLite; o append resiliente usa SQLite como autoridade obrigatória.                                                                                                                            | Interface SQL transacional tipada e limitada (spec 02) em ambos.                                                                   |
+| SQLite × PostgreSQL       | PostgreSQL não tem os stores de lifecycle, loop e policy nem backup/restore/verify equivalentes. Decisão do mantenedor: SQLite é sempre a cópia local obrigatória e autoridade de recuperação do ledger e demais estados críticos internos; PostgreSQL é projeção/replicação retomável e nunca substitui essa cópia.                     | Interface SQL transacional tipada e limitada (spec 02) em ambos; completar stores PostgreSQL sem retirar a escrita SQLite-first.   |
 | LanceDB × Qdrant          | A branch do PR #57 fixa `Cosine` no LanceDB e normaliza os dois resultados para similaridade `[-1, 1]` (maior é melhor); testes com vetores não unitários passam nos dois adapters. A busca ainda não aplica o limite de 65536 dimensões do upsert antes de chamar o backend, então dimensões inválidas podem produzir erros diferentes. | Filtro por metadado além do escopo, criação/parâmetros de índice ANN, quantização, busca lexical/híbrida, backup/snapshot, health. |
-| Redis × NATS JetStream KV | TTL por chave: Redis suporta; o adapter NATS retorna `Unsupported`. O NATS 2.10 local não suporta TTL por mensagem; a funcionalidade nativa requer 2.11 e `AllowMsgTTL`. Escolher versão mínima ou emulação compatível antes de fechar esta lacuna.                                                                                      | Escrita condicional por revisão (CAS), incremento atômico, listagem por prefixo, observação de mudanças.                           |
-| Redis Streams × JetStream | `max_deliver`: o NATS expõe o teto (hoje ilimitado); o Redis precisa de contagem de entregas via `XPENDING`. Deduplicação: nativa no JetStream (`Nats-Msg-Id`), manual no Redis.                                                                                                                                                         | Retenção e remoção após ACK (decisão do mantenedor pendente), DLQ, NACK/atraso de reentrega, shutdown gracioso.                    |
+| Redis × NATS JetStream KV | A branch empilhada sobre #57 implementa TTL por mensagem em NATS e marca o bucket com `AllowMsgTTL`; exige NATS 2.11+. Teste real de create/update/expiração passou com NATS 2.15.3 e Redis 8.10.3. As imagens de teste do workspace foram atualizadas.                                                                                  | CAS por revisão, incremento atômico, listagem por prefixo e observação de mudanças.                                                |
+| Redis Streams × JetStream | Retenção atual é sem limite; redelivery não tem teto. Decisão recebida: retenção finita configurável, teto de tentativas e dead-letter. ACK significa que o consumidor concluiu o job com sucesso.                                                                                                                                       | Implementar semântica/configuração equivalente nos dois, com DLQ recuperável e shutdown gracioso.                                  |
 | Redis Pub/Sub × NATS Core | Nenhuma lacuna de contrato conhecida (ambos efêmeros; mensagem sem assinante é descartada, provado por teste).                                                                                                                                                                                                                           | Assinatura por padrão/curinga e reconexão observável.                                                                              |
 
 O relatório atual `capabilities()` enumera implementado/não implementado e
@@ -85,7 +85,9 @@ especializações como suportadas.
 O contrato vetorial compartilhado usa vetores não unitários para distinguir
 Cosine de L2: com os mesmos dados, o ranking por norma L2 difere, enquanto os
 dois adapters devem ordenar por similaridade cosseno. A implementação e os
-testes estão na branch do PR #57, ainda não integrada em `main`.
+testes estão na branch do PR #57, ainda não integrada em `main`. A próxima
+branch atualiza dependências lockadas, adiciona TTL nativo de NATS KV e registra
+as decisões do mantenedor para ledger e filas.
 
 ## Estado revalidado contra `main` (`22c861f`)
 
@@ -116,7 +118,8 @@ locais ao processo e não devem ser persistidos em configuração.
 Redis Streams recupera entregas pendentes com `XAUTOCLAIM`; NATS JetStream usa
 consumidores duráveis e `ack_wait`. KV Redis aceita TTL por chave; JetStream KV
 não implementa o mesmo contrato de TTL e retorna erro `Unsupported` quando ele
-é solicitado, o que é uma lacuna de equivalência. LanceDB reporta distância
+é solicitado em `main` (`22c861f`), o que é uma lacuna de equivalência corrigida
+na branch empilhada atual. LanceDB reporta distância
 (_menor é mais próximo_, métrica padrão L2); Qdrant reporta similaridade cosseno
 (_maior é mais próximo_). Esse é o estado atual, não o contrato desejado: a
 meta é alinhar a métrica e normalizar o score para um contrato único. Até lá,
