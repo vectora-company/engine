@@ -55,13 +55,20 @@ async def vector_store_delete(
 async def kv_store_put(
     config: JsonObject, key: str, value: Any, ttl_seconds: int | None = None
 ) -> None:
-    """Persist JSON in Redis or NATS KV; NATS rejects per-key TTL."""
+    """Persist JSON in Redis or NATS KV with an optional per-key TTL."""
     await _native.kv_store_put(json.dumps(config), key, json.dumps(value), ttl_seconds)
 
 
 async def kv_store_get(config: JsonObject, key: str) -> Any:
     """Read JSON from the selected KV adapter, returning None when absent."""
     return json.loads(await _native.kv_store_get(json.dumps(config), key))
+
+
+async def kv_store_list_keys(
+    config: JsonObject, prefix: str = "", limit: int = 100
+) -> list[str]:
+    """List distinct keys matching a literal prefix in ascending order."""
+    return await _native.kv_store_list_keys(json.dumps(config), prefix, limit)
 
 
 async def queue_enqueue(config: JsonObject, payload: bytes) -> str:
@@ -797,6 +804,7 @@ __all__ = [
     "fallback_embed",
     "fallback_rerank",
     "kv_store_get",
+    "kv_store_list_keys",
     "kv_store_put",
     "model_tool_loop_contract_version",
     "native_chat_complete",

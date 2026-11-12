@@ -367,6 +367,24 @@ componentes não finitos. O PR #65 usa a mesma validação de
 1 a 65536 dimensões finitas nos quatro caminhos. A verificação dos extremos
 em execução fica pendente.
 
+## Listagem KV por prefixo
+
+A branch empilhada sobre #66 expõe listagem em Rust, Python e TypeScript.
+Redis usa [SCAN com MATCH e TYPE](https://redis.io/docs/latest/commands/scan/)
+e NATS usa [Keys do JetStream KV](https://docs.rs/async-nats/0.52.0/async_nats/jetstream/kv/struct.Store.html#method.keys).
+Os dois retornam um conjunto ordenado limitado, sem snapshot sob concorrência.
+Redis reserva o prefixo do namespace para as chaves KV do tipo string.
+O limite de 1000 restringe o resultado, enquanto a varredura percorre o
+backend para selecionar as primeiras chaves em ordem. Implementações externas
+do trait Rust `KvStore` precisam implementar o novo método.
+
+O build release do workspace passou. Um smoke test via addon Node verificou
+Redis 8.10.3 e NATS 2.15.3 com namespace vazio, ordenação, limite, prefixo
+vazio, TTL e isolamento. No Redis também confirmou prefixo contendo `[`
+literal. A wheel Maturin para CPython 3.13 também passou a listagem nos dois
+serviços. TypeScript, Ruff e ty passaram. A remoção explícita ainda precisa
+de uma verificação de integração dedicada.
+
 ## Verificação da branch empilhada sobre #57
 
 Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:
