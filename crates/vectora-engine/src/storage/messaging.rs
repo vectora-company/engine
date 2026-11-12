@@ -699,58 +699,81 @@ impl NatsStreamQueue {
         &self,
         durable: &str,
     ) -> Result<async_nats::jetstream::consumer::PullConsumer, MessagingError> {
-        use async_nats::jetstream::consumer::PullConsumer;
+        use async_nats::jetstream::consumer::{FromConsumer, PullConsumer, pull::Config};
         let stream = self.ensure_stream().await?;
-        let config = async_nats::jetstream::consumer::pull::Config {
-            durable_name: Some(durable.to_owned()),
-            ack_wait: self.ack_wait,
-            // The adapter caps handler attempts. The broker must keep retrying
-            // the transfer when the DLQ is unavailable.
-            max_deliver: -1,
-            ..Default::default()
-        };
-        stream
-            .get_or_create_consumer(durable, config.clone())
+        let consumer: PullConsumer = stream
+            .get_or_create_consumer(
+                durable,
+                Config {
+                    durable_name: Some(durable.to_owned()),
+                    ack_wait: self.ack_wait,
+                    max_deliver: -1,
+                    ..Default::default()
+                },
+            )
             .await
             .map_err(|_| MessagingError::Storage)?;
-        let consumer: PullConsumer = self
-            .jetstream
+        let current = &consumer.cached_info().config;
+        if current.ack_wait == self.ack_wait && current.max_deliver == -1 {
+            return Ok(consumer);
+        }
+        let mut config = Config::try_from_consumer_config(current.clone())
+            .map_err(|_| MessagingError::Storage)?;
+        config.ack_wait = self.ack_wait;
+        // Keep broker redelivery available when a DLQ transfer fails.
+        config.max_deliver = -1;
+        self.jetstream
             .update_consumer_on_stream(config, &self.stream)
             .await
-            .map_err(|_| MessagingError::Storage)?;
-        Ok(consumer)
+            .map_err(|_| MessagingError::Storage)
     }
 
     async fn ensure_stream(&self) -> Result<async_nats::jetstream::stream::Stream, MessagingError> {
-        self.jetstream
-            .create_or_update_stream(async_nats::jetstream::stream::Config {
-                name: self.stream.clone(),
-                subjects: vec![self.subject.clone()],
-                max_messages: self.max_messages.min(i64::MAX as u64) as i64,
-                ..Default::default()
-            })
-            .await
-            .map_err(|_| MessagingError::Storage)?;
-        self.jetstream
-            .get_stream(&self.stream)
-            .await
-            .map_err(|_| MessagingError::Storage)
+        self.ensure_queue_stream(&self.stream, &self.subject).await
     }
 
     async fn ensure_dead_stream(
         &self,
     ) -> Result<async_nats::jetstream::stream::Stream, MessagingError> {
-        self.jetstream
-            .create_or_update_stream(async_nats::jetstream::stream::Config {
-                name: self.dead_stream.clone(),
-                subjects: vec![self.dead_subject.clone()],
-                max_messages: self.max_messages.min(i64::MAX as u64) as i64,
+        self.ensure_queue_stream(&self.dead_stream, &self.dead_subject)
+            .await
+    }
+
+    async fn ensure_queue_stream(
+        &self,
+        name: &str,
+        subject: &str,
+    ) -> Result<async_nats::jetstream::stream::Stream, MessagingError> {
+        use async_nats::jetstream::stream::Config;
+
+        let max_messages = self.max_messages.min(i64::MAX as u64) as i64;
+        let stream = self
+            .jetstream
+            .get_or_create_stream(Config {
+                name: name.to_owned(),
+                subjects: vec![subject.to_owned()],
+                max_messages,
                 ..Default::default()
             })
             .await
             .map_err(|_| MessagingError::Storage)?;
+        let current = &stream.cached_info().config;
+        // Queue and DLQ names can overlap. Never rewrite a stream that serves
+        // another subject, even if its name matches the configured queue.
+        if current.subjects.len() != 1 || current.subjects[0] != subject {
+            return Err(MessagingError::Storage);
+        }
+        if current.max_messages == max_messages {
+            return Ok(stream);
+        }
+        let mut config = current.clone();
+        config.max_messages = max_messages;
         self.jetstream
-            .get_stream(&self.dead_stream)
+            .update_stream(config)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        self.jetstream
+            .get_stream(name)
             .await
             .map_err(|_| MessagingError::Storage)
     }

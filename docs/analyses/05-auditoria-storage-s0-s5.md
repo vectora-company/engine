@@ -348,6 +348,17 @@ timeout da chamada como expiração no broker, tanto na fila principal quanto na
 DLQ. A confirmação de ausência de mensagem é recebida do broker. Verificação
 com serviço real permanece pendente nesta branch.
 
+## Configuração de recursos JetStream existentes
+
+O adapter confere se o stream atende exclusivamente ao subject esperado antes
+de atualizar o limite de mensagens. Um nome que coincida com o de outra fila
+ou DLQ resulta em erro e preserva o recurso existente. A correção mantém os
+nomes persistidos. Na atualização de stream, apenas `max_messages` muda. No
+consumer durável, apenas `ack_wait` e `max_deliver` mudam. Se esses valores já
+correspondem à política da Engine, a configuração é reutilizada. A validação
+de recursos previamente configurados e nomes sobrepostos com NATS real fica
+pendente.
+
 ## Verificação da branch empilhada sobre #57
 
 Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:
