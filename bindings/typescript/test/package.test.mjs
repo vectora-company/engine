@@ -26,6 +26,7 @@ import {
   modelToolLoopContractVersion,
   rerank,
   rerankContractVersion,
+  queueReceiveDeadLetter,
   runContractVersion,
   transitionRun,
   toolContractVersion,
@@ -268,6 +269,22 @@ test("storage selection validates independent backends in Rust", () => {
   for (const field of ["kv", "queue", "pubsub"]) {
     assert.throws(() => validateStorageSelection({ contract_version: 1, [field]: "memory" }));
   }
+});
+
+test("queue dead-letter receive is exposed through the Node binding", async () => {
+  await assert.rejects(
+    queueReceiveDeadLetter(
+      {
+        backend: "redis_streams",
+        endpoint: "redis://localhost",
+        namespace: "jobs",
+        max_attempts: 0,
+      },
+      "operator",
+      "recovery",
+    ),
+    /invalid messaging request/,
+  );
 });
 
 const settings = {

@@ -163,8 +163,8 @@ retention continuam gaps.
 - Distinguir execução interativa do loop de agente de jobs longos de indexação, crawl, avaliação ou manutenção.
 - O ledger ou store durável definido pelo contrato é a autoridade para estado; eventos de fila são transporte/projeção quando assim configurado.
 - Não introduzir Celery ou outro broker sem comparação documentada contra adapters e consumidores necessários.
-- NATS JetStream e Redis Streams mantêm contratos distintos para ack, redelivery, retention, replay e dead-letter; reconexão/shutdown são parte dos testes.
-- Toda fila tem retenção finita configurável por `max_messages` (padrão 100000); ao atingir o limite, o broker descarta as mensagens mais antigas, inclusive entregas pendentes. A política futura de retry usa cinco tentativas como padrão e encaminha falhas terminais para uma DLQ recuperável com retenção finita própria.
+- Redis Streams e NATS JetStream devem expor a mesma semântica de ACK, redelivery, retenção, replay e DLQ. A mecânica específica de cada protocolo pode diferir internamente; qualquer diferença de comportamento observável precisa de prova de incompatibilidade e registro em `capabilities()`. Reconexão e shutdown são parte dos testes de paridade.
+- Toda fila tem retenção finita configurável por `max_messages` (padrão 100000); ao atingir o limite, o broker descarta as mensagens mais antigas, inclusive entregas pendentes. O contrato comum limita a cinco entregas por padrão e encaminha falhas terminais para uma DLQ recuperável, também limitada por `max_messages`. A DLQ é consumida pela API `receive_dead_letter`; a aplicação pode tratar e confirmar a falha ou republicá-la na fila original.
 
 ## Migrations, compatibilidade e recuperação
 

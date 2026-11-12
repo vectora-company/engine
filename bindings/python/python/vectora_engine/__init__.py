@@ -81,6 +81,20 @@ async def queue_receive(
     return result
 
 
+async def queue_receive_dead_letter(
+    config: JsonObject, consumer: str, group: str, timeout_ms: int = 30_000
+) -> dict[str, Any] | None:
+    """Receive a failed job from the recoverable dead-letter queue."""
+    result = json.loads(
+        await _native.queue_receive_dead_letter(
+            json.dumps(config), consumer, group, timeout_ms
+        )
+    )
+    if result is not None:
+        result["payload"] = bytes(result["payload"])
+    return result
+
+
 async def queue_ack(delivery_id: str) -> None:
     """Acknowledge a delivery previously returned by queue_receive."""
     await _native.queue_ack(delivery_id)
@@ -795,6 +809,7 @@ __all__ = [
     "queue_ack",
     "queue_enqueue",
     "queue_receive",
+    "queue_receive_dead_letter",
     "queue_release",
     "reconcile_tool_result",
     "recover_model_tool_loop",

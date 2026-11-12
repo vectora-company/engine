@@ -169,27 +169,31 @@ impl StorageSelection {
             Some(QueueBackend::RedisStreams) => backends.push(entry(
                 "queue",
                 "redis_streams",
-                &["durable_queue"],
-                &["dead_letter_queue"],
+                &["durable_queue", "dead_letter_queue"],
+                &[],
                 None,
                 None,
                 Some(true),
                 &[
                     "Unacknowledged deliveries are reclaimed with XAUTOCLAIM after the visibility timeout.",
                     "Source stream retention is capped by max_messages (default 100000); oldest entries can be trimmed, including pending deliveries.",
+                    "After max_attempts (default 5), unacknowledged jobs move to a separately consumable dead-letter stream.",
+                    "Dead-letter transfer and source ACK are atomic in Redis.",
                 ],
             )),
             Some(QueueBackend::NatsJetstream) => backends.push(entry(
                 "queue",
                 "nats_jetstream",
-                &["durable_queue"],
-                &["dead_letter_queue"],
+                &["durable_queue", "dead_letter_queue"],
+                &[],
                 None,
                 None,
                 Some(true),
                 &[
                     "Durable consumers redeliver after ack_wait.",
                     "Source stream retention is capped by max_messages (default 100000); oldest entries can be removed, including pending deliveries.",
+                    "After max_attempts (default 5), unacknowledged jobs move to a separately consumable dead-letter stream.",
+                    "Dead-letter publication is at-least-once before the source ACK and may duplicate if the ACK is lost.",
                 ],
             )),
             None => {}
@@ -245,6 +249,18 @@ mod tests {
             Some(ScoreDirection::HigherIsCloser)
         );
         assert_eq!(report.backends[1].ttl, Some(true));
+        assert!(
+            report.backends[2]
+                .implemented
+                .contains(&"dead_letter_queue".to_owned())
+        );
+        assert!(report.backends[2].not_implemented.is_empty());
+        let nats = selection(r#"{"contract_version":1,"queue":"nats_jetstream"}"#).capabilities();
+        assert!(
+            nats.backends[0]
+                .implemented
+                .contains(&"dead_letter_queue".to_owned())
+        );
     }
 
     #[test]

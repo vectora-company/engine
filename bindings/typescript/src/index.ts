@@ -510,6 +510,12 @@ interface NativeBinding {
     group: string,
     timeoutMs: number,
   ): Promise<string>;
+  queueReceiveDeadLetter(
+    configJson: string,
+    consumer: string,
+    group: string,
+    timeoutMs: number,
+  ): Promise<string>;
   queueAck(deliveryId: string): Promise<void>;
   queueRelease(deliveryId: string): void;
   pubsubPublish(
@@ -775,6 +781,8 @@ export interface QueueConfig {
   visibility_timeout_seconds?: number;
   /** Maximum number of messages retained by the queue stream (default 100000). */
   max_messages?: number;
+  /** Maximum deliveries before moving a job to the dead-letter stream (default 5). */
+  max_attempts?: number;
 }
 export interface PubSubConfig {
   backend: "redis" | "nats_core";
@@ -860,6 +868,7 @@ export async function kvStoreGet(
 export interface QueueDelivery {
   delivery_id: string;
   payload: Uint8Array;
+  attempts: number;
 }
 export async function queueEnqueue(
   config: QueueConfig,
@@ -883,11 +892,34 @@ export async function queueReceive(
       group,
       timeoutMs,
     ),
-  ) as { delivery_id: string; payload: number[] } | null;
+  ) as { delivery_id: string; payload: number[]; attempts: number } | null;
   return result
     ? {
         delivery_id: result.delivery_id,
         payload: Uint8Array.from(result.payload),
+        attempts: result.attempts,
+      }
+    : null;
+}
+export async function queueReceiveDeadLetter(
+  config: QueueConfig,
+  consumer: string,
+  group: string,
+  timeoutMs = 30_000,
+): Promise<QueueDelivery | null> {
+  const result = JSON.parse(
+    await native.queueReceiveDeadLetter(
+      JSON.stringify(config),
+      consumer,
+      group,
+      timeoutMs,
+    ),
+  ) as { delivery_id: string; payload: number[]; attempts: number } | null;
+  return result
+    ? {
+        delivery_id: result.delivery_id,
+        payload: Uint8Array.from(result.payload),
+        attempts: result.attempts,
       }
     : null;
 }

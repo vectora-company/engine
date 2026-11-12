@@ -29,6 +29,7 @@ from vectora_engine import (
     native_chat_complete,
     native_chat_stream,
     prepare_tool_dispatch,
+    queue_receive_dead_letter,
     rerank,
     rerank_contract_version,
     run_contract_version,
@@ -87,10 +88,27 @@ def test_storage_capabilities_state_backend_differences() -> None:
     )
     vector, kv = report["backends"]
     assert vector["score_direction"] == "higher_is_closer"
-    assert kv["ttl"] is False
+    assert kv["ttl"] is True
     assert storage_capabilities({"contract_version": 1})["backends"] == []
     with pytest.raises(RuntimeError, match="unsupported storage contract version"):
         storage_capabilities({"contract_version": 99})
+
+
+def test_queue_dead_letter_receive_is_exposed_through_python_binding() -> None:
+    async def receive_invalid_queue() -> None:
+        with pytest.raises(RuntimeError, match="invalid messaging request"):
+            await queue_receive_dead_letter(
+                {
+                    "backend": "redis_streams",
+                    "endpoint": "redis://localhost",
+                    "namespace": "jobs",
+                    "max_attempts": 0,
+                },
+                "operator",
+                "recovery",
+            )
+
+    asyncio.run(receive_invalid_queue())
 
 
 def test_sqlite_ledger_backup_verify_and_restore(tmp_path: Path) -> None:

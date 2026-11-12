@@ -834,6 +834,7 @@ pub async fn queue_receive(
         return Ok("null".to_owned());
     };
     let payload = delivery.payload().to_vec();
+    let attempts = delivery.attempts();
     let handle = format!(
         "queue-{}",
         STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
@@ -842,7 +843,47 @@ pub async fn queue_receive(
         .lock()
         .map_err(|_| Error::from_reason("queue handle lock failed"))?
         .insert(handle.clone(), delivery);
-    encode_json(&serde_json::json!({"delivery_id": handle, "payload": payload}))
+    encode_json(
+        &serde_json::json!({"delivery_id": handle, "payload": payload, "attempts": attempts}),
+    )
+}
+
+#[napi]
+pub async fn queue_receive_dead_letter(
+    config_json: String,
+    consumer: String,
+    group: String,
+    timeout_ms: u32,
+) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid queue config"))?;
+    let queue = vectora_engine::storage::messaging::QueueAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let Some(delivery) = queue
+        .receive_dead_letter(
+            &consumer,
+            &group,
+            std::time::Duration::from_millis(u64::from(timeout_ms)),
+        )
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?
+    else {
+        return Ok("null".to_owned());
+    };
+    let payload = delivery.payload().to_vec();
+    let attempts = delivery.attempts();
+    let handle = format!(
+        "queue-{}",
+        STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    queue_deliveries()
+        .lock()
+        .map_err(|_| Error::from_reason("queue handle lock failed"))?
+        .insert(handle.clone(), delivery);
+    encode_json(
+        &serde_json::json!({"delivery_id": handle, "payload": payload, "attempts": attempts}),
+    )
 }
 
 #[napi]

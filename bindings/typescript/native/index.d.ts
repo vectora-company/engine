@@ -164,6 +164,13 @@ export declare function queueReceive(
   timeoutMs: number,
 ): Promise<string>;
 
+export declare function queueReceiveDeadLetter(
+  configJson: string,
+  consumer: string,
+  group: string,
+  timeoutMs: number,
+): Promise<string>;
+
 export declare function queueRelease(deliveryId: string): void;
 
 export declare function rerank(
