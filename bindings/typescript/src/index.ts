@@ -787,6 +787,7 @@ export interface VectorRecord {
 }
 export interface VectorHit {
   id: number;
+  /** Cosine similarity in [-1, 1]; larger scores are closer for every backend. */
   score: number;
   metadata: JsonValue;
 }

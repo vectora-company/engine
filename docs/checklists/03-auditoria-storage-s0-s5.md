@@ -47,12 +47,13 @@ substituída pelos resultados locais registrados em 2026-11-12.
 
 ## Equivalência por par (política de 2026-11-12)
 
-Cada item abaixo é lacuna a fechar nos dois lados do par; veja a matriz em
+Os itens marcados concluídos foram verificados na branch indicada; os demais
+são lacunas a fechar nos dois lados do par. Veja a matriz em
 [`04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
 
-- [ ] Vetorial: alinhar métrica (L2 × cosseno) e normalizar o score; contrato de ranking testado com vetores não normalizados nos dois backends.
+- [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local (branch do PR #57; não integrado em `main`).
 - [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends; limite de dimensão da consulta igual nos dois.
-- [ ] KV: TTL no NATS KV (verificar versão do NATS); CAS por revisão, incremento atômico, prefixo e watch nos dois.
+- [ ] KV: decidir versão mínima NATS 2.11+ (TTL nativo) ou emulação compatível com 2.10; depois implementar TTL e testar com Redis/NATS. CAS por revisão, incremento, prefixo e watch também faltam nos dois.
 - [ ] Filas: `max_deliver`/contagem de entregas, DLQ, NACK/atraso e deduplicação equivalentes nas duas.
 - [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL, com a mesma suíte do SQLite.
 - [ ] Decisão do mantenedor: autoridade do ledger (SQLite obrigatório × PostgreSQL selecionável como autoridade).

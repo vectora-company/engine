@@ -126,9 +126,9 @@ impl StorageSelection {
                 &["vector_store"],
                 &["lexical_search", "hybrid_search"],
                 None,
-                Some(ScoreDirection::LowerIsCloser),
+                Some(ScoreDirection::HigherIsCloser),
                 None,
-                &["Score is a distance; do not compare with Qdrant without normalisation."],
+                &["Cosine similarity is normalized to [-1, 1]; higher is closer."],
             )),
             Some(VectorBackend::Qdrant) => backends.push(entry(
                 "vector",
@@ -138,7 +138,7 @@ impl StorageSelection {
                 None,
                 Some(ScoreDirection::HigherIsCloser),
                 None,
-                &["Score is cosine similarity; do not compare with LanceDB without normalisation."],
+                &["Cosine similarity is in [-1, 1]; higher is closer."],
             )),
             None => {}
         }
@@ -242,13 +242,13 @@ mod tests {
     }
 
     #[test]
-    fn distinguishes_ttl_and_score_direction_between_siblings() {
+    fn reports_shared_cosine_score_direction_and_distinct_ttl() {
         let redis =
             selection(r#"{"contract_version":1,"kv":"redis","vector":"lance_db"}"#).capabilities();
         assert_eq!(redis.backends[1].ttl, Some(true));
         assert_eq!(
             redis.backends[0].score_direction,
-            Some(ScoreDirection::LowerIsCloser)
+            Some(ScoreDirection::HigherIsCloser)
         );
     }
 

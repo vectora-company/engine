@@ -1,9 +1,13 @@
 # Auditoria de storage e ledger S0–S5
 
-**Estado:** correção de contrato implementada; validação runtime pendente
-**Branch:** `fix/storage-selection-contract`
-**Escopo desta etapa:** alinhar o contrato público de seleção às implementações
-e registrar a cobertura que ainda precisa ser demonstrada.
+**Estado revalidado:** auditoria S0–S5 em andamento; equivalência dos pares
+registrada no PR #55; métrica e score vetoriais corrigidos e testados na branch
+do PR #57. TTL do NATS KV, retenção de filas e autoridade do ledger aguardam
+decisão vital.
+**Branch de origem:** `fix/storage-selection-contract`; o estado posterior está
+separado por PRs na fotografia ao fim desta análise.
+**Escopo:** alinhar o contrato público de seleção às implementações e registrar
+a cobertura que ainda precisa ser demonstrada.
 
 ## Decisão desta etapa
 
@@ -264,8 +268,38 @@ auditoria e dos PRs #46 e #47: o teste vetorial compartilhado usa vetores
 unitários, onde L2 e cosseno ordenam igual, e portanto não prova equivalência
 de ranking; o relatório `capabilities()` declara a diferença sem corrigi-la.
 
+Na branch empilhada sobre o PR #56, o PR #57 corrige essa lacuna: LanceDB usa
+`DistanceType::Cosine`, o adapter converte distância para similaridade cosseno
+em `[-1, 1]` (maior é melhor), e `capabilities()` declara a mesma direção nos
+dois backends. A fixture usa vetores não unitários cujo ranking difere sob L2
+e cosseno. Em 2026-11-12, `cargo fmt --all -- --check` passou; os testes
+`storage::vector::tests` passaram 9/9 com `VECTORA_TEST_QDRANT_URL` apontando
+ao Qdrant Podman 1.12.4, incluindo os dois testes service-real (LanceDB local e
+Qdrant). `storage::capabilities` passou 4/4. O teste opt-in de restart do
+Qdrant não executou nesta rodada, pois não foram definidas as variáveis de
+reinício. Esses resultados são locais e não atribuem a correção a `main`.
+
 A matriz de lacunas por par está no plano de storage. Uma pergunta de
 arquitetura depende do mantenedor: a autoridade local obrigatória em SQLite do
 ledger resiliente (PostgreSQL apenas como projeção) é compatível com a
 equivalência entre os dois, ou o PostgreSQL deve poder ser autoridade única
 quando selecionado? A pergunta está no chat; nada foi alterado no contrato.
+
+## Decisão vital aguardando `brunosrz`: TTL por chave em NATS KV
+
+O adapter NATS atual retorna `Unsupported` para TTL. O serviço instalado é
+`nats:2.10-alpine`; NATS documenta TTL por mensagem do JetStream a partir de
+2.11 e exige `AllowMsgTTL` no stream ([release notes 2.11](https://github.com/nats-io/nats.docs/blob/master/release_notes/whats_new_211.md), [configuração do stream](https://github.com/nats-io/nats.docs/blob/master/nats-concepts/jetstream/streams.md)). Portanto, a diferença não é incompatibilidade permanente, mas há uma decisão de compatibilidade do backend e do formato persistido.
+
+Qual caminho adotar?
+
+1. Exigir NATS Server 2.11+ e usar o TTL nativo por mensagem; isso altera a
+   versão mínima suportada pelo adapter.
+2. Manter suporte a NATS 2.10 e emular TTL no adapter com metadados de expiração
+   persistidos junto ao valor; isso cria um formato de valor e exige regras de
+   leitura/migração e remoção concorrente.
+
+Ambas as opções fecham a base funcional Redis/NATS; a escolha afeta
+compatibilidade de deployment ou formato durável. O código e os testes service-
+real que dependem da escolha aguardam a resposta. Perguntar a `brunosrz` aqui
+no chat, sem marcação em GitHub.

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-pub const VECTOR_CONTRACT_VERSION: u16 = 1;
+pub const VECTOR_CONTRACT_VERSION: u16 = 2;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -28,6 +28,7 @@ pub struct VectorRecord {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct VectorHit {
     pub id: u64,
+    /// Cosine similarity in [-1, 1]; larger scores are closer for every backend.
     pub score: f32,
     pub metadata: Value,
 }
@@ -275,6 +276,7 @@ impl VectorStore for LanceDbStore {
             .query()
             .nearest_to(vector)
             .map_err(|_| VectorError::InvalidInput)?
+            .distance_type(lancedb::DistanceType::Cosine)
             .only_if(format!("scope = '{scope}'"))
             .limit(limit as usize)
             .execute()
@@ -299,7 +301,7 @@ impl VectorStore for LanceDbStore {
                     serde_json::from_str(metadata.value(idx)).map_err(|_| VectorError::Storage)?;
                 hits.push(VectorHit {
                     id: ids.value(idx),
-                    score: distances.value(idx),
+                    score: 1.0 - distances.value(idx),
                     metadata: value,
                 });
             }
@@ -614,14 +616,9 @@ mod tests {
         }
     }
 
-    /// Exercises behaviour that both vector backends must share, and checks
-    /// that the declared score direction matches what the backend reports.
-    async fn exercise_shared_vector_contract(
-        store: &dyn VectorStore,
-        collection: &str,
-        direction: super::super::capabilities::ScoreDirection,
-    ) {
-        use super::super::capabilities::ScoreDirection;
+    /// Exercises behavior common to both vector backends, including cosine
+    /// ranking for non-unit vectors and a shared score direction.
+    async fn exercise_shared_vector_contract(store: &dyn VectorStore, collection: &str) {
         assert!(matches!(
             store
                 .search(
@@ -634,28 +631,23 @@ mod tests {
             Err(VectorError::Storage)
         ));
         for item in [
-            record(1, "one", [1.0, 0.0, 0.0], "exact"),
-            record(2, "one", [0.8, 0.6, 0.0], "near"),
+            record(1, "one", [2.0, 0.0, 0.0], "exact"),
+            record(2, "one", [1.0, 10.0, 0.0], "near"),
             record(3, "one", [0.0, 1.0, 0.0], "far"),
-            record(1, "two", [1.0, 0.0, 0.0], "other-scope"),
+            record(1, "two", [2.0, 0.0, 0.0], "other-scope"),
         ] {
             store.upsert(collection, item).await.unwrap();
         }
-        let query = || vec![1.0, 0.0, 0.0];
+        let query = || vec![2.0, 0.0, 0.0];
         let hits = store.search(collection, "one", query(), 10).await.unwrap();
         assert_eq!(hits.iter().map(|h| h.id).collect::<Vec<_>>(), [1, 2, 3]);
         assert!(
             hits.iter().all(|hit| hit.metadata["text"] != "other-scope"),
             "search must not return another scope"
         );
-        match direction {
-            ScoreDirection::LowerIsCloser => {
-                assert!(hits[0].score < hits[1].score && hits[1].score < hits[2].score)
-            }
-            ScoreDirection::HigherIsCloser => {
-                assert!(hits[0].score > hits[1].score && hits[1].score > hits[2].score)
-            }
-        }
+        assert!(hits[0].score > hits[1].score && hits[1].score > hits[2].score);
+        assert!((hits[0].score - 1.0).abs() < 1e-5);
+        assert!((hits[2].score).abs() < 1e-5);
         let limited = store.search(collection, "one", query(), 1).await.unwrap();
         assert_eq!(limited.iter().map(|h| h.id).collect::<Vec<_>>(), [1]);
 
@@ -685,7 +677,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn qdrant_shares_the_vector_contract_and_reports_similarity_scores() {
+    async fn qdrant_shares_the_cosine_score_contract() {
         let Ok(endpoint) = std::env::var("VECTORA_TEST_QDRANT_URL") else {
             return;
         };
@@ -698,12 +690,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         );
-        exercise_shared_vector_contract(
-            &store,
-            &collection,
-            super::super::capabilities::ScoreDirection::HigherIsCloser,
-        )
-        .await;
+        exercise_shared_vector_contract(&store, &collection).await;
     }
 
     #[tokio::test]
@@ -767,7 +754,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lancedb_shares_the_vector_contract_and_reports_distance_scores() {
+    async fn lancedb_shares_the_cosine_score_contract() {
         let path = std::env::temp_dir().join(format!(
             "vectora-lance-shared-{}-{}",
             std::process::id(),
@@ -777,12 +764,7 @@ mod tests {
                 .as_nanos()
         ));
         let store = LanceDbStore::connect(path.to_str().unwrap()).await.unwrap();
-        exercise_shared_vector_contract(
-            &store,
-            "shared",
-            super::super::capabilities::ScoreDirection::LowerIsCloser,
-        )
-        .await;
+        exercise_shared_vector_contract(&store, "shared").await;
         drop(store);
         let _ = std::fs::remove_dir_all(path);
     }

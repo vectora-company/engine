@@ -208,16 +208,18 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Seguir a etapa independente de atualização do loop operacional, agora na branch
-`docs/loop-pr-stack-and-decisions`, empilhada sobre o PR #55. Depois disso,
-retomar as lacunas de equivalência da seção 1b nesta ordem de dependência:
-(1) alinhar métrica/score e testar ranking vetorial com vetores não unitários;
-(2) TTL por chave no NATS KV; (3) contagem/teto de redelivery, retenção e DLQ
-com a política decidida; (4) stores de lifecycle/loop/policy e backup/restore
-PostgreSQL; (5) base comum ausente em ambos, como filtros de metadado, índices,
-quantização, CAS e prefixos. As duas decisões vitais registradas na análise de
-storage bloqueiam apenas as partes dependentes. Não iniciar adoção no Vectora
-nem reescrita ampla do backend Python antes dos gates.
+Atualização do loop operacional está implementada na branch do PR #56.
+Alinhamento da métrica e do score vetorial está implementado e verificado na
+branch seguinte (PR #57). As próximas lacunas independentes da seção 1b são:
+(1) filtros, ANN, quantização e busca híbrida nos dois vector stores; (2) CAS,
+incremento, prefixo e watch nos dois KV stores. TTL por chave no NATS KV
+aguarda a escolha entre exigir NATS 2.11+ ou emular mantendo compatibilidade
+com 2.10.
+Contagem/teto de redelivery, retenção e DLQ dependem da decisão de filas;
+stores lifecycle/loop/policy e autoridade/backup PostgreSQL dependem da
+decisão de autoridade do ledger. As três decisões bloqueiam apenas as partes
+dependentes. Não iniciar adoção no Vectora nem reescrita ampla do backend Python
+antes dos gates.
 
 ## Nota de proveniência local
 
@@ -232,7 +234,7 @@ evidência nesta atualização.
 A referência de `main` foi consultada no remoto em 2026-11-12 (`a13140b`); as
 alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A stack
 ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
-→ #55. Não há PR #50 nessa cadeia.
+→ #55 → #56 → #57. Não há PR #50 nessa cadeia.
 
 | PR                                                       | Entrega na branch do PR                                                             |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -246,6 +248,8 @@ ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 �
 | [#53](https://github.com/vectora-company/engine/pull/53) | Backup/restore do ledger SQLite: cópia online e backup coordenado pelo host.        |
 | [#54](https://github.com/vectora-company/engine/pull/54) | Caracterização da retenção e redelivery atuais das filas.                           |
 | [#55](https://github.com/vectora-company/engine/pull/55) | Política de equivalência funcional dos pares e matriz de lacunas.                   |
+| [#56](https://github.com/vectora-company/engine/pull/56) | Loop operacional, stack de PRs e regras de decisão/evidência.                       |
+| [#57](https://github.com/vectora-company/engine/pull/57) | Alinhamento do ranking vetorial por cosseno e normalização do score.                |
 
 O teste service-real combinado de storage passou 58/58 com Redis, NATS,
 Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros
@@ -256,16 +260,15 @@ para payload são decisões de `brunosrz` já implementadas nos PRs indicados.
 
 O GH Bot ainda monta manualmente em
 [`app/src/server/engine.ts`](../../../gh-bot/app/src/server/engine.ts) os
-contract versions que lê da binding local. A API da Engine já expõe
+contract versions que lê da binding local. A branch local da Engine expõe
 `storageCapabilities()`, mas o Bot ainda não usa um snapshot agregado como
 `engineContractSnapshot()`; a substituição pertence a um PR próprio no
-repositório do Bot e fica fora desta stack da Engine. Na branch local desta
-stack, a binding já expõe `storageCapabilities()`.
+repositório do Bot e fica fora desta stack da Engine.
 
-As decisões vitais ainda abertas são a política de retenção/redelivery das
-filas e se PostgreSQL poderá ser autoridade única do ledger ou se SQLite
-continuará obrigatório. Elas estão registradas na análise de storage e devem
+As decisões vitais ainda abertas são: TTL NATS por versão mínima ou emulação;
+política de retenção/redelivery das filas; e autoridade única PostgreSQL ou
+SQLite obrigatório no ledger. Estão registradas na análise de storage e devem
 ser perguntadas aqui no chat. Até a resposta, avance em trabalho independente;
-retenção de filas e autoridade do ledger permanecem bloqueadas. A próxima
-entrega independente é atualizar e seguir o loop operacional/documental desta
-stack, sem esperar aprovação nem checks de CI.
+essas partes permanecem bloqueadas. A próxima
+entrega independente é implementar as lacunas de equivalência não bloqueadas
+por decisões vitais, sem esperar aprovação nem checks de CI.

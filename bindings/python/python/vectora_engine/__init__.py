@@ -37,7 +37,7 @@ async def vector_store_search(
     vector: Sequence[float],
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """Search vectors inside the exact supplied scope."""
+    """Search a scope; scores are cosine similarities and higher is closer."""
     return json.loads(
         await _native.vector_store_search(
             json.dumps(config), collection, scope, list(vector), limit
