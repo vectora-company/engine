@@ -622,6 +622,14 @@ interface NativeBinding {
     draftJson: string,
     postgresUrl?: string,
   ): Promise<string>;
+  sqliteLedgerBackupOnline(path: string, destination: string): Promise<string>;
+  sqliteLedgerBackupOffline(path: string, destination: string): Promise<string>;
+  sqliteLedgerVerifyBackup(path: string): Promise<string>;
+  sqliteLedgerRestore(
+    backup: string,
+    destination: string,
+    replace: boolean,
+  ): Promise<string>;
   sqliteLedgerRead(
     path: string,
     scope: string,
@@ -1384,6 +1392,55 @@ export async function sqliteLedgerRead(
   return JSON.parse(
     await native.sqliteLedgerRead(path, scope, aggregate, after, limit),
   ) as LedgerEvent[];
+}
+
+export interface LedgerBackupReport {
+  schema_version: number;
+  events: number;
+  bytes: number;
+}
+
+/** Snapshot a live ledger while writers keep committing; never overwrites. */
+export async function sqliteLedgerBackupOnline(
+  path: string,
+  destination: string,
+): Promise<LedgerBackupReport> {
+  return JSON.parse(
+    await native.sqliteLedgerBackupOnline(path, destination),
+  ) as LedgerBackupReport;
+}
+
+/** Copy a ledger the host has quiesced; rejects with a busy error if a writer is active. */
+export async function sqliteLedgerBackupOffline(
+  path: string,
+  destination: string,
+): Promise<LedgerBackupReport> {
+  return JSON.parse(
+    await native.sqliteLedgerBackupOffline(path, destination),
+  ) as LedgerBackupReport;
+}
+
+/** Check integrity and schema version of a ledger backup file. */
+export async function sqliteLedgerVerifyBackup(
+  path: string,
+): Promise<LedgerBackupReport> {
+  return JSON.parse(
+    await native.sqliteLedgerVerifyBackup(path),
+  ) as LedgerBackupReport;
+}
+
+/**
+ * Restore a verified backup. The host must have stopped every writer; with
+ * `replace` the previous file is kept as `<destination>.replaced`.
+ */
+export async function sqliteLedgerRestore(
+  backup: string,
+  destination: string,
+  replace = false,
+): Promise<LedgerBackupReport> {
+  return JSON.parse(
+    await native.sqliteLedgerRestore(backup, destination, replace),
+  ) as LedgerBackupReport;
 }
 
 /** Version of the experimental run lifecycle contract. */

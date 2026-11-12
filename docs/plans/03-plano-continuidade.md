@@ -217,7 +217,8 @@ stack aberta nos PRs #45, #46, #47, #48, #49 e #51; #46, #47, #48, #49 e
 concorrência multi-processo do ledger. A evidência e os
 limites locais estão em `04-plano-storage-ledger.md` e
 `05-auditoria-storage-s0-s5.md`. Não se considera esses PRs integrados em main
-até merge. A auditoria dos quatro serviços com reinícios passou 58/58. A
-decisão de backup/restore do ledger foi registrada e solicitada a `brunosrz`;
-aguardar resposta antes de fixar esse contrato. Memory/context/RAG e adoção em
+até merge. A auditoria dos quatro serviços com reinícios passou 58/58. O
+backup/restore do ledger SQLite foi decidido por `brunosrz` (implementar os modos
+online e offline coordenado pelo host) e está implementado; payloads de storage
+ficam sem limite de tamanho por decisão dele. Memory/context/RAG e adoção em
 consumidores continuam fora desta etapa de auditoria.

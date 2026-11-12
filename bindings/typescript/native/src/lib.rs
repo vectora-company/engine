@@ -638,6 +638,54 @@ pub async fn sqlite_ledger_read(
 }
 
 #[napi]
+pub async fn sqlite_ledger_backup_online(path: String, destination: String) -> Result<String> {
+    let report = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+            .backup_online(destination)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&report)
+}
+
+#[napi]
+pub async fn sqlite_ledger_backup_offline(path: String, destination: String) -> Result<String> {
+    let report = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::backup_offline(path, destination)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&report)
+}
+
+#[napi]
+pub async fn sqlite_ledger_verify_backup(path: String) -> Result<String> {
+    let report =
+        tokio::task::spawn_blocking(move || vectora_engine::storage::sqlite::verify_backup(path))
+            .await
+            .map_err(|_| Error::from_reason("ledger worker failed"))?
+            .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&report)
+}
+
+#[napi]
+pub async fn sqlite_ledger_restore(
+    backup: String,
+    destination: String,
+    replace: bool,
+) -> Result<String> {
+    let report = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::restore(backup, destination, replace)
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&report)
+}
+
+#[napi]
 pub async fn vector_store_upsert(
     config_json: String,
     collection: String,

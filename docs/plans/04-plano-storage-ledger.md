@@ -229,8 +229,7 @@ Os itens de capabilities, testes de storage service-real, restart de Redis/NATS,
 recovery da projeção PostgreSQL (teste isolado) e concorrência do ledger estão
 implementados nas branches da stack e têm os resultados registrados em
 [`05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
-Não são ainda capacidades integradas em `main`. Restam backup/restore (decisão
-de contrato), shutdown gracioso, retenção/limites JetStream e limites/falhas de
+Não são ainda capacidades integradas em `main`. Backup/restore do ledger (online e offline coordenado) está implementado após decisão do mantenedor; restam shutdown gracioso, retenção/limites JetStream e limites/falhas de
 indexação vetorial. A execução combinada inicial de 55 testes teve uma falha
 porque `podman stop` removeu o PostgreSQL auto-removível; após recriar o
 container sem remoção automática e proteger o teste, a execução mais recente

@@ -352,6 +352,31 @@ async def sqlite_ledger_read(
     )
 
 
+async def sqlite_ledger_backup_online(path: str, destination: str) -> dict[str, Any]:
+    """Snapshot a live ledger while writers keep committing; never overwrites."""
+    return json.loads(await _native.sqlite_ledger_backup_online(path, destination))
+
+
+async def sqlite_ledger_backup_offline(path: str, destination: str) -> dict[str, Any]:
+    """Copy a ledger the host has quiesced; fails with a busy error if a writer is active."""
+    return json.loads(await _native.sqlite_ledger_backup_offline(path, destination))
+
+
+async def sqlite_ledger_verify_backup(path: str) -> dict[str, Any]:
+    """Check integrity and schema version of a ledger backup file."""
+    return json.loads(await _native.sqlite_ledger_verify_backup(path))
+
+
+async def sqlite_ledger_restore(
+    backup: str, destination: str, *, replace: bool = False
+) -> dict[str, Any]:
+    """Restore a verified backup; the host must have stopped every writer.
+
+    With ``replace`` the previous file is kept as ``<destination>.replaced``.
+    """
+    return json.loads(await _native.sqlite_ledger_restore(backup, destination, replace))
+
+
 def assemble_turn(
     turn_id: str,
     events: Sequence[JsonObject],
@@ -781,7 +806,11 @@ __all__ = [
     "sqlite_latest_checkpoint",
     "sqlite_ledger_append",
     "sqlite_ledger_append_checkpointed",
+    "sqlite_ledger_backup_offline",
+    "sqlite_ledger_backup_online",
     "sqlite_ledger_read",
+    "sqlite_ledger_restore",
+    "sqlite_ledger_verify_backup",
     "sqlite_model_tool_loop_accept_model_turn",
     "sqlite_model_tool_loop_cancel",
     "sqlite_model_tool_loop_load",

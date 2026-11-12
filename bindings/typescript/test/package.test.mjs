@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -51,7 +51,11 @@ import {
   sqliteRunLoadLatest,
   sqliteRunTransition,
   sqliteRunVerify,
+  sqliteLedgerBackupOffline,
+  sqliteLedgerBackupOnline,
   sqliteLedgerRead,
+  sqliteLedgerRestore,
+  sqliteLedgerVerifyBackup,
   sqliteReserveRun,
   sqliteSaveCheckpoint,
   sqliteLatestCheckpoint,
@@ -172,6 +176,32 @@ test("verification gate rejects sensitive or expired required evidence", () => {
   );
   report.checks[0].evidence[0].redacted = false;
   assert.throws(() => evaluateVerification(report, policy), /must be redacted/);
+});
+
+test("sqlite ledger backup, verify and restore work through Node", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-backup-"));
+  try {
+    const live = join(dir, "ledger.db");
+    const event = (n) => ({ scope: "team", aggregate: "run", event_id: `e${n}`, idempotency_key: `k${n}`, event_type: "step", payload: { n }, expected_version: n - 1 });
+    for (const n of [1, 2]) await sqliteLedgerAppend(live, event(n));
+    const online = join(dir, "online.db");
+    const offline = join(dir, "offline.db");
+    assert.equal((await sqliteLedgerBackupOnline(live, online)).events, 2);
+    assert.equal((await sqliteLedgerBackupOffline(live, offline)).events, 2);
+    assert.equal((await sqliteLedgerVerifyBackup(offline)).events, 2);
+    await assert.rejects(sqliteLedgerBackupOnline(live, online), /invalid ledger input/);
+
+    await sqliteLedgerAppend(live, event(3));
+    assert.equal((await sqliteLedgerRestore(online, live, true)).events, 2);
+    assert.equal((await sqliteLedgerRead(live, "team", "run")).length, 2);
+    assert.equal((await sqliteLedgerVerifyBackup(`${live}.replaced`)).events, 3);
+
+    const garbage = join(dir, "garbage.db");
+    await writeFile(garbage, "not a database");
+    await assert.rejects(sqliteLedgerVerifyBackup(garbage), /corrupt/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("sqlite ledger persists and retries safely through Node", async () => {

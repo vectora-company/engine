@@ -36,7 +36,11 @@ from vectora_engine import (
     sqlite_latest_checkpoint,
     sqlite_ledger_append,
     sqlite_ledger_append_checkpointed,
+    sqlite_ledger_backup_offline,
+    sqlite_ledger_backup_online,
     sqlite_ledger_read,
+    sqlite_ledger_restore,
+    sqlite_ledger_verify_backup,
     sqlite_model_tool_loop_accept_model_turn,
     sqlite_model_tool_loop_cancel,
     sqlite_model_tool_loop_start,
@@ -87,6 +91,42 @@ def test_storage_capabilities_state_backend_differences() -> None:
     assert storage_capabilities({"contract_version": 1})["backends"] == []
     with pytest.raises(RuntimeError, match="unsupported storage contract version"):
         storage_capabilities({"contract_version": 99})
+
+
+def test_sqlite_ledger_backup_verify_and_restore(tmp_path: Path) -> None:
+    live = str(tmp_path / "ledger.db")
+
+    def event(n: int) -> dict[str, Any]:
+        return {
+            "scope": "team",
+            "aggregate": "run",
+            "event_id": f"e{n}",
+            "idempotency_key": f"k{n}",
+            "event_type": "step",
+            "payload": {"n": n},
+            "expected_version": n - 1,
+        }
+
+    for n in (1, 2):
+        asyncio.run(sqlite_ledger_append(live, event(n)))
+    online = str(tmp_path / "online.db")
+    offline = str(tmp_path / "offline.db")
+    assert asyncio.run(sqlite_ledger_backup_online(live, online))["events"] == 2
+    assert asyncio.run(sqlite_ledger_backup_offline(live, offline))["events"] == 2
+    assert asyncio.run(sqlite_ledger_verify_backup(offline))["events"] == 2
+    with pytest.raises(RuntimeError, match="invalid ledger input"):
+        asyncio.run(sqlite_ledger_backup_online(live, online))
+
+    asyncio.run(sqlite_ledger_append(live, event(3)))
+    restored = asyncio.run(sqlite_ledger_restore(online, live, replace=True))
+    assert restored["events"] == 2
+    assert len(asyncio.run(sqlite_ledger_read(live, "team", "run"))) == 2
+    assert asyncio.run(sqlite_ledger_verify_backup(live + ".replaced"))["events"] == 3
+
+    garbage = tmp_path / "garbage.db"
+    garbage.write_bytes(b"not a database")
+    with pytest.raises(RuntimeError, match="corrupt"):
+        asyncio.run(sqlite_ledger_verify_backup(str(garbage)))
 
 
 def test_shared_conformance_fixture() -> None:
