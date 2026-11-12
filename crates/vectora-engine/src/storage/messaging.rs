@@ -23,10 +23,17 @@ pub struct QueueConfig {
     pub namespace: String,
     #[serde(default = "default_visibility_timeout_seconds")]
     pub visibility_timeout_seconds: u64,
+    /// Maximum messages retained by each queue stream.
+    #[serde(default = "default_queue_max_messages")]
+    pub max_messages: u64,
 }
 
 fn default_visibility_timeout_seconds() -> u64 {
     30
+}
+
+fn default_queue_max_messages() -> u64 {
+    100_000
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -445,11 +452,15 @@ impl RedisPubSub {
 
 pub struct RedisStreamQueue {
     store: RedisStore,
+    max_messages: u64,
 }
 
 impl RedisStreamQueue {
-    pub fn new(store: RedisStore) -> Self {
-        Self { store }
+    pub fn new(store: RedisStore, max_messages: u64) -> Self {
+        Self {
+            store,
+            max_messages,
+        }
     }
     fn stream_key(&self, queue: &str) -> Result<String, MessagingError> {
         validate_key(queue)?;
@@ -460,6 +471,8 @@ impl RedisStreamQueue {
         let mut conn = self.store.connection().await?;
         redis::cmd("XADD")
             .arg(key)
+            .arg("MAXLEN")
+            .arg(self.max_messages.min(usize::MAX as u64) as usize)
             .arg("*")
             .arg("payload")
             .arg(payload)
@@ -585,6 +598,7 @@ pub struct NatsStreamQueue {
     stream: String,
     subject: String,
     ack_wait: Duration,
+    max_messages: u64,
 }
 
 impl NatsStreamQueue {
@@ -592,6 +606,7 @@ impl NatsStreamQueue {
         url: &str,
         name: &str,
         ack_wait: Duration,
+        max_messages: u64,
     ) -> Result<Self, MessagingError> {
         validate_identifier(name)?;
         let client = async_nats::connect(url)
@@ -603,6 +618,7 @@ impl NatsStreamQueue {
             stream: format!("VQ_{}", name.to_ascii_uppercase()),
             subject: format!("vectora.queue.{name}"),
             ack_wait,
+            max_messages,
         };
         Ok(queue)
     }
@@ -628,11 +644,16 @@ impl NatsStreamQueue {
 
     async fn ensure_stream(&self) -> Result<async_nats::jetstream::stream::Stream, MessagingError> {
         self.jetstream
-            .get_or_create_stream(async_nats::jetstream::stream::Config {
+            .create_or_update_stream(async_nats::jetstream::stream::Config {
                 name: self.stream.clone(),
                 subjects: vec![self.subject.clone()],
+                max_messages: self.max_messages.min(i64::MAX as u64) as i64,
                 ..Default::default()
             })
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        self.jetstream
+            .get_stream(&self.stream)
             .await
             .map_err(|_| MessagingError::Storage)
     }
@@ -730,12 +751,15 @@ pub enum QueueAdapter {
 
 impl QueueAdapter {
     pub async fn connect(config: QueueConfig) -> Result<Self, MessagingError> {
+        if config.visibility_timeout_seconds == 0 || config.max_messages == 0 {
+            return Err(MessagingError::InvalidInput);
+        }
         match config.backend {
             super::QueueBackend::RedisStreams => Ok(Self::Redis {
-                queue: RedisStreamQueue::new(RedisStore::connect(
-                    &config.endpoint,
-                    &config.namespace,
-                )?),
+                queue: RedisStreamQueue::new(
+                    RedisStore::connect(&config.endpoint, &config.namespace)?,
+                    config.max_messages,
+                ),
                 name: config.namespace,
                 visibility_timeout: Duration::from_secs(config.visibility_timeout_seconds),
             }),
@@ -744,6 +768,7 @@ impl QueueAdapter {
                     &config.endpoint,
                     &config.namespace,
                     Duration::from_secs(config.visibility_timeout_seconds),
+                    config.max_messages,
                 )
                 .await?,
             }),
@@ -899,6 +924,16 @@ impl RedisSubscription {
 mod tests {
     use super::*;
 
+    #[test]
+    fn queue_retention_has_a_bounded_backward_compatible_default() {
+        let config: QueueConfig = serde_json::from_str(
+            r#"{"backend":"redis_streams","endpoint":"redis://localhost","namespace":"jobs"}"#,
+        )
+        .unwrap();
+        assert_eq!(config.visibility_timeout_seconds, 30);
+        assert_eq!(config.max_messages, 100_000);
+    }
+
     #[tokio::test]
     async fn redis_kv_ttl_and_pubsub_against_real_service() {
         let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") else {
@@ -989,6 +1024,7 @@ mod tests {
                 endpoint: url,
                 namespace: format!("queue_{}", std::process::id()),
                 visibility_timeout_seconds: 1,
+                max_messages: 100_000,
             })
             .await
             .unwrap();
@@ -1025,6 +1061,7 @@ mod tests {
                 endpoint: url,
                 namespace: format!("jobs_{}", std::process::id()),
                 visibility_timeout_seconds: 1,
+                max_messages: 100_000,
             })
             .await
             .unwrap();
@@ -1074,6 +1111,7 @@ mod tests {
                 endpoint,
                 namespace: format!("ackq_{}", unique_suffix()),
                 visibility_timeout_seconds: 1,
+                max_messages: 100_000,
             })
             .await
             .unwrap();
@@ -1230,6 +1268,7 @@ mod tests {
             endpoint: url,
             namespace,
             visibility_timeout_seconds: 1,
+            max_messages: 100_000,
         })
         .await
         .unwrap();
@@ -1270,6 +1309,7 @@ mod tests {
             endpoint: url,
             namespace: format!("restartq_{suffix}"),
             visibility_timeout_seconds: 1,
+            max_messages: 100_000,
         })
         .await
         .unwrap();
@@ -1320,11 +1360,8 @@ mod tests {
         }
     }
 
-    /// Documents current retention: nothing removes acknowledged jobs, no
-    /// maximum age or length applies, and redelivery is not capped. A change to
-    /// that policy must update this test deliberately.
     #[tokio::test]
-    async fn redis_stream_keeps_acknowledged_entries_without_a_length_bound() {
+    async fn redis_stream_trims_oldest_entries_to_configured_length() {
         let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") else {
             return;
         };
@@ -1333,6 +1370,7 @@ mod tests {
             endpoint: url,
             namespace: format!("retain_{}", unique_suffix()),
             visibility_timeout_seconds: 1,
+            max_messages: 1,
         })
         .await
         .unwrap();
@@ -1342,16 +1380,6 @@ mod tests {
         for payload in [b"one".to_vec(), b"two".to_vec()] {
             adapter.enqueue(payload).await.unwrap();
         }
-        for _ in 0..2 {
-            adapter
-                .receive("worker", "workers", Duration::from_secs(1))
-                .await
-                .unwrap()
-                .unwrap()
-                .ack()
-                .await
-                .unwrap();
-        }
         let mut conn = queue.store.connection().await.unwrap();
         let key = queue.stream_key(name).unwrap();
         let length: usize = redis::cmd("XLEN")
@@ -1359,11 +1387,17 @@ mod tests {
             .query_async(&mut conn)
             .await
             .unwrap();
-        assert_eq!(length, 2, "acknowledged entries are retained in the stream");
+        assert_eq!(length, 1, "the configured stream limit is enforced");
+        let delivery = adapter
+            .receive("worker", "workers", Duration::from_secs(1))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(delivery.payload(), b"two");
     }
 
     #[tokio::test]
-    async fn nats_stream_uses_unbounded_limits_retention_and_uncapped_redelivery() {
+    async fn nats_stream_uses_configured_finite_retention() {
         use async_nats::jetstream::stream::RetentionPolicy;
         let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") else {
             return;
@@ -1373,6 +1407,7 @@ mod tests {
             endpoint: url,
             namespace: format!("retain_{}", unique_suffix()),
             visibility_timeout_seconds: 1,
+            max_messages: 1,
         })
         .await
         .unwrap();
@@ -1400,9 +1435,7 @@ mod tests {
             "acknowledged jobs stay in the stream"
         );
         assert!(matches!(info.config.retention, RetentionPolicy::Limits));
-        assert_eq!(info.config.max_messages, -1);
+        assert_eq!(info.config.max_messages, 1);
         assert_eq!(info.config.max_age, Duration::ZERO);
-        let consumer = queue.ensure("workers").await.unwrap();
-        assert_eq!(consumer.cached_info().config.max_deliver, -1);
     }
 }
