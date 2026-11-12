@@ -226,3 +226,29 @@ de evento do ledger e as demais validações de entrada existentes continuam.
 Evidência local: 5 testes Rust em `sqlite::backup::tests` (snapshot consistente
 com escritor ativo, `Busy`, restore com `.replaced`, destino em uso, arquivos
 corrompidos/estrangeiros/esquema novo) e testes equivalentes em Python e Node.
+
+## Decisão vital aguardando `brunosrz`: retenção e redelivery das filas duráveis
+
+Evidência (testes de caracterização contra Redis e NATS reais, 2026-11-12):
+
+- **Redis Streams:** depois do ACK a entrada continua no stream (`XLEN` não
+  diminui); não há `XTRIM`/`MAXLEN`. O stream cresce sem limite.
+- **NATS JetStream:** o stream é criado com retenção `Limits`, `max_messages`
+  e `max_age` ilimitados; jobs confirmados permanecem (`messages` não diminui).
+  O consumidor tem `max_deliver` ilimitado: uma mensagem que nunca é confirmada
+  é reentregue indefinidamente, e `dead_letter_queue` consta como não
+  implementado em `capabilities()`.
+
+Pergunta: qual política de retenção e de redelivery as filas devem adotar?
+
+1. Remover o job ao confirmar (WorkQueue no NATS; `XDEL`/`XACKDEL` no Redis):
+   sem crescimento, mas sem replay após o ACK.
+2. Manter com limite configurável pelo host (idade e/ou número máximo de
+   entradas, mais `max_deliver`): preserva replay limitado; o host escolhe
+   valores e responde por perda de dados ao ultrapassá-los.
+3. Manter como está: sem mudança de contrato, com crescimento ilimitado e
+   redelivery sem teto como limitação documentada.
+
+A escolha afeta perda de dados, replay e configuração pública. Trabalho
+dependente: implementar a política escolhida e os testes service-real
+correspondentes. Perguntado a `brunosrz` no chat; aguardar a resposta.
