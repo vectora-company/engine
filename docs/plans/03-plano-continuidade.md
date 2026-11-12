@@ -212,8 +212,9 @@ usado como evidência nesta atualização.
 ## Revalidação do loop em 2026-11-12
 
 A próxima entrega do plano continua sendo a auditoria S0–S5 de storage. Há uma
-stack aberta #45–#51; os PRs #46–#51 cobrem capabilities, testes service-real,
-reinício de serviços e concorrência multi-processo do ledger. A evidência e os
+stack aberta nos PRs #45, #46, #47, #48, #49 e #51; #46, #47, #48, #49 e
+#51 cobrem capabilities, testes service-real, reinício de serviços e
+concorrência multi-processo do ledger. A evidência e os
 limites locais estão em `04-plano-storage-ledger.md` e
 `05-auditoria-storage-s0-s5.md`. Não se considera esses PRs integrados em main
 até merge. A auditoria dos quatro serviços com reinícios passou 58/58. A
