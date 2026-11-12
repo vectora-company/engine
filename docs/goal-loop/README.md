@@ -38,3 +38,13 @@ em `docs/analyses/` e o checklist específico em `docs/checklists/`. Os arquivos
 gerais relacionados são o [protocolo detalhado](../plans/05-loop-de-desenvolvimento.md),
 o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 [análise geral](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
+
+## Regras operacionais do mantenedor
+
+- Commit, push e PR são obrigatórios; só aprovar PR e criar issue exigem pedido.
+- PRs são sempre empilhados: cada um tem como base a branch do anterior, e a
+  próxima etapa começa sem esperar aprovação ou CI.
+- Um PR aberto é o trabalho ativo: liste os PRs antes de escolher escopo.
+- Decisões vitais são perguntadas no chat, não no GitHub.
+- Storage segue a equivalência por par descrita na
+  [spec 02](../specs/02-storage-memoria-contexto-rag.md).

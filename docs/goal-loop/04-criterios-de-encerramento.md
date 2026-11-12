@@ -18,7 +18,8 @@ comportamento externo. Antes de parar:
 1. documente a pergunta em `docs/analyses/`, com opções, consequências e etapa
    bloqueada;
 2. complete todo trabalho independente da decisão;
-3. faça uma pergunta objetiva a `brunosrz` e aguarde a resposta;
+3. faça uma pergunta objetiva a `brunosrz` no chat (não em issue nem em
+   comentário de PR, sem marcá-lo no GitHub) e aguarde a resposta;
 4. não implemente a opção presumida nem avance em trabalho dependente.
 
 ## 3. Bloqueio externo sem trabalho independente
@@ -34,5 +35,7 @@ até essa condição mudar.
 - uma etapa acabou, mas outras etapas aprovadas continuam pendentes;
 - o trabalho é demorado ou exige corrigir falhas locais;
 - checks remotos de CI estão executando ou falharam: este loop não os acompanha;
+- o PR anterior da stack aguarda aprovação: abra o próximo PR empilhado sobre
+  ele e continue;
 - falta de conveniência ou de uma nova instrução quando o próximo passo já está
   definido e aprovado.

@@ -9,13 +9,21 @@ Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 ## Preparação e escopo
 
 - [ ] Confirmar repositório, branch, base da stack e estado da working tree.
+- [ ] Listar PRs abertos; tratar o PR do topo como trabalho ativo e confirmar
+      a branch atual, pois o checkout é compartilhado.
+- [ ] Para storage, inspecionar `podman ps -a` e usar os serviços locais reais;
+      registrar as versões efetivamente executadas.
 - [ ] Ler `AGENTS.md`, instruções locais e [análise/referências](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 - [ ] Identificar spec, issue local de origem e plano ativo.
 - [ ] Registrar objetivo, comportamento esperado, exemplos e fora de escopo.
 - [ ] Inspecionar implementação e testes existentes; separar fatos, hipóteses e
       lacunas.
 - [ ] Identificar consumidores e versões dos bindings afetados.
-- [ ] Registrar decisões pendentes; interromper se houver decisão vital.
+- [ ] Registrar decisões pendentes; interromper somente o trabalho que depende
+      de uma decisão vital e continuar etapas independentes aprovadas.
+- [ ] Para storage, consultar a matriz por pares: implementar a base viável nos
+      dois adapters; registrar como especialização apenas incompatibilidade
+      técnica comprovada.
 
 ## Contratos e desenho
 
@@ -55,7 +63,14 @@ Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
       incidentais.
 - [ ] Registrar SHA, comandos, resultados e limitações reproduzíveis.
 - [ ] Atualizar o plano com itens restantes, riscos e próximo passo.
-- [ ] Commitar e abrir/atualizar PR conforme o fluxo solicitado pelo mantenedor.
+- [ ] Executar Prettier nos Markdown alterados; reaplicar `git add` se formatar.
+- [ ] Fazer commit e push para o remoto GitHub; o `origin` local pode ser um
+      clone auxiliar.
+- [ ] Abrir PR com base na branch do PR anterior da stack e conferir a base no
+      GitHub.
+- [ ] Iniciar a próxima etapa em nova branch empilhada sem esperar aprovação ou
+      CI. Aprovar PRs e criar issues somente mediante pedido explícito.
+- [ ] Antes de parar contêiner de teste, verificar `AutoRemove`.
 
 ## Critério de conclusão da etapa
 

@@ -20,6 +20,28 @@ as regras específicas de uma spec ou de um plano.
    conjunto; não condicione esse fluxo à publicação npm.
 7. Documentação primária das bibliotecas e protocolos externos citados.
 
+## Revalidação de sessão e PR stack
+
+Antes de escolher escopo, liste os PRs abertos com `gh pr list`; o PR no topo é
+o trabalho ativo e base do próximo PR.
+Confira `git branch --show-current`, `git status` e o SHA local porque o
+checkout pode ser compartilhado. Faça commit, push e PR em cada etapa; PRs
+novos são empilhados sobre a branch do PR anterior e a próxima etapa começa
+sem aguardar aprovação ou CI. Decisões vitais são perguntadas a `brunosrz` aqui
+no chat, nunca por marcação em GitHub.
+
+Para storage, inspecione os serviços já instalados com `podman ps -a`, confirme
+imagem/versão em execução e configure as variáveis `VECTORA_TEST_*`. Teste
+condicional sem variável de serviço não executa integração e deve ser anotado
+como `não executado`. Antes de parar/reiniciar um contêiner, confira
+`AutoRemove`; não registre credenciais. CI remoto não é evidência desta etapa.
+
+Em storage, aplique primeiro a base funcional equivalente entre os pares
+definidos na spec 02. Só registre especialização se a incompatibilidade estiver
+verificada para as versões concretas dos backends e sua justificativa estiver
+visível em `capabilities()`; uma diferença observada hoje pode ser lacuna, não
+uma decisão de produto.
+
 Issues locais e auditorias são material de requisitos e contexto. Não são prova
 de que algo já foi implementado, nem autorização para copiar comportamento de
 produto para a Engine. Issues abertas no GitHub não substituem os documentos
@@ -68,7 +90,8 @@ com uma nota curta para itens bloqueados ou não aplicáveis.
 
 ## Decisões que exigem o mantenedor
 
-Pare antes de implementar quando uma resposta alterar de modo material:
+Pare antes de implementar a parte dependente quando uma resposta alterar de
+modo material:
 
 - contratos públicos, formato de dados ou estratégia de migração;
 - segurança, trust boundary, permissões ou execução de efeitos externos;
@@ -76,6 +99,7 @@ Pare antes de implementar quando uma resposta alterar de modo material:
 - semântica de consistência, retenção, recuperação ou perda de dados;
 - escopo do produto, responsabilidade do host ou dependência entre produtos.
 
-Documente a pergunta, opções, impactos e trabalho bloqueado em `docs/`; peça a
-decisão de `brunosrz` e encerre o loop até receber resposta. Não transforme uma
-preferência presumida em decisão arquitetural.
+Documente a pergunta, opções, impactos e trabalho dependente em `docs/`; peça a
+decisão de `brunosrz` aqui no chat. Conclua primeiro o trabalho independente e
+encerre o loop somente se não houver outra etapa independente aprovada. Não
+transforme uma preferência presumida em decisão arquitetural.

@@ -8,7 +8,10 @@ que permitam revisar o que foi feito e o que permanece pendente.
 
 ## Retomada
 
-1. Confirme repositório, branch, base da stack e estado da working tree.
+1. Confirme repositório, branch, base da stack e estado da working tree, liste
+   os PRs abertos (`gh pr list`; o PR aberto é o trabalho ativo) e, para
+   storage, os contêineres de teste (`podman ps -a`). O checkout pode ser
+   compartilhado com outra sessão: não presuma a branch.
 2. Leia `AGENTS.md`, o plano ativo e a spec correspondente. Consulte a análise
    e o checklist específicos; aplique também o [checklist geral](../checklists/00-checklist-de-implementacao.md)
    e as [regras de evidência](03-fontes-e-evidencias.md).
@@ -40,8 +43,11 @@ que permitam revisar o que foi feito e o que permanece pendente.
    deste loop.
 6. Revise o diff e atualize plano, análise e checklist para refletirem o código
    real. Não marque como concluído o que só está parcialmente implementado.
-7. Faça commit e atualize o PR/stack segundo as instruções do mantenedor. Antes
-   de iniciar outra capability, confirme sua autorização e a base correta.
+7. Faça commit, push e abra o PR com base na branch do PR anterior da stack;
+   é obrigatório e não depende de pedido. Inicie a próxima etapa já em uma nova
+   branch empilhada, sem esperar aprovação nem CI. Aprovar PRs e criar issues
+   só ocorre quando `brunosrz` pedir. Use a próxima etapa já aprovada no plano
+   ativo e confirme a base correta antes de abrir a branch empilhada.
 
 ## Validação experimental pelo GH Bot
 
@@ -56,5 +62,7 @@ reimplementar o runtime em TypeScript.
 ## Continuidade
 
 Concluir uma etapa não conclui o goal enquanto houver outra etapa aprovada no
-plano ativo. Ao terminar uma etapa, selecione a próxima pendente. Pare somente
+plano ativo. Ao terminar uma etapa, selecione a próxima pendente e empilhe o
+PR seguinte sobre o anterior. Em storage, aplique a equivalência por par:
+implemente nos dois lados do par e só especialize o que for incompatível. Pare somente
 nas condições do documento de [encerramento](04-criterios-de-encerramento.md).

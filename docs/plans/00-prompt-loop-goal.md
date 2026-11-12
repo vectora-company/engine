@@ -1,6 +1,12 @@
 # Goal loop
 
 Siga [`AGENTS.md`](../../AGENTS.md) e o [guia do loop](../goal-loop/README.md).
+Antes de escolher o trabalho, confira `git branch --show-current`, `git status`,
+`gh pr list --repo vectora-company/engine` e, em storage, `podman ps -a`; o PR
+aberto no topo da stack é o trabalho ativo. Faça commit, push para o remoto
+GitHub e PR obrigatoriamente. Cada PR novo usa a branch do PR anterior como
+base; abra a próxima etapa sem esperar aprovação nem CI. Decisões vitais são
+perguntadas a brunosrz aqui no chat, sem marcar no GitHub.
 Leia o [plano operacional](../goal-loop/01-plano-operacional.md), o
 [checklist](../goal-loop/02-checklist-do-loop.md), as
 [regras de evidência](../goal-loop/03-fontes-e-evidencias.md) e os

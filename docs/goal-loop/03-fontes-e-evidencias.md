@@ -41,6 +41,13 @@ executado`. Não use check remoto de CI como evidência neste loop; não afirme
 paridade, suporte ou ganho de desempenho além do que os testes/medições realmente
 cobrem.
 
+Evidência de serviço real: registre as variáveis usadas (`VECTORA_TEST_REDIS_URL`,
+`VECTORA_TEST_NATS_URL`, `VECTORA_TEST_QDRANT_URL`, `VECTORA_TEST_POSTGRES_URL`
+e, para reinício de serviços, `VECTORA_TEST_PODMAN_RESTART`), a contagem de
+testes executados e o ambiente. Sem a variável, os testes retornam sem validar o
+serviço: classifique como `não executado`, nunca como `passou`. Não registre
+senhas nem URLs com credenciais.
+
 Ao revisitar um finding, classifique-o como `confirmado`, `corrigido`, `não
 reproduzido` ou `ainda não verificado`, com caminhos de código/teste que
 sustentem a classificação. Se a evidência mudar, atualize análise, checklist e
