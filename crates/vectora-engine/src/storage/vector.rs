@@ -6,6 +6,15 @@ use serde_json::Value;
 use thiserror::Error;
 
 pub const VECTOR_CONTRACT_VERSION: u16 = 2;
+const MAX_VECTOR_DIMENSIONS: usize = 65_536;
+
+fn valid_vector_dimensions(dimensions: usize) -> bool {
+    (1..=MAX_VECTOR_DIMENSIONS).contains(&dimensions)
+}
+
+fn valid_vector(vector: &[f32]) -> bool {
+    valid_vector_dimensions(vector.len()) && vector.iter().all(|value| value.is_finite())
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -178,10 +187,7 @@ fn lance_batch(
 impl VectorStore for LanceDbStore {
     async fn upsert(&self, collection: &str, record: VectorRecord) -> Result<(), VectorError> {
         QdrantStore::collection_name(collection)?;
-        if record.scope.trim().is_empty()
-            || record.vector.is_empty()
-            || record.vector.iter().any(|v| !v.is_finite())
-        {
+        if record.scope.trim().is_empty() || !valid_vector(&record.vector) {
             return Err(VectorError::InvalidInput);
         }
         let names = self
@@ -258,11 +264,7 @@ impl VectorStore for LanceDbStore {
         use futures_util::TryStreamExt;
         use lancedb::query::{ExecutableQuery, QueryBase};
         QdrantStore::collection_name(collection)?;
-        if scope.trim().is_empty()
-            || vector.is_empty()
-            || vector.iter().any(|v| !v.is_finite())
-            || !(1..=1000).contains(&limit)
-        {
+        if scope.trim().is_empty() || !valid_vector(&vector) || !(1..=1000).contains(&limit) {
             return Err(VectorError::InvalidInput);
         }
         let table = self
@@ -349,7 +351,7 @@ impl QdrantStore {
         dimensions: usize,
     ) -> Result<(), VectorError> {
         Self::collection_name(collection)?;
-        if dimensions == 0 || dimensions > 65536 {
+        if !valid_vector_dimensions(dimensions) {
             return Err(VectorError::InvalidInput);
         }
         let path = format!("/collections/{collection}");
@@ -390,11 +392,7 @@ impl QdrantStore {
 impl VectorStore for QdrantStore {
     async fn upsert(&self, collection: &str, record: VectorRecord) -> Result<(), VectorError> {
         Self::collection_name(collection)?;
-        if record.scope.trim().is_empty()
-            || record.vector.is_empty()
-            || record.vector.len() > 65536
-            || record.vector.iter().any(|v| !v.is_finite())
-        {
+        if record.scope.trim().is_empty() || !valid_vector(&record.vector) {
             return Err(VectorError::InvalidInput);
         }
         self.ensure_collection(collection, record.vector.len())
@@ -428,11 +426,7 @@ impl VectorStore for QdrantStore {
         limit: u32,
     ) -> Result<Vec<VectorHit>, VectorError> {
         Self::collection_name(collection)?;
-        if scope.trim().is_empty()
-            || vector.is_empty()
-            || vector.iter().any(|v| !v.is_finite())
-            || !(1..=1000).contains(&limit)
-        {
+        if scope.trim().is_empty() || !valid_vector(&vector) || !(1..=1000).contains(&limit) {
             return Err(VectorError::InvalidInput);
         }
         let response = self.request(reqwest::Method::POST, &format!("/collections/{collection}/points/search"))

@@ -255,7 +255,8 @@ ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 �
 | [#61](https://github.com/vectora-company/engine/pull/61) | Teto de tentativas, DLQ consumível e bindings Python/TypeScript para filas.         |
 | [#62](https://github.com/vectora-company/engine/pull/62) | Recuperação de falha na transferência para a DLQ em Redis Streams e NATS JetStream. |
 | [#63](https://github.com/vectora-company/engine/pull/63) | Recebimento de uma mensagem por chamada no JetStream, com expiração no broker.      |
-| Em andamento                                             | Preservação da configuração de streams e consumidores JetStream existentes.         |
+| [#64](https://github.com/vectora-company/engine/pull/64) | Preservação da configuração de streams e consumidores JetStream existentes.         |
+| Em andamento                                             | Limite comum de dimensões para gravar e buscar vetores em LanceDB e Qdrant.         |
 
 O teste service-real combinado de storage passou 58/58 com Redis, NATS,
 Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros

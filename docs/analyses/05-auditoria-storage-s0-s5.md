@@ -359,6 +359,14 @@ correspondem à política da Engine, a configuração é reutilizada. A validaç
 de recursos previamente configurados e nomes sobrepostos com NATS real fica
 pendente.
 
+## Limite de dimensões em LanceDB e Qdrant
+
+Qdrant aplicava o teto na gravação e na criação da coleção. A busca nos dois
+adapters e a gravação no LanceDB só verificavam se o vetor era vazio ou tinha
+componentes não finitos. A branch empilhada sobre #64 usa a mesma validação de
+1 a 65536 dimensões finitas nos quatro caminhos. A verificação dos extremos
+em execução fica pendente.
+
 ## Verificação da branch empilhada sobre #57
 
 Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:
