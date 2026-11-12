@@ -18,7 +18,8 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Inventariar adapters de KV, queue e pub/sub Redis/NATS.
 - [x] Inventariar adapters vetoriais LanceDB/Qdrant e diferenças conhecidas.
 - [x] Cobrir concorrência entre conexões (threads), conflito de versão/idempotência, retry idêntico concorrente, restart do arquivo e limites de leitura do ledger SQLite.
-- [ ] Cobrir backup/restore, concorrência entre processos independentes e recovery operacional do ledger.
+- [x] Cobrir concorrência entre processos independentes no ledger SQLite (3 processos, mesma versão esperada: 1 commit e 2 `VersionConflict`).
+- [ ] Cobrir backup/restore e recovery operacional do ledger (requer decisão de contrato sobre o mecanismo de backup).
 - [x] Rodar os testes service-real existentes e novos de ACK/redelivery, TTL, pub/sub sem assinante e isolamento de namespace contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 52 testes de `storage::` passam.
 - [x] Cobrir reinício dos serviços: Redis e NATS JetStream (KV e filas retêm dados e o adapter volta a operar) e PostgreSQL parado/religado (append local continua `Pending`; a outbox drena em ordem). Habilitado por `VECTORA_TEST_PODMAN_RESTART`.
 - [ ] Cobrir shutdown gracioso do adapter, retenção/limites JetStream e reinício do Qdrant.

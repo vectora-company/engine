@@ -98,8 +98,12 @@ exatamente um evento e o outro recebe `VersionConflict`; retries idênticos
 concorrentes devolvem o mesmo evento sem duplicar; eventos e idempotência
 sobrevivem à reabertura do arquivo; cursor/limite inválidos falham com
 `InvalidInput`. Resultado local: 12 testes de `storage::sqlite::tests` passam;
-nenhum defeito reproduzido. Limites: threads não substituem processos
-independentes, e backup/restore e recovery operacional não foram cobertos.
+nenhum defeito reproduzido. Também há um teste com 3 processos independentes
+(o binário de teste reexecuta a si mesmo como escritor): com a mesma versão
+esperada, exatamente um confirma e os outros dois recebem `VersionConflict`.
+Limite: backup/restore e recovery operacional não foram cobertos; o mecanismo
+de backup (cópia online do arquivo SQLite) afeta o contrato e fica como decisão
+a registrar antes de implementar.
 
 ## Matriz service-real
 
