@@ -51,6 +51,13 @@ static STORAGE_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 static QUEUE_DELIVERIES: OnceLock<
     Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>>,
 > = OnceLock::new();
+type KvWatchMap = Mutex<HashMap<String, vectora_engine::storage::messaging::KvWatch>>;
+static KV_WATCHES: OnceLock<KvWatchMap> = OnceLock::new();
+
+fn kv_watches() -> &'static KvWatchMap {
+    KV_WATCHES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 static PUBSUB_SUBSCRIPTIONS: OnceLock<
     Mutex<
         HashMap<
@@ -838,6 +845,54 @@ pub async fn kv_store_compare_and_set(
         )
         .await
         .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
+pub async fn kv_watch_open(config_json: String, prefix: String) -> Result<String> {
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let watch = store
+        .watch(&prefix)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let id = format!(
+        "kv-watch-{}",
+        STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    kv_watches()
+        .lock()
+        .map_err(|_| Error::from_reason("KV watch handle lock failed"))?
+        .insert(id.clone(), watch);
+    Ok(id)
+}
+
+#[napi]
+pub async fn kv_watch_receive(watch_id: String, timeout_ms: u32) -> Result<String> {
+    let watch = kv_watches()
+        .lock()
+        .map_err(|_| Error::from_reason("KV watch handle lock failed"))?
+        .get(&watch_id)
+        .cloned()
+        .ok_or_else(|| Error::from_reason("unknown KV watch"))?;
+    let change = watch
+        .receive(std::time::Duration::from_millis(timeout_ms.into()))
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&change)
+}
+
+#[napi]
+pub async fn kv_watch_close(watch_id: String) -> Result<()> {
+    let watch = kv_watches()
+        .lock()
+        .map_err(|_| Error::from_reason("KV watch handle lock failed"))?
+        .remove(&watch_id)
+        .ok_or_else(|| Error::from_reason("unknown KV watch"))?;
+    watch.close().await;
+    Ok(())
 }
 
 #[napi]

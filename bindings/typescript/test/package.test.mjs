@@ -27,6 +27,9 @@ import {
   modelToolLoopContractVersion,
   rerank,
   rerankContractVersion,
+  kvWatchOpen,
+  kvWatchReceive,
+  kvWatchClose,
   kvStoreIncrement,
   kvStoreCompareAndSet,
   kvStoreGetWithRevision,
@@ -1500,6 +1503,43 @@ for (const [backend, endpoint] of [
       assert.equal(await kvStoreIncrement(config, key, -2, 60), -2);
     } finally {
       await kvStoreDelete(config, key);
+    }
+  });
+}
+
+for (const [backend, endpoint] of [
+  ["redis", process.env.VECTORA_TEST_REDIS_WATCH_URL],
+  ["nats_jetstream", process.env.VECTORA_TEST_NATS_URL],
+]) {
+  test(`KV watch filters and closes live subscriptions in ${backend}`, { skip: !endpoint }, async () => {
+    const namespace = `kv_watch_${randomUUID()}`;
+    const config = { backend, endpoint, namespace };
+    const other = { backend, endpoint, namespace: `${namespace}_other` };
+    await kvStorePut(config, "job.old", 1, 60);
+    const watch = await kvWatchOpen(config, "job.");
+    let closed = false;
+    try {
+      await kvStorePut(config, "other", 1, 60);
+      await kvStorePut(other, "job.foreign", 1, 60);
+      assert.equal(await kvWatchReceive(watch, 100), null);
+      await kvStoreIncrement(config, "job.counter", 1, 60);
+      assert.deepEqual(await kvWatchReceive(watch, 2000), { key: "job.counter", kind: "put" });
+      await kvStoreDelete(config, "job.counter");
+      assert.deepEqual(await kvWatchReceive(watch, 2000), { key: "job.counter", kind: "remove" });
+      await kvStorePut(config, "job.expires", 1, 1);
+      assert.deepEqual(await kvWatchReceive(watch, 2000), { key: "job.expires", kind: "put" });
+      assert.deepEqual(await kvWatchReceive(watch, 4000), { key: "job.expires", kind: "remove" });
+      const pending = kvWatchReceive(watch, 30_000);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      await kvWatchClose(watch);
+      closed = true;
+      assert.equal(await pending, null);
+      await assert.rejects(kvWatchReceive(watch, 100), /unknown KV watch/);
+    } finally {
+      if (!closed) await kvWatchClose(watch);
+      await kvStoreDelete(config, "job.old");
+      await kvStoreDelete(config, "other");
+      await kvStoreDelete(other, "job.foreign");
     }
   });
 }

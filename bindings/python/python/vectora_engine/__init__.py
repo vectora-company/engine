@@ -91,6 +91,23 @@ async def kv_store_increment(
     return await _native.kv_store_increment(json.dumps(config), key, delta, ttl_seconds)
 
 
+async def kv_watch_open(config: JsonObject, prefix: str = "") -> str:
+    """Subscribe to live changes for a literal prefix."""
+    return await _native.kv_watch_open(json.dumps(config), prefix)
+
+
+async def kv_watch_receive(
+    watch_id: str, timeout_ms: int = 30_000
+) -> dict[str, Any] | None:
+    """Wait for a key change, returning None on timeout or concurrent close."""
+    return json.loads(await _native.kv_watch_receive(watch_id, timeout_ms))
+
+
+async def kv_watch_close(watch_id: str) -> None:
+    """Close a KV watch and release its subscription."""
+    await _native.kv_watch_close(watch_id)
+
+
 async def kv_store_delete(config: JsonObject, key: str) -> None:
     """Remove a key from the selected KV namespace."""
     await _native.kv_store_delete(json.dumps(config), key)
@@ -842,6 +859,9 @@ __all__ = [
     "kv_store_increment",
     "kv_store_list_keys",
     "kv_store_put",
+    "kv_watch_close",
+    "kv_watch_open",
+    "kv_watch_receive",
     "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_stream",

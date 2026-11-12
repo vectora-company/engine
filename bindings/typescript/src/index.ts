@@ -517,6 +517,9 @@ interface NativeBinding {
     delta: number,
     ttlSeconds?: number,
   ): Promise<number>;
+  kvWatchOpen(configJson: string, prefix: string): Promise<string>;
+  kvWatchReceive(watchId: string, timeoutMs: number): Promise<string>;
+  kvWatchClose(watchId: string): Promise<void>;
   kvStoreDelete(configJson: string, key: string): Promise<void>;
   kvStoreListKeys(
     configJson: string,
@@ -928,6 +931,31 @@ export async function kvStoreIncrement(
     delta,
     ttlSeconds,
   );
+}
+
+export interface KvChange {
+  key: string;
+  kind: "put" | "remove";
+}
+
+export async function kvWatchOpen(
+  config: KvStoreConfig,
+  prefix = "",
+): Promise<string> {
+  return native.kvWatchOpen(JSON.stringify(config), prefix);
+}
+
+export async function kvWatchReceive(
+  watchId: string,
+  timeoutMs = 30_000,
+): Promise<KvChange | null> {
+  return JSON.parse(
+    await native.kvWatchReceive(watchId, timeoutMs),
+  ) as KvChange | null;
+}
+
+export async function kvWatchClose(watchId: string): Promise<void> {
+  await native.kvWatchClose(watchId);
 }
 
 /** Remove a key from the selected KV namespace. */

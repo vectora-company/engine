@@ -427,7 +427,7 @@ bindings passaram. A suíte Rust completa não foi repetida.
 
 ## Incremento atômico no KV
 
-A branch sobre #70 soma inteiros JSON via leitura com revisão e escrita
+O PR #71 soma inteiros JSON via leitura com revisão e escrita
 condicional. A criação concorrente usa Lua no Redis e a sequência esperada
 do subject no JetStream. No NATS, a recriação usa a revisão do marcador de
 remoção e envia o TTL no mesmo publish. A implementação evita o caminho
@@ -441,6 +441,24 @@ de overflow e valor incompatível, invalidação da revisão antiga e TTL
 após recriação. A wheel CPython 3.13 passou concorrência e delta negativo nos
 dois serviços. Core e addon compilaram em release. Checks dos bindings
 passaram. A suíte Rust completa não foi repetida.
+
+## Observação de mudanças no KV
+
+A branch sobre #71 expõe assinatura por prefixo literal em Rust, Python e
+TypeScript. O Redis usa [notificações de keyspace](https://redis.io/docs/latest/develop/pubsub/keyspace-notifications/)
+com as classes de gravação, remoção, expiração e eviction. O JetStream
+usa [watch_all](https://docs.rs/async-nats/0.52.0/async_nats/jetstream/kv/struct.Store.html#method.watch_all)
+para mudanças futuras e normaliza marcadores de remoção e expiração.
+A assinatura é uma fonte de invalidação sem replay portável. O Redis exige
+configuração prévia e a Engine confere o requisito na abertura da assinatura.
+
+Core e addon Node compilaram em release. A suíte Node passou 44/44 com Redis
+8.10.3 e NATS 2.15.3 reais, incluindo filtro, isolamento, ausência de replay
+inicial, gravação, remoção, expiração e cancelamento. A wheel CPython 3.13
+passou gravação, remoção e cancelamento nos dois serviços. O Redis recusou
+watch com notificações desligadas. A configuração temporária do contêiner
+de teste foi restaurada. Typecheck e linters dos bindings passaram. A suíte
+Rust completa não foi repetida.
 
 ## Verificação da branch empilhada sobre #57
 

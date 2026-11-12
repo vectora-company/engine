@@ -51,6 +51,13 @@ static STORAGE_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 static QUEUE_DELIVERIES: OnceLock<
     Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>>,
 > = OnceLock::new();
+type KvWatchMap = Mutex<HashMap<String, vectora_engine::storage::messaging::KvWatch>>;
+static KV_WATCHES: OnceLock<KvWatchMap> = OnceLock::new();
+
+fn kv_watches() -> &'static KvWatchMap {
+    KV_WATCHES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 static PUBSUB_SUBSCRIPTIONS: OnceLock<
     Mutex<
         HashMap<
@@ -902,6 +909,65 @@ fn kv_store_compare_and_set<'py>(
             )
             .await
             .map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn kv_watch_open<'py>(
+    py: Python<'py>,
+    config_json: String,
+    prefix: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid KV config"))?;
+        let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        let watch = store.watch(&prefix).await.map_err(py_error)?;
+        let id = format!(
+            "kv-watch-{}",
+            STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        kv_watches()
+            .lock()
+            .map_err(|_| py_error("KV watch handle lock failed"))?
+            .insert(id.clone(), watch);
+        Ok(id)
+    })
+}
+
+#[pyfunction]
+fn kv_watch_receive<'py>(
+    py: Python<'py>,
+    watch_id: String,
+    timeout_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let watch = kv_watches()
+            .lock()
+            .map_err(|_| py_error("KV watch handle lock failed"))?
+            .get(&watch_id)
+            .cloned()
+            .ok_or_else(|| py_error("unknown KV watch"))?;
+        let change = watch
+            .receive(std::time::Duration::from_millis(timeout_ms))
+            .await
+            .map_err(py_error)?;
+        encode_json(&change)
+    })
+}
+
+#[pyfunction]
+fn kv_watch_close<'py>(py: Python<'py>, watch_id: String) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let watch = kv_watches()
+            .lock()
+            .map_err(|_| py_error("KV watch handle lock failed"))?
+            .remove(&watch_id)
+            .ok_or_else(|| py_error("unknown KV watch"))?;
+        watch.close().await;
+        Ok(())
     })
 }
 
@@ -1810,6 +1876,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(kv_store_get, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_get_with_revision, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_compare_and_set, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_watch_open, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_watch_receive, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_watch_close, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_increment, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_list_keys, module)?)?;
