@@ -222,7 +222,7 @@ PRs empilhados ainda sujeitos a revisão, não incorporados em `main`:
 - #47: matriz service-real de Redis, NATS, Qdrant e PostgreSQL.
 - #48: reinício de Redis/NATS e queda/retorno PostgreSQL.
 - #49: concorrência do ledger entre processos independentes.
-- #50: erro para coleção vetorial ausente e reinício do Qdrant, com resultado
+- #51: erro para coleção vetorial ausente e reinício do Qdrant, com resultado
   atualizado na auditoria.
 
 Os itens de capabilities, testes de storage service-real, restart de Redis/NATS,

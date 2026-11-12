@@ -160,7 +160,7 @@ com `expected_version=0` confirma, dois recebem `VersionConflict`, e uma
 reabertura lê um único evento. Isso fecha a cobertura de concorrência entre
 processos, ainda sujeito à revisão/integração do PR #49.
 
-## Estado vetorial (PR #50)
+## Estado vetorial (PR #51)
 
 A suíte comum agora exige que uma coleção ausente resulte em
 `VectorError::Storage` em LanceDB e Qdrant. O teste opt-in de reinício do
