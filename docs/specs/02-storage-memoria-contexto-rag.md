@@ -99,6 +99,11 @@ e observação de mudanças. Nas filas, ACK/NACK, redelivery com teto, DLQ,
 deduplicação e replay. A disponibilidade nativa ou emulada de cada item ainda
 deve ser confirmada por versão e registrada na matriz do plano.
 
+No JetStream KV, a chave tem até 512 bytes e usa letras ASCII, números,
+`-`, `_`, `/`, `=` e pontos que separam segmentos não vazios. Leitura,
+escrita com ou sem TTL e remoção aplicam essa regra antes da operação no
+bucket. Redis mantém o conjunto de chaves mais amplo que já aceita.
+
 A remoção KV é idempotente, opera no namespace selecionado e fica disponível
 em Rust, Python e TypeScript. Uma chave removida deixa de aparecer na leitura
 e na listagem.

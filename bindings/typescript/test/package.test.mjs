@@ -1407,3 +1407,25 @@ for (const [backend, endpoint] of [
     }
   });
 }
+
+test("JetStream KV validates keys with and without TTL", { skip: !process.env.VECTORA_TEST_NATS_URL }, async () => {
+  const config = {
+    backend: "nats_jetstream",
+    endpoint: process.env.VECTORA_TEST_NATS_URL,
+    namespace: `kv_keys_${randomUUID()}`,
+  };
+  for (const key of ["a[b]", "a b", "a.*", "a.>", ".a", "a.", "a..b", "á"]) {
+    await assert.rejects(kvStorePut(config, key, 1), /invalid messaging request/);
+    await assert.rejects(kvStorePut(config, key, 1, 60), /invalid messaging request/);
+    await assert.rejects(kvStoreGet(config, key), /invalid messaging request/);
+    await assert.rejects(kvStoreDelete(config, key), /invalid messaging request/);
+  }
+  const key = "scope.sub/key_=01";
+  try {
+    await kvStorePut(config, key, 1, 60);
+    assert.equal(await kvStoreGet(config, key), 1);
+    assert.deepEqual(await kvStoreListKeys(config, "scope."), [key]);
+  } finally {
+    await kvStoreDelete(config, key);
+  }
+});

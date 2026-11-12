@@ -123,6 +123,19 @@ fn validate_key(key: &str) -> Result<(), MessagingError> {
     }
 }
 
+fn validate_nats_kv_key(key: &str) -> Result<(), MessagingError> {
+    validate_key(key)?;
+    // JetStream KV uses the key as a subject suffix.
+    if key.split('.').any(|part| part.is_empty())
+        || !key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-/_=.".contains(&byte))
+    {
+        return Err(MessagingError::InvalidInput);
+    }
+    Ok(())
+}
+
 fn validate_key_listing(prefix: &str, limit: u32) -> Result<(), MessagingError> {
     if !(1..=1000).contains(&limit) {
         return Err(MessagingError::InvalidInput);
@@ -355,7 +368,7 @@ impl NatsStore {
 #[async_trait]
 impl KvStore for NatsStore {
     async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, MessagingError> {
-        validate_key(key)?;
+        validate_nats_kv_key(key)?;
         self.kv()
             .await?
             .get(key)
@@ -369,12 +382,16 @@ impl KvStore for NatsStore {
         value: Vec<u8>,
         ttl: Option<Duration>,
     ) -> Result<(), MessagingError> {
-        validate_key(key)?;
+        validate_nats_kv_key(key)?;
         let store = self.kv().await?;
         match ttl {
             Some(ttl) => {
                 let seconds = ttl_seconds_ceil(ttl);
                 let mut headers = async_nats::HeaderMap::new();
+                headers.insert(
+                    async_nats::header::NATS_EXPECTED_STREAM,
+                    format!("KV_{}", self.bucket),
+                );
                 headers.insert(
                     async_nats::header::NATS_MESSAGE_TTL,
                     async_nats::HeaderValue::from(seconds),
@@ -399,7 +416,7 @@ impl KvStore for NatsStore {
         }
     }
     async fn delete(&self, key: &str) -> Result<(), MessagingError> {
-        validate_key(key)?;
+        validate_nats_kv_key(key)?;
         self.kv()
             .await?
             .delete(key)
@@ -422,7 +439,7 @@ impl KvStore for NatsStore {
             .await
             .map_err(|_| MessagingError::Storage)?
         {
-            if key.starts_with(prefix) && validate_key(&key).is_ok() {
+            if key.starts_with(prefix) && validate_nats_kv_key(&key).is_ok() {
                 keep_listed_key(&mut keys, key, limit);
             }
         }

@@ -387,7 +387,7 @@ serviços. TypeScript, Ruff e ty passaram. A remoção explícita foi verificada
 ## Remoção KV pelos bindings
 
 O core já remove chaves com DEL no Redis e marca remoção no JetStream KV.
-A branch sobre #67 expõe a operação em Python e TypeScript. A verificação
+O PR #68 expõe a operação em Python e TypeScript. A verificação
 Node usa dois namespaces por serviço e cobre remoção repetida, leitura
 ausente, listagem sem a chave removida e preservação da chave homônima no
 outro namespace. A suíte Node passou 37/37 com Redis 8.10.3 e NATS 2.15.3,
@@ -395,6 +395,17 @@ incluindo os dois cenários de remoção. A wheel Maturin de CPython 3.13 passou
 o smoke test de remoção repetida, leitura ausente e listagem vazia nos dois
 serviços. Typecheck TypeScript, Oxlint, Ruff e ty passaram. A suíte Rust
 completa não foi rodada.
+
+## Validação de chaves JetStream KV
+
+O async-nats valida a chave em operações KV, mas o caminho de TTL do adapter
+publica diretamente no JetStream. A branch sobre #68 aplica a mesma regra de
+chave em leitura, remoção, escrita e resultados de listagem, com ou sem TTL.
+A publicação com TTL informa ao servidor o stream esperado. O prefixo de
+listagem permanece literal e Redis mantém suas chaves existentes. O build Node em release e a
+suíte Node passaram com Redis 8.10.3 e NATS 2.15.3 reais (38/38). O caso novo
+verifica oito chaves inválidas nos quatro caminhos e uma chave válida com
+TTL. A suíte Rust completa não foi repetida.
 
 ## Verificação da branch empilhada sobre #57
 
