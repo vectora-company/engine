@@ -147,6 +147,27 @@ reavaliados individualmente se outro consumidor demonstrar necessidade e houver
 um contrato comum. O plano de continuidade foi atualizado para as próximas
 etapas sem copiar essa implementação Python para a Engine.
 
+### Decisão resolvida — oferecer os três modos de integração
+
+brunosrz decidiu oferecer as três formas de usar o preparo de mídia. A
+implementação deve compartilhar o mesmo pipeline Rust e manter `ChatRequest`
+sem bytes:
+
+1. **Preparo manual pelo consumidor:** chamar `prepare_content` e enviar as
+   partes resultantes pelo método atual. Expor o mesmo helper nos bindings.
+2. **Contexto efêmero por chamada:** métodos `complete/stream` aceitam um
+   `MediaExecutionContext` para store e resolver, sem persistir essa dependência.
+3. **Contexto padrão no cliente:** builder/config do cliente mantém contexto
+   padrão; contexto explícito por chamada tem precedência. Dados já preparados
+   (`Inline`/imagem resolvida) não são preparados duas vezes.
+
+A leitura do `MediaStore` será assíncrona: o chat e seus transportes já são
+async, e o store pode fazer I/O; não bloquear executor com leitura de arquivo ou
+serviço. O contrato deve limitar tamanho antes de codificar base64 e registrar
+somente metadados/digest/modo/motivo, nunca bytes. A decisão está implementada
+no plano e será entregue em etapas Rust e bindings. Não há decisão vital
+pendente nesta integração neste momento.
+
 ## Decisões que exigem o mantenedor
 
 Pare antes de implementar a parte dependente quando uma resposta alterar de

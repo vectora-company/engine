@@ -1,8 +1,9 @@
 # Checklist — mídia nativa no chat
 
 Etapa da [spec de mídia](../specs/17-midia-no-chat.md) e do
-[plano ativo](../plans/03-plano-continuidade.md), executada em uma branch
-empilhada sobre o PR #77.
+[plano ativo](../plans/03-plano-continuidade.md). A etapa de payload foi entregue
+no PR #79 sobre #77; esta branch filha registra a decisão para integrar a mídia
+no envio.
 
 ## Contrato e implementação
 
@@ -26,8 +27,11 @@ empilhada sobre o PR #77.
 - [x] `cargo clippy -p vectora-engine --all-targets --all-features --locked -- -D warnings`.
 - [x] Prettier e `git diff --check`; revisar o diff.
 - [x] Atualizar plano, spec, análise e Q&As com evidência real e limites.
-- [ ] Commit, push e PR empilhado sobre `fix/storage-vector-collection-dimensions` (#77).
-- [ ] Iniciar a etapa seguinte em branch empilhada, sem aguardar CI.
+- [x] Commit e push do código da etapa de payload.
+- [x] Abrir o PR #79 sobre a branch do PR #77.
+- [x] Iniciar a próxima etapa em `feat/chat-media-routing-evidence`, filha do PR #79.
+- [x] Commit, push e abrir o PR #80 empilhado sobre #79, sem marcar brunosrz no GitHub.
+- [ ] Aguardar a resposta no chat; manter bloqueadas as mudanças de API que dependem da decisão.
 
 ## Evidência do consumidor Vectora
 
@@ -47,3 +51,12 @@ implementação; não foram adicionados à API pública da Engine.
   formatos do Chat Completions.
 - A integração do preparador no fluxo real de envio, fallback após rejeição,
   limites e roteamento/evidência seguem no backlog da spec 17.
+
+## Próxima etapa — decisão vital
+
+- [x] Concluir e verificar a serialização de payloads específica do PR #79.
+- [x] Investigar o caminho de envio e confirmar que os adapters não recebem
+      `MediaStore` nem `CapabilityResolver`.
+- [x] Registrar as opções de API e a decisão de síncrono/assíncrono em
+      [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
+- [ ] Aguardar a resposta de brunosrz no chat antes de alterar a API pública.
