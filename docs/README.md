@@ -7,7 +7,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
 com o estado verificado, a direção de uma primeira release completa e o backlog
-por fases. A stack atual verificada em 2026-11-13 é #82 → #83 → #84 → #85 → #86; o PR #86 tipa resultados de tools e está aberto. O PR [#87](https://github.com/vectora-company/engine/pull/87) revisa Markdown como filho do #86. Storage e runtime seguem com gaps registrados no plano e nas specs.
+por fases. A stack atual verificada em 2026-11-13 é #82 → #83 → #84 → #85 → #86 → #87 → #88; o PR #86 tipa resultados de tools e está aberto. O PR [#87](https://github.com/vectora-company/engine/pull/87) revisa Markdown como filho do #86; a reclassificação MIME está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87. Storage e runtime seguem com gaps registrados no plano e nas specs.
 
 ## Operação de desenvolvimento
 

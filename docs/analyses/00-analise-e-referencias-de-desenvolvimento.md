@@ -269,6 +269,19 @@ retry não cobre tamanho, autenticação, falha de transporte nem erros SSE apó
 o stream ter sido entregue. O registro `media_decisions.reason` e o evento
 `media_routed` anotam o rebaixamento sem incluir bytes.
 
+## Reclassificação MIME na reidratação — implementação local
+
+A reidratação compara a assinatura dos bytes já verificados (tamanho e SHA-256)
+com a modalidade do `ContentPart`. Se a modalidade coincide, o payload e a
+`MediaDecision` usam o MIME detectado, não o MIME fornecido pelo host. Se diverge,
+a parte é rebaixada para texto/referência; bytes de PDF não são enviados como
+imagem/áudio, e previews só são enviados quando os bytes identificam imagem.
+Documentos nativos só seguem quando a assinatura identifica PDF.
+
+Verificação local: 22 testes `chat::media::tests` passaram, incluindo casos de
+MIME de imagem adulterado, MIME genérico em PDF e modalidade divergente. Format, Clippy, testes Rust workspace e rustdoc passaram nos hooks; os 22 testes
+focados passaram. A mudança foi publicada no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87, head `18c2eca`.
+
 ## Partes multimodais em `ToolResult` — decisão e implementação
 
 brunosrz escolheu substituir diretamente `output: String` por `parts`, sem

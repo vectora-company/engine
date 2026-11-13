@@ -777,7 +777,10 @@ pub async fn prepare_content_with_limits(
             message_index: 0,
             part_index: index,
             name: media.media_ref.name.clone(),
-            mime_type: media.media_ref.mime_type.clone(),
+            mime_type: outcome
+                .mime_type
+                .clone()
+                .unwrap_or_else(|| media.media_ref.mime_type.clone()),
             size_bytes: media.media_ref.size_bytes,
             sha256: media.media_ref.sha256.clone(),
             mode: outcome.mode,
@@ -807,6 +810,7 @@ struct Outcome {
     mode: MediaMode,
     reason: String,
     parts: Vec<ContentPart>,
+    mime_type: Option<String>,
 }
 
 fn text_part(text: String) -> ContentPart {
@@ -850,6 +854,7 @@ fn fallback(kind: MediaKind, media: &MediaPart, reason: &str) -> Outcome {
         },
         reason: reason.to_owned(),
         parts: vec![text_part(media.textual_form(kind))],
+        mime_type: None,
     }
 }
 
@@ -861,13 +866,14 @@ fn unavailable(media: &MediaPart, why: &str) -> Outcome {
             "[anexo não enviado: {}]",
             media.media_ref.name
         ))],
+        mime_type: None,
     }
 }
 
-fn inline(kind: MediaKind, media_ref: &MediaRef, data: &[u8]) -> InlineMedia {
+fn inline(kind: MediaKind, mime_type: &str, media_ref: &MediaRef, data: &[u8]) -> InlineMedia {
     InlineMedia {
         kind,
-        mime_type: media_ref.mime_type.clone(),
+        mime_type: mime_type.to_owned(),
         name: media_ref.name.clone(),
         data_base64: STANDARD.encode(data),
     }
@@ -891,16 +897,37 @@ async fn decide(
         }
         MediaKind::Audio => capabilities.audio_input.is_supported(),
         MediaKind::Video => capabilities.video_input.is_supported(),
-        MediaKind::Document => {
-            capabilities.pdf.is_supported() && media.media_ref.mime_type == "application/pdf"
-        }
+        MediaKind::Document => capabilities.pdf.is_supported(),
         MediaKind::Text | MediaKind::File => false,
     };
 
     if native {
         return match read_verified(&media.media_ref, store, max_media_bytes).await {
             Ok(data) => {
-                let item = inline(kind, &media.media_ref, &data);
+                let detected = classify(&data, Some(&media.media_ref.mime_type));
+                if detected.kind != kind {
+                    return fallback(
+                        kind,
+                        media,
+                        "tipo detectado nos bytes diverge do tipo declarado",
+                    );
+                }
+                if kind == MediaKind::Document && detected.mime_type != "application/pdf" {
+                    return fallback(
+                        kind,
+                        media,
+                        "o provider aceita PDF, mas os bytes identificam outro documento",
+                    );
+                }
+                let declared_mime = media
+                    .media_ref
+                    .mime_type
+                    .split(';')
+                    .next()
+                    .unwrap_or(&media.media_ref.mime_type)
+                    .trim();
+                let mime_changed = declared_mime != detected.mime_type;
+                let item = inline(kind, &detected.mime_type, &media.media_ref, &data);
                 let part = if kind == MediaKind::Image {
                     ContentPart::ImageUrl {
                         image_url: ImageUrl {
@@ -913,8 +940,13 @@ async fn decide(
                 };
                 Outcome {
                     mode: MediaMode::Native,
-                    reason: "o modelo declara a modalidade".to_owned(),
+                    reason: if mime_changed {
+                        "MIME declarado diverge; corrigido pela assinatura dos bytes".to_owned()
+                    } else {
+                        "o modelo declara a modalidade".to_owned()
+                    },
                     parts: vec![part],
+                    mime_type: Some(detected.mime_type),
                 }
             }
             Err(why) if why == "mídia excede o limite configurado" => fallback(kind, media, &why),
@@ -930,12 +962,23 @@ async fn decide(
         let mut parts = vec![text_part(media.textual_form(kind))];
         for preview in &media.previews {
             match read_verified(preview, store, max_image_bytes).await {
-                Ok(data) => parts.push(ContentPart::ImageUrl {
-                    image_url: ImageUrl {
-                        url: inline(MediaKind::Image, preview, &data).data_url(),
-                        detail: None,
-                    },
-                }),
+                Ok(data) => {
+                    let detected = classify(&data, Some(&preview.mime_type));
+                    if detected.kind != MediaKind::Image {
+                        return fallback(
+                            kind,
+                            media,
+                            "preview não contém uma imagem reconhecida pelos bytes",
+                        );
+                    }
+                    parts.push(ContentPart::ImageUrl {
+                        image_url: ImageUrl {
+                            url: inline(MediaKind::Image, &detected.mime_type, preview, &data)
+                                .data_url(),
+                            detail: None,
+                        },
+                    });
+                }
                 Err(why) if why == "mídia excede o limite configurado" => {
                     return fallback(kind, media, &why);
                 }
@@ -946,6 +989,7 @@ async fn decide(
             mode: MediaMode::Image,
             reason: "o modelo lê imagem, não o arquivo".to_owned(),
             parts,
+            mime_type: None,
         };
     }
 
@@ -1171,6 +1215,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn mime_da_imagem_nativa_e_corrigido_pela_assinatura_dos_bytes() {
+        let mut store = MemoryStore::default();
+        let mut media = part(store.put("a", PNG), None, vec![]);
+        media.media_ref.mime_type = "image/jpeg".into();
+        let result = prepare_content(
+            vec![ContentPart::Image(media)],
+            &caps(true, false),
+            &store,
+            "modelo",
+            ContentSite::UserMessage,
+        )
+        .await;
+
+        assert!(matches!(
+            &result.parts[0],
+            ContentPart::ImageUrl { image_url } if image_url.url.starts_with("data:image/png;base64,")
+        ));
+        assert_eq!(result.decisions[0].mime_type, "image/png");
+        assert!(
+            result.decisions[0]
+                .reason
+                .contains("MIME declarado diverge")
+        );
+    }
+
+    #[tokio::test]
+    async fn tipo_declarado_divergente_nao_envia_bytes_como_outra_modalidade() {
+        let mut store = MemoryStore::default();
+        let media = part(store.put("a", PDF), Some("[imagem: arquivo]"), vec![]);
+        let result = prepare_content(
+            vec![ContentPart::Image(media)],
+            &caps(true, true),
+            &store,
+            "modelo",
+            ContentSite::UserMessage,
+        )
+        .await;
+
+        assert_eq!(result.decisions[0].mode, MediaMode::Text);
+        assert!(
+            result.decisions[0]
+                .reason
+                .contains("tipo detectado nos bytes")
+        );
+        assert!(matches!(&result.parts[0], ContentPart::Text { text } if text.contains("imagem")));
+    }
+
+    #[tokio::test]
+    async fn pdf_nativo_usa_mime_detectado_mesmo_com_declaracao_generica() {
+        let mut store = MemoryStore::default();
+        let mut media = part(store.put("pdf", PDF), None, vec![]);
+        media.media_ref.mime_type = "application/octet-stream".into();
+        let result = prepare_content(
+            vec![ContentPart::Document(media)],
+            &caps(true, true),
+            &store,
+            "modelo",
+            ContentSite::UserMessage,
+        )
+        .await;
+
+        assert_eq!(result.decisions[0].mode, MediaMode::Native);
+        assert_eq!(result.decisions[0].mime_type, "application/pdf");
+        assert!(matches!(
+            &result.parts[0],
+            ContentPart::Inline(item) if item.mime_type == "application/pdf"
+        ));
+    }
+
+    #[tokio::test]
     async fn imagem_sem_visao_cai_na_forma_textual_ou_na_referencia() {
         let mut store = MemoryStore::default();
         let com_texto = part(store.put("a", PNG), Some("[imagem: gato]"), vec![]);
@@ -1252,6 +1366,38 @@ mod tests {
         assert_eq!(result.decisions[0].mode, MediaMode::Image);
         assert_eq!(result.parts.len(), 2);
         assert!(matches!(result.parts[1], ContentPart::ImageUrl { .. }));
+    }
+
+    #[tokio::test]
+    async fn preview_que_nao_e_imagem_nao_e_enviado_como_imagem() {
+        let mut store = MemoryStore::default();
+        let preview = store.put("preview", PDF);
+        let media = part(
+            store.put("document", PDF),
+            Some("texto extraído"),
+            vec![preview],
+        );
+        let result = prepare_content(
+            vec![ContentPart::Document(media)],
+            &caps(true, false),
+            &store,
+            "modelo",
+            ContentSite::UserMessage,
+        )
+        .await;
+
+        assert_eq!(result.decisions[0].mode, MediaMode::Text);
+        assert!(
+            result.decisions[0]
+                .reason
+                .contains("preview não contém uma imagem")
+        );
+        assert!(
+            result
+                .parts
+                .iter()
+                .all(|part| !matches!(part, ContentPart::ImageUrl { .. }))
+        );
     }
 
     #[tokio::test]

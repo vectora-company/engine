@@ -1,6 +1,6 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada na stack aberta #79–#86. A substituição
+**Estado:** parcialmente implementada na stack aberta #79–#88; reclassificação de MIME está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87. A substituição
 direta de `ToolResult` está no PR #86, filho do #85; não há compatibilidade v1. Nada
 desta stack está integrado em `main`. Tipos, classificação por bytes, capabilities,
 decisões por parte, payloads nativos e preparo Rust estão implementados para os
@@ -110,7 +110,11 @@ Regras:
 - **Reidratação com verificação.** Antes de enviar, a Engine pede os bytes ao
   store do consumidor e confere `sha256` e tamanho. Digest divergente ou asset
   ausente nunca é erro silencioso: a parte vira uma nota textual (`[anexo
-indisponível: nome]`) e a decisão registra o motivo.
+indisponível: nome]`) e a decisão registra o motivo. Na reidratação, a assinatura
+  dos bytes também prevalece sobre o MIME declarado. Quando a modalidade detectada
+  coincide com a parte, o payload usa o MIME real; se diverge, a mídia cai para
+  texto/referência. Documentos nativos exigem PDF detectado, e previews precisam
+  ser imagens reconhecidas antes de serem enviados.
 - **Só o turno atual reidrata.** Mídia de mensagens antigas segue como forma
   textual ou nota, para limitar custo e superfície. O consumidor pode ampliar para
   as N imagens mais recentes de resultados de tools.
@@ -127,7 +131,11 @@ o campo anterior.
 
 O limite do loop mede os bytes serializados das partes (texto e referência). O
 limite do asset binário é aplicado ao reidratar por `MediaExecutionContext`; o
-host continua responsável por autorizar o `MediaStore`.
+host continua responsável por autorizar o `MediaStore`. Na reidratação, a assinatura
+dos bytes prevalece sobre o MIME declarado. A Engine usa o MIME detectado quando
+a modalidade coincide; se os bytes indicarem outra modalidade, não os envia com
+o tipo declarado e rebaixa a parte para texto/referência. Para documentos nativos,
+somente PDF é aceito; previews precisam classificar como imagem.
 
 ### Decisão resolvida — substituição direta do contrato
 
