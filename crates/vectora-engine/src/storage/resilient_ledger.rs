@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use super::{
     postgres::{PostgresError, PostgresLedger},
-    sqlite::{EventDraft, LedgerError, LedgerEvent, SqliteLedger},
+    sqlite::{EventDraft, LedgerError, LedgerEvent, PendingProjection, SqliteLedger},
 };
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -83,21 +83,13 @@ impl ResilientLedger {
                 return Ok(0);
             }
         }
-        let pending = self.local.pending_outbox(limit)?;
+        let pending = self.local.pending_projections(limit)?;
         let mut delivered = 0;
-        for event in pending {
+        for projection in pending {
+            let PendingProjection { event, checkpoint } = projection;
             let pg = self.postgres.as_ref().expect("initialized above");
-            let draft = EventDraft {
-                scope: event.scope.clone(),
-                aggregate: event.aggregate.clone(),
-                event_id: event.event_id.clone(),
-                idempotency_key: event.idempotency_key.clone(),
-                event_type: event.event_type.clone(),
-                payload: event.payload.clone(),
-                expected_version: event.sequence.saturating_sub(1),
-            };
-            match pg.append(draft).await {
-                Ok(projected) if projected == event => {
+            match pg.project(event.clone(), checkpoint).await {
+                Ok(()) => {
                     self.local.mark_outbox_delivered(
                         &event.scope,
                         &event.aggregate,
@@ -105,8 +97,7 @@ impl ResilientLedger {
                     )?;
                     delivered += 1;
                 }
-                Ok(_)
-                | Err(PostgresError::IdempotencyConflict | PostgresError::VersionConflict) => {
+                Err(PostgresError::IdempotencyConflict | PostgresError::VersionConflict) => {
                     return Err(ResilientLedgerError::ProjectionConflict);
                 }
                 Err(_) => {
@@ -229,6 +220,55 @@ mod tests {
         assert_eq!(
             pg.read(&scope, "thread", 0, 10).await.unwrap(),
             vec![appended.event]
+        );
+        drop(ledger);
+        drop(pg);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn checkpointed_store_state_projects_atomically_to_postgres() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let path = db_path();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let scope = format!("checkpoint-mirror-{suffix}");
+        let aggregate = format!("run-{suffix}");
+        let mut local = SqliteLedger::open_persistent(&path).unwrap();
+        let saved = local
+            .append_checkpointed_with_outbox(
+                EventDraft {
+                    scope: scope.clone(),
+                    aggregate: aggregate.clone(),
+                    event_id: format!("event-{suffix}"),
+                    idempotency_key: format!("idem-{suffix}"),
+                    event_type: "run_lifecycle_transition".into(),
+                    payload: json!({"state":{"status":"running"}}),
+                    expected_version: 0,
+                },
+                format!("checkpoint-{suffix}"),
+                json!({"contract_version":1,"status":"running"}),
+            )
+            .unwrap();
+        drop(local);
+
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(ledger.pending_count().unwrap(), 1);
+        assert_eq!(ledger.flush_outbox(10).await.unwrap(), 1);
+        assert_eq!(ledger.pending_count().unwrap(), 0);
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        assert_eq!(
+            pg.read(&scope, &aggregate, 0, 10).await.unwrap(),
+            vec![saved.event]
+        );
+        assert_eq!(
+            pg.latest_checkpoint(&scope, &aggregate).await.unwrap(),
+            Some(saved.checkpoint)
         );
         drop(ledger);
         drop(pg);

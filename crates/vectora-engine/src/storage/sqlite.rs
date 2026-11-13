@@ -10,7 +10,7 @@ use thiserror::Error;
 mod backup;
 pub use backup::{BackupReport, verify_backup};
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 pub const CHECKPOINT_VERSION: u16 = 1;
 const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
 
@@ -103,6 +103,12 @@ pub struct CheckpointedEvent {
     pub checkpoint: Checkpoint,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct PendingProjection {
+    pub event: LedgerEvent,
+    pub checkpoint: Option<Checkpoint>,
+}
+
 pub struct SqliteLedger {
     connection: Connection,
 }
@@ -187,6 +193,13 @@ impl SqliteLedger {
                 PRIMARY KEY(scope,aggregate_id,sequence)
             ); CREATE INDEX ve_ledger_outbox_pending ON ve_ledger_outbox(delivered,scope,aggregate_id,sequence);
             UPDATE ve_ledger_meta SET version=4 WHERE id=1;")?;
+            current = 4;
+        }
+        if current < 5 {
+            tx.execute_batch(
+                "ALTER TABLE ve_ledger_outbox ADD COLUMN checkpoint_json TEXT;
+            UPDATE ve_ledger_meta SET version=5 WHERE id=1;",
+            )?;
         }
         tx.commit()?;
         Ok(())
@@ -220,16 +233,51 @@ impl SqliteLedger {
         Ok(result)
     }
 
+    /// Appends an event and checkpoint and queues their projection atomically.
+    pub fn append_checkpointed_with_outbox(
+        &mut self,
+        draft: EventDraft,
+        checkpoint_id: String,
+        state: Value,
+    ) -> Result<CheckpointedEvent, LedgerError> {
+        if checkpoint_id.trim().is_empty() {
+            return Err(LedgerError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let result = Self::append_checkpointed_in(&tx, draft, checkpoint_id, state)?;
+        Self::queue_projection_in(&tx, &result.event, Some(&result.checkpoint))?;
+        tx.commit()?;
+        Ok(result)
+    }
+
     /// Appends locally and queues a durable mirror record in the same transaction.
     pub fn append_with_outbox(&mut self, draft: EventDraft) -> Result<LedgerEvent, LedgerError> {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let event = Self::append_in(&tx, draft)?;
-        let serialized = serde_json::to_string(&event).map_err(|_| LedgerError::InvalidInput)?;
-        tx.execute("INSERT INTO ve_ledger_outbox(scope,aggregate_id,sequence,event_json) VALUES(?1,?2,?3,?4) ON CONFLICT(scope,aggregate_id,sequence) DO NOTHING", params![event.scope,event.aggregate,event.sequence as i64,serialized])?;
+        Self::queue_projection_in(&tx, &event, None)?;
         tx.commit()?;
         Ok(event)
+    }
+
+    fn queue_projection_in(
+        tx: &Transaction<'_>,
+        event: &LedgerEvent,
+        checkpoint: Option<&Checkpoint>,
+    ) -> Result<(), LedgerError> {
+        let event_json = serde_json::to_string(event).map_err(|_| LedgerError::InvalidInput)?;
+        let checkpoint_json = checkpoint
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|_| LedgerError::InvalidInput)?;
+        tx.execute(
+            "INSERT INTO ve_ledger_outbox(scope,aggregate_id,sequence,event_json,checkpoint_json) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(scope,aggregate_id,sequence) DO UPDATE SET checkpoint_json=COALESCE(ve_ledger_outbox.checkpoint_json,excluded.checkpoint_json)",
+            params![event.scope, event.aggregate, event.sequence as i64, event_json, checkpoint_json],
+        )?;
+        Ok(())
     }
 
     pub fn pending_outbox(&self, limit: u32) -> Result<Vec<LedgerEvent>, LedgerError> {
@@ -240,6 +288,26 @@ impl SqliteLedger {
         let rows = stmt.query_map([limit], |row| row.get::<_, String>(0))?;
         rows.map(|row| serde_json::from_str(&row?).map_err(|_| LedgerError::Storage))
             .collect()
+    }
+
+    pub fn pending_projections(&self, limit: u32) -> Result<Vec<PendingProjection>, LedgerError> {
+        if !(1..=1000).contains(&limit) {
+            return Err(LedgerError::InvalidInput);
+        }
+        let mut stmt = self.connection.prepare("SELECT event_json,checkpoint_json FROM ve_ledger_outbox WHERE delivered=0 ORDER BY scope,aggregate_id,sequence LIMIT ?1")?;
+        let rows = stmt.query_map([limit], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
+        rows.map(|row| {
+            let (event, checkpoint) = row?;
+            Ok(PendingProjection {
+                event: serde_json::from_str(&event).map_err(|_| LedgerError::Storage)?,
+                checkpoint: checkpoint
+                    .map(|json| serde_json::from_str(&json).map_err(|_| LedgerError::Storage))
+                    .transpose()?,
+            })
+        })
+        .collect()
     }
 
     pub fn pending_outbox_count(&self) -> Result<u64, LedgerError> {
@@ -479,6 +547,8 @@ impl SqliteLedger {
             )?;
         }
         let lifecycle = Self::append_checkpointed_in(&tx, lifecycle_event, checkpoint_id, state)?;
+        Self::queue_projection_in(&tx, &admission_event, None)?;
+        Self::queue_projection_in(&tx, &lifecycle.event, Some(&lifecycle.checkpoint))?;
         tx.commit()?;
         Ok(CheckpointedAdmission {
             reservation,
@@ -919,6 +989,39 @@ mod tests {
         ledger.mark_outbox_delivered("s", "a", 1).unwrap();
         assert!(ledger.pending_outbox(10).unwrap().is_empty());
         assert_eq!(ledger.read("s", "a", 0, 10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn checkpointed_outbox_keeps_event_and_snapshot_together() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let draft = EventDraft {
+            scope: "s".into(),
+            aggregate: "run:1:x".into(),
+            event_id: "event-1".into(),
+            idempotency_key: "operation-1".into(),
+            event_type: "run_lifecycle_transition".into(),
+            payload: json!({"state":{"status":"running"}}),
+            expected_version: 0,
+        };
+        let checkpoint_state = json!({"contract_version":1,"status":"running"});
+        let saved = ledger
+            .append_checkpointed_with_outbox(
+                draft.clone(),
+                "checkpoint-1".into(),
+                checkpoint_state.clone(),
+            )
+            .unwrap();
+        let pending = ledger.pending_projections(10).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].event, saved.event);
+        assert_eq!(pending[0].checkpoint, Some(saved.checkpoint.clone()));
+        assert_eq!(
+            ledger
+                .append_checkpointed_with_outbox(draft, "checkpoint-1".into(), checkpoint_state,)
+                .unwrap(),
+            saved
+        );
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 1);
     }
 
     fn temp_ledger_path(label: &str) -> std::path::PathBuf {

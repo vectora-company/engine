@@ -336,9 +336,11 @@ impl SqliteModelToolLoopStore {
         };
         let state_value =
             serde_json::to_value(&state).map_err(|_| SqliteModelToolLoopError::Serialization)?;
-        let saved = self
-            .ledger
-            .append_checkpointed(draft, checkpoint_id, state_value.clone())?;
+        let saved = self.ledger.append_checkpointed_with_outbox(
+            draft,
+            checkpoint_id,
+            state_value.clone(),
+        )?;
         if saved.event.sequence != state.ledger_sequence
             || saved.checkpoint.sequence != state.ledger_sequence
             || saved.checkpoint.state != state_value
@@ -506,6 +508,7 @@ mod tests {
                 "start-1",
             )
             .unwrap();
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 1);
         store
             .start(
                 "run-1",
@@ -514,6 +517,7 @@ mod tests {
                 "start-2",
             )
             .unwrap();
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 2);
 
         let first = store.load_latest("run-1", "turn-1").unwrap().unwrap();
         let second = store.load_latest("run-1", "turn-2").unwrap().unwrap();
