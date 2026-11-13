@@ -1,7 +1,7 @@
 # Plano de continuidade da Vectora Engine
 
-**Estado revalidado:** 11 de novembro de 2026
-**Referência remota:** branch `main`, commit `22c861f`
+**Estado revalidado:** 12 de novembro de 2026
+**Referência remota:** branch `main`, commit `a13140b9f85ba8c06a7412a7110a5292b8220e56`
 **Objetivo:** transformar as capabilities experimentais já implementadas numa
 engine distribuível e adotável com segurança, sem substituir o backend Python
 nem presumir paridade.
@@ -208,33 +208,64 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Fechar as lacunas de equivalência dos pares de storage (seção 1b) e continuar a auditoria S0–S5 do plano de storage, considerando a cobertura
-service-real condicional já inventariada. A seleção pública de backend
-`memory` foi removida e testada nos bindings; permanecem os gaps de capacidade,
-conformidade service-real e recuperação listados no plano específico. A matriz
-[`02-matriz-conformidade-capabilities.md`](../analyses/02-matriz-conformidade-capabilities.md)
-já evidencia os gaps que mudam a etapa seguinte: ausência de contratos de
-memória/contexto/RAG e de testes service-real completos. Não
-começar adoção no Vectora nem reescrita ampla do backend Python antes desses
-gates.
+Seguir a etapa independente de atualização do loop operacional, agora na branch
+`docs/loop-pr-stack-and-decisions`, empilhada sobre o PR #55. Depois disso,
+retomar as lacunas de equivalência da seção 1b nesta ordem de dependência:
+(1) alinhar métrica/score e testar ranking vetorial com vetores não unitários;
+(2) TTL por chave no NATS KV; (3) contagem/teto de redelivery, retenção e DLQ
+com a política decidida; (4) stores de lifecycle/loop/policy e backup/restore
+PostgreSQL; (5) base comum ausente em ambos, como filtros de metadado, índices,
+quantização, CAS e prefixos. As duas decisões vitais registradas na análise de
+storage bloqueiam apenas as partes dependentes. Não iniciar adoção no Vectora
+nem reescrita ampla do backend Python antes dos gates.
 
 ## Nota de proveniência local
 
-O walkthrough histórico registra entregas até o commit `43a2655`. Esta
-fotografia foi atualizada para `22c861f`; consulte a auditoria do PR #3 e os
-planos específicos para a evidência posterior. Nenhum estado de CI remoto é
-usado como evidência nesta atualização.
+O walkthrough histórico registra entregas até o commit `43a2655`. A fotografia
+de `main` nesta revisão está em `a13140b`; as branches dos PRs abertos são
+estado de trabalho separado. Consulte a auditoria do PR #3 e os planos
+específicos para evidência posterior. Nenhum estado de CI remoto é usado como
+evidência nesta atualização.
 
 ## Revalidação do loop em 2026-11-12
 
-A próxima entrega do plano continua sendo a auditoria S0–S5 de storage. Há uma
-stack aberta nos PRs #45, #46, #47, #48, #49 e #51; #46, #47, #48, #49 e
-#51 cobrem capabilities, testes service-real, reinício de serviços e
-concorrência multi-processo do ledger. A evidência e os
-limites locais estão em `04-plano-storage-ledger.md` e
-`05-auditoria-storage-s0-s5.md`. Não se considera esses PRs integrados em main
-até merge. A auditoria dos quatro serviços com reinícios passou 58/58. O
-backup/restore do ledger SQLite foi decidido por `brunosrz` (implementar os modos
-online e offline coordenado pelo host) e está implementado; payloads de storage
-ficam sem limite de tamanho por decisão dele. Memory/context/RAG e adoção em
-consumidores continuam fora desta etapa de auditoria.
+A referência de `main` foi consultada no remoto em 2026-11-12 (`a13140b`); as
+alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A stack
+ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
+→ #55. Não há PR #50 nessa cadeia.
+
+| PR                                                       | Entrega na branch do PR                                                             |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [#45](https://github.com/vectora-company/engine/pull/45) | Snapshot do runtime TypeScript.                                                     |
+| [#46](https://github.com/vectora-company/engine/pull/46) | Relatório estático de capabilities de storage e testes do ledger.                   |
+| [#47](https://github.com/vectora-company/engine/pull/47) | Matriz de integração service-real para storage.                                     |
+| [#48](https://github.com/vectora-company/engine/pull/48) | Recuperação de Redis/NATS após restart e projeção PostgreSQL durante queda/retorno. |
+| [#49](https://github.com/vectora-company/engine/pull/49) | Concorrência do ledger SQLite entre processos independentes.                        |
+| [#51](https://github.com/vectora-company/engine/pull/51) | Restart do Qdrant e erro explícito quando a coleção não existe.                     |
+| [#52](https://github.com/vectora-company/engine/pull/52) | Limites de entrada dos stores de storage.                                           |
+| [#53](https://github.com/vectora-company/engine/pull/53) | Backup/restore do ledger SQLite: cópia online e backup coordenado pelo host.        |
+| [#54](https://github.com/vectora-company/engine/pull/54) | Caracterização da retenção e redelivery atuais das filas.                           |
+| [#55](https://github.com/vectora-company/engine/pull/55) | Política de equivalência funcional dos pares e matriz de lacunas.                   |
+
+O teste service-real combinado de storage passou 58/58 com Redis, NATS,
+Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros
+em `04-plano-storage-ledger.md` e `05-auditoria-storage-s0-s5.md`. Isso é
+resultado local das branches, não integração em `main` nem aprovação de CI.
+Backup/restore SQLite (online e offline coordenado) e ausência de limite novo
+para payload são decisões de `brunosrz` já implementadas nos PRs indicados.
+
+O GH Bot ainda monta manualmente em
+[`app/src/server/engine.ts`](../../../gh-bot/app/src/server/engine.ts) os
+contract versions que lê da binding local. A API da Engine já expõe
+`storageCapabilities()`, mas o Bot ainda não usa um snapshot agregado como
+`engineContractSnapshot()`; a substituição pertence a um PR próprio no
+repositório do Bot e fica fora desta stack da Engine. Na branch local desta
+stack, a binding já expõe `storageCapabilities()`.
+
+As decisões vitais ainda abertas são a política de retenção/redelivery das
+filas e se PostgreSQL poderá ser autoridade única do ledger ou se SQLite
+continuará obrigatório. Elas estão registradas na análise de storage e devem
+ser perguntadas aqui no chat. Até a resposta, avance em trabalho independente;
+retenção de filas e autoridade do ledger permanecem bloqueadas. A próxima
+entrega independente é atualizar e seguir o loop operacional/documental desta
+stack, sem esperar aprovação nem checks de CI.

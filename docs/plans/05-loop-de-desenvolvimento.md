@@ -30,12 +30,20 @@ do loop e os critérios sucintos de encerramento.
 
 ## Início de cada sessão
 
-1. Confirmar branch/base e working tree.
-2. Ler `AGENTS.md`, este plano, a análise, o checklist e a spec/plano ativos.
-3. Revalidar no código e nos testes as afirmações documentadas; marcar findings
+1. Confirmar branch/base e working tree. O checkout pode ser compartilhado com
+   outra sessão (por exemplo o Codex): rode `git branch --show-current` e
+   `git status` antes de agir e não presuma que a branch é a da sessão anterior.
+2. Listar os PRs abertos (`gh pr list --repo vectora-company/engine`). Um PR
+   aberto é o trabalho ativo e a base da stack; nunca escolha escopo sem
+   ter olhado a lista. O `origin` do checkout local pode apontar para um clone
+   local desatualizado: confirme o tip real no GitHub antes de empilhar.
+3. Para storage, conferir `podman ps -a` (os serviços de teste já existem como
+   contêineres `vectora-engine-*`, só precisam de `podman start`).
+4. Ler `AGENTS.md`, este plano, a análise, o checklist e a spec/plano ativos.
+5. Revalidar no código e nos testes as afirmações documentadas; marcar findings
    antigos como resolvidos, atuais ou não reproduzidos.
-4. Selecionar a menor etapa pendente e aprovada no plano ativo.
-5. Se não existir etapa, spec, análise ou checklist suficiente, criar os
+6. Selecionar a menor etapa pendente e aprovada no plano ativo.
+7. Se não existir etapa, spec, análise ou checklist suficiente, criar os
    documentos aplicáveis a partir dos templates antes de uma implementação
    ampla. Um artefato geral não substitui o checklist específico da etapa.
 
@@ -49,13 +57,47 @@ do loop e os critérios sucintos de encerramento.
    depois.
 4. Verificar conforme o checklist; corrigir regressões atribuíveis à etapa.
 5. Revisar diff, documentar evidências e atualizar o estado real do plano.
-6. Commitar e abrir/atualizar o PR segundo o pedido do mantenedor. Criar a
-   próxima branch empilhada somente quando uma nova etapa for autorizada e a
-   base correta estiver confirmada.
+6. Commitar, fazer push e abrir o PR. É obrigatório e não depende de pedido:
+   cada etapa vira um PR cuja base é a branch do PR anterior da stack (ver
+   [Stack de PRs](#stack-de-prs)). Comece a próxima etapa já em uma nova branch
+   empilhada; não espere aprovação nem o resultado de CI do PR anterior.
 
 Não avance para trabalho fora do plano ativo, não faça alterações paralelas em
 consumidores sem escopo e não declare paridade ou performance sem medições
 reproduzíveis.
+
+## Stack de PRs
+
+- Cada PR novo usa como base a branch do PR anterior (não `main`), para que o
+  mantenedor aprove em cascata. Exemplo: #45 ← #46 ← #47 ← próximo PR com base
+  na branch do #47. Quando um PR já estiver integrado, o seguinte passa a ter
+  como base a branch seguinte da stack ou `main`.
+- Faça push para `https://github.com/vectora-company/engine.git` e crie o PR com
+  `gh pr create --base <branch do PR anterior> --head <branch nova>`. Título e
+  descrição em português; a descrição lista a pilha, o que muda, a evidência
+  local e os limites, e termina com a linha de atribuição exigida.
+- Commit, push e abertura de PR são obrigatórios. Aprovar PRs e criar issues
+  só ocorre quando `brunosrz` pedir.
+- Depois do push, siga para o próximo PR da stack. Falha de CI no PR anterior
+  não interrompe o trabalho: corrija no PR afetado quando fizer sentido e
+  continue a stack.
+- O hook de pre-commit executa a suíte Rust completa; o tempo depende do cache e
+  do host (nesta execução, a linkagem passou de 25 minutos). O Prettier pode
+  reformatar arquivos e abortar o commit. Rode
+  `uv run pre-commit run prettier --files <arquivos .md>` antes, repita o
+  `git add` se o hook reformatar, e execute commit, push e `gh pr create`
+  encadeados em background.
+
+## Equivalência de storage
+
+SQLite/PostgreSQL, LanceDB/Qdrant, Redis/NATS KV, Redis Streams/JetStream e
+Redis Pub/Sub/NATS Core formam pares. A base funcional é equivalente: antes de
+implementar algo em um backend, consulte a matriz de lacunas em
+[`04-plano-storage-ledger.md`](04-plano-storage-ledger.md) e implemente nos dois
+lados do par com a mesma suíte de conformidade. Uma capability só fica em um
+lado quando a incompatibilidade técnica está verificada na documentação do
+projeto e registrada em `capabilities()` (política na
+[spec 02](../specs/02-storage-memoria-contexto-rag.md)).
 
 ## Critérios para encerrar o loop
 
@@ -70,8 +112,10 @@ verificados e documentados. Informe os resultados, limitações e estado dos PRs
 
 Uma decisão muda contrato público, arquitetura, segurança, dados, compatibilidade,
 escopo ou comportamento externo e não pode ser inferida com segurança. Registre
-em `docs/analyses/` a pergunta, opções, impactos e trabalho bloqueado; pergunte a
-`brunosrz` e pare. Retome somente após a resposta.
+em `docs/analyses/` a pergunta, opções, impactos e trabalho bloqueado e conclua
+todo o trabalho independente. Então faça a pergunta a `brunosrz` **no chat**
+(não em issue nem em comentário de PR, sem marcá-lo no GitHub) e pare. Retome
+somente após a resposta.
 
 ### Bloqueio externo sem avanço independente
 
@@ -79,6 +123,7 @@ Uma credencial, serviço, dependência ou ambiente externo impede o trabalho
 restante e não há etapa independente útil. Registre o bloqueio, evidências e
 condição para retomada; pare até a condição mudar.
 
-Não encerre por conveniência ou falta de contexto: reconstrua o contexto pelos
-arquivos acima. Não continue após um critério de encerramento até receber nova
+Não encerre por conveniência, falta de contexto, PR anterior aguardando
+aprovação ou checks de CI em execução ou falhando: reconstrua o contexto pelos
+arquivos acima e siga a stack. Não continue após um critério de encerramento até receber nova
 orientação ou a decisão necessária.

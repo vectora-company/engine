@@ -8,7 +8,14 @@ item bloqueado ou não aplicável precisa de uma justificativa curta.
 
 ## Preparação
 
-- [ ] Confirmar repo, branch, base da stack e working tree.
+- [ ] Confirmar repo, branch, base da stack e working tree; listar os PRs
+      abertos e usar o PR aberto como base. Em checkout compartilhado, conferir
+      a branch atual antes de agir.
+- [ ] Storage: conferir `podman ps -a`, iniciar os contêineres de teste e
+      exportar as variáveis `VECTORA_TEST_*` necessárias.
+- [ ] Storage: consultar a matriz de equivalência do plano de storage; a
+      capability vale para os dois lados do par ou tem motivo de
+      incompatibilidade registrado.
 - [ ] Ler `AGENTS.md`, plano ativo, spec, análise e checklist específicos.
 - [ ] Identificar consumidores, bindings e contratos afetados.
 - [ ] Para capabilities destinadas ao GH Bot, revisar
@@ -53,8 +60,16 @@ item bloqueado ou não aplicável precisa de uma justificativa curta.
 - [ ] Revisar diff, arquivos staged e ausência de segredos/artefatos incidentais.
 - [ ] Registrar comandos, resultados, SHA, ambiente e limitações reproduzíveis.
 - [ ] Atualizar plano, análise e checklist com estado verdadeiro.
-- [ ] Commitar e atualizar o PR/stack conforme instrução do mantenedor.
-- [ ] Registrar próximo passo e confirmar que ele está aprovado e desbloqueado.
+- [ ] Rodar o Prettier nos Markdown alterados e repetir o `git add` se o hook
+      reformatar.
+- [ ] Commitar e fazer push para a URL do GitHub (o `origin` local pode apontar
+      para um clone).
+- [ ] Abrir o PR com base na branch do PR anterior da stack (não `main`).
+- [ ] Iniciar a próxima etapa em nova branch empilhada sem esperar CI nem
+      aprovação.
+- [ ] Antes de parar um contêiner de teste, conferir que não tem `AutoRemove`.
+- [ ] Confirmar que o próximo passo está no plano ativo aprovado; abrir sua
+      branch empilhada imediatamente, sem esperar CI ou aprovação do PR anterior.
 
 ## Saída de etapa
 
