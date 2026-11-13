@@ -9,7 +9,7 @@ lifecycle/verificação e snapshots/pedidos/recibos de policy. São fundações
 experimentais, não um runtime operacional completo: o host executa adapters,
 autentica identidade/aprovador/reconciliador e coordena providers/processos. A
 engine não torna efeitos externos atômicos nem fornece exactly-once. Não há
-adapter PostgreSQL equivalente para lifecycle, loop ou policy, coordenação
+adapter PostgreSQL equivalente para lifecycle, loop ou policy (lacuna de equivalência a fechar), coordenação
 operacional de restart, execução sandbox, aplicação de hooks/egress, subagentes,
 skills, plugins ou orquestração multiagente. A avaliação de policy não autentica
 o host nem o aprovador. Consulte a

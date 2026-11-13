@@ -30,12 +30,19 @@ specs locais.
    contrato permitir.
 4. Não afirme paridade nem ganho de performance sem casos de conformidade e
    medições reproduzíveis por SHA, ambiente e configuração.
-5. MCP é uma integração cliente. A engine não converte o produto Vectora em
+5. Storage tem duas camadas, nesta ordem. Base: tudo que existe nos dois lados
+   de um par (SQLite/PostgreSQL, LanceDB/Qdrant, Redis/NATS KV, Redis
+   Streams/JetStream, Redis Pub/Sub/NATS Core) é implementado nos dois, com a
+   mesma API, semântica observável e suíte de conformidade; um lado sem a
+   capacidade é lacuna, não escolha. Especialização: só o que o outro lado
+   não pode fazer por incompatibilidade técnica verificada e registrada em
+   `capabilities()`. Veja `docs/specs/02-storage-memoria-contexto-rag.md`.
+6. MCP é uma integração cliente. A engine não converte o produto Vectora em
    servidor MCP.
-6. Comentários explicam invariantes e comportamento presente; não guardam
+7. Comentários explicam invariantes e comportamento presente; não guardam
    histórico de implementação, menções a ferramentas de IA ou etapas de
    planejamento.
-7. Use Conventional Commits. Títulos e descrições de PR em português; para
+8. Use Conventional Commits. Títulos e descrições de PR em português; para
    mudanças ligadas a uma spec, inclua uma única linha `Refs: #N` ou
    `Closes: #N` quando houver issue pública correspondente.
 

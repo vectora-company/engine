@@ -1,8 +1,10 @@
 //! Static, declarative capabilities of the selected storage backends.
 //!
 //! The report describes what each adapter implements; it does not open a
-//! connection, probe a service, or prove operational guarantees. Differences
-//! between backends are stated, never normalised.
+//! connection, probe a service, or prove operational guarantees. Backends in
+//! the same pair are meant to share a functional base; a difference reported
+//! here is either a gap still to close or a specialisation whose
+//! incompatibility reason is recorded.
 
 use serde::{Deserialize, Serialize};
 

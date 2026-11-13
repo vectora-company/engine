@@ -44,3 +44,16 @@ evidência local registrada; não implica prontidão de produção.
 Os testes/limites restantes estão descritos na análise vinculada. A antiga nota
 de interrupção de testes e addons desatualizados pertencia à etapa inicial e foi
 substituída pelos resultados locais registrados em 2026-11-12.
+
+## Equivalência por par (política de 2026-11-12)
+
+Cada item abaixo é lacuna a fechar nos dois lados do par; veja a matriz em
+[`04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
+
+- [ ] Vetorial: alinhar métrica (L2 × cosseno) e normalizar o score; contrato de ranking testado com vetores não normalizados nos dois backends.
+- [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends; limite de dimensão da consulta igual nos dois.
+- [ ] KV: TTL no NATS KV (verificar versão do NATS); CAS por revisão, incremento atômico, prefixo e watch nos dois.
+- [ ] Filas: `max_deliver`/contagem de entregas, DLQ, NACK/atraso e deduplicação equivalentes nas duas.
+- [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL, com a mesma suíte do SQLite.
+- [ ] Decisão do mantenedor: autoridade do ledger (SQLite obrigatório × PostgreSQL selecionável como autoridade).
+- [ ] Especializações: registrar cada uma em `capabilities()` com o motivo de incompatibilidade verificado na documentação.
