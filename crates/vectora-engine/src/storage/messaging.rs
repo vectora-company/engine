@@ -1135,4 +1135,117 @@ mod tests {
             assert_eq!(second.get("key").await.unwrap(), Some(b"two".to_vec()));
         }
     }
+
+    /// Restarts a local test container. Enabled only when the operator sets
+    /// `VECTORA_TEST_PODMAN_RESTART`, because it interrupts the service.
+    fn restart_test_container(name: &str) -> bool {
+        if std::env::var("VECTORA_TEST_PODMAN_RESTART").is_err() {
+            return false;
+        }
+        let status = std::process::Command::new("podman")
+            .args(["restart", "-t", "5", name])
+            .status()
+            .expect("podman is required for service restart tests");
+        assert!(status.success(), "podman restart {name} failed");
+        true
+    }
+
+    /// Retries until the adapter works again after a restart, so the test
+    /// measures recovery and not how quickly the service listens.
+    async fn eventually<T, F, Fut>(what: &str, mut operation: F) -> T
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = Result<T, MessagingError>>,
+    {
+        let mut last = None;
+        for _ in 0..40 {
+            match tokio::time::timeout(Duration::from_secs(5), operation()).await {
+                Ok(Ok(value)) => return value,
+                Ok(Err(error)) => last = Some(error.to_string()),
+                Err(_) => last = Some("timed out".into()),
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        panic!("{what} did not recover after the service restart: {last:?}");
+    }
+
+    #[tokio::test]
+    async fn redis_kv_and_stream_recover_after_service_restart() {
+        let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let namespace = format!("restart_{}", unique_suffix());
+        let store = KvStoreAdapter::connect(KvStoreConfig {
+            backend: super::super::KvBackend::Redis,
+            endpoint: url.clone(),
+            namespace: namespace.clone(),
+        })
+        .await
+        .unwrap();
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint: url,
+            namespace,
+            visibility_timeout_seconds: 1,
+        })
+        .await
+        .unwrap();
+        store.put("kept", b"value".to_vec(), None).await.unwrap();
+        queue.enqueue(b"job".to_vec()).await.unwrap();
+        if !restart_test_container("vectora-engine-redis") {
+            return;
+        }
+        let kept = eventually("redis kv get", || store.get("kept")).await;
+        assert_eq!(kept, Some(b"value".to_vec()), "persisted key must survive");
+        let delivery = eventually("redis queue receive", || async {
+            queue
+                .receive("worker", "workers", Duration::from_secs(1))
+                .await?
+                .ok_or(MessagingError::Storage)
+        })
+        .await;
+        assert_eq!(delivery.payload(), b"job");
+        delivery.ack().await.unwrap();
+        store.put("after", b"ok".to_vec(), None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn nats_kv_and_jetstream_recover_after_service_restart() {
+        let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let suffix = unique_suffix();
+        let store = KvStoreAdapter::connect(KvStoreConfig {
+            backend: super::super::KvBackend::NatsJetstream,
+            endpoint: url.clone(),
+            namespace: format!("RESTART_{suffix}"),
+        })
+        .await
+        .unwrap();
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint: url,
+            namespace: format!("restartq_{suffix}"),
+            visibility_timeout_seconds: 1,
+        })
+        .await
+        .unwrap();
+        store.put("kept", b"value".to_vec(), None).await.unwrap();
+        queue.enqueue(b"job".to_vec()).await.unwrap();
+        if !restart_test_container("vectora-engine-nats") {
+            return;
+        }
+        let kept = eventually("nats kv get", || store.get("kept")).await;
+        assert_eq!(kept, Some(b"value".to_vec()), "persisted key must survive");
+        let delivery = eventually("nats queue receive", || async {
+            queue
+                .receive("worker", "restart-workers", Duration::from_secs(2))
+                .await?
+                .ok_or(MessagingError::Storage)
+        })
+        .await;
+        assert_eq!(delivery.payload(), b"job");
+        delivery.ack().await.unwrap();
+        store.put("after", b"ok".to_vec(), None).await.unwrap();
+    }
 }

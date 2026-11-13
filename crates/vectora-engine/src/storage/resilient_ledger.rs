@@ -266,4 +266,88 @@ mod tests {
         drop(pg);
         std::fs::remove_file(path).unwrap();
     }
+
+    fn podman(action: &str, container: &str) {
+        let status = std::process::Command::new("podman")
+            .args([action, container])
+            .status()
+            .expect("podman is required for service restart tests");
+        assert!(status.success(), "podman {action} {container} failed");
+    }
+
+    #[tokio::test]
+    async fn projection_resumes_after_postgres_is_stopped_and_started() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        if std::env::var("VECTORA_TEST_PODMAN_RESTART").is_err() {
+            return;
+        }
+        // `podman stop` deletes a container created with auto-remove, which
+        // would destroy the operator's service instead of pausing it.
+        let auto_remove = std::process::Command::new("podman")
+            .args([
+                "inspect",
+                "--format",
+                "{{.HostConfig.AutoRemove}}",
+                "vectora-engine-pg-test",
+            ])
+            .output()
+            .expect("podman is required for service restart tests");
+        if String::from_utf8_lossy(&auto_remove.stdout).trim() != "false" {
+            return;
+        }
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let scope = format!("outage-{suffix}");
+        let draft = |n: u64| EventDraft {
+            scope: scope.clone(),
+            aggregate: "thread".into(),
+            event_id: format!("event-{n}-{suffix}"),
+            idempotency_key: format!("idem-{n}-{suffix}"),
+            event_type: "step".into(),
+            payload: json!({"n": n}),
+            expected_version: n - 1,
+        };
+        let path = db_path();
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(
+            ledger.append(draft(1)).await.unwrap().mirror,
+            MirrorState::Synchronized
+        );
+
+        podman("stop", "vectora-engine-pg-test");
+        let during_outage = ledger.append(draft(2)).await.unwrap();
+        assert_eq!(during_outage.mirror, MirrorState::Pending);
+        assert_eq!(ledger.pending_count().unwrap(), 1);
+        assert_eq!(
+            ledger.read_local(&scope, "thread", 0, 10).unwrap().len(),
+            2,
+            "the local commit must not depend on PostgreSQL"
+        );
+
+        podman("start", "vectora-engine-pg-test");
+        let mut recovered = false;
+        for _ in 0..40 {
+            if ledger.flush_outbox(100).await.is_ok() && ledger.pending_count().unwrap() == 0 {
+                recovered = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        assert!(recovered, "outbox must drain after PostgreSQL returns");
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        let projected = pg.read(&scope, "thread", 0, 10).await.unwrap();
+        assert_eq!(
+            projected.iter().map(|e| e.sequence).collect::<Vec<_>>(),
+            [1, 2]
+        );
+        assert_eq!(projected[1], during_outage.event);
+        drop(ledger);
+        drop(pg);
+        std::fs::remove_file(path).unwrap();
+    }
 }

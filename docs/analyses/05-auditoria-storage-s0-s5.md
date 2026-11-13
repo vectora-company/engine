@@ -123,9 +123,21 @@ falharam. Testes adicionados nesta etapa:
   inválida falha, e direção do score (LanceDB distância/menor é mais próximo;
   Qdrant similaridade/maior é mais próximo), coerente com `capabilities()`.
 
-Não coberto: derrubar/reiniciar o serviço durante a operação (reconnect,
-shutdown), retenção JetStream, limites de payload e falhas de indexação.
-Permanecem `não executado`.
+Reinício de serviços (`VECTORA_TEST_PODMAN_RESTART=1`, 55 testes de `storage::`
+passam nessa configuração; o de PostgreSQL passou isoladamente após a trava
+descrita abaixo): `podman restart` de Redis e NATS — a chave de KV e o job
+enfileirado sobrevivem, o adapter volta a operar e o ACK funciona; PostgreSQL
+parado e religado — o append SQLite continua confirmado e `Pending` durante a
+queda, e a outbox drena em ordem após o retorno. A durabilidade observada é
+da configuração de teste (sem volume dedicado), não uma garantia do adapter.
+
+Incidente: o contêiner `vectora-engine-pg-test` havia sido criado com remoção
+automática; `podman stop` o apagou. Foi recriado (mesma imagem, porta, usuário
+e banco; senha de teste nova, sem remoção automática) e o teste agora só para
+o serviço se `AutoRemove` for falso.
+
+Não coberto: shutdown gracioso do adapter, retenção JetStream, reinício do
+Qdrant, limites de payload e falhas de indexação. Permanecem `não executado`.
 
 ## Trabalho que permanece
 
