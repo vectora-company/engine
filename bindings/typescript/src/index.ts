@@ -47,9 +47,22 @@ export interface FallbackChatSettings {
 }
 
 /** Ephemeral assets keyed by the consumer's opaque asset IDs. */
+export interface ProviderMediaLimits {
+  provider: string;
+  model: string;
+  limits: {
+    image_bytes?: number;
+    audio_bytes?: number;
+    video_bytes?: number;
+    document_bytes?: number;
+    file_bytes?: number;
+  };
+}
+
 export interface MediaExecutionContext {
   assets: Record<string, Uint8Array>;
   max_media_bytes?: number;
+  provider_limits?: ProviderMediaLimits[];
 }
 
 export interface PreparedContent {
@@ -1889,6 +1902,9 @@ function encodeMediaSettings(
       ...(context.max_media_bytes === undefined
         ? {}
         : { max_media_bytes: context.max_media_bytes }),
+      ...(context.provider_limits === undefined
+        ? {}
+        : { provider_limits: context.provider_limits }),
     },
   });
 }

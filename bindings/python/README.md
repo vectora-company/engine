@@ -28,7 +28,7 @@ Mídia usa `MediaExecutionContext(assets={asset_id: bytes})`. O mapa é
 temporário; no Vectora, construa-o somente com bytes obtidos por
 `AssetStore.read` após validar owner/workspace/thread. `prepare_chat_content`
 é o modo manual; `chat_complete(..., media_context=ctx)` é por chamada;
-`settings["media_context"] = ctx` configura o padrão. O limite padrão é 20 MiB.
+`settings["media_context"] = ctx` configura o padrão. O limite padrão é 20 MiB por asset. `provider_limits` pode definir limites específicos por provider/modelo e modalidade (`image_bytes`, `audio_bytes`, `video_bytes`, `document_bytes`, `file_bytes`); o menor entre esse valor e `max_media_bytes` vale. Isso é configuração explícita do host, não descoberta automática do provider.
 
 Anthropic Messages, Google Gemini e Cohere Chat v2 usam `native_chat_complete`
 e `native_chat_stream` com o mesmo contrato Rust. `settings.provider` deve ser

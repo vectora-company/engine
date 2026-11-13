@@ -16,7 +16,8 @@ use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ContentPart,
     ContentSite, FallbackChatClient, FallbackChatSettings, MediaError, MediaExecutionContext,
     MediaRef, MediaStore, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
-    OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn, prepare_content_with_limit,
+    OpenAiCompatibleSettings, ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn,
+    prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -95,6 +96,8 @@ struct BindingMediaContext {
     assets: HashMap<String, String>,
     #[serde(default)]
     max_media_bytes: Option<u64>,
+    #[serde(default)]
+    provider_limits: Vec<ProviderMediaLimits>,
 }
 
 struct BindingMediaStore(HashMap<String, Vec<u8>>);
@@ -122,10 +125,13 @@ fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionConte
                 .map_err(|_| "invalid base64 media asset".to_owned())
         })
         .collect::<Result<HashMap<_, _>, _>>()?;
-    let mut context = MediaExecutionContext::new(
-        CapabilityResolver::new(),
-        Arc::new(BindingMediaStore(assets)),
-    );
+    let resolver = settings
+        .provider_limits
+        .iter()
+        .fold(CapabilityResolver::new(), |resolver, entry| {
+            resolver.with_media_limits(&entry.provider, &entry.model, entry.limits)
+        });
+    let mut context = MediaExecutionContext::new(resolver, Arc::new(BindingMediaStore(assets)));
     if let Some(limit) = settings.max_media_bytes {
         context = context.with_max_media_bytes(limit);
     }
@@ -1742,13 +1748,14 @@ fn chat_prepare_content<'py>(
             .map_err(|_| py_error("invalid media context"))?;
         let context = binding_media_context(context_value).map_err(py_error)?;
         let capabilities = context.resolver.resolve(&provider, &model);
-        let prepared = prepare_content_with_limit(
+        let prepared = prepare_content_with_limits(
             parts,
             &capabilities,
             context.store.as_ref(),
             &model,
             ContentSite::UserMessage,
             context.max_media_bytes,
+            context.resolver.media_limits_for(&provider, &model),
         )
         .await;
         encode_json(&serde_json::json!({

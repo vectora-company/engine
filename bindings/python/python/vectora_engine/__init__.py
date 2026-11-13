@@ -19,6 +19,7 @@ class MediaExecutionContext:
 
     assets: Mapping[str, bytes]
     max_media_bytes: int | None = None
+    provider_limits: Sequence[Mapping[str, Any]] = ()
 
 
 def _media_settings(
@@ -43,9 +44,17 @@ def _media_settings(
             if not isinstance(data, (bytes, bytearray, memoryview)):
                 raise TypeError(f"media asset {asset_id!r} must be bytes-like")
             encoded[asset_id] = base64.b64encode(data).decode("ascii")
-        payload["media_context"] = {"assets": encoded}
+        media_payload: dict[str, Any] = {"assets": encoded}
+        provider_limits = (
+            context.provider_limits
+            if isinstance(context, MediaExecutionContext)
+            else context.get("provider_limits", ())
+        )
+        if provider_limits:
+            media_payload["provider_limits"] = list(provider_limits)
         if limit is not None:
-            payload["media_context"]["max_media_bytes"] = limit
+            media_payload["max_media_bytes"] = limit
+        payload["media_context"] = media_payload
     return json.dumps(payload, separators=(",", ":"))
 
 
