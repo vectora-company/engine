@@ -163,4 +163,4 @@ orientação ou a decisão necessária.
 
 O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94 e integrado, adiciona testes service-real que confirmam `ProjectionMismatch` para linha extra em `ve_ledger_versions` e `ProjectionConflict` para payload divergente. Ambos passaram no PostgreSQL local; Clippy passou. Próxima etapa: concorrência entre projetores.
 
-Esta etapa, baseada em main após o #95, testa 16 rodadas service-real com dois projetores independentes drenando simultaneamente duas sequências do mesmo agregado. Todos os resultados foram idempotentes, sem pendências; Clippy passou. Migrations PostgreSQL versionadas e rollback continuam pendentes.
+O PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main` após integração do #95, testa 16 rodadas service-real com dois projetores independentes drenando simultaneamente duas sequências do mesmo agregado. Todos os resultados foram idempotentes, sem pendências; Clippy passou. Migrations PostgreSQL versionadas e rollback continuam pendentes.

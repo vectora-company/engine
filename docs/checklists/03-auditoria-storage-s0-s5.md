@@ -91,7 +91,7 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [ ] Executar suíte NATS com versão 2.11+ (servidor local é 2.10).
 - [x] Commit `984e2d066dcc05b0a98e076361ada632751fc61a`, push e abrir PR [#94](https://github.com/vectora-company/engine/pull/94), filho do #93.
 
-## Concorrência dos projetores PostgreSQL — etapa de concorrência, baseada em main após o #95
+## Concorrência dos projetores PostgreSQL — PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`
 
 - [x] Em 16 rodadas contra PostgreSQL real, dois `ResilientLedger` independentes drenaram a mesma outbox com dois eventos sequenciais. Ambos terminaram sem erro, só houve uma cópia de cada evento e a outbox ficou vazia.
 - [ ] Expandir para processos independentes, admission/reservation concorrentes e erro/retry durante a corrida.

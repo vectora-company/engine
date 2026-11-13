@@ -7,7 +7,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
 com o estado verificado, a direção de uma primeira release completa e o backlog
-por fases. A stack #73–#95 foi integrada em `main` (`d9497080efee29b816e78fff0c0d6ff2ab6f7147`); não havia PR aberto quando começou a etapa atual. A branch local `test/postgres-concurrent-projectors` cobre uma verificação adicional de concorrência dos projetores PostgreSQL; o PR desta etapa será aberto sobre `main`. Storage e runtime ainda têm gaps registrados no plano e nas specs.
+por fases. A stack #73–#95 foi integrada em `main` (`d9497080efee29b816e78fff0c0d6ff2ab6f7147`); não havia PR aberto quando começou a etapa atual. A branch local `test/postgres-concurrent-projectors` cobre uma verificação adicional de concorrência dos projetores PostgreSQL; PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`, head `fb1977a`. Storage e runtime ainda têm gaps registrados no plano e nas specs.
 
 ## Operação de desenvolvimento
 

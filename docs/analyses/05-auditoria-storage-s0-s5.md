@@ -244,6 +244,6 @@ Branch `test/postgres-projection-integrity`, commit `df23e43cda2d24e4a4e169f4da3
 
 Dois testes PostgreSQL reais verificam que `rebuild_projection` falha com `ProjectionMismatch` se houver uma linha de versão extra na scope e com `ProjectionConflict` se o payload de um evento projetado tiver sido alterado. A outbox local permanece pendente no conflito. Os três testes de rebuild (reconstrução completa e duas rejeições) passaram; Clippy passou.
 
-## Concorrência entre projetores — etapa baseada em main após o #95
+## Concorrência entre projetores — PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`
 
 Teste service-real em 16 rodadas abre dois `ResilientLedger` independentes sobre o mesmo arquivo SQLite e drena em paralelo dois eventos sequenciais na mesma scope/agregado. Cada evento aparece uma vez no PostgreSQL, não há erro nem outbox restante. Isso cobre handles/conexões independentes no mesmo processo; concorrência entre processos e admissions disputadas ainda não foram medidas. Clippy passou.
