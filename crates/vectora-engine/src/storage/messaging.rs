@@ -770,15 +770,10 @@ impl NatsStreamQueue {
         group: &str,
         timeout: Duration,
     ) -> Result<Option<NatsQueueDelivery>, MessagingError> {
-        use futures_util::StreamExt;
         validate_key(group)?;
         let consumer = self.ensure(group).await?;
-        let mut messages = consumer
-            .messages()
-            .await
-            .map_err(|_| MessagingError::Storage)?;
-        match tokio::time::timeout(timeout, messages.next()).await {
-            Ok(Some(Ok(message))) => {
+        match pull_nats_queue_message(&consumer, timeout).await? {
+            Some(message) => {
                 let info = message.info().map_err(|_| MessagingError::Storage)?;
                 let attempts = info.delivered.max(1);
                 if attempts > i64::from(self.max_attempts) {
@@ -814,8 +809,7 @@ impl NatsStreamQueue {
                     }))
                 }
             }
-            Ok(Some(Err(_))) => Err(MessagingError::Storage),
-            Ok(None) | Err(_) => Ok(None),
+            None => Ok(None),
         }
     }
 
@@ -825,7 +819,6 @@ impl NatsStreamQueue {
         timeout: Duration,
     ) -> Result<Option<NatsQueueDelivery>, MessagingError> {
         use async_nats::jetstream::consumer::PullConsumer;
-        use futures_util::StreamExt;
         validate_key(group)?;
         let stream = self.ensure_dead_stream().await?;
         let consumer: PullConsumer = stream
@@ -839,12 +832,8 @@ impl NatsStreamQueue {
             )
             .await
             .map_err(|_| MessagingError::Storage)?;
-        let mut messages = consumer
-            .messages()
-            .await
-            .map_err(|_| MessagingError::Storage)?;
-        match tokio::time::timeout(timeout, messages.next()).await {
-            Ok(Some(Ok(message))) => {
+        match pull_nats_queue_message(&consumer, timeout).await? {
+            Some(message) => {
                 let attempts = message
                     .info()
                     .map_err(|_| MessagingError::Storage)?
@@ -852,10 +841,31 @@ impl NatsStreamQueue {
                     .max(1) as u32;
                 Ok(Some(NatsQueueDelivery { message, attempts }))
             }
-            Ok(Some(Err(_))) => Err(MessagingError::Storage),
-            Ok(None) | Err(_) => Ok(None),
+            None => Ok(None),
         }
     }
+}
+
+async fn pull_nats_queue_message(
+    consumer: &async_nats::jetstream::consumer::PullConsumer,
+    timeout: Duration,
+) -> Result<Option<async_nats::jetstream::Message>, MessagingError> {
+    use futures_util::StreamExt;
+
+    // Each API call owns one delivery. Expire the pull on the broker so an
+    // idle receive cannot leave a request waiting with the SDK default expiry.
+    let mut batch = consumer
+        .batch()
+        .max_messages(1)
+        .expires(timeout.max(Duration::from_millis(1)))
+        .messages()
+        .await
+        .map_err(|_| MessagingError::Storage)?;
+    batch
+        .next()
+        .await
+        .transpose()
+        .map_err(|_| MessagingError::Storage)
 }
 
 pub struct NatsQueueDelivery {

@@ -339,6 +339,15 @@ ainda possui a entrega, com a mesma contagem, antes de publicar na DLQ e
 confirmar a origem. A validação desses cenários com os serviços permanece
 pendente nesta branch.
 
+## Recebimento de uma mensagem no JetStream
+
+A API pública retorna uma entrega por chamada. O método `messages()` do
+async-nats solicita até 200 mensagens por pedido e usa expiração de 30
+segundos. O adapter agora faz um pedido com limite de uma mensagem e usa o
+timeout da chamada como expiração no broker, tanto na fila principal quanto na
+DLQ. A confirmação de ausência de mensagem é recebida do broker. Verificação
+com serviço real permanece pendente nesta branch.
+
 ## Verificação da branch empilhada sobre #57
 
 Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:
