@@ -7,7 +7,9 @@ quando ocorrer uma das condições abaixo.
 
 Todos os critérios de aceite e entregas obrigatórias do plano ativo foram
 implementados, verificados localmente e documentados. Atualize o plano e os
-checklists, informe limitações e resultados, e encerre o goal.
+checklists, informe limitações e resultados, e encerre o goal. Confira também
+os links dos Markdown criados durante o ciclo em
+`docs/plans/00-prompt-loop-goal.md` e nos documentos do goal que os usam.
 
 ## 2. Decisão vital aguardando `brunosrz`
 

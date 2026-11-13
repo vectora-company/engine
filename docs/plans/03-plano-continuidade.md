@@ -208,18 +208,17 @@ Uma capability só avança de experimental quando:
 
 ## Próxima entrega recomendada
 
-Atualização do loop operacional está implementada na branch do PR #56.
-Alinhamento da métrica e do score vetorial está implementado e verificado na
-branch seguinte (PR #57). As próximas lacunas independentes da seção 1b são:
-(1) filtros, ANN, quantização e busca híbrida nos dois vector stores; (2) CAS,
-incremento, prefixo e watch nos dois KV stores. TTL por chave foi implementado
-na branch empilhada atual. O mantenedor definiu em 2026-11-12: TTL nativo exige
-NATS 2.11+; filas terão
-retenção finita configurável, teto de tentativas e DLQ recuperável; SQLite é a
-cópia local obrigatória para ledger e estado interno crítico, enquanto
-PostgreSQL recebe projeções retomáveis. ACK significa confirmação de job
-concluído com sucesso. Não iniciar adoção no Vectora nem reescrita ampla do
-backend Python antes dos gates.
+O PR #65 unifica a validação de dimensões de busca e gravação em LanceDB e
+Qdrant. O core compilou. Ainda falta verificar os extremos em execução.
+As próximas lacunas independentes incluem CAS por revisão, incremento,
+prefixo e watch nos dois KV stores, além de filtros e índices vetoriais.
+Em filas, faltam shutdown gracioso e redrive atômico. Os cenários de falha
+da DLQ, recebimento e preservação de configuração dos PRs #62–#64 ainda
+precisam de validação com serviço real.
+
+Veja [`docs/plans/04-plano-storage-ledger.md`](04-plano-storage-ledger.md),
+[`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md)
+e [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
 
 ## Nota de proveniência local
 
@@ -234,7 +233,7 @@ evidência nesta atualização.
 A referência de `main` foi consultada no remoto em 2026-11-12 (`a13140b`); as
 alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A stack
 ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
-→ #55 → #56 → #57. Não há PR #50 nessa cadeia.
+→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65.
 
 | PR                                                       | Entrega na branch do PR                                                             |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -256,7 +255,7 @@ ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 �
 | [#62](https://github.com/vectora-company/engine/pull/62) | Recuperação de falha na transferência para a DLQ em Redis Streams e NATS JetStream. |
 | [#63](https://github.com/vectora-company/engine/pull/63) | Recebimento de uma mensagem por chamada no JetStream, com expiração no broker.      |
 | [#64](https://github.com/vectora-company/engine/pull/64) | Preservação da configuração de streams e consumidores JetStream existentes.         |
-| Em andamento                                             | Limite comum de dimensões para gravar e buscar vetores em LanceDB e Qdrant.         |
+| [#65](https://github.com/vectora-company/engine/pull/65) | Limite comum de dimensões para gravar e buscar vetores em LanceDB e Qdrant.         |
 
 O teste service-real combinado de storage passou 58/58 com Redis, NATS,
 Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros
@@ -275,6 +274,6 @@ repositório do Bot e fica fora desta stack da Engine.
 As decisões sobre TTL, política de filas e autoridade do ledger foram recebidas
 no chat em 2026-11-12. PR #59 implementa atualização de dependências e TTL NATS.
 PR #60 implementa limite finito por quantidade para Redis/NATS (100000 por
-padrão). A branch atual implementa cinco entregas por padrão, DLQ consumível e
+padrão). O PR #61 implementa cinco entregas por padrão, DLQ consumível e
 APIs nos bindings. Shutdown gracioso e redrive atômico continuam como etapas
 seguintes aprovadas, sem depender de nova resposta.
