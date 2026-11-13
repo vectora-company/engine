@@ -1,7 +1,7 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada na stack aberta #79–#88; reclassificação de MIME está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87. A substituição
-direta de `ToolResult` está no PR #86, filho do #85; não há compatibilidade v1. Nada
+**Estado:** parcialmente implementada na stack aberta #79–#90; reclassificação de MIME está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87; a fronteira persistível/efêmera está no PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89. A substituição
+direta de `ToolResult` está no PR #86, filho do #85; não há compatibilidade v1. O PR #90 implementa o envelope persistível/efêmero e é filho do #89. Nada
 desta stack está integrado em `main`. Tipos, classificação por bytes, capabilities,
 decisões por parte, payloads nativos e preparo Rust estão implementados para os
 protocolos descritos abaixo. Retry textual único em incompatibilidade multimodal
@@ -119,17 +119,29 @@ indisponível: nome]`) e a decisão registra o motivo. Na reidratação, a assin
   textual ou nota, para limitar custo e superfície. O consumidor pode ampliar para
   as N imagens mais recentes de resultados de tools.
 
-## Decisão pendente — bytes inline na API pública
+## Fronteira de requests persistíveis e envio efêmero
 
-`ContentPart::Inline` carrega base64 diretamente; `ImageUrl` também pode carregar
-uma `data:` URL. Embora o preparo do request gere esses valores apenas em memória,
-os bindings aceitam os tipos serializados e consumidores podem persistir um
-`ChatRequest` inteiro por engano. A regra atual "não persistir" não é aplicada
-pelo tipo.
+A API separa o envelope persistível `PersistableChatRequest` do envelope de
+transporte `EphemeralChatRequest`. O primeiro rejeita `ContentPart::Inline` e
+`ImageUrl.url` com `data:` durante serialização e desserialização. O segundo
+contém `contract_version: 1` e um `ChatRequest`; só os métodos `*_ephemeral` dos
+bindings aceitam esse envelope, validam o limite global/configurado e conferem
+tipo e MIME pelos bytes antes do envio. O teto padrão é 20 MiB por asset e o
+contexto pode reduzi-lo. O MIME declarado é normalizado pela assinatura dos
+bytes; modalidade divergente, base64 inválido e payload acima do limite falham
+antes da chamada ao provider.
 
-A fronteira pública está pendente de decisão. As opções e consequências estão
-registradas em `docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`.
-Até a escolha, não alterar a aceitação, serialização nem tipos públicos de inline.
+Os três modos seguem disponíveis nos bindings Python e TypeScript: preparo
+manual com `prepare_chat_content`/`prepareChatContent` seguido de envio pelo
+método efêmero; contexto `MediaExecutionContext` passado por chamada; e contexto
+padrão configurado no client. Os seis métodos efêmeros cobrem complete/stream
+para adapter OpenAI-compatible, adapters nativos e fallback. Requests normais
+continuam aceitando referências e são seguros para persistência. O contrato
+público Chat v1 não mudou: o envelope efêmero tem versão independente.
+
+A escolha da opção 3 foi dada por brunosrz no chat. A implementação está no PR
+[#90](https://github.com/vectora-company/engine/pull/90), filho do PR
+[#89](https://github.com/vectora-company/engine/pull/89).
 
 ## Resultado de tool com partes
 

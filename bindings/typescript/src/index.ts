@@ -79,6 +79,12 @@ export interface ChatRequest {
   extensions?: Record<string, JsonValue>;
 }
 
+/** Request envelope for transient provider sends; never put in persisted chat history. */
+export interface EphemeralChatRequest {
+  contract_version: 1;
+  request: ChatRequest;
+}
+
 export interface ToolDefinition {
   name: string;
   description?: string;
@@ -820,10 +826,22 @@ interface NativeBinding {
     mediaContextJson: string,
   ): Promise<string>;
   chatComplete(settingsJson: string, requestJson: string): Promise<string>;
+  chatCompleteEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   chatStreamStart(settingsJson: string, requestJson: string): Promise<string>;
+  chatStreamStartEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   chatStreamNext(id: string): Promise<string | null>;
   chatStreamCancel(id: string): void;
   nativeChatComplete(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  nativeChatCompleteEphemeral(
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
@@ -831,11 +849,23 @@ interface NativeBinding {
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
+  nativeChatStreamStartEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   fallbackChatComplete(
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
+  fallbackChatCompleteEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   fallbackChatStreamStart(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  fallbackChatStreamStartEphemeral(
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
@@ -1975,6 +2005,18 @@ export async function nativeChatComplete(
   return JSON.parse(result) as ChatCompletion;
 }
 
+export async function nativeChatCompleteEphemeral(
+  settings: NativeChatSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): Promise<ChatCompletion> {
+  const result = await native.nativeChatCompleteEphemeral(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  return JSON.parse(result) as ChatCompletion;
+}
+
 /** Complete with an explicit ordered fallback list implemented by Rust. */
 export async function fallbackChatComplete(
   settings: FallbackChatSettings,
@@ -1982,6 +2024,18 @@ export async function fallbackChatComplete(
   mediaContext?: MediaExecutionContext,
 ): Promise<ChatCompletion> {
   const result = await native.fallbackChatComplete(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  return JSON.parse(result) as ChatCompletion;
+}
+
+export async function fallbackChatCompleteEphemeral(
+  settings: FallbackChatSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): Promise<ChatCompletion> {
+  const result = await native.fallbackChatCompleteEphemeral(
     encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
@@ -2001,6 +2055,18 @@ export async function chatComplete(
   return JSON.parse(result) as ChatCompletion;
 }
 
+export async function chatCompleteEphemeral(
+  settings: OpenAiCompatibleSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): Promise<ChatCompletion> {
+  const result = await native.chatCompleteEphemeral(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  return JSON.parse(result) as ChatCompletion;
+}
+
 /**
  * Pull a backpressured stream from Rust. Returning early or aborting iteration
  * cancels the native task and drops its HTTP response body.
@@ -2011,6 +2077,26 @@ export async function* chatStream(
   mediaContext?: MediaExecutionContext,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.chatStreamStart(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  try {
+    for (;;) {
+      const event = await native.chatStreamNext(id);
+      if (event === null) return;
+      yield JSON.parse(event) as ChatEvent;
+    }
+  } finally {
+    native.chatStreamCancel(id);
+  }
+}
+
+export async function* chatStreamEphemeral(
+  settings: OpenAiCompatibleSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): AsyncGenerator<ChatEvent> {
+  const id = await native.chatStreamStartEphemeral(
     encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
@@ -2046,6 +2132,26 @@ export async function* nativeChatStream(
   }
 }
 
+export async function* nativeChatStreamEphemeral(
+  settings: NativeChatSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): AsyncGenerator<ChatEvent> {
+  const id = await native.nativeChatStreamStartEphemeral(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  try {
+    for (;;) {
+      const event = await native.chatStreamNext(id);
+      if (event === null) return;
+      yield JSON.parse(event) as ChatEvent;
+    }
+  } finally {
+    native.chatStreamCancel(id);
+  }
+}
+
 /** Stream from an explicit fallback list; partial provider output is not replayed. */
 export async function* fallbackChatStream(
   settings: FallbackChatSettings,
@@ -2053,6 +2159,26 @@ export async function* fallbackChatStream(
   mediaContext?: MediaExecutionContext,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.fallbackChatStreamStart(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  try {
+    for (;;) {
+      const event = await native.chatStreamNext(id);
+      if (event === null) return;
+      yield JSON.parse(event) as ChatEvent;
+    }
+  } finally {
+    native.chatStreamCancel(id);
+  }
+}
+
+export async function* fallbackChatStreamEphemeral(
+  settings: FallbackChatSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): AsyncGenerator<ChatEvent> {
+  const id = await native.fallbackChatStreamStartEphemeral(
     encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );

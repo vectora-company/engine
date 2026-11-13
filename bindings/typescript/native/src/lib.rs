@@ -14,9 +14,10 @@ use napi_derive::napi;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ContentPart,
-    ContentSite, FallbackChatClient, FallbackChatSettings, MediaError, MediaExecutionContext,
-    MediaRef, MediaStore, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
-    OpenAiCompatibleSettings, ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn,
+    ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
+    FallbackChatSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore,
+    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
+    PersistableChatRequest, ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn,
     prepare_content_with_limits,
 };
 use vectora_engine::harness::{
@@ -152,6 +153,29 @@ fn split_media_context(
     Ok((settings, context))
 }
 
+fn request_media_limit(settings_json: &str) -> Result<u64> {
+    let value: serde_json::Value = serde_json::from_str(settings_json)
+        .map_err(|_| Error::from_reason("invalid client settings"))?;
+    Ok(value
+        .get("media_context")
+        .and_then(|context| context.get("max_media_bytes"))
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(DEFAULT_MAX_MEDIA_BYTES))
+}
+
+fn parse_chat_request(request_json: &str, ephemeral: bool, max_bytes: u64) -> Result<ChatRequest> {
+    if ephemeral {
+        let mut request: EphemeralChatRequest = serde_json::from_str(request_json)
+            .map_err(|_| Error::from_reason("invalid ephemeral chat request"))?;
+        request.validate(max_bytes).map_err(Error::from_reason)?;
+        Ok(request.into_inner())
+    } else {
+        let request: PersistableChatRequest = serde_json::from_str(request_json)
+            .map_err(|_| Error::from_reason("invalid persistable chat request"))?;
+        Ok(request.into_inner())
+    }
+}
+
 #[napi]
 pub async fn chat_prepare_content(
     provider: String,
@@ -186,12 +210,13 @@ pub async fn chat_prepare_content(
 fn parse_inputs(
     settings_json: &str,
     request_json: &str,
+    ephemeral: bool,
 ) -> Result<(OpenAiCompatibleClient, ChatRequest)> {
+    let max_bytes = request_media_limit(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: OpenAiCompatibleSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid client settings"))?;
-    let request: ChatRequest = serde_json::from_str(request_json)
-        .map_err(|_| Error::from_reason("invalid chat request"))?;
+    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
     let mut config = settings.into_config();
     if let Some(context) = media_context {
         config = config.media_context("openai", context);
@@ -204,12 +229,13 @@ fn parse_inputs(
 fn parse_native_inputs(
     settings_json: &str,
     request_json: &str,
+    ephemeral: bool,
 ) -> Result<(NativeChatClient, ChatRequest)> {
+    let max_bytes = request_media_limit(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: NativeChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid native provider settings"))?;
-    let request: ChatRequest = serde_json::from_str(request_json)
-        .map_err(|_| Error::from_reason("invalid chat request"))?;
+    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
     let mut client =
         NativeChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
     if let Some(context) = media_context {
@@ -221,12 +247,13 @@ fn parse_native_inputs(
 fn parse_fallback_inputs(
     settings_json: &str,
     request_json: &str,
+    ephemeral: bool,
 ) -> Result<(FallbackChatClient, ChatRequest)> {
+    let max_bytes = request_media_limit(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: FallbackChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid fallback settings"))?;
-    let request: ChatRequest = serde_json::from_str(request_json)
-        .map_err(|_| Error::from_reason("invalid chat request"))?;
+    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
     let mut client =
         FallbackChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
     if let Some(context) = media_context {
@@ -1645,7 +1672,20 @@ pub async fn fallback_rerank(settings_json: String, request_json: String) -> Res
 
 #[napi]
 pub async fn chat_complete(settings_json: String, request_json: String) -> Result<String> {
-    let (client, request) = parse_inputs(&settings_json, &request_json)?;
+    let (client, request) = parse_inputs(&settings_json, &request_json, false)?;
+    let completion = client
+        .complete(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    serde_json::to_string(&completion).map_err(|_| Error::from_reason("could not encode response"))
+}
+
+#[napi]
+pub async fn chat_complete_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request) = parse_inputs(&settings_json, &request_json, true)?;
     let completion = client
         .complete(request)
         .await
@@ -1655,7 +1695,7 @@ pub async fn chat_complete(settings_json: String, request_json: String) -> Resul
 
 #[napi]
 pub async fn chat_stream_start(settings_json: String, request_json: String) -> Result<String> {
-    let (client, request) = parse_inputs(&settings_json, &request_json)?;
+    let (client, request) = parse_inputs(&settings_json, &request_json, false)?;
     let stream = client
         .stream(request)
         .await
@@ -1668,6 +1708,43 @@ pub async fn chat_stream_start(settings_json: String, request_json: String) -> R
             let serialized = item
                 .map_err(|error| Error::from_reason(error.to_string()))
                 .and_then(|event: ChatEvent| {
+                    serde_json::to_string(&event)
+                        .map_err(|_| Error::from_reason("could not encode stream event"))
+                });
+            if sender.send(serialized).await.is_err() {
+                break;
+            }
+        }
+    });
+    let state = StreamState {
+        receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+        abort: task.abort_handle(),
+    };
+    streams()
+        .lock()
+        .map_err(|_| Error::from_reason("stream registry unavailable"))?
+        .insert(id.clone(), state);
+    Ok(id)
+}
+
+#[napi]
+pub async fn chat_stream_start_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request) = parse_inputs(&settings_json, &request_json, true)?;
+    let stream = client
+        .stream(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        let mut stream = stream;
+        while let Some(item) = stream.next().await {
+            let serialized = item
+                .map_err(|error| Error::from_reason(error.to_string()))
+                .and_then(|event| {
                     serde_json::to_string(&event)
                         .map_err(|_| Error::from_reason("could not encode stream event"))
                 });
@@ -1723,7 +1800,20 @@ pub fn chat_stream_cancel(id: String) -> Result<()> {
 
 #[napi]
 pub async fn native_chat_complete(settings_json: String, request_json: String) -> Result<String> {
-    let (client, request) = parse_native_inputs(&settings_json, &request_json)?;
+    let (client, request) = parse_native_inputs(&settings_json, &request_json, false)?;
+    let completion = client
+        .complete(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    serde_json::to_string(&completion).map_err(|_| Error::from_reason("could not encode response"))
+}
+
+#[napi]
+pub async fn native_chat_complete_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request) = parse_native_inputs(&settings_json, &request_json, true)?;
     let completion = client
         .complete(request)
         .await
@@ -1736,7 +1826,44 @@ pub async fn native_chat_stream_start(
     settings_json: String,
     request_json: String,
 ) -> Result<String> {
-    let (client, request) = parse_native_inputs(&settings_json, &request_json)?;
+    let (client, request) = parse_native_inputs(&settings_json, &request_json, false)?;
+    let stream = client
+        .stream(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        let mut stream = stream;
+        while let Some(item) = stream.next().await {
+            let serialized = item
+                .map_err(|error| Error::from_reason(error.to_string()))
+                .and_then(|event| {
+                    serde_json::to_string(&event)
+                        .map_err(|_| Error::from_reason("could not encode stream event"))
+                });
+            if sender.send(serialized).await.is_err() {
+                break;
+            }
+        }
+    });
+    let state = StreamState {
+        receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+        abort: task.abort_handle(),
+    };
+    streams()
+        .lock()
+        .map_err(|_| Error::from_reason("stream registry unavailable"))?
+        .insert(id.clone(), state);
+    Ok(id)
+}
+
+#[napi]
+pub async fn native_chat_stream_start_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request) = parse_native_inputs(&settings_json, &request_json, true)?;
     let stream = client
         .stream(request)
         .await
@@ -1770,7 +1897,20 @@ pub async fn native_chat_stream_start(
 
 #[napi]
 pub async fn fallback_chat_complete(settings_json: String, request_json: String) -> Result<String> {
-    let (client, request) = parse_fallback_inputs(&settings_json, &request_json)?;
+    let (client, request) = parse_fallback_inputs(&settings_json, &request_json, false)?;
+    let completion = client
+        .complete(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    serde_json::to_string(&completion).map_err(|_| Error::from_reason("could not encode response"))
+}
+
+#[napi]
+pub async fn fallback_chat_complete_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request) = parse_fallback_inputs(&settings_json, &request_json, true)?;
     let completion = client
         .complete(request)
         .await
@@ -1783,7 +1923,7 @@ pub async fn fallback_chat_stream_start(
     settings_json: String,
     request_json: String,
 ) -> Result<String> {
-    let (client, request) = parse_fallback_inputs(&settings_json, &request_json)?;
+    let (client, request) = parse_fallback_inputs(&settings_json, &request_json, false)?;
     let stream = client
         .stream(request)
         .await
@@ -1814,5 +1954,42 @@ pub async fn fallback_chat_stream_start(
                 abort: task.abort_handle(),
             },
         );
+    Ok(id)
+}
+
+#[napi]
+pub async fn fallback_chat_stream_start_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request) = parse_fallback_inputs(&settings_json, &request_json, true)?;
+    let stream = client
+        .stream(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        let mut stream = stream;
+        while let Some(item) = stream.next().await {
+            let serialized = item
+                .map_err(|error| Error::from_reason(error.to_string()))
+                .and_then(|event| {
+                    serde_json::to_string(&event)
+                        .map_err(|_| Error::from_reason("could not encode stream event"))
+                });
+            if sender.send(serialized).await.is_err() {
+                break;
+            }
+        }
+    });
+    let state = StreamState {
+        receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+        abort: task.abort_handle(),
+    };
+    streams()
+        .lock()
+        .map_err(|_| Error::from_reason("stream registry unavailable"))?
+        .insert(id.clone(), state);
     Ok(id)
 }

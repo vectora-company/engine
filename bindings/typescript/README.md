@@ -26,6 +26,13 @@ O mapa é temporário; o host valida autorização do asset antes de fornecê-lo
 settings configura o padrão. Contexto por chamada tem precedência; limite padrão
 de 20 MiB.
 
+Requests normais rejeitam `inline` e URLs `data:` para manter os bytes fora do
+histórico persistível. Para o modo manual de `prepareChatContent` ou outro
+payload inline, use `EphemeralChatRequest` com `chatCompleteEphemeral`/
+`chatStreamEphemeral`; os adapters nativos e fallback têm métodos equivalentes.
+O envelope efêmero é validado em Rust (versão, base64, assinatura/MIME e limite
+de bytes) antes do transporte e não deve ser persistido.
+
 Anthropic Messages, Google Gemini e Cohere Chat v2 usam `nativeChatComplete` e
 `nativeChatStream` com o mesmo contrato Rust. `settings.provider` deve ser
 `anthropic`, `google` ou `cohere`; credenciais e configuração específica pertencem ao

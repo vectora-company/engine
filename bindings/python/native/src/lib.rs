@@ -14,9 +14,10 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ContentPart,
-    ContentSite, FallbackChatClient, FallbackChatSettings, MediaError, MediaExecutionContext,
-    MediaRef, MediaStore, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
-    OpenAiCompatibleSettings, ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn,
+    ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
+    FallbackChatSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore,
+    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
+    PersistableChatRequest, ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn,
     prepare_content_with_limits,
 };
 use vectora_engine::harness::{
@@ -151,15 +152,43 @@ fn split_media_context(
     Ok((settings, context))
 }
 
+fn request_media_limit(settings_json: &str) -> Result<u64, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(settings_json).map_err(|_| "invalid client settings".to_owned())?;
+    Ok(value
+        .get("media_context")
+        .and_then(|context| context.get("max_media_bytes"))
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(DEFAULT_MAX_MEDIA_BYTES))
+}
+
+fn parse_chat_request(
+    request_json: &str,
+    ephemeral: bool,
+    max_bytes: u64,
+) -> Result<ChatRequest, String> {
+    if ephemeral {
+        let mut request: EphemeralChatRequest = serde_json::from_str(request_json)
+            .map_err(|error| format!("invalid ephemeral chat request: {error}"))?;
+        request.validate(max_bytes)?;
+        Ok(request.into_inner())
+    } else {
+        serde_json::from_str::<PersistableChatRequest>(request_json)
+            .map(PersistableChatRequest::into_inner)
+            .map_err(|error| format!("invalid persistable chat request: {error}"))
+    }
+}
+
 fn parse_inputs(
     settings_json: &str,
     request_json: &str,
+    ephemeral: bool,
 ) -> Result<(OpenAiCompatibleClient, ChatRequest), String> {
+    let max_bytes = request_media_limit(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: OpenAiCompatibleSettings =
         serde_json::from_value(settings_json).map_err(|_| "invalid client settings".to_owned())?;
-    let request: ChatRequest =
-        serde_json::from_str(request_json).map_err(|_| "invalid chat request".to_owned())?;
+    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
     let mut config = settings.into_config();
     if let Some(context) = media_context {
         config = config.media_context("openai", context);
@@ -171,12 +200,13 @@ fn parse_inputs(
 fn parse_native_inputs(
     settings_json: &str,
     request_json: &str,
+    ephemeral: bool,
 ) -> Result<(NativeChatClient, ChatRequest), String> {
+    let max_bytes = request_media_limit(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: NativeChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| "invalid native provider settings".to_owned())?;
-    let request: ChatRequest =
-        serde_json::from_str(request_json).map_err(|_| "invalid chat request".to_owned())?;
+    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
     let mut client = NativeChatClient::new(settings).map_err(|error| error.to_string())?;
     if let Some(context) = media_context {
         client = client.with_media_context(context);
@@ -187,12 +217,13 @@ fn parse_native_inputs(
 fn parse_fallback_inputs(
     settings_json: &str,
     request_json: &str,
+    ephemeral: bool,
 ) -> Result<(FallbackChatClient, ChatRequest), String> {
+    let max_bytes = request_media_limit(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: FallbackChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| "invalid fallback settings".to_owned())?;
-    let request: ChatRequest =
-        serde_json::from_str(request_json).map_err(|_| "invalid chat request".to_owned())?;
+    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
     let mut client = FallbackChatClient::new(settings).map_err(|error| error.to_string())?;
     if let Some(context) = media_context {
         client = client.with_media_context(context);
@@ -1226,6 +1257,22 @@ fn queue_release(delivery_id: String) -> PyResult<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod request_boundary_tests {
+    use super::*;
+
+    const INNER: &str = r#"{"contract_version":2,"model":"m","messages":[{"role":"user","content":[{"type":"inline","kind":"image","mime_type":"image/png","name":"x.png","data_base64":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII="}]}]}"#;
+
+    #[test]
+    fn binding_requires_explicit_ephemeral_envelope_for_inline_media() {
+        assert!(parse_chat_request(INNER, false, 1024).is_err());
+        let envelope = format!(r#"{{"contract_version":1,"request":{INNER}}}"#);
+        let request = parse_chat_request(&envelope, true, 1024).unwrap();
+        assert_eq!(request.model, "m");
+        assert!(parse_chat_request(&envelope, true, 1).is_err());
+    }
+}
+
 #[pyfunction]
 fn pubsub_publish<'py>(
     py: Python<'py>,
@@ -1739,7 +1786,22 @@ fn chat_complete<'py>(
     request_json: String,
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
-        let (client, request) = parse_inputs(&settings_json, &request_json).map_err(py_error)?;
+        let (client, request) =
+            parse_inputs(&settings_json, &request_json, false).map_err(py_error)?;
+        let completion = client.complete(request).await.map_err(py_error)?;
+        serde_json::to_string(&completion).map_err(|_| py_error("could not encode response"))
+    })
+}
+
+#[pyfunction]
+fn chat_complete_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request) =
+            parse_inputs(&settings_json, &request_json, true).map_err(py_error)?;
         let completion = client.complete(request).await.map_err(py_error)?;
         serde_json::to_string(&completion).map_err(|_| py_error("could not encode response"))
     })
@@ -1784,7 +1846,46 @@ fn chat_stream_start<'py>(
     request_json: String,
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
-        let (client, request) = parse_inputs(&settings_json, &request_json).map_err(py_error)?;
+        let (client, request) =
+            parse_inputs(&settings_json, &request_json, false).map_err(py_error)?;
+        let stream = client.stream(request).await.map_err(py_error)?;
+        let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+        let (sender, receiver) = mpsc::channel(8);
+        let task = tokio::spawn(async move {
+            let mut stream = stream;
+            while let Some(item) = stream.next().await {
+                let serialized =
+                    item.map_err(|error| error.to_string())
+                        .and_then(|event: ChatEvent| {
+                            serde_json::to_string(&event)
+                                .map_err(|_| "could not encode stream event".to_owned())
+                        });
+                if sender.send(serialized).await.is_err() {
+                    break;
+                }
+            }
+        });
+        let state = StreamState {
+            receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+            abort: task.abort_handle(),
+        };
+        streams()
+            .lock()
+            .map_err(|_| py_error("stream registry unavailable"))?
+            .insert(id.clone(), state);
+        Ok(id)
+    })
+}
+
+#[pyfunction]
+fn chat_stream_start_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request) =
+            parse_inputs(&settings_json, &request_json, true).map_err(py_error)?;
         let stream = client.stream(request).await.map_err(py_error)?;
         let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
         let (sender, receiver) = mpsc::channel(8);
@@ -1858,7 +1959,21 @@ fn native_chat_complete<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
         let (client, request) =
-            parse_native_inputs(&settings_json, &request_json).map_err(py_error)?;
+            parse_native_inputs(&settings_json, &request_json, false).map_err(py_error)?;
+        let completion = client.complete(request).await.map_err(py_error)?;
+        serde_json::to_string(&completion).map_err(|_| py_error("could not encode response"))
+    })
+}
+
+#[pyfunction]
+fn native_chat_complete_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request) =
+            parse_native_inputs(&settings_json, &request_json, true).map_err(py_error)?;
         let completion = client.complete(request).await.map_err(py_error)?;
         serde_json::to_string(&completion).map_err(|_| py_error("could not encode response"))
     })
@@ -1872,7 +1987,43 @@ fn native_chat_stream_start<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
         let (client, request) =
-            parse_native_inputs(&settings_json, &request_json).map_err(py_error)?;
+            parse_native_inputs(&settings_json, &request_json, false).map_err(py_error)?;
+        let stream = client.stream(request).await.map_err(py_error)?;
+        let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+        let (sender, receiver) = mpsc::channel(8);
+        let task = tokio::spawn(async move {
+            let mut stream = stream;
+            while let Some(item) = stream.next().await {
+                let serialized = item.map_err(|error| error.to_string()).and_then(|event| {
+                    serde_json::to_string(&event)
+                        .map_err(|_| "could not encode stream event".to_owned())
+                });
+                if sender.send(serialized).await.is_err() {
+                    break;
+                }
+            }
+        });
+        let state = StreamState {
+            receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+            abort: task.abort_handle(),
+        };
+        streams()
+            .lock()
+            .map_err(|_| py_error("stream registry unavailable"))?
+            .insert(id.clone(), state);
+        Ok(id)
+    })
+}
+
+#[pyfunction]
+fn native_chat_stream_start_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request) =
+            parse_native_inputs(&settings_json, &request_json, true).map_err(py_error)?;
         let stream = client.stream(request).await.map_err(py_error)?;
         let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
         let (sender, receiver) = mpsc::channel(8);
@@ -1908,7 +2059,21 @@ fn fallback_chat_complete<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
         let (client, request) =
-            parse_fallback_inputs(&settings_json, &request_json).map_err(py_error)?;
+            parse_fallback_inputs(&settings_json, &request_json, false).map_err(py_error)?;
+        let completion = client.complete(request).await.map_err(py_error)?;
+        serde_json::to_string(&completion).map_err(|_| py_error("could not encode response"))
+    })
+}
+
+#[pyfunction]
+fn fallback_chat_complete_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request) =
+            parse_fallback_inputs(&settings_json, &request_json, true).map_err(py_error)?;
         let completion = client.complete(request).await.map_err(py_error)?;
         serde_json::to_string(&completion).map_err(|_| py_error("could not encode response"))
     })
@@ -1922,7 +2087,7 @@ fn fallback_chat_stream_start<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
         let (client, request) =
-            parse_fallback_inputs(&settings_json, &request_json).map_err(py_error)?;
+            parse_fallback_inputs(&settings_json, &request_json, false).map_err(py_error)?;
         let stream = client.stream(request).await.map_err(py_error)?;
         let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
         let (sender, receiver) = mpsc::channel(8);
@@ -1948,6 +2113,42 @@ fn fallback_chat_stream_start<'py>(
                     abort: task.abort_handle(),
                 },
             );
+        Ok(id)
+    })
+}
+
+#[pyfunction]
+fn fallback_chat_stream_start_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request) =
+            parse_fallback_inputs(&settings_json, &request_json, true).map_err(py_error)?;
+        let stream = client.stream(request).await.map_err(py_error)?;
+        let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+        let (sender, receiver) = mpsc::channel(8);
+        let task = tokio::spawn(async move {
+            let mut stream = stream;
+            while let Some(item) = stream.next().await {
+                let serialized = item.map_err(|error| error.to_string()).and_then(|event| {
+                    serde_json::to_string(&event)
+                        .map_err(|_| "could not encode stream event".to_owned())
+                });
+                if sender.send(serialized).await.is_err() {
+                    break;
+                }
+            }
+        });
+        let state = StreamState {
+            receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+            abort: task.abort_handle(),
+        };
+        streams()
+            .lock()
+            .map_err(|_| py_error("stream registry unavailable"))?
+            .insert(id.clone(), state);
         Ok(id)
     })
 }
@@ -2053,13 +2254,25 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(chat_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(chat_assemble_turn, module)?)?;
     module.add_function(wrap_pyfunction!(chat_complete, module)?)?;
+    module.add_function(wrap_pyfunction!(chat_complete_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(chat_prepare_content, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_start, module)?)?;
+    module.add_function(wrap_pyfunction!(chat_stream_start_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_next, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_cancel, module)?)?;
     module.add_function(wrap_pyfunction!(native_chat_complete, module)?)?;
+    module.add_function(wrap_pyfunction!(native_chat_complete_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(native_chat_stream_start, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        native_chat_stream_start_ephemeral,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(fallback_chat_complete, module)?)?;
+    module.add_function(wrap_pyfunction!(fallback_chat_complete_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(fallback_chat_stream_start, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        fallback_chat_stream_start_ephemeral,
+        module
+    )?)?;
     Ok(())
 }

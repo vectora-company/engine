@@ -229,7 +229,7 @@ impl NativeChatClient {
         let provider = self.provider_name();
         let prepared = context.prepare_request(provider, request.clone()).await;
         let mut decisions = prepared.decisions;
-        let mut completion = match self.complete_prepared(prepared.request).await {
+        let mut completion = match self.complete_prepared(prepared.request.into_inner()).await {
             Ok(completion) => completion,
             Err(ChatError::MultimodalIncompatible) if has_native_media(&decisions) => {
                 let fallback = context
@@ -238,7 +238,8 @@ impl NativeChatClient {
                 let mut fallback_decisions = fallback.decisions;
                 mark_text_retry(&mut fallback_decisions);
                 decisions = fallback_decisions;
-                self.complete_prepared(fallback.request).await?
+                self.complete_prepared(fallback.request.into_inner())
+                    .await?
             }
             Err(error) => return Err(error),
         };
@@ -270,7 +271,7 @@ impl NativeChatClient {
         let provider = self.provider_name();
         let prepared = context.prepare_request(provider, request.clone()).await;
         let mut decisions = prepared.decisions;
-        let stream = match self.stream_prepared(prepared.request).await {
+        let stream = match self.stream_prepared(prepared.request.into_inner()).await {
             Ok(stream) => stream,
             Err(ChatError::MultimodalIncompatible) if has_native_media(&decisions) => {
                 let fallback = context
@@ -279,7 +280,7 @@ impl NativeChatClient {
                 let mut fallback_decisions = fallback.decisions;
                 mark_text_retry(&mut fallback_decisions);
                 decisions = fallback_decisions;
-                self.stream_prepared(fallback.request).await?
+                self.stream_prepared(fallback.request.into_inner()).await?
             }
             Err(error) => return Err(error),
         };

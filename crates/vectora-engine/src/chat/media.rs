@@ -10,6 +10,8 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
+pub const DEFAULT_MAX_MEDIA_BYTES: u64 = 20 * 1024 * 1024;
+
 use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
@@ -563,7 +565,7 @@ impl MediaExecutionContext {
         Self {
             resolver,
             store,
-            max_media_bytes: 20 * 1024 * 1024,
+            max_media_bytes: DEFAULT_MAX_MEDIA_BYTES,
         }
     }
 
@@ -648,14 +650,17 @@ impl MediaExecutionContext {
                 decision
             }));
         }
-        PreparedRequest { request, decisions }
+        PreparedRequest {
+            request: super::EphemeralChatRequest::new(request),
+            decisions,
+        }
     }
 }
 
 /// A prepared request and redacted routing evidence for its media parts.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PreparedRequest {
-    pub request: super::ChatRequest,
+    pub request: super::EphemeralChatRequest,
     pub decisions: Vec<MediaDecision>,
 }
 

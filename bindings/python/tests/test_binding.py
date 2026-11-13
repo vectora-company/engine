@@ -1,6 +1,7 @@
 """Contract smoke tests for the Python facade over the Rust core."""
 
 import asyncio
+import base64
 import hashlib
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -10,12 +11,14 @@ from typing import Any
 
 import pytest
 from vectora_engine import (
+    EphemeralChatRequest,
     MediaExecutionContext,
     accept_model_turn,
     assemble_turn,
     authorize_tool_dispatch,
     cancel_model_tool_loop,
     chat_complete,
+    chat_complete_ephemeral,
     chat_contract_version,
     chat_stream,
     create_run,
@@ -1851,6 +1854,53 @@ def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
         limited_thread.join()
         limited_server.server_close()
     assert limited_capture["body"]["messages"][0]["content"][0]["type"] != "file"
+
+
+def test_inline_media_requires_explicit_ephemeral_request() -> None:
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII="
+    )
+    request = {
+        **REQUEST,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/jpeg;base64,"
+                            + base64.b64encode(png).decode("ascii")
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    response = json.dumps(
+        {"choices": [{"message": {"content": "answer"}, "finish_reason": "stop"}]}
+    ).encode()
+    server, thread, captured = serve(response, "application/json")
+    settings = {"base_url": endpoint(server)}
+    try:
+        with pytest.raises(RuntimeError, match="ephemeral"):
+            asyncio.run(chat_complete(settings, request))
+        ephemeral = EphemeralChatRequest(request)
+        asyncio.run(chat_complete_ephemeral(settings, ephemeral))
+        assert captured["body"]["messages"][0]["content"][0]["image_url"][
+            "url"
+        ].startswith("data:image/png;base64,")
+        with pytest.raises(RuntimeError, match="limit"):
+            asyncio.run(
+                chat_complete_ephemeral(
+                    {**settings, "media_context": {"assets": {}, "max_media_bytes": 1}},
+                    ephemeral,
+                )
+            )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
 
 
 def test_stream_keeps_reasoning_and_text_in_separate_events() -> None:

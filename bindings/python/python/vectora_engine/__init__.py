@@ -22,6 +22,26 @@ class MediaExecutionContext:
     provider_limits: Sequence[Mapping[str, Any]] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class EphemeralChatRequest:
+    """Explicit in-memory-only envelope for requests containing inline bytes."""
+
+    request: JsonObject
+    contract_version: int = 1
+
+
+def _ephemeral_request_json(request: EphemeralChatRequest | JsonObject) -> str:
+    value = (
+        request
+        if isinstance(request, EphemeralChatRequest)
+        else EphemeralChatRequest(request)
+    )
+    return json.dumps(
+        {"contract_version": value.contract_version, "request": value.request},
+        separators=(",", ":"),
+    )
+
+
 def _media_settings(
     settings: JsonObject, explicit: MediaExecutionContext | None
 ) -> str:
@@ -831,6 +851,20 @@ async def chat_complete(
     return json.loads(result)
 
 
+async def chat_complete_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> dict[str, Any]:
+    """Send an explicitly transient request that may contain Inline bytes/data URLs."""
+    return json.loads(
+        await _native.chat_complete_ephemeral(
+            _media_settings(settings, media_context), _ephemeral_request_json(request)
+        )
+    )
+
+
 async def prepare_chat_content(
     provider: str,
     model: str,
@@ -862,6 +896,20 @@ async def native_chat_complete(
     return json.loads(result)
 
 
+async def native_chat_complete_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> dict[str, Any]:
+    """Send transient inline media through a native provider adapter."""
+    return json.loads(
+        await _native.native_chat_complete_ephemeral(
+            _media_settings(settings, media_context), _ephemeral_request_json(request)
+        )
+    )
+
+
 async def chat_stream(
     settings: JsonObject,
     request: JsonObject,
@@ -872,6 +920,23 @@ async def chat_stream(
     stream_id = await _native.chat_stream_start(
         _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
+    )
+    try:
+        while event := await _native.chat_stream_next(stream_id):
+            yield json.loads(event)
+    finally:
+        _native.chat_stream_cancel(stream_id)
+
+
+async def chat_stream_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream a transient request that may contain inline media bytes."""
+    stream_id = await _native.chat_stream_start_ephemeral(
+        _media_settings(settings, media_context), _ephemeral_request_json(request)
     )
     try:
         while event := await _native.chat_stream_next(stream_id):
@@ -898,6 +963,23 @@ async def native_chat_stream(
         _native.chat_stream_cancel(stream_id)
 
 
+async def native_chat_stream_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream transient inline media through a native provider adapter."""
+    stream_id = await _native.native_chat_stream_start_ephemeral(
+        _media_settings(settings, media_context), _ephemeral_request_json(request)
+    )
+    try:
+        while event := await _native.chat_stream_next(stream_id):
+            yield json.loads(event)
+    finally:
+        _native.chat_stream_cancel(stream_id)
+
+
 async def fallback_chat_complete(
     settings: JsonObject,
     request: JsonObject,
@@ -910,6 +992,20 @@ async def fallback_chat_complete(
         json.dumps(request, separators=(",", ":")),
     )
     return json.loads(result)
+
+
+async def fallback_chat_complete_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> dict[str, Any]:
+    """Use caller-ordered fallback with an explicitly transient media request."""
+    return json.loads(
+        await _native.fallback_chat_complete_ephemeral(
+            _media_settings(settings, media_context), _ephemeral_request_json(request)
+        )
+    )
 
 
 async def fallback_chat_stream(
@@ -930,22 +1026,44 @@ async def fallback_chat_stream(
         _native.chat_stream_cancel(stream_id)
 
 
+async def fallback_chat_stream_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream caller-ordered fallback for transient inline media."""
+    stream_id = await _native.fallback_chat_stream_start_ephemeral(
+        _media_settings(settings, media_context), _ephemeral_request_json(request)
+    )
+    try:
+        while event := await _native.chat_stream_next(stream_id):
+            yield json.loads(event)
+    finally:
+        _native.chat_stream_cancel(stream_id)
+
+
 __all__ = [
+    "EphemeralChatRequest",
     "MediaExecutionContext",
     "accept_model_turn",
     "assemble_turn",
     "authorize_tool_dispatch",
     "cancel_model_tool_loop",
     "chat_complete",
+    "chat_complete_ephemeral",
     "chat_contract_version",
     "chat_stream",
+    "chat_stream_ephemeral",
     "create_run",
     "embed",
     "embedding_contract_version",
     "evaluate_verification",
     "evidence_gate_contract_version",
     "fallback_chat_complete",
+    "fallback_chat_complete_ephemeral",
     "fallback_chat_stream",
+    "fallback_chat_stream_ephemeral",
     "fallback_embed",
     "fallback_rerank",
     "kv_store_compare_and_set",
@@ -960,7 +1078,9 @@ __all__ = [
     "kv_watch_receive",
     "model_tool_loop_contract_version",
     "native_chat_complete",
+    "native_chat_complete_ephemeral",
     "native_chat_stream",
+    "native_chat_stream_ephemeral",
     "prepare_chat_content",
     "prepare_tool_dispatch",
     "pubsub_publish",

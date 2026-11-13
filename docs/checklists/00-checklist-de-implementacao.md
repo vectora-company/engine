@@ -62,13 +62,15 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Rodar hooks completos: format, Prettier, Clippy, testes Rust workspace e rustdoc passaram; os 22 testes focados passaram.
 - [x] Commit `18c2eca`, push e abrir o [PR #88](https://github.com/vectora-company/engine/pull/88), filho do #87.
 
-## Fronteira de bytes inline — decisão vital aguardando brunosrz
+## Fronteira de bytes inline — implementação da decisão 3
 
-- [x] Confirmar que `ContentPart::Inline` e `ImageUrl` com `data:` são aceitos pelo contrato serializado e que o host pode persistir esses bytes.
-- [x] Registrar as opções: entrada ref-only, inline com aviso, ou request durável separado de envio efêmero.
-- [x] Concluir etapas independentes, incluindo PRs #87 e #88; registrar impacto no modo manual já aprovado.
-- [x] Registrar pergunta e opções na análise e no PR [#89](https://github.com/vectora-company/engine/pull/89), sem marcar brunosrz no GitHub.
-- [ ] Aguardar decisão de brunosrz no chat antes de alterar tipos públicos, bindings ou versionamento.
+- [x] Receber no chat a decisão de separar request persistível de envio efêmero.
+- [x] Rejeitar `Inline` e `data:` ao desserializar/serializar request persistível.
+- [x] Validar envelope efêmero, base64, assinatura/tipo, MIME e limite configurável (20 MiB padrão).
+- [x] Expor complete/stream efêmeros em Python e TypeScript para OpenAI-compatible, nativo e fallback.
+- [x] Preservar preparo manual, contexto por chamada e contexto padrão.
+- [x] Cobrir limites e fronteira em testes Rust e bindings.
+- [x] Verificar workspace Rust (171 testes + 3 fixtures e Clippy), Python (52 testes, Ruff/format/ty), TypeScript (build/typecheck; 38 passaram, 10 de serviço sem endpoint foram ignorados) e diff; registrar no PR #90, filho de #89.
 
 ## Preparação e escopo
 
