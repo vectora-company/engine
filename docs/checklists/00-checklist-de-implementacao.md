@@ -70,7 +70,7 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Expor complete/stream efêmeros em Python e TypeScript para OpenAI-compatible, nativo e fallback.
 - [x] Preservar preparo manual, contexto por chamada e contexto padrão.
 - [x] Cobrir limites e fronteira em testes Rust e bindings.
-- [x] Verificar workspace Rust (171 testes + 3 fixtures e Clippy), Python (52 testes, Ruff/format/ty), TypeScript (build/typecheck; 38 passaram, 10 de serviço sem endpoint foram ignorados) e diff; registrar no PR #90, filho de #89.
+- [x] Verificar workspace Rust (171 testes + 3 fixtures e Clippy), Python (52 testes, Ruff/format/ty), TypeScript (build/typecheck; 38 passaram, 10 de serviço sem endpoint foram ignorados) e diff; registrar no PR [#90](https://github.com/vectora-company/engine/pull/90), filho de #89; head `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`.
 
 ## Preparação e escopo
 

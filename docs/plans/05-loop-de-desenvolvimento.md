@@ -112,6 +112,24 @@ lado quando a incompatibilidade técnica está verificada na documentação do
 projeto e registrada em `capabilities()` (política na
 [spec 02](../specs/02-storage-memoria-contexto-rag.md)).
 
+## Execução atual — 13 de novembro de 2026
+
+A decisão vital sobre bytes inline foi respondida no chat: separar o tipo
+persistível do envelope efêmero. Implementação publicada no PR
+[#90](https://github.com/vectora-company/engine/pull/90), filho do #89, na
+branch `feat/chat-ephemeral-media-request`, head
+`d56e864286153b6bee1f8cc67e1ffda4c1ba2afb` (OPEN/CLEAN; verificações remotas
+não apareceram no momento do registro). O trabalho e seus critérios ficam em
+[`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md),
+[`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md),
+[`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md),
+[`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md) e
+[`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+Verificação local: workspace Rust 171 testes + 3 fixtures, Clippy e rustdoc;
+Python 52 testes; TypeScript build/typecheck e 38 testes (10 testes que exigem
+URLs de serviço ignorados); hooks completos passaram. O loop continua pelo
+próximo item independente do plano ativo sem aguardar aprovação ou CI remoto.
+
 ## Critérios para encerrar o loop
 
 Encerre o loop quando ocorrer uma destas condições:
