@@ -106,6 +106,15 @@ fn validate_key(key: &str) -> Result<(), MessagingError> {
     }
 }
 
+fn ttl_seconds_ceil(ttl: Duration) -> u64 {
+    let seconds = ttl.as_secs();
+    if ttl.subsec_nanos() == 0 {
+        seconds.max(1)
+    } else {
+        seconds.saturating_add(1).max(1)
+    }
+}
+
 fn validate_identifier(value: &str) -> Result<(), MessagingError> {
     if value.is_empty()
         || value.len() > 128
@@ -141,7 +150,7 @@ impl KvStore for RedisStore {
         let mut command = redis::cmd("SET");
         command.arg(key).arg(value);
         if let Some(ttl) = ttl {
-            let seconds = ttl.as_secs().max(1);
+            let seconds = ttl_seconds_ceil(ttl);
             command.arg("EX").arg(seconds);
         }
         command
@@ -222,24 +231,35 @@ impl NatsStore {
         Ok(store)
     }
     async fn kv(&self) -> Result<async_nats::jetstream::kv::Store, MessagingError> {
-        if let Ok(store) = self.jetstream.get_key_value(&self.bucket).await {
-            return Ok(store);
-        }
-        match self
-            .jetstream
-            .create_key_value(async_nats::jetstream::kv::Config {
-                bucket: self.bucket.clone(),
-                ..Default::default()
-            })
-            .await
-        {
-            Ok(store) => Ok(store),
-            Err(_) => self
+        let store = match self.jetstream.get_key_value(&self.bucket).await {
+            Ok(store) => store,
+            Err(_) => {
+                return self
+                    .jetstream
+                    .create_key_value(async_nats::jetstream::kv::Config {
+                        bucket: self.bucket.clone(),
+                        limit_markers: Some(Duration::from_secs(60)),
+                        ..Default::default()
+                    })
+                    .await
+                    .map_err(|_| MessagingError::Storage);
+            }
+        };
+        let mut stream_config = store.stream.cached_info().config.clone();
+        if !stream_config.allow_message_ttl || stream_config.subject_delete_marker_ttl.is_none() {
+            stream_config.allow_message_ttl = true;
+            stream_config.subject_delete_marker_ttl = Some(Duration::from_secs(60));
+            self.jetstream
+                .update_stream(stream_config)
+                .await
+                .map_err(|_| MessagingError::Storage)?;
+            return self
                 .jetstream
                 .get_key_value(&self.bucket)
                 .await
-                .map_err(|_| MessagingError::Storage),
+                .map_err(|_| MessagingError::Storage);
         }
+        Ok(store)
     }
     pub async fn publish(&self, subject: &str, payload: Vec<u8>) -> Result<(), MessagingError> {
         validate_subject(subject)?;
@@ -277,15 +297,33 @@ impl KvStore for NatsStore {
         ttl: Option<Duration>,
     ) -> Result<(), MessagingError> {
         validate_key(key)?;
-        if ttl.is_some() {
-            return Err(MessagingError::Unsupported);
+        let store = self.kv().await?;
+        match ttl {
+            Some(ttl) => {
+                let seconds = ttl_seconds_ceil(ttl);
+                let mut headers = async_nats::HeaderMap::new();
+                headers.insert(
+                    async_nats::header::NATS_MESSAGE_TTL,
+                    async_nats::HeaderValue::from(seconds),
+                );
+                self.jetstream
+                    .publish_with_headers(
+                        format!("$KV.{}.{}", self.bucket, key),
+                        headers,
+                        value.into(),
+                    )
+                    .await
+                    .map_err(|_| MessagingError::Storage)?
+                    .await
+                    .map(|_| ())
+                    .map_err(|_| MessagingError::Storage)
+            }
+            None => store
+                .put(key, value.into())
+                .await
+                .map(|_| ())
+                .map_err(|_| MessagingError::Storage),
         }
-        self.kv()
-            .await?
-            .put(key, value.into())
-            .await
-            .map(|_| ())
-            .map_err(|_| MessagingError::Storage)
     }
     async fn delete(&self, key: &str) -> Result<(), MessagingError> {
         validate_key(key)?;
@@ -649,7 +687,7 @@ impl NatsQueueDelivery {
 /// it leaves the provider's normal redelivery policy in effect.
 pub enum QueueDelivery {
     Redis(RedisQueueDelivery),
-    Nats(NatsQueueDelivery),
+    Nats(Box<NatsQueueDelivery>),
 }
 
 #[async_trait]
@@ -740,7 +778,7 @@ impl QueueAdapter {
             Self::Nats { queue, .. } => queue
                 .receive(group, timeout)
                 .await
-                .map(|delivery| delivery.map(QueueDelivery::Nats)),
+                .map(|delivery| delivery.map(|delivery| QueueDelivery::Nats(Box::new(delivery)))),
         }
     }
 }
@@ -917,12 +955,17 @@ mod tests {
         .unwrap();
         store.put("answer", b"42".to_vec(), None).await.unwrap();
         assert_eq!(store.get("answer").await.unwrap(), Some(b"42".to_vec()));
-        assert!(matches!(
-            store
-                .put("ttl", b"x".to_vec(), Some(Duration::from_secs(1)))
-                .await,
-            Err(MessagingError::Unsupported)
-        ));
+        store
+            .put("ttl", b"persistent".to_vec(), None)
+            .await
+            .unwrap();
+        store
+            .put("ttl", b"x".to_vec(), Some(Duration::from_secs(1)))
+            .await
+            .unwrap();
+        assert_eq!(store.get("ttl").await.unwrap(), Some(b"x".to_vec()));
+        tokio::time::sleep(Duration::from_millis(1300)).await;
+        assert_eq!(store.get("ttl").await.unwrap(), None);
         let pubsub = PubSubAdapter::connect(PubSubConfig {
             backend: super::super::PubSubBackend::NatsCore,
             endpoint: url,
@@ -1251,6 +1294,9 @@ mod tests {
 
     #[test]
     fn key_identifier_and_subject_bounds_are_enforced() {
+        assert_eq!(ttl_seconds_ceil(Duration::from_millis(1)), 1);
+        assert_eq!(ttl_seconds_ceil(Duration::from_millis(1_500)), 2);
+        assert_eq!(ttl_seconds_ceil(Duration::from_secs(2)), 2);
         assert!(validate_key(&"k".repeat(512)).is_ok());
         for key in [String::new(), "k".repeat(513), "line\nbreak".to_owned()] {
             assert!(

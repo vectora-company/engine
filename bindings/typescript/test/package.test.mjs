@@ -255,7 +255,7 @@ test("storage capabilities state backend differences from Rust", () => {
     kv: "nats_jetstream",
   });
   assert.equal(report.backends[0].score_direction, "higher_is_closer");
-  assert.equal(report.backends[1].ttl, false);
+  assert.equal(report.backends[1].ttl, true);
   assert.deepEqual(storageCapabilities({ contract_version: 1 }).backends, []);
   assert.throws(() => storageCapabilities({ contract_version: 99 }));
 });

@@ -157,11 +157,11 @@ impl StorageSelection {
                 "kv",
                 "nats_jetstream",
                 &["kv_store"],
-                &["per_key_ttl"],
-                Some(false),
+                &[],
+                Some(true),
                 None,
                 None,
-                &["A TTL request fails with an unsupported error."],
+                &["Per-key TTL uses JetStream message TTL; NATS Server 2.11+ is required."],
             )),
             None => {}
         }
@@ -238,11 +238,11 @@ mod tests {
             report.backends[0].score_direction,
             Some(ScoreDirection::HigherIsCloser)
         );
-        assert_eq!(report.backends[1].ttl, Some(false));
+        assert_eq!(report.backends[1].ttl, Some(true));
     }
 
     #[test]
-    fn reports_shared_cosine_score_direction_and_distinct_ttl() {
+    fn reports_shared_cosine_score_direction_and_ttl() {
         let redis =
             selection(r#"{"contract_version":1,"kv":"redis","vector":"lance_db"}"#).capabilities();
         assert_eq!(redis.backends[1].ttl, Some(true));

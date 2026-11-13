@@ -11,7 +11,7 @@ version = "0.0.1"
 edition = "2024"
 license = "AGPL-3.0-only"
 repository = "https://github.com/vectora-company/engine"
-rust-version = "1.88"
+rust-version = "1.89"
 
 [workspace.dependencies]
 async-stream = "0.3.6"

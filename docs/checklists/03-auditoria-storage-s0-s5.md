@@ -24,8 +24,8 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Rodar testes service-real de ACK/redelivery, TTL, pub/sub sem assinante, isolamento KV, projeção PostgreSQL e vetores contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 58 testes passam na execução combinada mais recente.
 - [x] Reinício de Redis e NATS JetStream: KV/jobs sobrevivem e os adapters voltam a operar. PostgreSQL parado/religado: o teste isolado passou; a execução combinada registrou uma falha ao parar um container com `AutoRemove=true`, que o Podman removeu. O teste agora confere `AutoRemove=false` antes de parar o serviço. Habilitado por `VECTORA_TEST_PODMAN_RESTART`.
 - [x] Reiniciar o Qdrant local e confirmar que coleção/ponto persistem e o adapter recupera a busca no mesmo contêiner.
-- [x] Caracterizar a retenção das filas duráveis em Redis Streams e NATS JetStream (entradas confirmadas permanecem; sem limite de idade/tamanho; redelivery sem teto).
-- [ ] Definir e implementar a política de retenção/redelivery das filas (decisão do mantenedor pendente) e cobrir shutdown gracioso do adapter.
+- [x] Caracterizar a retenção atual das filas duráveis em Redis Streams e NATS JetStream (entradas confirmadas permanecem; sem limite de idade/tamanho; redelivery sem teto).
+- [ ] Implementar a decisão recebida: retenção finita configurável, tentativas limitadas, DLQ recuperável e shutdown gracioso, com semântica comum em Redis e NATS.
 - [x] Cobrir ordenação, `limit`, direção do score, upsert idempotente, mesmo id em escopos distintos, delete por escopo e dimensão inválida em LanceDB e Qdrant (contrato comum).
 - [x] Cobrir os limites de entrada existentes: busca `limit` 1–1000, vetor 1–65536 dimensões (upsert), escopo/coleção (≤128, charset), chave KV ≤512, identificadores ≤128 e subjects (sem segmentos vazios nem `*`/`#`, ≤512), nos dois lados de cada fronteira.
 - [x] Limite de tamanho de `metadata` vetorial, valores de KV e payloads de fila: decidido não impor limite novo (decisão do mantenedor, 2026-11-12).
@@ -53,8 +53,8 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 
 - [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local (branch do PR #57; não integrado em `main`).
 - [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends; limite de dimensão da consulta igual nos dois.
-- [ ] KV: decidir versão mínima NATS 2.11+ (TTL nativo) ou emulação compatível com 2.10; depois implementar TTL e testar com Redis/NATS. CAS por revisão, incremento, prefixo e watch também faltam nos dois.
+- [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens novas. CAS por revisão, incremento, prefixo e watch ainda faltam nos dois.
 - [ ] Filas: `max_deliver`/contagem de entregas, DLQ, NACK/atraso e deduplicação equivalentes nas duas.
 - [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL, com a mesma suíte do SQLite.
-- [ ] Decisão do mantenedor: autoridade do ledger (SQLite obrigatório × PostgreSQL selecionável como autoridade).
+- [x] Decisão do mantenedor: SQLite permanece cópia local obrigatória e autoridade de recovery para ledger e estado crítico interno; PostgreSQL recebe projeções/replicação retomável. Credenciais e autenticação/RBAC do produto ficam no host.
 - [ ] Especializações: registrar cada uma em `capabilities()` com o motivo de incompatibilidade verificado na documentação.

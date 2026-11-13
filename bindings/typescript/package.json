@@ -18,10 +18,10 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.0.0",
-    "@types/node": "24.10.0",
-    "oxlint": "1.25.0",
-    "typescript": "5.9.3"
+    "@napi-rs/cli": "3.10.12",
+    "@types/node": "26.6.6",
+    "oxlint": "1.93.0",
+    "typescript": "7.0.2"
   },
   "engines": {
     "node": ">=22.13.0"

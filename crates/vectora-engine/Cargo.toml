@@ -10,7 +10,7 @@ rust-version.workspace = true
 [dependencies]
 arrow-array = "56.2"
 arrow-schema = "56.2"
-async-nats = "0.38"
+async-nats = { version = "0.52", features = ["server_2_11"] }
 blake3 = "1.8"
 async-stream.workspace = true
 async-trait = "0.1"
