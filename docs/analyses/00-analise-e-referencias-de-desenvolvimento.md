@@ -214,7 +214,8 @@ e o objetivo/escopo proposto no
 
 ## Overrides de limite multimodal — 2026-11-13
 
-A branch `feat/chat-media-provider-limits-docs83`, filha do PR documental #83,
+A branch `feat/chat-media-provider-limits-docs83`, publicada como PR #84
+(head `d4ccd3d7ffe8994311acdd274bc4553c7f6b69fc`) sobre o PR documental #83,
 implementa `provider_limits` como lista explícita de `{provider, model, limits}`
 nos contextos Python e TypeScript. O resolver Rust seleciona limites por
 modalidade e par; cada asset continua limitado pelo menor valor entre o teto
@@ -222,11 +223,12 @@ global (`max_media_bytes`, padrão de 20 MiB) e o override correspondente.
 Ausência de override não presume o limite do provider, e o escopo não inclui
 limite agregado da requisição.
 
-Verificação local: 18 testes `chat::media::tests` passaram; maturin compilou a
+Verificação local: 18 testes `chat::media::tests`, a suíte do workspace via
+pre-commit, Clippy, fmt e rustdoc passaram; maturin compilou a
 extensão Python; o teste Python específico passou após fixar `PYTHONPATH` para o
 binding deste checkout; `pnpm build`, `tsc` e o teste Node de mídia passaram.
 Um primeiro teste TS falhou porque a fachada não encaminhava `provider_limits`
-ao addon; a serialização foi corrigida e o mesmo teste passou.
+ao addon; a serialização foi corrigida e o mesmo teste passou. O PR #84 está aberto e empilhado sobre #83.
 
 Limites oficiais variam com protocolo e método de envio, portanto esta etapa
 fornece overrides ao host e não codifica números universais: a documentação

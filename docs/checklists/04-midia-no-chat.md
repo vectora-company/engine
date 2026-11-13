@@ -3,7 +3,7 @@
 Checklist da [spec de mídia](../specs/17-midia-no-chat.md) e do
 [plano ativo](../plans/03-plano-continuidade.md). O payload (#79), a integração
 Rust (#81) e os bindings (#82) estão implementados em PRs abertos; a stack parte
-de #73 e ainda não está integrada em `main`. A revisão documental está no PR [#83](https://github.com/vectora-company/engine/pull/83), filha do #82. A etapa seguinte roda na branch local `feat/chat-media-provider-limits-docs83`, filha do head do #83.
+de #73 e ainda não está integrada em `main`. A revisão documental está no PR [#83](https://github.com/vectora-company/engine/pull/83), filha do #82. A etapa de limites está no PR [#84](https://github.com/vectora-company/engine/pull/84), filha do #83.
 
 ## Contrato e implementação
 
@@ -49,7 +49,7 @@ implementação; não foram adicionados à API pública da Engine.
 
 - OpenAI Responses API não existe neste adapter; o contrato se limita aos
   formatos do Chat Completions.
-- Retry após rejeição específica, catálogo automático de capabilities/limites por modelo, limites agregados do request e `ToolResult` multimodal seguem no backlog da spec 17. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução.
+- Retry após rejeição específica, catálogo automático de capabilities/limites por modelo, limites agregados do request e `ToolResult` multimodal seguem no backlog da spec 17. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
 
 ## Integração — etapa atual
 
