@@ -1003,4 +1003,136 @@ mod tests {
             redelivered.ack().await.unwrap();
         }
     }
+
+    fn unique_suffix() -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        format!(
+            "{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )
+    }
+
+    #[tokio::test]
+    async fn acknowledged_jobs_are_not_redelivered_and_empty_queues_time_out() {
+        let mut targets = Vec::new();
+        if let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") {
+            targets.push((super::super::QueueBackend::RedisStreams, url));
+        }
+        if let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") {
+            targets.push((super::super::QueueBackend::NatsJetstream, url));
+        }
+        for (backend, endpoint) in targets {
+            let queue = QueueAdapter::connect(QueueConfig {
+                backend,
+                endpoint,
+                namespace: format!("ackq_{}", unique_suffix()),
+                visibility_timeout_seconds: 1,
+            })
+            .await
+            .unwrap();
+            assert!(
+                queue
+                    .receive("worker-1", "workers", Duration::from_millis(300))
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{backend:?}: an empty queue must time out without a delivery"
+            );
+            queue.enqueue(b"job".to_vec()).await.unwrap();
+            let delivery = queue
+                .receive("worker-1", "workers", Duration::from_secs(3))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(delivery.payload(), b"job");
+            delivery.ack().await.unwrap();
+            tokio::time::sleep(Duration::from_millis(1500)).await;
+            assert!(
+                queue
+                    .receive("worker-2", "workers", Duration::from_millis(500))
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{backend:?}: an acknowledged job must not be redelivered"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn pubsub_drops_messages_published_without_a_subscriber() {
+        let mut targets = Vec::new();
+        if let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") {
+            targets.push((super::super::PubSubBackend::Redis, url));
+        }
+        if let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") {
+            targets.push((super::super::PubSubBackend::NatsCore, url));
+        }
+        for (backend, endpoint) in targets {
+            let pubsub = PubSubAdapter::connect(PubSubConfig {
+                backend,
+                endpoint,
+                namespace: format!("drop_{}", unique_suffix()),
+            })
+            .await
+            .unwrap();
+            pubsub.publish("events", b"early".to_vec()).await.unwrap();
+            let mut subscription = pubsub.subscribe("events").await.unwrap();
+            assert_eq!(
+                subscription
+                    .receive(Duration::from_millis(500))
+                    .await
+                    .unwrap(),
+                None,
+                "{backend:?}: a message without a subscriber must be dropped"
+            );
+            pubsub.publish("events", b"late".to_vec()).await.unwrap();
+            assert_eq!(
+                subscription.receive(Duration::from_secs(2)).await.unwrap(),
+                Some(b"late".to_vec())
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn kv_namespaces_are_isolated_and_delete_removes_keys() {
+        let mut targets = Vec::new();
+        if let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") {
+            targets.push((super::super::KvBackend::Redis, url, "ns"));
+        }
+        if let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") {
+            targets.push((super::super::KvBackend::NatsJetstream, url, "NS"));
+        }
+        for (backend, endpoint, prefix) in targets {
+            let suffix = unique_suffix();
+            let connect = |name: String| {
+                let endpoint = endpoint.clone();
+                let suffix = suffix.clone();
+                async move {
+                    KvStoreAdapter::connect(KvStoreConfig {
+                        backend,
+                        endpoint,
+                        namespace: format!("{prefix}_{name}_{suffix}"),
+                    })
+                    .await
+                    .unwrap()
+                }
+            };
+            let first = connect("a".into()).await;
+            let second = connect("b".into()).await;
+            first.put("key", b"one".to_vec(), None).await.unwrap();
+            assert_eq!(
+                second.get("key").await.unwrap(),
+                None,
+                "{backend:?}: namespaces must not share keys"
+            );
+            second.put("key", b"two".to_vec(), None).await.unwrap();
+            first.delete("key").await.unwrap();
+            assert_eq!(first.get("key").await.unwrap(), None);
+            assert_eq!(second.get("key").await.unwrap(), Some(b"two".to_vec()));
+        }
+    }
 }

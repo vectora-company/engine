@@ -604,4 +604,115 @@ mod tests {
             Err(VectorError::InvalidInput)
         ));
     }
+
+    fn record(id: u64, scope: &str, vector: [f32; 3], text: &str) -> VectorRecord {
+        VectorRecord {
+            id,
+            scope: scope.into(),
+            vector: vector.to_vec(),
+            metadata: json!({"text": text}),
+        }
+    }
+
+    /// Exercises behaviour that both vector backends must share, and checks
+    /// that the declared score direction matches what the backend reports.
+    async fn exercise_shared_vector_contract(
+        store: &dyn VectorStore,
+        collection: &str,
+        direction: super::super::capabilities::ScoreDirection,
+    ) {
+        use super::super::capabilities::ScoreDirection;
+        for item in [
+            record(1, "one", [1.0, 0.0, 0.0], "exact"),
+            record(2, "one", [0.8, 0.6, 0.0], "near"),
+            record(3, "one", [0.0, 1.0, 0.0], "far"),
+            record(1, "two", [1.0, 0.0, 0.0], "other-scope"),
+        ] {
+            store.upsert(collection, item).await.unwrap();
+        }
+        let query = || vec![1.0, 0.0, 0.0];
+        let hits = store.search(collection, "one", query(), 10).await.unwrap();
+        assert_eq!(hits.iter().map(|h| h.id).collect::<Vec<_>>(), [1, 2, 3]);
+        assert!(
+            hits.iter().all(|hit| hit.metadata["text"] != "other-scope"),
+            "search must not return another scope"
+        );
+        match direction {
+            ScoreDirection::LowerIsCloser => {
+                assert!(hits[0].score < hits[1].score && hits[1].score < hits[2].score)
+            }
+            ScoreDirection::HigherIsCloser => {
+                assert!(hits[0].score > hits[1].score && hits[1].score > hits[2].score)
+            }
+        }
+        let limited = store.search(collection, "one", query(), 1).await.unwrap();
+        assert_eq!(limited.iter().map(|h| h.id).collect::<Vec<_>>(), [1]);
+
+        store
+            .upsert(collection, record(1, "one", [1.0, 0.0, 0.0], "replaced"))
+            .await
+            .unwrap();
+        let hits = store.search(collection, "one", query(), 10).await.unwrap();
+        assert_eq!(hits.len(), 3, "upserting an id must replace, not duplicate");
+        assert_eq!(hits[0].metadata["text"], "replaced");
+
+        store.delete(collection, "one", 1).await.unwrap();
+        let other = store.search(collection, "two", query(), 10).await.unwrap();
+        assert_eq!(
+            other.len(),
+            1,
+            "deleting in one scope must not affect another"
+        );
+        assert_eq!(other[0].metadata["text"], "other-scope");
+        assert!(
+            store
+                .search(collection, "one", vec![1.0, 0.0], 10)
+                .await
+                .is_err(),
+            "a query with the wrong dimension must fail"
+        );
+    }
+
+    #[tokio::test]
+    async fn qdrant_shares_the_vector_contract_and_reports_similarity_scores() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_QDRANT_URL") else {
+            return;
+        };
+        let store = QdrantStore::new(&endpoint, None).unwrap();
+        let collection = format!(
+            "vectora_shared_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        exercise_shared_vector_contract(
+            &store,
+            &collection,
+            super::super::capabilities::ScoreDirection::HigherIsCloser,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn lancedb_shares_the_vector_contract_and_reports_distance_scores() {
+        let path = std::env::temp_dir().join(format!(
+            "vectora-lance-shared-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = LanceDbStore::connect(path.to_str().unwrap()).await.unwrap();
+        exercise_shared_vector_contract(
+            &store,
+            "shared",
+            super::super::capabilities::ScoreDirection::LowerIsCloser,
+        )
+        .await;
+        drop(store);
+        let _ = std::fs::remove_dir_all(path);
+    }
 }

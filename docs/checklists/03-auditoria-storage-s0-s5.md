@@ -19,9 +19,10 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Inventariar adapters vetoriais LanceDB/Qdrant e diferenças conhecidas.
 - [x] Cobrir concorrência entre conexões (threads), conflito de versão/idempotência, retry idêntico concorrente, restart do arquivo e limites de leitura do ledger SQLite.
 - [ ] Cobrir backup/restore, concorrência entre processos independentes e recovery operacional do ledger.
-- [ ] Rodar matriz service-real de restart, falha, reconnect, ACK/redelivery,
-      TTL/retention e shutdown.
-- [ ] Cobrir filtros, isolamento, score, payload e falhas dos stores vetoriais.
+- [x] Rodar os testes service-real existentes e novos de ACK/redelivery, TTL, pub/sub sem assinante e isolamento de namespace contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 52 testes de `storage::` passam.
+- [ ] Cobrir restart/reconnect/shutdown dos serviços (derrubar e subir o serviço durante a operação) e retenção.
+- [x] Cobrir ordenação, `limit`, direção do score, upsert idempotente, mesmo id em escopos distintos, delete por escopo e dimensão inválida em LanceDB e Qdrant (contrato comum).
+- [ ] Cobrir limites de payload e falhas de indexação dos stores vetoriais.
 - [ ] Definir limite/semântica comum sem esconder diferenças específicas.
 
 ## Encerramento desta etapa

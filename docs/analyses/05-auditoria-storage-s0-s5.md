@@ -104,10 +104,28 @@ independentes, e backup/restore e recovery operacional não foram cobertos.
 ## Matriz service-real
 
 Os serviços de teste (Redis, NATS com JetStream, Qdrant e PostgreSQL) existem
-como contêineres Podman locais (`vectora-engine-*`). Os testes condicionais
-leem `VECTORA_TEST_POSTGRES_URL`, `VECTORA_TEST_REDIS_URL`,
-`VECTORA_TEST_NATS_URL` e `VECTORA_TEST_QDRANT_URL`; sem elas retornam sem
-validar o serviço. Resultados desta execução: ver a seção seguinte.
+como contêineres Podman locais (`vectora-engine-*`) e precisam de
+`podman start`. Os testes condicionais leem `VECTORA_TEST_POSTGRES_URL`,
+`VECTORA_TEST_REDIS_URL`, `VECTORA_TEST_NATS_URL` e `VECTORA_TEST_QDRANT_URL`;
+sem elas retornam sem validar o serviço.
+
+Resultado local (2026-11-12, serviços reais ligados, `--test-threads=1`):
+`cargo test -p vectora-engine --lib --locked storage::` — 52 passaram, 0
+falharam. Testes adicionados nesta etapa:
+
+- fila vazia expira sem entrega; job confirmado (ACK) não é reentregue
+  (Redis Streams e NATS JetStream);
+- mensagem publicada sem assinante é descartada (Redis Pub/Sub e NATS Core),
+  como declarado em `capabilities()`;
+- namespaces de KV são isolados e `delete` remove só a chave do namespace;
+- contrato vetorial comum a LanceDB e Qdrant: ordenação, `limit`, upsert
+  substitui, mesmo id em escopos distintos, delete por escopo, dimensão
+  inválida falha, e direção do score (LanceDB distância/menor é mais próximo;
+  Qdrant similaridade/maior é mais próximo), coerente com `capabilities()`.
+
+Não coberto: derrubar/reiniciar o serviço durante a operação (reconnect,
+shutdown), retenção JetStream, limites de payload e falhas de indexação.
+Permanecem `não executado`.
 
 ## Trabalho que permanece
 
