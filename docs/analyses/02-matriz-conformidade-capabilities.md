@@ -2,8 +2,7 @@
 
 **Base de referência:** `main` no GitHub em
 `dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1`. Em 13 de novembro de 2026, storage e mídia foram revalidados contra os PRs
-#79–#86; o PR #86 (head `b188a94`) é o topo da stack de implementação. Esta
-branch prepara a revisão documental seguinte. Código em PR aberto não equivale a
+#79–#86; o PR #86 (head `b188a94`) é o topo da stack de implementação. O PR [#87](https://github.com/vectora-company/engine/pull/87) registra a revisão documental atual. Código em PR aberto não equivale a
 capability integrada em `main`. A matriz registra gaps de conformidade, não um
 selo de maturidade ou prontidão de release.
 **Plano:** [`03-plano-continuidade.md`](../plans/03-plano-continuidade.md)

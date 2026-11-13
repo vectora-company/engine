@@ -51,7 +51,7 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Corrigir estado da mídia, stack de PRs e verificações locais nos índices, plano, análise, checklist, spec e sabatina.
 - [x] Verificar destinos relativos de links nos 55 Markdown versionados: 0 quebrados.
 - [x] Rodar Prettier, hooks aplicáveis e `git diff --check`; links relativos válidos nos 55 Markdown.
-- [ ] Commit, push e abrir PR documental empilhado sobre o #86; registrar URL e SHA.
+- [x] Commit `4ab3df3`, push e abrir o [PR #87](https://github.com/vectora-company/engine/pull/87), filho do #86 (head `4ab3df3`).
 
 ## Preparação e escopo
 

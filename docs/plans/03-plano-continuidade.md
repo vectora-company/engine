@@ -9,7 +9,7 @@ squash). A stack aberta é `main` ← [#73](https://github.com/vectora-company/e
 [#80](https://github.com/vectora-company/engine/pull/80) ←
 [#81](https://github.com/vectora-company/engine/pull/81) ←
 [#82](https://github.com/vectora-company/engine/pull/82) ← PR documental
-[#83](https://github.com/vectora-company/engine/pull/83) ← [#84](https://github.com/vectora-company/engine/pull/84) ← [#85](https://github.com/vectora-company/engine/pull/85) ← [#86](https://github.com/vectora-company/engine/pull/86) ← branch documental `docs/revisao-markdown-pos-86` (PR a abrir). Os PRs #82–#86 estão abertos; o #82 tem head `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83) está
+[#83](https://github.com/vectora-company/engine/pull/83) ← [#84](https://github.com/vectora-company/engine/pull/84) ← [#85](https://github.com/vectora-company/engine/pull/85) ← [#86](https://github.com/vectora-company/engine/pull/86) ← PR documental [#87](https://github.com/vectora-company/engine/pull/87) (`docs/revisao-markdown-pos-86`). Os PRs #82–#86 estão abertos; o #82 tem head `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83) está
 empilhado sobre a branch `feat/chat-media-bindings` do #82. A branch filha `feat/chat-media-provider-limits-docs83` está publicada no [PR
 #84](https://github.com/vectora-company/engine/pull/84), head
 `58980b3647e96b495756f7986bfdbfdd40d09e8c` (limites por provider/modelo; docs sincronizados).
@@ -264,7 +264,7 @@ conformidade para o estado e a cobertura de cada capability.
 ## Próxima etapa
 
 A revisão Markdown inicial foi publicada no PR #83; uma segunda revisão ampla
-está em andamento na branch `docs/revisao-markdown-pos-86`, filha do PR #86, porque a stack posterior tornou
+está no PR [#87](https://github.com/vectora-company/engine/pull/87), filho do #86, porque a stack posterior tornou
 referências de estado e versões obsoletas. Depois dela, a próxima etapa independente
 é consolidar uma proposta verificável de charter para a primeira release completa: áreas incluídas, critérios de maturidade, paridade
 Rust/Python/TypeScript, compatibilidade, suporte de plataformas, publicação e
