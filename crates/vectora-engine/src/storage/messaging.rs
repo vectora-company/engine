@@ -1273,4 +1273,90 @@ mod tests {
             );
         }
     }
+
+    /// Documents current retention: nothing removes acknowledged jobs, no
+    /// maximum age or length applies, and redelivery is not capped. A change to
+    /// that policy must update this test deliberately.
+    #[tokio::test]
+    async fn redis_stream_keeps_acknowledged_entries_without_a_length_bound() {
+        let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let adapter = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint: url,
+            namespace: format!("retain_{}", unique_suffix()),
+            visibility_timeout_seconds: 1,
+        })
+        .await
+        .unwrap();
+        let QueueAdapter::Redis { queue, name, .. } = &adapter else {
+            unreachable!()
+        };
+        for payload in [b"one".to_vec(), b"two".to_vec()] {
+            adapter.enqueue(payload).await.unwrap();
+        }
+        for _ in 0..2 {
+            adapter
+                .receive("worker", "workers", Duration::from_secs(1))
+                .await
+                .unwrap()
+                .unwrap()
+                .ack()
+                .await
+                .unwrap();
+        }
+        let mut conn = queue.store.connection().await.unwrap();
+        let key = queue.stream_key(name).unwrap();
+        let length: usize = redis::cmd("XLEN")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(length, 2, "acknowledged entries are retained in the stream");
+    }
+
+    #[tokio::test]
+    async fn nats_stream_uses_unbounded_limits_retention_and_uncapped_redelivery() {
+        use async_nats::jetstream::stream::RetentionPolicy;
+        let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let adapter = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint: url,
+            namespace: format!("retain_{}", unique_suffix()),
+            visibility_timeout_seconds: 1,
+        })
+        .await
+        .unwrap();
+        let QueueAdapter::Nats { queue } = &adapter else {
+            unreachable!()
+        };
+        adapter.enqueue(b"job".to_vec()).await.unwrap();
+        adapter
+            .receive("worker", "workers", Duration::from_secs(3))
+            .await
+            .unwrap()
+            .unwrap()
+            .ack()
+            .await
+            .unwrap();
+        let info = queue
+            .ensure_stream()
+            .await
+            .unwrap()
+            .get_info()
+            .await
+            .unwrap();
+        assert_eq!(
+            info.state.messages, 1,
+            "acknowledged jobs stay in the stream"
+        );
+        assert!(matches!(info.config.retention, RetentionPolicy::Limits));
+        assert_eq!(info.config.max_messages, -1);
+        assert_eq!(info.config.max_age, Duration::ZERO);
+        let consumer = queue.ensure("workers").await.unwrap();
+        assert_eq!(consumer.cached_info().config.max_deliver, -1);
+    }
 }
