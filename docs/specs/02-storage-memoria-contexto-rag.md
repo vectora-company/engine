@@ -104,6 +104,15 @@ No JetStream KV, a chave tem até 512 bytes e usa letras ASCII, números,
 escrita com ou sem TTL e remoção aplicam essa regra antes da operação no
 bucket. Redis mantém o conjunto de chaves mais amplo que já aceita.
 
+A leitura com revisão retorna o valor e um token opaco para aquela chave,
+namespace e backend, ou ausência. A escrita condicional retorna verdadeiro
+se substituiu o valor com a revisão esperada, e falso se a chave expirou,
+foi removida ou mudou. Sem TTL, a escrita condicional remove o TTL anterior.
+Redis mantém o valor em seu formato atual e guarda a revisão numa chave
+interna. Escritas externas ao adapter e deploy misto com versões que não
+invalidam a revisão ficam fora da garantia. A conta Redis precisa de EVAL
+e acesso ao namespace interno de revisões `:vectora-kv-revision:`.
+
 A remoção KV é idempotente, opera no namespace selecionado e fica disponível
 em Rust, Python e TypeScript. Uma chave removida deixa de aparecer na leitura
 e na listagem.

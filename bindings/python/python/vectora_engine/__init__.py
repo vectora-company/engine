@@ -64,6 +64,26 @@ async def kv_store_get(config: JsonObject, key: str) -> Any:
     return json.loads(await _native.kv_store_get(json.dumps(config), key))
 
 
+async def kv_store_get_with_revision(
+    config: JsonObject, key: str
+) -> dict[str, Any] | None:
+    """Read the value and its opaque revision, or None when absent."""
+    return json.loads(await _native.kv_store_get_with_revision(json.dumps(config), key))
+
+
+async def kv_store_compare_and_set(
+    config: JsonObject,
+    key: str,
+    revision: str,
+    value: Any,
+    ttl_seconds: int | None = None,
+) -> bool:
+    """Replace a live value if its revision still matches."""
+    return await _native.kv_store_compare_and_set(
+        json.dumps(config), key, revision, json.dumps(value), ttl_seconds
+    )
+
+
 async def kv_store_delete(config: JsonObject, key: str) -> None:
     """Remove a key from the selected KV namespace."""
     await _native.kv_store_delete(json.dumps(config), key)
@@ -808,8 +828,10 @@ __all__ = [
     "fallback_chat_stream",
     "fallback_embed",
     "fallback_rerank",
+    "kv_store_compare_and_set",
     "kv_store_delete",
     "kv_store_get",
+    "kv_store_get_with_revision",
     "kv_store_list_keys",
     "kv_store_put",
     "model_tool_loop_contract_version",

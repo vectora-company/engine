@@ -6984,6 +6984,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "getrandom 0.3.4",
  "jsonschema",
  "lancedb",
  "redis",

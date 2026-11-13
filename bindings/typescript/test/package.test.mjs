@@ -27,6 +27,8 @@ import {
   modelToolLoopContractVersion,
   rerank,
   rerankContractVersion,
+  kvStoreCompareAndSet,
+  kvStoreGetWithRevision,
   kvStoreDelete,
   kvStoreGet,
   kvStoreListKeys,
@@ -1429,3 +1431,41 @@ test("JetStream KV validates keys with and without TTL", { skip: !process.env.VE
     await kvStoreDelete(config, key);
   }
 });
+
+for (const [backend, endpoint] of [
+  ["redis", process.env.VECTORA_TEST_REDIS_URL],
+  ["nats_jetstream", process.env.VECTORA_TEST_NATS_URL],
+]) {
+  test(`KV compare-and-set uses the current revision in ${backend}`, { skip: !endpoint }, async () => {
+    const config = { backend, endpoint, namespace: `kv_cas_${randomUUID()}` };
+    const key = "job.counter";
+    assert.equal(await kvStoreGetWithRevision(config, key), null);
+    await kvStorePut(config, key, 1, 60);
+    const first = await kvStoreGetWithRevision(config, key);
+    assert.equal(first.value, 1);
+    assert.equal(typeof first.revision, "string");
+    assert.deepEqual(await kvStoreGetWithRevision(config, key), first);
+    const results = await Promise.all([
+      kvStoreCompareAndSet(config, key, first.revision, 2, 1),
+      kvStoreCompareAndSet(config, key, first.revision, 3, 1),
+    ]);
+    assert.equal(results.filter(Boolean).length, 1);
+    const second = await kvStoreGetWithRevision(config, key);
+    assert.notEqual(second.revision, first.revision);
+    assert.equal(second.value, results[0] ? 2 : 3);
+    assert.equal(await kvStoreCompareAndSet(config, key, first.revision, 4), false);
+    assert.deepEqual(await kvStoreListKeys(config), [key]);
+    await new Promise(resolve => setTimeout(resolve, 1450));
+    assert.equal(await kvStoreGetWithRevision(config, key), null);
+    assert.equal(await kvStoreCompareAndSet(config, key, second.revision, 4), false);
+    await kvStorePut(config, key, 5, 60);
+    const third = await kvStoreGetWithRevision(config, key);
+    await kvStorePut(config, key, 5, 60);
+    assert.equal(await kvStoreCompareAndSet(config, key, third.revision, 6), false);
+    const fourth = await kvStoreGetWithRevision(config, key);
+    await kvStoreDelete(config, key);
+    await kvStorePut(config, key, 5, 60);
+    assert.equal(await kvStoreCompareAndSet(config, key, fourth.revision, 6), false);
+    await kvStoreDelete(config, key);
+  });
+}

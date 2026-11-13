@@ -407,6 +407,24 @@ suíte Node passaram com Redis 8.10.3 e NATS 2.15.3 reais (38/38). O caso novo
 verifica oito chaves inválidas nos quatro caminhos e uma chave válida com
 TTL. A suíte Rust completa não foi repetida.
 
+## Escrita KV condicional por revisão
+
+A branch sobre #69 expõe leitura versionada e CAS em Rust, Python e
+TypeScript. Redis conserva os bytes na chave atual e atribui uma revisão
+aleatória sob Lua quando a primeira leitura versionada encontra a chave.
+SET e DEL pelo adapter invalidam a revisão. O TTL interno acompanha o
+valor, e a revisão não aparece na listagem. NATS usa a revisão da última
+mensagem da chave e exige essa sequência no publish, inclusive com TTL.
+Redis exige EVAL e acesso ao prefixo interno. A garantia pressupõe que
+todos os escritores Redis passem pelo adapter atualizado.
+
+A suíte Node passou 40/40 com Redis 8.10.3 e NATS 2.15.3, incluindo corrida
+entre dois escritores, expiração, remoção e recriação, sobrescrita comum e
+listagem sem a chave interna. Um smoke test Redis leu e atualizou por CAS uma
+chave legada gravada por SET sem revisão. A wheel CPython 3.13 passou leitura
+versionada e corrida de CAS nos dois serviços. Typecheck e linters dos
+bindings passaram. A suíte Rust completa não foi repetida.
+
 ## Verificação da branch empilhada sobre #57
 
 Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:

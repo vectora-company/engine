@@ -230,17 +230,17 @@ evidência nesta atualização.
 
 ## Próxima etapa de KV
 
-O PR #67 implementa listagem literal por prefixo e o #68 expõe remoção nos
-bindings Python e Node. A branch sobre #68 uniformiza a validação de chaves
-NATS em leitura, escrita e remoção, inclusive a escrita com TTL. CAS por
-revisão, incremento e watch continuam pendentes.
+O PR #67 implementa listagem por prefixo, o #68 expõe remoção e o #69 alinha
+a validação JetStream com e sem TTL. A branch `feat/storage-kv-compare-and-set`
+entrega leitura com revisão e escrita condicional. Incremento e watch
+continuam pendentes.
 
 ## Revalidação do loop em 2026-11-12
 
 A referência de `main` foi consultada no remoto em 2026-11-12 (`a13140b`); as
 alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A stack
 ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
-→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66 → #67 → #68.
+→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66 → #67 → #68 → #69.
 
 | PR                                                       | Entrega na branch do PR                                                             |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |

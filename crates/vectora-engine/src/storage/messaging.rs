@@ -61,9 +61,25 @@ pub enum MessagingError {
     Unsupported,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct KvEntry {
+    pub value: Vec<u8>,
+    pub revision: String,
+}
+
 #[async_trait]
 pub trait KvStore: Send + Sync {
     async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, MessagingError>;
+    async fn get_with_revision(&self, key: &str) -> Result<Option<KvEntry>, MessagingError>;
+    /// Replaces a live value only when its revision still matches.
+    async fn compare_and_set(
+        &self,
+        key: &str,
+        revision: &str,
+        value: Vec<u8>,
+        ttl: Option<Duration>,
+    ) -> Result<bool, MessagingError>;
+
     async fn put(
         &self,
         key: &str,
@@ -107,6 +123,41 @@ impl RedisStore {
         validate_key(key)?;
         Ok(format!("{}:{key}", self.prefix))
     }
+    async fn write_value(
+        &self,
+        key: &str,
+        revision: Option<&str>,
+        value: Vec<u8>,
+        ttl: Option<Duration>,
+    ) -> Result<bool, MessagingError> {
+        let key = self.key(key)?;
+        let mut conn = self.connection().await?;
+        const WRITE: &str = r"
+            if ARGV[1] ~= '' and (redis.call('EXISTS', KEYS[1]) == 0
+                or redis.call('GET', KEYS[2]) ~= ARGV[1]) then
+                return 0
+            end
+            redis.call('DEL', KEYS[2])
+            if ARGV[3] == '0' then
+                redis.call('SET', KEYS[1], ARGV[2])
+            else
+                redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+            end
+            return 1
+        ";
+        redis::cmd("EVAL")
+            .arg(WRITE)
+            .arg(2)
+            .arg(&key)
+            .arg(redis_revision_key(&key))
+            .arg(revision.unwrap_or_default())
+            .arg(value)
+            .arg(ttl.map_or(0, ttl_seconds_ceil))
+            .query_async(&mut conn)
+            .await
+            .map_err(|_| MessagingError::Storage)
+    }
+
     async fn connection(&self) -> Result<redis::aio::MultiplexedConnection, MessagingError> {
         self.client
             .get_multiplexed_async_connection()
@@ -153,6 +204,16 @@ fn keep_listed_key(keys: &mut std::collections::BTreeSet<String>, key: String, l
     }
 }
 
+fn redis_revision_key(key: &str) -> String {
+    format!(":vectora-kv-revision:{key}")
+}
+
+fn redis_revision_token() -> Result<String, MessagingError> {
+    let mut bytes = [0; 16];
+    getrandom::fill(&mut bytes).map_err(|_| MessagingError::Storage)?;
+    Ok(format!("{:032x}", u128::from_be_bytes(bytes)))
+}
+
 fn ttl_seconds_ceil(ttl: Duration) -> u64 {
     let seconds = ttl.as_secs();
     if ttl.subsec_nanos() == 0 {
@@ -186,30 +247,64 @@ impl KvStore for RedisStore {
             .await
             .map_err(|_| MessagingError::Storage)
     }
+    async fn get_with_revision(&self, key: &str) -> Result<Option<KvEntry>, MessagingError> {
+        let key = self.key(key)?;
+        let mut conn = self.connection().await?;
+        const READ: &str = r"
+            local value = redis.call('GET', KEYS[1])
+            if not value then return nil end
+            local revision = redis.call('GET', KEYS[2])
+            if not revision then
+                revision = ARGV[1]
+                local ttl = redis.call('PTTL', KEYS[1])
+                if ttl >= 0 then
+                    redis.call('SET', KEYS[2], revision, 'PX', math.max(ttl, 1))
+                else
+                    redis.call('SET', KEYS[2], revision)
+                end
+            end
+            return {value, revision}
+        ";
+        let entry: Option<(Vec<u8>, String)> = redis::cmd("EVAL")
+            .arg(READ)
+            .arg(2)
+            .arg(&key)
+            .arg(redis_revision_key(&key))
+            .arg(redis_revision_token()?)
+            .query_async(&mut conn)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        Ok(entry.map(|(value, revision)| KvEntry { value, revision }))
+    }
+
+    async fn compare_and_set(
+        &self,
+        key: &str,
+        revision: &str,
+        value: Vec<u8>,
+        ttl: Option<Duration>,
+    ) -> Result<bool, MessagingError> {
+        if revision.len() != 32 || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(MessagingError::InvalidInput);
+        }
+        self.write_value(key, Some(revision), value, ttl).await
+    }
+
     async fn put(
         &self,
         key: &str,
         value: Vec<u8>,
         ttl: Option<Duration>,
     ) -> Result<(), MessagingError> {
-        let key = self.key(key)?;
-        let mut conn = self.connection().await?;
-        let mut command = redis::cmd("SET");
-        command.arg(key).arg(value);
-        if let Some(ttl) = ttl {
-            let seconds = ttl_seconds_ceil(ttl);
-            command.arg("EX").arg(seconds);
-        }
-        command
-            .query_async::<()>(&mut conn)
-            .await
-            .map_err(|_| MessagingError::Storage)
+        self.write_value(key, None, value, ttl).await.map(|_| ())
     }
+
     async fn delete(&self, key: &str) -> Result<(), MessagingError> {
         let key = self.key(key)?;
         let mut conn = self.connection().await?;
         redis::cmd("DEL")
-            .arg(key)
+            .arg(&key)
+            .arg(redis_revision_key(&key))
             .query_async::<u64>(&mut conn)
             .await
             .map_err(|_| MessagingError::Storage)?;
@@ -376,6 +471,78 @@ impl KvStore for NatsStore {
             .map(|value| value.map(|bytes| bytes.to_vec()))
             .map_err(|_| MessagingError::Storage)
     }
+    async fn get_with_revision(&self, key: &str) -> Result<Option<KvEntry>, MessagingError> {
+        use async_nats::jetstream::kv::Operation;
+        validate_nats_kv_key(key)?;
+        let entry = self
+            .kv()
+            .await?
+            .entry(key)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        Ok(entry
+            .filter(|entry| entry.operation == Operation::Put)
+            .map(|entry| KvEntry {
+                value: entry.value.to_vec(),
+                revision: entry.revision.to_string(),
+            }))
+    }
+
+    async fn compare_and_set(
+        &self,
+        key: &str,
+        revision: &str,
+        value: Vec<u8>,
+        ttl: Option<Duration>,
+    ) -> Result<bool, MessagingError> {
+        use async_nats::jetstream::{context::PublishErrorKind, kv::Operation};
+        validate_nats_kv_key(key)?;
+        let revision: u64 = revision
+            .parse()
+            .ok()
+            .filter(|value| *value != 0)
+            .ok_or(MessagingError::InvalidInput)?;
+        let store = self.kv().await?;
+        if !store
+            .entry(key)
+            .await
+            .map_err(|_| MessagingError::Storage)?
+            .is_some_and(|entry| entry.operation == Operation::Put && entry.revision == revision)
+        {
+            return Ok(false);
+        }
+        let mut headers = async_nats::HeaderMap::new();
+        headers.insert(
+            async_nats::header::NATS_EXPECTED_STREAM,
+            format!("KV_{}", self.bucket),
+        );
+        headers.insert(
+            async_nats::header::NATS_EXPECTED_LAST_SUBJECT_SEQUENCE,
+            async_nats::HeaderValue::from(revision),
+        );
+        if let Some(ttl) = ttl {
+            headers.insert(
+                async_nats::header::NATS_MESSAGE_TTL,
+                async_nats::HeaderValue::from(ttl_seconds_ceil(ttl)),
+            );
+        }
+        match self
+            .jetstream
+            .publish_with_headers(
+                format!("$KV.{}.{}", self.bucket, key),
+                headers,
+                value.into(),
+            )
+            .await
+            .map_err(|_| MessagingError::Storage)?
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == PublishErrorKind::WrongLastSequence => Ok(false),
+            Err(_) => Err(MessagingError::Storage),
+        }
+    }
+
     async fn put(
         &self,
         key: &str,
@@ -474,6 +641,26 @@ impl KvStore for KvStoreAdapter {
             Self::Nats(store) => store.get(key).await,
         }
     }
+    async fn get_with_revision(&self, key: &str) -> Result<Option<KvEntry>, MessagingError> {
+        match self {
+            Self::Redis(store) => store.get_with_revision(key).await,
+            Self::Nats(store) => store.get_with_revision(key).await,
+        }
+    }
+
+    async fn compare_and_set(
+        &self,
+        key: &str,
+        revision: &str,
+        value: Vec<u8>,
+        ttl: Option<Duration>,
+    ) -> Result<bool, MessagingError> {
+        match self {
+            Self::Redis(store) => store.compare_and_set(key, revision, value, ttl).await,
+            Self::Nats(store) => store.compare_and_set(key, revision, value, ttl).await,
+        }
+    }
+
     async fn put(
         &self,
         key: &str,

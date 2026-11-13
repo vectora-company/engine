@@ -796,6 +796,51 @@ pub async fn kv_store_get(config_json: String, key: String) -> Result<String> {
 }
 
 #[napi]
+pub async fn kv_store_get_with_revision(config_json: String, key: String) -> Result<String> {
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let Some(entry) = store
+        .get_with_revision(&key)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?
+    else {
+        return Ok("null".to_owned());
+    };
+    let value: serde_json::Value = serde_json::from_slice(&entry.value)
+        .map_err(|_| Error::from_reason("stored KV value is invalid"))?;
+    encode_json(&serde_json::json!({"value": value, "revision": entry.revision}))
+}
+
+#[napi]
+pub async fn kv_store_compare_and_set(
+    config_json: String,
+    key: String,
+    revision: String,
+    value_json: String,
+    ttl_seconds: Option<u32>,
+) -> Result<bool> {
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&value_json).map_err(|_| Error::from_reason("invalid KV value"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    store
+        .compare_and_set(
+            &key,
+            &revision,
+            serde_json::to_vec(&value).map_err(|_| Error::from_reason("invalid KV value"))?,
+            ttl_seconds.map(|seconds| std::time::Duration::from_secs(seconds.into())),
+        )
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
 pub async fn kv_store_delete(config_json: String, key: String) -> Result<()> {
     let config =
         serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
