@@ -183,7 +183,7 @@ outras etapas aprovadas no plano ativo.
 - [x] Binding Python: `maturin develop` e `pytest` local explícito — 53 passaram.
 - [x] Binding TypeScript: `pnpm typecheck`, `pnpm build` e `pnpm test` — 39 passaram, 10 ignorados sem endpoints.
 - [x] Simular perda de eventos, checkpoints, reservas/admissions e reserva standalone na scope de teste.
-- [x] Cobrir linha extra em `ve_ledger_versions` e conteúdo de evento alterado na projeção; testes PostgreSQL service-real passaram no PR #95.
+- [x] Cobrir linha extra em `ve_ledger_versions` e conteúdo de evento alterado na projeção; testes PostgreSQL service-real passaram no PR [#95](https://github.com/vectora-company/engine/pull/95), head `df23e43cda2d24e4a4e169f4da399a1bda4bb795` (OPEN).
 - [ ] Cobrir indisponibilidade remota durante a reconstrução.
 - [ ] Reexecutar a suíte NATS com servidor 2.11+; o contêiner atual é 2.10 e falhou em 3 testes que exigem TTL de KV.
 - [ ] Em seguida tratar concorrência de projetores e migrations PostgreSQL com rollback.

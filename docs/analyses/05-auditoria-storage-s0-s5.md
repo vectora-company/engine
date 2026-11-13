@@ -238,6 +238,8 @@ demais serviços, incluindo Redis e Qdrant, passaram. Python: 53 testes passaram
 
 A outbox atende indisponibilidade/reconexão, mas confirmação remota remove a linha. Se o PostgreSQL for perdido, o SQLite mantém a fonte completa; antes do PR #94 a abertura não reconstituía as linhas projetadas. A decisão de brunosrz no chat adota backup integral `pg_dump`/gerenciado e rebuild/verify pela Engine, sem formato próprio de backup. O PR #94 re-enfileira e reproduz idempotentemente a scope local e compara cinco contagens: agregados/versões, eventos, checkpoints, reservas e admissions. A operação exige pausar writers; não há snapshot atômico entre os bancos. O teste service-real remove e restaura eventos, checkpoint, reservation/admission e reservation standalone. Os testes do PR #95 também confirmam rejeição de linha extra e conteúdo divergente.
 
-## Integridade da projeção — PR #95, filha do #94
+## Integridade da projeção — PR [#95](https://github.com/vectora-company/engine/pull/95), filha do #94
+
+Branch `test/postgres-projection-integrity`, commit `df23e43cda2d24e4a4e169f4da399a1bda4bb795` (OPEN).
 
 Dois testes PostgreSQL reais verificam que `rebuild_projection` falha com `ProjectionMismatch` se houver uma linha de versão extra na scope e com `ProjectionConflict` se o payload de um evento projetado tiver sido alterado. A outbox local permanece pendente no conflito. Os três testes de rebuild (reconstrução completa e duas rejeições) passaram; Clippy passou.

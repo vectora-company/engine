@@ -408,4 +408,4 @@ Decisão de brunosrz no chat: combinar backup PostgreSQL nativo (`pg_dump`/backu
 [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md) e
 [`docs/analyses/05-auditoria-storage-s0-s5.md`](05-auditoria-storage-s0-s5.md).
 
-O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, cobre as condições negativas da verificação: linha extra na tabela de versões retorna `ProjectionMismatch`; payload divergente para evento existente retorna `ProjectionConflict` e mantém a outbox local pendente. Os dois testes passaram contra PostgreSQL real.
+O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, head `df23e43cda2d24e4a4e169f4da399a1bda4bb795` (OPEN), cobre as condições negativas da verificação: linha extra na tabela de versões retorna `ProjectionMismatch`; payload divergente para evento existente retorna `ProjectionConflict` e mantém a outbox local pendente. Os dois testes passaram contra PostgreSQL real.
