@@ -187,7 +187,7 @@ outras etapas aprovadas no plano ativo.
 - [x] Cobrir corrida entre dois projetores independentes drenando duas sequências do mesmo agregado (16 rodadas service-real no PR [#96](https://github.com/vectora-company/engine/pull/96)).
 - [ ] Cobrir indisponibilidade remota durante a reconstrução.
 - [ ] Reexecutar a suíte NATS com servidor 2.11+; o contêiner atual é 2.10 e falhou em 3 testes que exigem TTL de KV.
-- [x] Concorrência entre dois projetores independentes no mesmo processo verificada em 16 rodadas service-real no PR [#96](https://github.com/vectora-company/engine/pull/96), head `fb1977a`.
+- [x] Concorrência entre dois projetores independentes no mesmo processo verificada em 16 rodadas service-real no PR [#96](https://github.com/vectora-company/engine/pull/96), head `fb1977a`, merge commit `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`.
 - [ ] Tratar concorrência entre processos/admissions e migrations PostgreSQL com rollback.
 
 ## Projeção de reservas e admissions — PR #93, filho do PR #92
@@ -198,3 +198,16 @@ outras etapas aprovadas no plano ativo.
 - [x] Workspace Rust 182 + 3 fixtures + 1 teste nativo; `storage::` 83/83 com PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0.
 - [x] Clippy `-D warnings`, rustdoc, formatação e hooks completos passaram.
 - [x] Commit `58e1619`, push e abrir o PR [#93](https://github.com/vectora-company/engine/pull/93), filho do #92.
+
+## Providers e modalidades de IA — referência llama.cpp v1.0.0
+
+Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md) e [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md).
+
+- [x] Atualizar a branch documental sobre `main` após o merge do PR #96.
+- [x] Registrar o estado verificado de Ollama: API nativa para visão/chat, embeddings de texto e compatibilidade OpenAI parcial.
+- [x] Inventariar providers e operações no core/bindings e conferir APIs HTTP upstream da tag `v1.0.0`.
+- [x] Separar chat, Decision Model, visão/geração de imagem, TTS, ASR/STT, vídeo, embeddings e rerank nos contratos e lacunas.
+- [x] Revisar e sincronizar spec, plano, análise, checklist, índices e goal loop.
+- [ ] Abrir PR documental desta etapa em `main`; depois registrar URL, head e SHA.
+- [ ] Implementar adapter llama-server incrementalmente com fixtures e paridade de bindings.
+- [ ] Expandir os perfis/providers e modalidades previstos no plano, sem declarar suporte por compatibilidade presumida.
