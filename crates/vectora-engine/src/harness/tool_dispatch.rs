@@ -420,6 +420,7 @@ mod tests {
             }],
             finish_reason: Some(FinishReason::ToolCalls),
             usage: None,
+            media_decisions: Vec::new(),
         }
     }
 

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::media::{InlineMedia, MediaPart};
+use super::media::{InlineMedia, MediaDecision, MediaPart};
 
 pub const CHAT_CONTRACT_VERSION: u16 = 1;
 
@@ -234,6 +234,9 @@ pub struct ChatCompletion {
     pub tool_calls: Vec<ToolCall>,
     pub finish_reason: Option<FinishReason>,
     pub usage: Option<Usage>,
+    /// Media routing evidence; never includes media bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media_decisions: Vec<MediaDecision>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -249,6 +252,9 @@ pub struct ToolCallDelta {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatEventKind {
+    MediaRouted {
+        decisions: Vec<MediaDecision>,
+    },
     ModelSwitched {
         from_model_id: String,
         to_model_id: String,

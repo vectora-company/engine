@@ -433,6 +433,7 @@ mod tests {
             tool_calls: Vec::new(),
             finish_reason: None,
             usage: None,
+            media_decisions: Vec::new(),
         }
     }
 

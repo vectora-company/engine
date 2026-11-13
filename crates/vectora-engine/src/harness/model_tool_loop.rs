@@ -1065,6 +1065,7 @@ mod tests {
             }),
             tool_calls: calls,
             usage: None,
+            media_decisions: Vec::new(),
         }
     }
 

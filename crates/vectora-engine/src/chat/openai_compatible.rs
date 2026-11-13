@@ -10,7 +10,7 @@ use tokio::time::{Instant, timeout_at};
 use url::Url;
 
 use crate::chat::{
-    ChatError, ContentPart,
+    ChatError, ContentPart, MediaDecision, MediaExecutionContext, PreparedRequest,
     error::classify_provider_error,
     sse::SseDecoder,
     types::{
@@ -103,6 +103,8 @@ pub struct OpenAiCompatibleConfig {
     retry_connect_attempts: u8,
     max_response_bytes: usize,
     max_event_bytes: usize,
+    media_provider: String,
+    media_context: Option<MediaExecutionContext>,
 }
 
 impl fmt::Debug for OpenAiCompatibleConfig {
@@ -120,6 +122,8 @@ impl fmt::Debug for OpenAiCompatibleConfig {
             .field("retry_connect_attempts", &self.retry_connect_attempts)
             .field("max_response_bytes", &self.max_response_bytes)
             .field("max_event_bytes", &self.max_event_bytes)
+            .field("media_provider", &self.media_provider)
+            .field("media_context", &self.media_context)
             .finish()
     }
 }
@@ -136,6 +140,8 @@ impl OpenAiCompatibleConfig {
             retry_connect_attempts: 2,
             max_response_bytes: 16 * 1024 * 1024,
             max_event_bytes: 1024 * 1024,
+            media_provider: "openai".to_owned(),
+            media_context: None,
         }
     }
 
@@ -164,6 +170,18 @@ impl OpenAiCompatibleConfig {
     pub fn response_limits(mut self, max_response_bytes: usize, max_event_bytes: usize) -> Self {
         self.max_response_bytes = max_response_bytes;
         self.max_event_bytes = max_event_bytes;
+        self
+    }
+
+    /// Set provider identity for capability resolution and a client-default
+    /// media context. A per-call context overrides this value.
+    pub fn media_context(
+        mut self,
+        provider: impl Into<String>,
+        context: MediaExecutionContext,
+    ) -> Self {
+        self.media_provider = provider.into();
+        self.media_context = Some(context);
         self
     }
 }
@@ -200,6 +218,37 @@ impl OpenAiCompatibleClient {
 
     /// Return one assistant response. Dropping this future cancels the HTTP request.
     pub async fn complete(&self, request: ChatRequest) -> Result<ChatCompletion, ChatError> {
+        let prepared = match &self.config.media_context {
+            Some(context) => Some(
+                context
+                    .prepare_request(&self.config.media_provider, request.clone())
+                    .await,
+            ),
+            None => None,
+        };
+        let (request, decisions) = prepared
+            .map(|prepared| (prepared.request, prepared.decisions))
+            .unwrap_or((request, Vec::new()));
+        let mut completion = self.complete_prepared(request).await?;
+        completion.media_decisions = decisions;
+        Ok(completion)
+    }
+
+    /// Complete with an ephemeral media context that overrides any client default.
+    pub async fn complete_with_media(
+        &self,
+        request: ChatRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<ChatCompletion, ChatError> {
+        let PreparedRequest { request, decisions } = context
+            .prepare_request(&self.config.media_provider, request)
+            .await;
+        let mut completion = self.complete_prepared(request).await?;
+        completion.media_decisions = decisions;
+        Ok(completion)
+    }
+
+    async fn complete_prepared(&self, request: ChatRequest) -> Result<ChatCompletion, ChatError> {
         validate_request(&request)?;
         let payload = request_payload(&request, false);
         let deadline = Instant::now() + self.config.total_timeout;
@@ -221,6 +270,35 @@ impl OpenAiCompatibleClient {
 
     /// Open a backpressured SSE stream. Dropping it drops the response body and cancels I/O.
     pub async fn stream(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
+        let prepared = match &self.config.media_context {
+            Some(context) => Some(
+                context
+                    .prepare_request(&self.config.media_provider, request.clone())
+                    .await,
+            ),
+            None => None,
+        };
+        let (request, decisions) = prepared
+            .map(|prepared| (prepared.request, prepared.decisions))
+            .unwrap_or((request, Vec::new()));
+        let stream = self.stream_prepared(request).await?;
+        Ok(with_media_evidence(stream, decisions))
+    }
+
+    /// Stream with an ephemeral media context that overrides any client default.
+    pub async fn stream_with_media(
+        &self,
+        request: ChatRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<ChatStream, ChatError> {
+        let PreparedRequest { request, decisions } = context
+            .prepare_request(&self.config.media_provider, request)
+            .await;
+        let stream = self.stream_prepared(request).await?;
+        Ok(with_media_evidence(stream, decisions))
+    }
+
+    async fn stream_prepared(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
         validate_request(&request)?;
         let payload = request_payload(&request, true);
         let deadline = Instant::now() + self.config.total_timeout;
@@ -351,6 +429,18 @@ impl OpenAiCompatibleClient {
             }
         }
     }
+}
+
+pub(crate) fn with_media_evidence(stream: ChatStream, decisions: Vec<MediaDecision>) -> ChatStream {
+    Box::pin(try_stream! {
+        if !decisions.is_empty() {
+            yield ChatEvent::new(ChatEventKind::MediaRouted { decisions });
+        }
+        let mut stream = stream;
+        while let Some(event) = stream.next().await {
+            yield event?;
+        }
+    })
 }
 
 fn validate_config(config: &OpenAiCompatibleConfig) -> Result<Url, ChatError> {
@@ -728,6 +818,7 @@ fn parse_completion(value: Value) -> Result<ChatCompletion, ChatError> {
         tool_calls,
         finish_reason,
         usage,
+        media_decisions: Vec::new(),
     })
 }
 
@@ -930,7 +1021,7 @@ fn safe_endpoint(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chat::{ContentPart, ImageUrl, ToolDefinition};
+    use crate::chat::{ContentPart, ImageUrl, MediaDecision, MediaMode, ToolDefinition};
 
     #[test]
     fn null_optional_usage_and_tool_calls_are_absent_in_completion_and_stream() {
@@ -948,6 +1039,168 @@ mod tests {
         assert!(matches!(events[0].event, ChatEventKind::TextDelta { .. }));
         assert!(parse_tool_calls(Some(&json!({}))).is_err());
         assert!(parse_usage(Some(&json!({}))).is_err());
+    }
+
+    #[tokio::test]
+    async fn stream_reports_media_decisions_before_provider_output() {
+        let decision = MediaDecision {
+            message_index: 0,
+            part_index: 0,
+            name: "photo.png".into(),
+            mime_type: "image/png".into(),
+            size_bytes: 8,
+            sha256: "digest".into(),
+            mode: MediaMode::Native,
+            reason: "vision supported".into(),
+            model: "model-x".into(),
+        };
+        let inner: ChatStream = Box::pin(futures_util::stream::iter(vec![Ok(ChatEvent::new(
+            ChatEventKind::Completed {
+                finish_reason: Some(FinishReason::Stop),
+            },
+        ))]));
+        let mut stream = with_media_evidence(inner, vec![decision.clone()]);
+
+        let routed = stream.next().await.unwrap().unwrap();
+        assert_eq!(
+            routed.event,
+            ChatEventKind::MediaRouted {
+                decisions: vec![decision]
+            }
+        );
+        assert!(matches!(
+            stream.next().await.unwrap().unwrap().event,
+            ChatEventKind::Completed { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn client_default_media_context_prepares_payload_and_returns_evidence() {
+        use std::{collections::HashMap, io::Read, io::Write, net::TcpListener, sync::Arc, thread};
+
+        use crate::chat::{
+            CapabilityResolver, MediaError, MediaExecutionContext, MediaPart, MediaRef, MediaStore,
+            sha256_hex,
+        };
+
+        struct Store(HashMap<String, Vec<u8>>);
+
+        #[async_trait::async_trait]
+        impl MediaStore for Store {
+            async fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
+                self.0
+                    .get(&media_ref.asset_id)
+                    .cloned()
+                    .ok_or(MediaError::Unavailable)
+            }
+        }
+
+        let bytes = b"%PDF-1.4\n";
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for _ in 0..2 {
+                let (mut socket, _) = listener.accept().unwrap();
+                let mut received = Vec::new();
+                let mut chunk = [0; 4096];
+                let (body_start, content_length) = loop {
+                    let count = socket.read(&mut chunk).unwrap();
+                    received.extend_from_slice(&chunk[..count]);
+                    if let Some(index) =
+                        received.windows(4).position(|window| window == b"\r\n\r\n")
+                    {
+                        let headers = String::from_utf8_lossy(&received[..index]);
+                        let content_length = headers
+                            .lines()
+                            .find_map(|line| {
+                                let (name, value) = line.split_once(':')?;
+                                name.eq_ignore_ascii_case("content-length")
+                                    .then(|| value.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap();
+                        let body_start = index + 4;
+                        if received.len() >= body_start + content_length {
+                            break (body_start, content_length);
+                        }
+                    }
+                };
+                let request: Value =
+                    serde_json::from_slice(&received[body_start..body_start + content_length])
+                        .unwrap();
+                let response =
+                    br#"{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}"#;
+                write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                response.len()
+            )
+            .unwrap();
+                socket.write_all(response).unwrap();
+                requests.push(request);
+            }
+            requests
+        });
+
+        let mut assets = HashMap::new();
+        assets.insert("pdf".into(), bytes.to_vec());
+        let context =
+            MediaExecutionContext::new(CapabilityResolver::new(), Arc::new(Store(assets)));
+        let client = OpenAiCompatibleClient::new(
+            OpenAiCompatibleConfig::new(format!("http://{address}/v1"))
+                .media_context("openai", context),
+        )
+        .unwrap();
+        let request = ChatRequest::new(
+            "model-x",
+            vec![Message {
+                role: MessageRole::User,
+                content: MessageContent::Parts(vec![ContentPart::Document(MediaPart {
+                    media_ref: MediaRef {
+                        asset_id: "pdf".into(),
+                        sha256: sha256_hex(bytes),
+                        mime_type: "application/pdf".into(),
+                        size_bytes: bytes.len() as u64,
+                        name: "report.pdf".into(),
+                    },
+                    text: None,
+                    previews: Vec::new(),
+                })]),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
+                name: None,
+                is_error: false,
+            }],
+        );
+
+        let explicit_context = client
+            .config
+            .media_context
+            .as_ref()
+            .unwrap()
+            .clone()
+            .with_max_media_bytes(0);
+        let explicit = client
+            .complete_with_media(request.clone(), &explicit_context)
+            .await
+            .unwrap();
+        let completion = client.complete(request).await.unwrap();
+        let sent = server.join().unwrap();
+        assert_eq!(explicit.media_decisions.len(), 1);
+        assert_eq!(
+            explicit.media_decisions[0].mode,
+            crate::chat::MediaMode::Reference
+        );
+        assert_eq!(completion.content, "ok");
+        assert_eq!(completion.media_decisions.len(), 1);
+        assert_eq!(sent[0]["messages"][0]["content"][0]["type"], "text");
+        assert_eq!(sent[1]["messages"][0]["content"][0]["type"], "file");
+        assert!(
+            sent[1]["messages"][0]["content"][0]["file"]["file_data"]
+                .as_str()
+                .unwrap()
+                .starts_with("data:application/pdf;base64,")
+        );
     }
 
     #[test]
@@ -1056,8 +1309,8 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn serializes_native_decisions_as_pdf_and_audio_chat_parts() {
+    #[tokio::test]
+    async fn serializes_native_decisions_as_pdf_and_audio_chat_parts() {
         use std::collections::HashMap;
 
         use crate::chat::media::{
@@ -1068,8 +1321,9 @@ mod tests {
         #[derive(Default)]
         struct Store(HashMap<String, Vec<u8>>);
 
+        #[async_trait::async_trait]
         impl MediaStore for Store {
-            fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
+            async fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
                 self.0
                     .get(&media_ref.asset_id)
                     .cloned()
@@ -1117,7 +1371,8 @@ mod tests {
             &store,
             "model",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert!(
             prepared
                 .decisions
