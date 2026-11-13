@@ -53,6 +53,15 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Rodar Prettier, hooks aplicáveis e `git diff --check`; links relativos válidos nos 55 Markdown.
 - [x] Commit `4ab3df3`, push e abrir o [PR #87](https://github.com/vectora-company/engine/pull/87), filho do #86 (head `4ab3df3`).
 
+## Reclassificar MIME pelos bytes reidratados — filha do PR #87
+
+- [x] Classificar os bytes verificados e usar o MIME detectado no payload quando a modalidade coincide.
+- [x] Rebaixar para texto/referência quando os bytes não correspondem à modalidade declarada; aceitar documento nativo somente quando a assinatura identifica PDF.
+- [x] Validar previews reidratados como imagens antes de serializar.
+- [x] Adicionar testes para MIME de imagem incorreto, MIME genérico em PDF e divergência entre modalidade declarada e bytes; 22 testes `chat::media::tests` passaram.
+- [x] Rodar hooks completos: format, Prettier, Clippy, testes Rust workspace e rustdoc passaram; os 22 testes focados passaram.
+- [ ] Commit, push e abrir PR filho do #87; registrar URL e SHA.
+
 ## Preparação e escopo
 
 - [ ] Confirmar repositório, branch, base da stack e estado da working tree.
