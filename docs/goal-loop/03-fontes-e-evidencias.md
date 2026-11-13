@@ -6,10 +6,12 @@
 2. Spec da capability em `docs/specs/`.
 3. Plano ativo em `docs/plans/` e checklist específico em `docs/checklists/`.
 4. Análise específica em `docs/analyses/` e referências citadas, incluindo
-   cópias locais pertinentes em `../issues/`.
+   cópias locais pertinentes em `/media/brunosrz/externo/vectora-repos/issues/`
+   quando esse workspace estiver disponível.
 5. Código e testes atuais da Engine.
-6. Consumidores relevantes, especialmente `../vectora/`, para verificar
-   contratos e comportamento que precisam continuar compatíveis.
+6. Consumidores relevantes, especialmente o checkout Vectora indicado no
+   `AGENTS.md`, para verificar contratos e comportamento que precisam continuar
+   compatíveis.
 7. Documentação primária das dependências e protocolos externos.
 
 Issues abertas no GitHub não substituem specs e materiais locais. Documentação,

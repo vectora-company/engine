@@ -4,8 +4,8 @@
 
 Implementar na engine Rust o runtime reutilizável descrito em
 [`01-runtime-agentico-e-harness.md`](../specs/01-runtime-agentico-e-harness.md),
-usando `../issues/01-loop-agentico-e-harness.md` e
-`../vectora/backend/engine/` como fontes de requisitos e comportamento
+usando `/media/brunosrz/externo/vectora-repos/issues/01-loop-agentico-e-harness.md` e
+`/media/brunosrz/externo/vectora-repos/vectora/backend/engine/` como fontes de requisitos e comportamento
 observável. O backend Python é referência para semântica; detalhes de produto,
 UI, RBAC, workbenches, adapters e storage proprietário não viram API da engine.
 

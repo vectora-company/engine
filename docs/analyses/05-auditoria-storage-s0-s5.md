@@ -1,17 +1,20 @@
 # Auditoria de storage e ledger S0–S5
 
-**Estado atual (verificado em 2026-11-13):** os PRs #45–#72 estão integrados
-em `main` (`dc1aa5e`); o #77 está no topo da stack aberta. Entregue: seleção
-com seis backends, `capabilities()`, ledger com concorrência entre processos e
-backup online/offline, projeção PostgreSQL com retomada, score vetorial por
-cosseno, limites e dimensão divergente, KV com TTL NATS, CAS, incremento,
-prefixo e watch, filas com retenção, tentativas e DLQ. O que falta está na
+**Estado da auditoria (revalidado em 2026-11-13):** os PRs #45–#72 estão
+integrados em `main` (`dc1aa5e`). O PR #77 e os PRs subsequentes de mídia #79–#82
+estão abertos na stack; o #82 é o topo nesta revisão, mas não muda adapters de
+storage. Entregue em `main`: seleção de seis backends, relatório estático de
+capabilities, ledger SQLite com concorrência entre processos e backup
+online/offline, projeção PostgreSQL retomável, vetores com cosseno e limites
+comuns, KV com TTL NATS/CAS/incremento/prefixo/watch e filas com retenção,
+tentativas e DLQ. Gaps e evidência por par estão na
 [matriz de equivalência](../plans/04-plano-storage-ledger.md) e no
 [plano ativo](../plans/03-plano-continuidade.md).
-**Como ler:** as seções abaixo são registros cronológicos de cada etapa. Quando
-uma seção antiga diz "pendente", "a decidir" ou descreve LanceDB com distância
-L2 e JetStream KV sem TTL, ela foi superada pelas seções posteriores e pelos
-PRs indicados em cada marca "superado".
+**Como ler:** as seções abaixo são registros cronológicos. Alguns trechos
+registram estado e testes de etapas antigas, não o estado corrente. Quando uma
+seção diz "pendente", "a decidir" ou descreve LanceDB com distância L2 e
+JetStream KV sem TTL, consulte a atualização por PR nesta auditoria, o checklist
+e a matriz vigente do [plano de storage](../plans/04-plano-storage-ledger.md).
 **Escopo:** registrar evidências, decisões do mantenedor e cobertura de storage.
 
 ## Decisão desta etapa

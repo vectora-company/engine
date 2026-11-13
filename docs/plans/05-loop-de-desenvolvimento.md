@@ -23,11 +23,12 @@ do loop e os critérios sucintos de encerramento.
 - `docs/analyses/`: investigação, fontes, evidências e decisões.
 - `docs/templates/`: modelos para criar esses artefatos por capability sem
   deixar escopo, evidência ou critérios de saída implícitos.
-- `../issues/`, `../vectora/` e `../gh-bot/`: caminhos relativos ao layout de
-  `/media/brunosrz/externo/vectora-repos/`; em outro checkout, use esse caminho
-  absoluto.
-- `../issues/`: requisitos originais locais quando disponíveis; não substituem
-  as specs da Engine.
+- Fontes locais fora deste repositório: issues em
+  `/media/brunosrz/externo/vectora-repos/issues/`, Vectora em
+  `/media/brunosrz/externo/vectora-repos/vectora/` e GH Bot no checkout indicado
+  pelo `AGENTS.md`. Use os caminhos mapeados nesse arquivo se o workspace mudar.
+- Issues locais são requisitos originais quando disponíveis; não substituem as
+  specs da Engine.
 - Código e testes atuais: evidência do comportamento implementado, nunca
   substituídos por texto histórico.
 

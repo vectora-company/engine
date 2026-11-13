@@ -10,8 +10,9 @@ Na raiz do repositório, `scons install` instala Rust, tooling Python e
 dependências pnpm. Dentro deste diretório, `pnpm build` compila o addon local e
 gera a fachada JavaScript e as declarações. `pnpm test` executa a suíte do pacote
 contra o addon local; os cenários com Redis, NATS, Qdrant e PostgreSQL só rodam
-quando as variáveis `VECTORA_TEST_*` estão definidas. O build de artefatos para outras plataformas e a publicação no
-npm serão habilitados em um workflow de release separado.
+quando as variáveis `VECTORA_TEST_*` estão definidas. O build de artefatos para
+outras plataformas e a publicação no npm ainda não estão configurados e exigem
+um workflow de release separado.
 
 Consuma `chatComplete(settings, request)` como `Promise` ou `chatStream` como
 `AsyncIterable`. Encerrar a iteração cancela a tarefa Rust e a requisição HTTP.

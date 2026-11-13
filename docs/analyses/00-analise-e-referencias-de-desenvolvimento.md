@@ -10,14 +10,15 @@ as regras específicas de uma spec ou de um plano.
 2. A spec da Engine em `docs/specs/` para a capability em questão.
 3. O plano ativo em `docs/plans/` e seu checklist de execução.
 4. As referências citadas pela spec, incluindo as cópias locais em
-   `../issues/` quando estiverem disponíveis.
+   `/media/brunosrz/externo/vectora-repos/issues/` quando estiverem disponíveis.
 5. Implementação atual da Engine e seus testes para verificar o comportamento
    realmente existente.
-6. Consumidores relevantes: `../gh-bot/` como primeiro ambiente experimental
-   integrado pela binding TypeScript local e `../vectora/` como referência de
-   comportamento e consumidor Python posterior. Consulte
-   `../gh-bot/docs/engine-integration.md` para o fluxo de desenvolvimento
-   conjunto; não condicione esse fluxo à publicação npm.
+6. Consumidores relevantes: GH Bot como primeiro ambiente experimental da
+   binding TypeScript local e Vectora como referência de comportamento e
+   consumidor Python. Consulte o [guia de integração do GH Bot](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md)
+   para o fluxo conjunto; não condicione o desenvolvimento à publicação npm.
+   Os caminhos locais dependem do clone efetivamente disponível; não presuma
+   que diretórios irmãos de qualquer checkout tenham o consumidor.
 7. Documentação primária das bibliotecas e protocolos externos citados.
 
 ## Revalidação de sessão e PR stack
@@ -113,12 +114,13 @@ usa `inlineData` para áudio e vídeo. OpenAI Responses continua fora do escopo
 porque não há adapter para essa API. Fontes primárias: [PDF na Anthropic](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support), [Part e `inlineData` na API Gemini](https://ai.google.dev/api/generate-content), [formatos suportados no Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) e [PDF nos dois endpoints OpenAI](https://developers.openai.com/api/docs/guides/file-inputs).
 
 O teste de payload inicialmente falhou porque a seleção de conteúdo Anthropic
-continuava ativando o formato em blocos somente para `ImageUrl`. A condição foi
-corrigida para reconhecer o PDF inline. Verificação local concluída: `cargo fmt
---all -- --check`, `cargo test -p vectora-engine --lib chat:: --locked` (44
-passaram), Clippy de todos os targets/features com `-D warnings`, Prettier e
-`git diff --check` passaram. O PR ainda não foi criado neste registro; a entrega
-continua pendente no checklist específico.
+ativava o formato em blocos somente para `ImageUrl`; a condição foi corrigida
+para reconhecer PDF inline. A verificação local registrada nessa etapa incluiu
+fmt, testes `chat::` (44), Clippy, Prettier e `git diff --check`. A frase original
+sobre PR ainda não criado descrevia apenas aquele instante: #79 foi aberto, e a
+integração do preparo e dos bindings está nos PRs abertos #81 e #82. Consulte o
+[plano ativo](../plans/03-plano-continuidade.md) e o
+[checklist de mídia](../checklists/04-midia-no-chat.md) para o estado atual.
 
 ### Evidência atualizada do Vectora consumidor
 
@@ -136,9 +138,10 @@ em texto somente para rejeição específica de mídia; imagens de ferramentas M
 como assets; conversão local de áudio/PDF/vídeo; transcrição offline e helper
 Speech do macOS com CI que gera fala. Isso não significa que a Engine já tenha
 essas capacidades. Esta etapa Engine fecha somente o defeito de formato do
-payload para as modalidades mapeadas; Naquele snapshot inicial, o preparador ainda não estava ligado ao envio real.
-Esse estado foi superado pela implementação descrita abaixo; continuam pendentes
-limites por provider/modelo, retry específico e resultado multimodal de tool.
+payload para as modalidades mapeadas. No snapshot inicial, o preparador ainda
+não estava ligado ao envio real; esse estado foi superado pela integração Rust
+no PR #81 e pelos bindings no PR #82. Continuam pendentes limites por
+provider/modelo, retry específico e resultado multimodal de tool.
 
 A fronteira de produto deve ser preservada: STT local, permissões do macOS,
 configuração UI, geração de prévias e empacotamento SCons estão implementados no
@@ -189,3 +192,23 @@ Documente a pergunta, opções, impactos e trabalho dependente em `docs/`; peça
 decisão de `brunosrz` aqui no chat. Conclua primeiro o trabalho independente e
 encerre o loop somente se não houver outra etapa independente aprovada. Não
 transforme uma preferência presumida em decisão arquitetural.
+
+## Revisão documental completa — 2026-11-13
+
+Revisados os 55 arquivos Markdown versionados do repositório. Snapshots de auditorias,
+matrizes e planos antigos foram preservados como históricos quando identificam
+claramente SHA/data; documentos vigentes foram corrigidos para refletir `main`
+(`dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1`), a stack aberta até o PR #82 e a
+implementação local nele contida. Esta revisão foi publicada no PR #83,
+empilhado sobre o #82; seu SHA é conferido no PR remoto, pois a branch recebeu atualização de checklist após a abertura. Corrigidos, entre outros, o estado dos
+payloads nativos, os três modos dos bindings, o status dos PRs e referências
+quebradas para o guia do GH Bot. A meta de primeira release ampla foi registrada
+no plano como proposta a decompor, sem declarar capabilities planejadas prontas.
+
+Evidência desta revisão: busca de links relativos em todos os Markdown — todos
+os destinos resolvem; o hook Prettier rodou em todos os 55 arquivos e passou na
+segunda execução; `git diff --check` — passou. Nenhum teste de código
+foi executado, pois o escopo deste PR é documental. Ver o andamento no
+[`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md)
+e o objetivo/escopo proposto no
+[`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).

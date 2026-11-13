@@ -3,9 +3,11 @@
 ![Engine](assets/branding/engine-banner.png)
 
 Núcleo em Rust para capacidades reutilizáveis de execução de agentes nos
-produtos Vectora. O repositório está em bootstrap: os contratos e limites das
-APIs ainda estão sendo definidos, portanto esta crate ainda não é um destino
-estável de integração.
+produtos Vectora. O repositório está em bootstrap: contratos, limites e
+maturidade das APIs ainda estão sendo definidos, portanto esta crate ainda não
+é um destino estável de integração. A meta declarada para a primeira release é
+uma entrega ampla e completa, não um MVP; o escopo e os gates estão sendo
+consolidados no [plano ativo](docs/plans/03-plano-continuidade.md).
 
 Documentação pública: [docs.vectora.company/engine](https://docs.vectora.company/engine/).
 

@@ -11,11 +11,11 @@ implementação, specs, planos, consumidores, referências e evidências.
 ## Desenvolvimento conjunto com o GH Bot
 
 O GH Bot é o primeiro consumidor experimental da Engine e deve avançar junto
-com ela (os caminhos `../gh-bot` e `../vectora` pressupõem o layout de
-`/media/brunosrz/externo/vectora-repos/`; em outro checkout, use esse caminho
-absoluto). Durante o desenvolvimento, use o checkout irmão `../gh-bot` e o guia
-[`engine-integration.md`](../../../gh-bot/docs/engine-integration.md): o
-binding TypeScript é consumido diretamente de `../engine/bindings/typescript`,
+com ela. Os caminhos dos checkouts locais estão no `AGENTS.md`; não presuma que
+sejam diretórios irmãos do checkout da Engine. Durante o desenvolvimento, use
+o checkout configurado do GH Bot e o
+[guia de integração da Engine](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md): o
+binding TypeScript é consumido diretamente do diretório local da Engine,
 sem depender de publicação no npm. Se o fluxo do Bot precisar de uma capability
 ausente, implemente o core Rust, os bindings e a integração do Bot na mesma
 stack de trabalho. Valide em uma conta GitHub nova e repositórios experimentais
@@ -43,9 +43,11 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 
 ## Capability ativa
 
-Fase 0 e Fase 1 do plano ativo: correções imediatas e mídia no chat (spec 17).
-O backlog completo, por fases, com origem, critério de saída e decisões
-pendentes, está no plano de continuidade. Storage segue como Fase 2.
+Revisão completa dos Markdown, empilhada sobre o PR #82 da spec 17, e
+consolidação do plano para a primeira release ampla da Engine. O backlog por
+fases, os gaps de maturidade e as decisões pendentes estão no plano de
+continuidade. A mídia segue parcialmente implementada nos PRs abertos #79–#82;
+storage e runtime não devem ser anunciados como estáveis.
 
 - Plano de continuidade (plano ativo): [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
 - Spec da mídia: [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md).

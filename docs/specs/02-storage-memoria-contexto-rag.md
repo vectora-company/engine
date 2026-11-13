@@ -162,8 +162,9 @@ especialização; se o outro lado puder oferecê-lo, volta para a base.
 
 ## Ledger e estado de execução
 
-Estado experimental verificado em 13 de novembro de 2026 (topo da stack sobre
-`main` `dc1aa5e`): há ledger/checkpoints em SQLite com backup online e offline,
+Estado experimental verificado em 13 de novembro de 2026: `main` está em
+`dc1aa5e`; os PRs #45–#72 de storage estão integrados. O topo atual da stack é
+o PR aberto #82, que trata de mídia e não altera storage. Há ledger/checkpoints em SQLite com backup online e offline,
 stores SQLite especializados de lifecycle, loop e policy, um
 `PostgresLedger` usado como projeção, e `ResilientLedger` que grava localmente
 com outbox antes de projetar para PostgreSQL. Também existem adapters vetoriais

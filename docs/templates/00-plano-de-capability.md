@@ -23,17 +23,17 @@
 
 ## Estado de partida
 
-| Item | Evidência atual | Estado | Gap |
-| --- | --- | --- | --- |
-| Core Rust | `[caminhos/símbolos/testes]` | `pendente` | [gap] |
-| Binding Python | `[caminhos/símbolos/testes]` | `pendente` | [gap] |
+| Item                    | Evidência atual              | Estado     | Gap   |
+| ----------------------- | ---------------------------- | ---------- | ----- |
+| Core Rust               | `[caminhos/símbolos/testes]` | `pendente` | [gap] |
+| Binding Python          | `[caminhos/símbolos/testes]` | `pendente` | [gap] |
 | Binding TypeScript/Node | `[caminhos/símbolos/testes]` | `pendente` | [gap] |
 
 ## Entregas ordenadas
 
-| Ordem | Entrega | Dependências | Critério verificável | Estado |
-| --- | --- | --- | --- | --- |
-| 1 | [entrega] | [dependências] | [evidência objetiva] | `pendente` |
+| Ordem | Entrega   | Dependências   | Critério verificável | Estado     |
+| ----- | --------- | -------------- | -------------------- | ---------- |
+| 1     | [entrega] | [dependências] | [evidência objetiva] | `pendente` |
 
 ## Decisões e gates
 
@@ -53,9 +53,9 @@
 
 ## Riscos e rollback
 
-| Risco | Impacto | Mitigação | Como reverter |
-| --- | --- | --- | --- |
-| [risco] | [impacto] | [mitigação] | [rollback] |
+| Risco   | Impacto   | Mitigação   | Como reverter |
+| ------- | --------- | ----------- | ------------- |
+| [risco] | [impacto] | [mitigação] | [rollback]    |
 
 ## Estado e próximo passo
 

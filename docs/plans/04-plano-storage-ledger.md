@@ -8,13 +8,13 @@ o Vectora Python é referência de comportamento e consumidor posterior. Cada
 capacidade pública entrega Rust, bindings Python e TypeScript e conformidade no
 mesmo PR. A publicação em crates.io, PyPI e npm tem seus próprios gates.
 
-Fontes: `../issues/01-loop-agentico-e-harness.md`,
-`../issues/02-storage-memoria-contexto-rag.md`,
-`../issues/04-chat-streaming-e-threads.md`,
-`../issues/08-contratos-backend-e-engine-rust.md` e
-`../issues/10-avaliacao-benchmarks-e-estudos.md`; consulte também
-`../vectora/backend/storage/`, `../vectora/backend/persistence/native/` e
-`../vectora/backend/scheduling/mq.py`. As issues contêm requisitos de produto:
+Fontes: `/media/brunosrz/externo/vectora-repos/issues/01-loop-agentico-e-harness.md`,
+`/media/brunosrz/externo/vectora-repos/issues/02-storage-memoria-contexto-rag.md`,
+`/media/brunosrz/externo/vectora-repos/issues/04-chat-streaming-e-threads.md`,
+`/media/brunosrz/externo/vectora-repos/issues/08-contratos-backend-e-engine-rust.md` e
+`/media/brunosrz/externo/vectora-repos/issues/10-avaliacao-benchmarks-e-estudos.md`; consulte também
+`/media/brunosrz/externo/vectora-repos/vectora/backend/storage/`, `/media/brunosrz/externo/vectora-repos/vectora/backend/persistence/native/` e
+`/media/brunosrz/externo/vectora-repos/vectora/backend/scheduling/mq.py`. As issues contêm requisitos de produto:
 extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 
 ## Princípios e fronteiras
@@ -64,8 +64,10 @@ diferenças aceitas: cada item ausente em um lado é lacuna na matriz abaixo.
 
 ## Matriz de equivalência por par (verificada em 2026-11-13)
 
-Fonte: código dos adapters na branch do topo da stack (PR #77, sobre `main`
-`dc1aa5e`) e os testes citados na
+Fonte: código dos adapters em `main` (`dc1aa5e`) e nos PRs de storage já
+integrados (#45–#72), com validação da dimensão no PR #77, ainda aberto na stack
+atual sobre #82. As etapas de mídia #79–#82 não alteram os adapters de storage.
+Consulte também os testes citados na
 [auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md). "Lacuna"
 significa que um lado tem e o outro não; "base comum ausente" significa que
 nenhum dos dois lados expõe a capacidade.
@@ -87,7 +89,7 @@ filas e do vetorial. Corrigir isso faz parte da Fase 0 e da Fase 2 do
 O contrato vetorial compartilhado usa vetores não unitários, de modo que L2 e
 cosseno ordenariam diferente; os dois adapters ordenam por cosseno.
 
-## Estado das fases S0–S5 (verificado em 2026-11-13)
+## Estado das fases S0–S5 (verificado em 2026-11-13; atualizado nesta revisão)
 
 As fases abaixo foram escritas como plano de implementação original. A tabela
 separa o que existe do que falta; "implementada" não significa pronta para

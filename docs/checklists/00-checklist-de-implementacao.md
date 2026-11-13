@@ -6,9 +6,23 @@ atualizado durante o trabalho. Não marque um item como feito sem evidência.
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 
-Para a etapa de mídia ativa empilhada sobre o PR #82, use também
+Esta revisão documental está empilhada sobre o PR #82 e alinha o plano à meta
+de uma primeira release completa. Para implementação de mídia, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
-permanece o checklist geral, não substitui os critérios específicos.
+permanece geral e não substitui critérios específicos.
+
+## Revisão documental completa — `docs/revisao-completa-markdown`
+
+- [x] Inventariar os 55 arquivos Markdown versionados e distinguir documentos
+      vigentes de snapshots históricos.
+- [x] Revalidar a branch e a stack no GitHub: PR #82 aberto no topo; esta branch
+      é sua filha.
+- [x] Corrigir referências contraditórias sobre payloads de mídia, bindings,
+      estado de storage, PRs abertos e objetivo da primeira release.
+- [x] Verificar todos os links Markdown locais; todos os destinos existem.
+- [x] Rodar Prettier em todos os Markdown; a segunda execução passou.
+- [x] Executar `git diff --check`.
+- [x] Revisar o diff final; commits documentais `00e2fe9` e `4c9a329`, push e abrir o [PR #83](https://github.com/vectora-company/engine/pull/83), empilhado sobre `feat/chat-media-bindings` (PR #82).
 
 ## Preparação e escopo
 
