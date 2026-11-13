@@ -7,7 +7,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
 com o estado verificado, a direção de uma primeira release completa e o backlog
-por fases. Em 2026-11-13, a stack aberta segue #82 → #83 → #84 → #85 → #86 → #87 → #88 → #89 → #90 → #91 → #92 → #93 → #94 → #95. O PR #86 substitui diretamente os resultados textuais de tools por partes tipadas; #87 revisa os Markdown; #88 reclassifica MIME na reidratação; #89 registra a fronteira de persistência; #90 implementa a decisão respondida no chat: request persistível separado do envelope efêmero para envio inline. O PR #90 é filho de #89; o PR #91 (diagnósticos da outbox) é filho do #90; o PR #92 (projeção de checkpoints) é filho do #91 e está aberto. O PR #93 (reservas/admissions) é filho do #92 e está aberto; o PR #94 (rebuild/verificação da projeção PostgreSQL a partir do SQLite) é filho do #93. Storage e runtime seguem com gaps registrados no plano e nas specs.
+por fases. A stack #73–#95 foi integrada em `main` (`d9497080efee29b816e78fff0c0d6ff2ab6f7147`); não havia PR aberto quando começou a etapa atual. A branch local `test/postgres-concurrent-projectors` cobre uma verificação adicional de concorrência dos projetores PostgreSQL; PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`, head `fb1977a`. Storage e runtime ainda têm gaps registrados no plano e nas specs.
 
 ## Operação de desenvolvimento
 

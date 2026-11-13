@@ -86,7 +86,13 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [x] Reexecutar projeção PostgreSQL idempotente e comparar contagens de agregados/versões por scope.
 - [x] Testar serviço real: apagar scope temporária e reconstruir eventos, checkpoint, admission, reservations e reserva standalone.
 - [x] Expor operação Rust, Python e TypeScript; bindings rejeitam operação sem URL PostgreSQL.
-- [x] PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, head `df23e43cda2d24e4a4e169f4da399a1bda4bb795` (OPEN): testar linha extra em `ve_ledger_versions` (`ProjectionMismatch`) e payload alterado (`ProjectionConflict`) contra PostgreSQL real.
+- [x] PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, integrado: testar linha extra em `ve_ledger_versions` (`ProjectionMismatch`) e payload alterado (`ProjectionConflict`) contra PostgreSQL real.
 - [ ] Testar indisponibilidade remota durante a reconstrução.
 - [ ] Executar suíte NATS com versão 2.11+ (servidor local é 2.10).
 - [x] Commit `984e2d066dcc05b0a98e076361ada632751fc61a`, push e abrir PR [#94](https://github.com/vectora-company/engine/pull/94), filho do #93.
+
+## Concorrência dos projetores PostgreSQL — PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`
+
+- [x] Em 16 rodadas contra PostgreSQL real, dois `ResilientLedger` independentes drenaram a mesma outbox com dois eventos sequenciais. Ambos terminaram sem erro, só houve uma cópia de cada evento e a outbox ficou vazia.
+- [ ] Expandir para processos independentes, admission/reservation concorrentes e erro/retry durante a corrida.
+- [ ] Implementar migrations PostgreSQL versionadas com rollback documentado.
