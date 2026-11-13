@@ -195,6 +195,7 @@ A ordem pode mudar conforme dependências reais, mas não remove os gates de con
 - Toda capability presente em um lado de um par e viável no outro está implementada nos dois e passa pela mesma suíte de conformidade; cada diferença restante tem motivo de incompatibilidade registrado.
 - Testes reais de serviços cobrem restart/reconnect, timeout, cancelamento, concorrência, idempotência e ciclo de vida; mocks não substituem esses testes.
 - SQL cobre transactions, migrations, lock/contention, conflicts, rollback, paginação e diferenças de tipos.
+- LanceDB e Qdrant aceitam vetores com 1 a 65536 componentes finitos na gravação e na busca. O adapter valida esse intervalo antes de acessar o backend.
 - Vector stores cobrem IDs, upsert/delete, filtros, dimensões, ranking, score, ordenação, coleção ausente e erro de indexação.
 - Redis/NATS cobrem TTL/retention, ack/redelivery, duplicate event, replay, disconnect, shutdown e degradação.
 - Contratos de memória/Context Planner não ultrapassam tenant/escopo autorizado e preservam origem, confiança e motivo.
