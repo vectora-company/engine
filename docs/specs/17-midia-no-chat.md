@@ -119,6 +119,18 @@ indisponível: nome]`) e a decisão registra o motivo. Na reidratação, a assin
   textual ou nota, para limitar custo e superfície. O consumidor pode ampliar para
   as N imagens mais recentes de resultados de tools.
 
+## Decisão pendente — bytes inline na API pública
+
+`ContentPart::Inline` carrega base64 diretamente; `ImageUrl` também pode carregar
+uma `data:` URL. Embora o preparo do request gere esses valores apenas em memória,
+os bindings aceitam os tipos serializados e consumidores podem persistir um
+`ChatRequest` inteiro por engano. A regra atual "não persistir" não é aplicada
+pelo tipo.
+
+A fronteira pública está pendente de decisão. As opções e consequências estão
+registradas em `docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`.
+Até a escolha, não alterar a aceitação, serialização nem tipos públicos de inline.
+
 ## Resultado de tool com partes
 
 `ToolResult` usa `parts: Vec<ToolResultPart>` (contrato v2), em ordem. Cada parte

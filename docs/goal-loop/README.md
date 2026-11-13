@@ -64,7 +64,7 @@ A branch `feat/chat-media-rejection-retry` está publicada no PR #85, filha de
 é filho do #85 e implementa a decisão de substituir diretamente `ToolResult` sem
 manter v1; a decisão e o contrato constam em `docs/specs/17-midia-no-chat.md`.
 A revisão documental está no PR [#87](https://github.com/vectora-company/engine/pull/87),
-filho do PR #86. A reclassificação MIME na reidratação está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87; o head é `18c2eca`. Ao criar um Markdown, no mesmo PR
+filho do PR #86. A reclassificação MIME na reidratação está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87; o head é `18c2eca`. A decisão sobre a fronteira de `Inline`/`data:` está documentada no PR [#89](https://github.com/vectora-company/engine/pull/89), filho do #88; veja as opções em `docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`. A implementação aguarda resposta no chat. Ao criar um Markdown, no mesmo PR
 vincule-o no índice `docs/README.md`, no prompt
 `docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
 artefatos da capability que dependem dele. Use o caminho completo a partir

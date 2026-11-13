@@ -62,6 +62,14 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Rodar hooks completos: format, Prettier, Clippy, testes Rust workspace e rustdoc passaram; os 22 testes focados passaram.
 - [x] Commit `18c2eca`, push e abrir o [PR #88](https://github.com/vectora-company/engine/pull/88), filho do #87.
 
+## Fronteira de bytes inline — decisão vital aguardando brunosrz
+
+- [x] Confirmar que `ContentPart::Inline` e `ImageUrl` com `data:` são aceitos pelo contrato serializado e que o host pode persistir esses bytes.
+- [x] Registrar as opções: entrada ref-only, inline com aviso, ou request durável separado de envio efêmero.
+- [x] Concluir etapas independentes, incluindo PRs #87 e #88; registrar impacto no modo manual já aprovado.
+- [x] Registrar pergunta e opções na análise e no PR [#89](https://github.com/vectora-company/engine/pull/89), sem marcar brunosrz no GitHub.
+- [ ] Aguardar decisão de brunosrz no chat antes de alterar tipos públicos, bindings ou versionamento.
+
 ## Preparação e escopo
 
 - [ ] Confirmar repositório, branch, base da stack e estado da working tree.
