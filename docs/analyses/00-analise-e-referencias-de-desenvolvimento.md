@@ -269,36 +269,28 @@ retry não cobre tamanho, autenticação, falha de transporte nem erros SSE apó
 o stream ter sido entregue. O registro `media_decisions.reason` e o evento
 `media_routed` anotam o rebaixamento sem incluir bytes.
 
-## Decisão vital pendente — fronteira de mídia inline
+## Fronteira de requests persistíveis e envio efêmero — decisão aplicada
 
-`ContentPart::Inline` serializa base64 e `ImageUrl.url` permite `data:` URL. O
-preparo interno os cria transitoriamente, mas os bindings também desserializam
-`ChatRequest`/`ContentPart`; a API não impede o consumidor de persistir esses
-bytes junto ao histórico. A regra documental de não persistir não é uma garantia
-de tipo nem de runtime. A decisão também toca o modo manual de preparo já
-aprovado: esse fluxo precisa continuar podendo entregar mídia preparada ao
-provider.
+brunosrz escolheu no chat a opção 3: separar o request persistível do envelope
+transitório de envio, preservando os três modos de integração. `PersistableChatRequest`
+rejeita `Inline` e URLs `data:` em JSON; `EphemeralChatRequest` exige envelope
+explícito, decodifica base64, confere o tipo pelos bytes, normaliza MIME e impõe
+20 MiB por padrão (ou o limite menor configurado no contexto). O limite é
+checado antes do transporte. O envelope é temporário e não faz parte do histórico.
 
-Opções para a primeira release, sem camada v1:
+Python e TypeScript expõem complete e stream efêmeros para OpenAI-compatible,
+providers nativos e fallback. Preparo manual envia o resultado por esse envelope;
+contexto por chamada e contexto padrão continuam usando mapas de assets e
+referências. O contrato Chat v1 não foi alterado; o envelope de envio tem sua
+própria versão 1. A distinção evita o acoplamento acidental de bytes a requests
+persistidos sem retirar a forma manual de uso.
 
-1. **Ref-only na entrada pública:** bindings e request persistível rejeitam
-   `Inline`/`data:`. O host usa `MediaRef` e o mapa efêmero; o modo manual precisa
-   de uma API de envio preparada própria.
-2. **Aceitar inline como hoje:** manter tipos e bindings atuais e documentar que
-   `ChatRequest` com bytes não deve ser persistido. É a menor mudança, mas não
-   impõe a regra nem limita cópias acidentais fora do preparo.
-3. **Separar request durável de envio efêmero (recomendado):** `ChatRequest`
-   persistível aceita referências, enquanto uma API/tipo explícito de envio
-   preparado aceita `Inline` e `data:` em memória, aplica limites e preserva o
-   modo manual. Exige redesenho público e testes nas duas bindings, mas torna a
-   fronteira verificável sem perder os três modos de integração.
-
-**Pergunta a brunosrz:** qual fronteira adotar — 1, 2 ou 3? Recomendação: 3,
-por preservar os três modos já decididos e evitar que bytes base64 entrem no
-contrato persistível. Até a resposta, ficam aguardadas alterações em tipos,
-desserialização, métodos dos bindings e versionamento. A pergunta e as opções estão registradas no PR [#89](https://github.com/vectora-company/engine/pull/89),
-filho do #88, head `2d5ff88`. A implementação permanece parada; a escolha é
-solicitada aqui no chat, sem mencionar brunosrz em comentários do GitHub.
+Testes locais: testes do core cobrem recusa no persistível, normalização MIME,
+limite, categoria e data URL. Testes das bindings verificam que a entrada normal
+recusa bytes e que a entrada efêmera exige envelope e limite. Os comandos de
+verificação e resultados finais estão registrados no plano de continuidade e no
+PR [#90](https://github.com/vectora-company/engine/pull/90), filho do
+[#89](https://github.com/vectora-company/engine/pull/89). O PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, está OPEN/CLEAN; o commit de implementação é `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; os checks remotos ainda não apareceram.
 
 ## Reclassificação MIME na reidratação — implementação local
 

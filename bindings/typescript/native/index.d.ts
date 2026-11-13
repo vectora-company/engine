@@ -30,6 +30,11 @@ export declare function chatComplete(
   requestJson: string,
 ): Promise<string>;
 
+export declare function chatCompleteEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
 export declare function chatContractVersion(): number;
 
 export declare function chatPrepareContent(
@@ -44,6 +49,11 @@ export declare function chatStreamCancel(id: string): void;
 export declare function chatStreamNext(id: string): Promise<string | null>;
 
 export declare function chatStreamStart(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function chatStreamStartEphemeral(
   settingsJson: string,
   requestJson: string,
 ): Promise<string>;
@@ -67,7 +77,17 @@ export declare function fallbackChatComplete(
   requestJson: string,
 ): Promise<string>;
 
+export declare function fallbackChatCompleteEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
 export declare function fallbackChatStreamStart(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function fallbackChatStreamStartEphemeral(
   settingsJson: string,
   requestJson: string,
 ): Promise<string>;
@@ -170,7 +190,17 @@ export declare function nativeChatComplete(
   requestJson: string,
 ): Promise<string>;
 
+export declare function nativeChatCompleteEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
 export declare function nativeChatStreamStart(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function nativeChatStreamStartEphemeral(
   settingsJson: string,
   requestJson: string,
 ): Promise<string>;

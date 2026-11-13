@@ -1,11 +1,17 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    ops::{Deref, DerefMut},
+};
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use serde::ser::Error as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::media::{InlineMedia, MediaDecision, MediaPart};
+use super::media::{InlineMedia, MediaDecision, MediaKind, MediaPart, classify};
 
 pub const CHAT_CONTRACT_VERSION: u16 = 1;
+pub const EPHEMERAL_CHAT_REQUEST_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -176,6 +182,191 @@ pub struct ChatRequest {
     pub extensions: BTreeMap<String, Value>,
 }
 
+/// JSON-safe request boundary: inline bytes and data URLs are not accepted or
+/// serialized. Use `EphemeralChatRequest` for an explicitly transient send.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PersistableChatRequest {
+    request: ChatRequest,
+}
+
+impl PersistableChatRequest {
+    pub fn new(request: ChatRequest) -> Result<Self, String> {
+        validate_persistable(&request)?;
+        Ok(Self { request })
+    }
+
+    pub fn into_inner(self) -> ChatRequest {
+        self.request
+    }
+}
+
+impl TryFrom<ChatRequest> for PersistableChatRequest {
+    type Error = String;
+
+    fn try_from(request: ChatRequest) -> Result<Self, Self::Error> {
+        Self::new(request)
+    }
+}
+
+impl Serialize for PersistableChatRequest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        validate_persistable(&self.request).map_err(S::Error::custom)?;
+        self.request.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PersistableChatRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let request = ChatRequest::deserialize(deserializer)?;
+        Self::new(request).map_err(serde::de::Error::custom)
+    }
+}
+
+fn validate_persistable(request: &ChatRequest) -> Result<(), String> {
+    for message in &request.messages {
+        let MessageContent::Parts(parts) = &message.content else {
+            continue;
+        };
+        for part in parts {
+            match part {
+                ContentPart::Inline(_) => {
+                    return Err("inline media requires an ephemeral chat request".into());
+                }
+                ContentPart::ImageUrl { image_url } if image_url.url.starts_with("data:") => {
+                    return Err("data URLs require an ephemeral chat request".into());
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Explicit envelope for a request that may contain media bytes and must only
+/// be held in memory for a provider call.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct EphemeralChatRequest {
+    pub contract_version: u16,
+    pub request: ChatRequest,
+}
+
+impl EphemeralChatRequest {
+    pub fn new(request: ChatRequest) -> Self {
+        Self {
+            contract_version: EPHEMERAL_CHAT_REQUEST_CONTRACT_VERSION,
+            request,
+        }
+    }
+
+    /// Checks and canonicalizes all inline bytes before a provider send.
+    pub fn validate(&mut self, max_media_bytes: u64) -> Result<(), String> {
+        if self.contract_version != EPHEMERAL_CHAT_REQUEST_CONTRACT_VERSION {
+            return Err("unsupported ephemeral chat request version".into());
+        }
+        for message in &mut self.request.messages {
+            let MessageContent::Parts(parts) = &mut message.content else {
+                continue;
+            };
+            for part in parts {
+                match part {
+                    ContentPart::Inline(item) => {
+                        let encoded_limit = max_media_bytes.div_ceil(3).saturating_mul(4);
+                        if item.data_base64.len() as u64 > encoded_limit {
+                            return Err("inline media exceeds the configured byte limit".into());
+                        }
+                        let bytes = STANDARD
+                            .decode(&item.data_base64)
+                            .map_err(|_| "inline media has invalid base64".to_owned())?;
+                        if bytes.len() as u64 > max_media_bytes {
+                            return Err("inline media exceeds the configured byte limit".into());
+                        }
+                        let detected = classify(&bytes, Some(&item.mime_type));
+                        if detected.kind != item.kind
+                            || (item.kind == MediaKind::Document
+                                && detected.mime_type != "application/pdf")
+                        {
+                            return Err("inline media type does not match its bytes".into());
+                        }
+                        item.mime_type = detected.mime_type;
+                        item.data_base64 = STANDARD.encode(bytes);
+                    }
+                    ContentPart::ImageUrl { image_url } if image_url.url.starts_with("data:") => {
+                        let (mime, encoded) = parse_data_url(&image_url.url)?;
+                        let encoded_limit = max_media_bytes.div_ceil(3).saturating_mul(4);
+                        if encoded.len() as u64 > encoded_limit {
+                            return Err("inline media exceeds the configured byte limit".into());
+                        }
+                        let bytes = STANDARD
+                            .decode(encoded)
+                            .map_err(|_| "inline media has invalid base64".to_owned())?;
+                        if bytes.len() as u64 > max_media_bytes {
+                            return Err("inline media exceeds the configured byte limit".into());
+                        }
+                        let detected = classify(&bytes, Some(mime));
+                        if detected.kind != MediaKind::Image {
+                            return Err("data URL bytes are not a recognized image".into());
+                        }
+                        image_url.url = format!(
+                            "data:{};base64,{}",
+                            detected.mime_type,
+                            STANDARD.encode(bytes)
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn into_inner(self) -> ChatRequest {
+        self.request
+    }
+}
+
+impl From<ChatRequest> for EphemeralChatRequest {
+    fn from(request: ChatRequest) -> Self {
+        Self::new(request)
+    }
+}
+
+impl Deref for EphemeralChatRequest {
+    type Target = ChatRequest;
+
+    fn deref(&self) -> &Self::Target {
+        &self.request
+    }
+}
+
+impl DerefMut for EphemeralChatRequest {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.request
+    }
+}
+
+fn parse_data_url(url: &str) -> Result<(&str, &str), String> {
+    let value = url
+        .strip_prefix("data:")
+        .ok_or_else(|| "invalid data URL".to_owned())?;
+    let (metadata, encoded) = value
+        .split_once(',')
+        .ok_or_else(|| "invalid data URL".to_owned())?;
+    let mime = metadata
+        .strip_suffix(";base64")
+        .ok_or_else(|| "data URL must use base64 encoding".to_owned())?;
+    if mime.is_empty() {
+        return Err("data URL is missing a MIME type".into());
+    }
+    Ok((mime, encoded))
+}
+
 impl ChatRequest {
     pub fn new(model: impl Into<String>, messages: Vec<Message>) -> Self {
         Self {
@@ -186,6 +377,83 @@ impl ChatRequest {
             tools: Vec::new(),
             extensions: BTreeMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod request_boundary_tests {
+    use super::*;
+
+    fn request_with(part: ContentPart) -> ChatRequest {
+        let mut request = ChatRequest::new("model", vec![Message::text(MessageRole::User, "")]);
+        request.messages[0].content = MessageContent::Parts(vec![part]);
+        request
+    }
+
+    fn png_inline() -> ContentPart {
+        ContentPart::Inline(InlineMedia {
+            kind: MediaKind::Image,
+            mime_type: "image/jpeg".into(),
+            name: "pixel.jpg".into(),
+            data_base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII=".into(),
+        })
+    }
+
+    #[test]
+    fn persistable_request_rejects_inline_bytes_and_data_urls() {
+        assert!(PersistableChatRequest::new(request_with(png_inline())).is_err());
+        assert!(
+            PersistableChatRequest::new(request_with(ContentPart::ImageUrl {
+                image_url: ImageUrl {
+                    url: "data:image/png;base64,iVBORw0KGgo=".into(),
+                    detail: None
+                },
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn ephemeral_request_validates_bytes_and_canonicalizes_mime() {
+        let mut request = EphemeralChatRequest::new(request_with(png_inline()));
+        request.validate(1024).unwrap();
+        let MessageContent::Parts(parts) = &request.messages[0].content else {
+            panic!()
+        };
+        let ContentPart::Inline(media) = &parts[0] else {
+            panic!()
+        };
+        assert_eq!(media.mime_type, "image/png");
+    }
+
+    #[test]
+    fn ephemeral_request_rejects_wrong_category_and_oversize_payload() {
+        let mut wrong_kind =
+            EphemeralChatRequest::new(request_with(ContentPart::Inline(InlineMedia {
+                kind: MediaKind::Audio,
+                mime_type: "audio/wav".into(),
+                name: "x".into(),
+                data_base64: "aGVsbG8=".into(),
+            })));
+        assert!(wrong_kind.validate(1024).is_err());
+        let mut oversized = EphemeralChatRequest::new(request_with(png_inline()));
+        assert!(oversized.validate(1).is_err());
+    }
+
+    #[test]
+    fn ephemeral_data_urls_are_decoded_and_mime_checked() {
+        let part = ContentPart::ImageUrl { image_url: ImageUrl {
+            url: "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII=".into(), detail: None,
+        }};
+        let mut request = EphemeralChatRequest::new(request_with(part));
+        request.validate(1024).unwrap();
+        let MessageContent::Parts(parts) = &request.messages[0].content else {
+            panic!()
+        };
+        let ContentPart::ImageUrl { image_url } = &parts[0] else {
+            panic!()
+        };
+        assert!(image_url.url.starts_with("data:image/png;base64,"));
     }
 }
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { chatComplete, prepareChatContent } from "../dist/index.js";
+import { chatComplete, chatCompleteEphemeral, prepareChatContent } from "../dist/index.js";
 
 const pdf = Buffer.from("%PDF-1.4\n");
 const mediaPart = {
@@ -123,5 +123,29 @@ test("media bindings support manual, per-call and client-default contexts", asyn
     );
   } finally {
     await limitedDefault.close();
+  }
+});
+
+test("inline bytes require the explicit ephemeral request envelope", async () => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII=", "base64");
+  const ephemeral = {
+    contract_version: 1,
+    request: {
+      contract_version: 1,
+      model: "fixture-model",
+      messages: [{
+        role: "user",
+        content: [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${png.toString("base64")}` } }],
+      }],
+    },
+  };
+  const server = await startServer();
+  try {
+    await assert.rejects(chatComplete(server.settings, ephemeral.request));
+    await chatCompleteEphemeral(server.settings, ephemeral);
+    assert.match(server.captured().messages[0].content[0].image_url.url, /^data:image\/png;base64,/);
+    await assert.rejects(chatCompleteEphemeral(server.settings, ephemeral, { assets: {}, max_media_bytes: 1 }));
+  } finally {
+    await server.close();
   }
 });

@@ -106,3 +106,11 @@ Vectora nesta implementação.
 - OpenAI Responses API não existe neste adapter; o contrato é Chat Completions.
 - O mapa efêmero carrega bytes em memória para a duração da chamada; hosts com
   stores externos validam escopo antes de montar `asset_id → bytes`.
+
+## Fronteira persistível/efêmera
+
+- [x] `PersistableChatRequest` rejeita `Inline` e URL `data:`; o contrato Chat v1 adjacente não muda.
+- [x] `EphemeralChatRequest` valida versão, base64, bytes/MIME e teto de 20 MiB configurável.
+- [x] Complete/stream efêmeros disponíveis para os três clientes Rust-backed em Python e TypeScript.
+- [x] Prático nos três modos: preparo manual, contexto por chamada e contexto padrão.
+- [x] Verificar: workspace Rust (171 testes + 3 fixtures, serviços reais), Python (52), TypeScript (build/typecheck; 38 passaram, 10 sem endpoints ignorados), Clippy e formatação; PR #90 é filho de #89.

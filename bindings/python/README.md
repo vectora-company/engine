@@ -30,6 +30,14 @@ temporário; no Vectora, construa-o somente com bytes obtidos por
 é o modo manual; `chat_complete(..., media_context=ctx)` é por chamada;
 `settings["media_context"] = ctx` configura o padrão. O limite padrão é 20 MiB por asset. `provider_limits` pode definir limites específicos por provider/modelo e modalidade (`image_bytes`, `audio_bytes`, `video_bytes`, `document_bytes`, `file_bytes`); o menor entre esse valor e `max_media_bytes` vale. Isso é configuração explícita do host, não descoberta automática do provider.
 
+Requests normais rejeitam `Inline` e URLs `data:` para que os bytes não sejam
+serializados junto ao histórico. Para envio manual de `prepare_chat_content` ou
+outro payload inline, use `EphemeralChatRequest` com
+`chat_complete_ephemeral`/`chat_stream_ephemeral`; providers nativos e fallback
+oferecem os equivalentes `native_*_ephemeral` e `fallback_*_ephemeral`. O
+envelope efêmero valida base64, tipo/MIME pelos bytes e `max_media_bytes` antes
+do transporte. Ele serve só para a chamada atual e não deve ser persistido.
+
 Anthropic Messages, Google Gemini e Cohere Chat v2 usam `native_chat_complete`
 e `native_chat_stream` com o mesmo contrato Rust. `settings.provider` deve ser
 `anthropic`, `google` ou `cohere`; credenciais e configuração específica pertencem ao

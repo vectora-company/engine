@@ -163,7 +163,7 @@ impl FallbackChatClient {
                     let PreparedRequest { request, decisions } = context
                         .prepare_request(&candidate.provider, request.clone())
                         .await;
-                    (request, decisions)
+                    (request.into_inner(), decisions)
                 }
                 None => (request.clone(), Vec::new()),
             };
@@ -177,7 +177,10 @@ impl FallbackChatClient {
                         .await;
                     decisions = fallback.decisions;
                     mark_text_retry(&mut decisions);
-                    candidate.client.complete(fallback.request).await
+                    candidate
+                        .client
+                        .complete(fallback.request.into_inner())
+                        .await
                 }
                 (result, _) => result,
             };
@@ -236,7 +239,7 @@ impl FallbackChatClient {
                         context
                             .prepare_request(&candidate.provider, candidate_request)
                             .await;
-                    candidate_request = prepared;
+                    candidate_request = prepared.into_inner();
                     decisions
                 } else {
                     Vec::new()
@@ -253,7 +256,7 @@ impl FallbackChatClient {
                             .await;
                         decisions = fallback.decisions;
                         mark_text_retry(&mut decisions);
-                        candidate.client.stream(fallback.request).await
+                        candidate.client.stream(fallback.request.into_inner()).await
                     }
                     (result, _) => result,
                 };
