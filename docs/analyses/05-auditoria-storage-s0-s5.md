@@ -98,8 +98,12 @@ exatamente um evento e o outro recebe `VersionConflict`; retries idênticos
 concorrentes devolvem o mesmo evento sem duplicar; eventos e idempotência
 sobrevivem à reabertura do arquivo; cursor/limite inválidos falham com
 `InvalidInput`. Resultado local: 12 testes de `storage::sqlite::tests` passam;
-nenhum defeito reproduzido. Limites: threads não substituem processos
-independentes, e backup/restore e recovery operacional não foram cobertos.
+nenhum defeito reproduzido. Também há um teste com 3 processos independentes
+(o binário de teste reexecuta a si mesmo como escritor): com a mesma versão
+esperada, exatamente um confirma e os outros dois recebem `VersionConflict`.
+Limite: backup/restore e recovery operacional não foram cobertos; o mecanismo
+de backup (cópia online do arquivo SQLite) afeta o contrato e fica como decisão
+a registrar antes de implementar.
 
 ## Matriz service-real
 
@@ -123,21 +127,33 @@ falharam. Testes adicionados nesta etapa:
   inválida falha, e direção do score (LanceDB distância/menor é mais próximo;
   Qdrant similaridade/maior é mais próximo), coerente com `capabilities()`.
 
-Reinício de serviços (`VECTORA_TEST_PODMAN_RESTART=1`, 55 testes de `storage::`
-passam nessa configuração; o de PostgreSQL passou isoladamente após a trava
-descrita abaixo): `podman restart` de Redis e NATS — a chave de KV e o job
-enfileirado sobrevivem, o adapter volta a operar e o ACK funciona; PostgreSQL
-parado e religado — o append SQLite continua confirmado e `Pending` durante a
-queda, e a outbox drena em ordem após o retorno. A durabilidade observada é
-da configuração de teste (sem volume dedicado), não uma garantia do adapter.
+Reinício de serviços (`VECTORA_TEST_PODMAN_RESTART=1`): os dois testes de
+reinício de Redis e NATS passaram. KV/jobs sobreviveram ao `podman restart`, os
+adapters voltaram a operar e o ACK funcionou. O teste isolado de PostgreSQL
+também passou: o append SQLite permaneceu `Pending` durante a queda e a outbox
+drenou em ordem após o retorno. A execução combinada dos 55 testes teve 54
+passagens e uma falha: `podman stop` removeu o container PostgreSQL original
+por estar configurado com `AutoRemove=true`. Esse resultado combinado não é
+aprovado. O container foi recriado sem remoção automática, e o teste agora
+confere `AutoRemove=false` antes de pará-lo. A durabilidade observada depende
+da configuração de teste e não é uma garantia geral do adapter.
 
 Incidente: o contêiner `vectora-engine-pg-test` havia sido criado com remoção
 automática; `podman stop` o apagou. Foi recriado (mesma imagem, porta, usuário
-e banco; senha de teste nova, sem remoção automática) e o teste agora só para
-o serviço se `AutoRemove` for falso.
+e banco; senha de teste nova, sem remoção automática). O teste confere a
+configuração antes de parar o serviço.
 
 Não coberto: shutdown gracioso do adapter, retenção JetStream, reinício do
 Qdrant, limites de payload e falhas de indexação. Permanecem `não executado`.
+
+## Estado do ledger multiprocesso (PR #49)
+
+`cargo test -p vectora-engine --lib --locked storage::sqlite::tests --
+--test-threads=1` passou com 14 testes. O novo teste executa três processos
+independentes do próprio binário de teste contra o mesmo arquivo: um append
+com `expected_version=0` confirma, dois recebem `VersionConflict`, e uma
+reabertura lê um único evento. Isso fecha a cobertura de concorrência entre
+processos, ainda sujeito à revisão/integração do PR #49.
 
 ## Trabalho que permanece
 
@@ -146,7 +162,9 @@ Qdrant, limites de payload e falhas de indexação. Permanecem `não executado`.
 - Exercitar serviço real para desconexão, restart, falha parcial, retry,
   redelivery, ACK, TTL/retention, isolamento e shutdown.
 - Definir e testar limites de filtros, scores e payloads de LanceDB/Qdrant.
-- Provar concorrência, backup, restore, projeção e recovery para ledger SQLite
-  e PostgreSQL, sem enfraquecer o SQLite como autoridade local resiliente.
+- Definir backup/restore e recovery operacional do ledger, além de concluir a
+  matriz de retenção/shutdown/restart do Qdrant. A cópia online do SQLite e
+  alternativas como fechar/pausar escritores têm garantias e impacto distintos;
+  a decisão de backup permanece pendente.
 - Manter interfaces de Memory/Context/RAG e integração dos consumidores em
   etapas separadas, com contratos e fallback próprios.

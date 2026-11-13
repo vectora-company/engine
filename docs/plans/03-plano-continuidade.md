@@ -208,3 +208,15 @@ O walkthrough histórico registra entregas até o commit `43a2655`. Esta
 fotografia foi atualizada para `22c861f`; consulte a auditoria do PR #3 e os
 planos específicos para a evidência posterior. Nenhum estado de CI remoto é
 usado como evidência nesta atualização.
+
+## Revalidação do loop em 2026-11-12
+
+A próxima entrega do plano continua sendo a auditoria S0–S5 de storage. Há uma
+stack aberta #45–#49; os PRs #46–#49 cobrem capabilities, testes service-real,
+reinício de serviços e concorrência multi-processo do ledger. A evidência e os
+limites locais estão em `04-plano-storage-ledger.md` e
+`05-auditoria-storage-s0-s5.md`. Não se considera esses PRs integrados em main
+até merge. Depois das lacunas independentes de storage, a decisão de backup/
+restore do ledger deve ser registrada e solicitada a `brunosrz` antes de fixar
+um contrato; memory/context/RAG e adoção em consumidores continuam fora desta
+etapa de auditoria.

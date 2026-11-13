@@ -1032,4 +1032,64 @@ mod tests {
             Err(LedgerError::InvalidInput)
         ));
     }
+
+    /// Child side of the multi-process test: appends one event to the ledger
+    /// named by the environment and reports the outcome on stdout.
+    #[test]
+    fn multiprocess_child_writer() {
+        let (Ok(path), Ok(id)) = (
+            std::env::var("VECTORA_LEDGER_CHILD_PATH"),
+            std::env::var("VECTORA_LEDGER_CHILD_ID"),
+        ) else {
+            return;
+        };
+        let mut ledger = SqliteLedger::open_persistent(path).unwrap();
+        let outcome = match ledger.append(draft(&id, &id, 0)) {
+            Ok(event) => format!("committed:{}", event.sequence),
+            Err(LedgerError::VersionConflict) => "version_conflict".to_owned(),
+            Err(other) => format!("error:{other}"),
+        };
+        println!("CHILD_RESULT {outcome}");
+    }
+
+    #[test]
+    fn independent_processes_commit_exactly_one_event_for_the_same_version() {
+        let path = temp_ledger_path("processes");
+        drop(SqliteLedger::open_persistent(&path).unwrap());
+        let executable = std::env::current_exe().unwrap();
+        let handles: Vec<_> = ["a", "b", "c"]
+            .into_iter()
+            .map(|id| {
+                let executable = executable.clone();
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    std::process::Command::new(executable)
+                        .args([
+                            "storage::sqlite::tests::multiprocess_child_writer",
+                            "--exact",
+                            "--nocapture",
+                            "--test-threads=1",
+                        ])
+                        .env("VECTORA_LEDGER_CHILD_PATH", path)
+                        .env("VECTORA_LEDGER_CHILD_ID", id)
+                        .output()
+                        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+                        .unwrap()
+                })
+            })
+            .collect();
+        let outputs: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let committed = outputs
+            .iter()
+            .filter(|out| out.contains("CHILD_RESULT committed:1"))
+            .count();
+        let conflicts = outputs
+            .iter()
+            .filter(|out| out.contains("CHILD_RESULT version_conflict"))
+            .count();
+        assert_eq!((committed, conflicts), (1, 2), "outputs: {outputs:?}");
+        let ledger = SqliteLedger::open_persistent(&path).unwrap();
+        assert_eq!(ledger.read("scope", "run", 0, 10).unwrap().len(), 1);
+        std::fs::remove_file(path).unwrap();
+    }
 }
