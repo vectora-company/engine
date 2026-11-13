@@ -134,3 +134,16 @@ serviço. Não foi encontrada cobertura integrada de indisponibilidade/reconnect
 restart, retenção e falhas combinadas nos quatro serviços. Esse inventário
 prepara a auditoria S0–S5; não substitui essa auditoria nem demonstra paridade
 operacional.
+
+### Atualização em branch empilhada: métrica vetorial (PR #57)
+
+O snapshot `main` acima mantém seus achados originais. Na branch empilhada sobre
+o PR #56, `VECTOR_CONTRACT_VERSION` passa a 2: LanceDB configura `Cosine` e
+converte sua distância em similaridade cosseno `[-1, 1]`, igual à semântica
+Qdrant; nos dois adapters, score maior significa mais próximo. `capabilities()`
+declara essa direção comum. A fixture usa vetores não unitários que distinguem
+o ranking por cosseno do ranking L2. Verificação local em 2026-11-12: 9/9 testes
+`storage::vector::tests`, incluindo LanceDB e Qdrant 1.12.4 real, e 4/4 testes
+`storage::capabilities`. O teste de restart do Qdrant não foi executado nesta
+rodada. Os demais gaps vetoriais (filtros, índices/ANN, quantização, busca
+híbrida e limites de busca) permanecem.
