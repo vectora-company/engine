@@ -548,14 +548,28 @@ impl RedisStreamQueue {
                 .query_async(&mut conn)
                 .await
                 .map_err(|_| MessagingError::Storage)?;
-            let attempts = pending.first().map_or(1, |item| item.3 as u32);
-            if max_attempts.is_some_and(|maximum| attempts > maximum) {
+            let Some((_, owner, _, attempts)) = pending.first() else {
+                return Ok(None);
+            };
+            if owner != consumer {
+                return Ok(None);
+            }
+            if max_attempts.is_some_and(|maximum| *attempts as u64 > u64::from(maximum)) {
                 let payload = redis::from_redis_value::<Vec<u8>>(
                     entry.map.get("payload").ok_or(MessagingError::Storage)?,
                 )
                 .map_err(|_| MessagingError::Storage)?;
                 let dead_letter = format!("{key}:dead");
-                const MOVE_TO_DLQ: &str = "redis.call('XADD', KEYS[2], 'MAXLEN', ARGV[5], '*', 'payload', ARGV[1], 'source_id', ARGV[2], 'attempts', ARGV[3]); return redis.call('XACK', KEYS[1], ARGV[4], ARGV[2])";
+                const MOVE_TO_DLQ: &str = r"
+                    local pending = redis.call('XPENDING', KEYS[1], ARGV[4], ARGV[2], ARGV[2], 1)
+                    if #pending == 0 or pending[1][2] ~= ARGV[6]
+                        or pending[1][4] ~= tonumber(ARGV[3]) then
+                        return 0
+                    end
+                    redis.call('XADD', KEYS[2], 'MAXLEN', ARGV[5], '*',
+                        'payload', ARGV[1], 'source_id', ARGV[2], 'attempts', ARGV[3])
+                    return redis.call('XACK', KEYS[1], ARGV[4], ARGV[2])
+                ";
                 redis::cmd("EVAL")
                     .arg(MOVE_TO_DLQ)
                     .arg(2)
@@ -566,11 +580,13 @@ impl RedisStreamQueue {
                     .arg(attempts)
                     .arg(group)
                     .arg(self.max_messages.min(usize::MAX as u64) as usize)
+                    .arg(consumer)
                     .query_async::<u64>(&mut conn)
                     .await
                     .map_err(|_| MessagingError::Storage)?;
                 return Ok(None);
             }
+            let attempts = u32::try_from(*attempts).unwrap_or(u32::MAX);
             return redis_delivery(&self.store, key, group, entry, attempts).map(Some);
         }
         let block_ms = block.as_millis().clamp(1, 30_000) as usize;
@@ -688,7 +704,9 @@ impl NatsStreamQueue {
         let config = async_nats::jetstream::consumer::pull::Config {
             durable_name: Some(durable.to_owned()),
             ack_wait: self.ack_wait,
-            max_deliver: i64::from(self.max_attempts.saturating_add(1)),
+            // The adapter caps handler attempts. The broker must keep retrying
+            // the transfer when the DLQ is unavailable.
+            max_deliver: -1,
             ..Default::default()
         };
         stream
@@ -762,8 +780,8 @@ impl NatsStreamQueue {
         match tokio::time::timeout(timeout, messages.next()).await {
             Ok(Some(Ok(message))) => {
                 let info = message.info().map_err(|_| MessagingError::Storage)?;
-                let attempts = info.delivered.max(1) as u32;
-                if attempts > self.max_attempts {
+                let attempts = info.delivered.max(1);
+                if attempts > i64::from(self.max_attempts) {
                     let dead_stream = self.ensure_dead_stream().await?;
                     let mut headers = async_nats::HeaderMap::new();
                     headers.insert(
@@ -783,11 +801,17 @@ impl NatsStreamQueue {
                         .map_err(|_| MessagingError::Storage)?
                         .await
                         .map_err(|_| MessagingError::Storage)?;
-                    message.ack().await.map_err(|_| MessagingError::Storage)?;
+                    message
+                        .double_ack()
+                        .await
+                        .map_err(|_| MessagingError::Storage)?;
                     drop(dead_stream);
                     Ok(None)
                 } else {
-                    Ok(Some(NatsQueueDelivery { message, attempts }))
+                    Ok(Some(NatsQueueDelivery {
+                        message,
+                        attempts: u32::try_from(attempts).unwrap_or(u32::MAX),
+                    }))
                 }
             }
             Ok(Some(Err(_))) => Err(MessagingError::Storage),

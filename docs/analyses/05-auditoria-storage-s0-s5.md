@@ -329,6 +329,16 @@ do stub `_native.pyi`. `scons build` foi interrompido enquanto aguardava o
 subprocesso; os builds de Python e TypeScript foram executados separadamente e
 passaram. A matrix completa do workspace não foi executada nesta branch.
 
+## Recuperação da transferência para a DLQ
+
+O PR #61 introduziu o limite de tentativas e o consumo da DLQ. A correção
+empilhada mantém o limite no adapter NATS e permite que o broker reentregue
+uma transferência que falhou. O adapter pede confirmação do ACK ao servidor
+depois da publicação na DLQ. No Redis, o script confere se o mesmo consumidor
+ainda possui a entrega, com a mesma contagem, antes de publicar na DLQ e
+confirmar a origem. A validação desses cenários com os serviços permanece
+pendente nesta branch.
+
 ## Verificação da branch empilhada sobre #57
 
 Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:

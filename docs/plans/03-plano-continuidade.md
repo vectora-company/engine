@@ -252,7 +252,8 @@ ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 �
 | [#57](https://github.com/vectora-company/engine/pull/57) | Alinhamento do ranking vetorial por cosseno e normalização do score.                |
 | [#59](https://github.com/vectora-company/engine/pull/59) | Atualização das dependências e TTL nativo por chave no NATS JetStream KV.           |
 | [#60](https://github.com/vectora-company/engine/pull/60) | Retenção finita configurável por quantidade em Redis Streams e NATS JetStream.      |
-| Em andamento                                             | Teto de tentativas, DLQ consumível e bindings Python/TypeScript para filas.         |
+| [#61](https://github.com/vectora-company/engine/pull/61) | Teto de tentativas, DLQ consumível e bindings Python/TypeScript para filas.         |
+| Em andamento                                             | Recuperação de falha na transferência para a DLQ em Redis Streams e NATS JetStream. |
 
 O teste service-real combinado de storage passou 58/58 com Redis, NATS,
 Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros
