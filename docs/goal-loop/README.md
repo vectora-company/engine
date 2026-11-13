@@ -47,7 +47,7 @@ Providers e modalidades de IA, com referência normativa à release fixa
 [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0).
 O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado em
 `main` (`f4a8cf9d7e30d9fb667a7f443f6572067e536d81`); a branch atualizada parte
-dessa base. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; a etapa de implementação é sua filha. Leia os artefatos:
+dessa base. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust foi aberto como PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. A etapa de bindings é filha do #98. Leia os artefatos:
 
 - Plano: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md).
 - Spec: [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).

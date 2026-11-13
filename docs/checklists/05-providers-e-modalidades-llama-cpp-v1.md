@@ -33,6 +33,7 @@
 
 - [x] Core Rust: settings endpoint seguros, health `/health`, discovery `/v1/models` e chat/stream compartilhado.
 - [x] Fixtures HTTP e parsing: cinco testes focados e 191 testes da lib passam; Clippy `-D warnings` para lib e testes e rustdoc passaram.
+- [x] Publicar o adapter Rust no PR empilhado [#98](https://github.com/vectora-company/engine/pull/98), base `docs/llama-cpp-v1-provider-review`, head `5a463bc`.
 - [ ] Expor profile callable em Python e TypeScript, incluindo streaming e contexto de mídia.
 - [ ] Executar integração opt-in com `llama-server` v1.0.0 fixado.
 - [ ] Protocolo, operação e provider/profile são campos distintos e tipados.

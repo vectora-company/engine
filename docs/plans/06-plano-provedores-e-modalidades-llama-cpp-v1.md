@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97) aberto, head `616f558`; etapa 2 iniciada em branch filha.
+**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`, e perfil Rust [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`, abertos em stack; etapa de bindings iniciada em branch filha do #98.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -62,12 +62,12 @@ idênticas nos bindings.
 preservados sem assumir que representam suporte efetivo do modelo, inclusive
 defaults de compatibilidade.
 
-**Estado atual:** branch `feat/llama-server-profile`, filha da documentação #97.
+**Estado atual:** implementada na branch `feat/llama-server-profile`, filha da documentação #97; PR [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`.
 O core Rust implementa settings validados, health `/health`, discovery
 `/v1/models` com arrays de modalidades e metadata preservados, e chat/stream
 pelo transporte compartilhado. Cinco testes focados e a suíte Rust lib (191
-testes), Clippy e rustdoc passaram. A exposição do profile nos bindings e a
-integração service-real ainda estão pendentes e seguem como próxima etapa.
+testes), Clippy e rustdoc passaram. A exposição do profile nos bindings segue
+na próxima etapa; a integração service-real continua pendente.
 
 ### Etapa 3 — Decision Models
 
