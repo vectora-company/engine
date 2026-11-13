@@ -386,3 +386,25 @@ Verificação local após implementação: 182 testes Rust + 3 fixtures + 1 test
 com PostgreSQL real. Clippy `-D warnings`, rustdoc, formatação e hooks completos
 passaram. Ainda faltam backup/verify PostgreSQL, concorrência entre projetores
 e migrations PostgreSQL com rollback.
+
+## Decisão vital pendente: backup e recuperação da projeção PostgreSQL
+
+O SQLite continua a autoridade e cópia local; perda de conexão PostgreSQL mantém
+writes locais em outbox e reconecta, conforme testes reais. Porém, se o banco
+PostgreSQL inteiro for perdido/recriado depois de uma projeção concluída, abrir
+`ResilientLedger` não refaz automaticamente o histórico: os marcadores de
+backfill permanecem concluídos e itens confirmados foram removidos da outbox.
+Não há hoje API de rebuild/verificação integral.
+
+| Opção                   | Contrato                                                                                                                                                                                | Vantagem                                                                                    | Custo/limite                                                                                                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL nativo       | Operador usa `pg_dump`/`pg_restore` ou backup gerenciado; Engine documenta e valida esquema/conectividade.                                                                              | Formato e recuperação maduros, suporta bancos grandes e inclui objetos nativos.             | Depende de tooling e operação do host; não confere sozinho a equivalência SQLite↔PostgreSQL nem restaura só a projeção em banco compartilhado.                                    |
+| Backup lógico da Engine | Export/import versionado das tabelas Engine, com snapshot consistente e verificação de conteúdo.                                                                                        | Portável e seletivo; pode verificar/reconstruir a projeção a partir do SQLite autoritativo. | Cria formato e compatibilidade próprios, exige streaming, permissões e contrato de conflito/restore; não substitui o backup do banco completo.                                    |
+| Combinado (recomendado) | Backup físico/lógico nativo do PostgreSQL para desastre do servidor; Engine oferece `verify_projection` e `rebuild_projection` replayando SQLite, sem inventar outro formato de backup. | Usa recovery nativo e mantém a projeção reconstruível pela fonte de verdade local.          | Requer definir escopo do verificador (contagens/hash/eventos/checkpoints/reservas), bloqueio/consistência durante rebuild e semântica quando o banco contém dados fora da Engine. |
+
+A escolha altera APIs públicas, formato persistido e comportamento de recovery; é
+vital e fica aguardando decisão de brunosrz no chat. Referências de estado:
+[`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md),
+[`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md),
+[`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md) e
+[`docs/analyses/05-auditoria-storage-s0-s5.md`](05-auditoria-storage-s0-s5.md).

@@ -216,3 +216,14 @@ Bindings não mudaram nesta etapa.
 Ainda faltam backup/verify PostgreSQL, concorrência entre projetores e migrations
 PostgreSQL com rollback documentado. SQLite continua a cópia local e autoridade
 para recuperação.
+
+## Recuperação após perda integral do PostgreSQL — decisão pendente
+
+A outbox atende indisponibilidade/reconexão, mas confirmação remota remove a
+linha. Se o banco PostgreSQL for perdido, o SQLite conserva o ledger completo,
+mas os marcadores de backfill impedem que a próxima abertura recrie a projeção.
+Não há verificação integral nem rebuild automático. A análise em
+[`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](00-analise-e-referencias-de-desenvolvimento.md)
+registra três contratos: backup nativo PostgreSQL, export lógico da Engine ou
+backup nativo combinado com verify/rebuild da projeção a partir do SQLite. O
+combinado é a recomendação técnica; a decisão vital aguarda resposta no chat.
