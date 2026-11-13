@@ -118,6 +118,18 @@ export declare function kvStorePut(
   ttlSeconds?: number | undefined | null,
 ): Promise<void>;
 
+export declare function kvWatchClose(watchId: string): Promise<void>;
+
+export declare function kvWatchOpen(
+  configJson: string,
+  prefix: string,
+): Promise<string>;
+
+export declare function kvWatchReceive(
+  watchId: string,
+  timeoutMs: number,
+): Promise<string>;
+
 export declare function modelToolLoopAcceptModelTurn(
   stateJson: string,
   completionJson: string,

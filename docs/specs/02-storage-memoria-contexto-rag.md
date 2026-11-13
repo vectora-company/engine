@@ -113,6 +113,16 @@ interna. Escritas externas ao adapter e deploy misto com versões que não
 invalidam a revisão ficam fora da garantia. A conta Redis precisa de EVAL
 e acesso ao namespace interno de revisões `:vectora-kv-revision:`.
 
+A observação KV abre uma assinatura de mudanças futuras para um prefixo
+literal no namespace. Cada aviso contém a chave e o tipo `put` ou `remove`.
+Remoção abrange delete e expiração. Os avisos servem para invalidar cache.
+O consumidor relê a chave se precisar do valor atual e ressincroniza após
+interrupção. A assinatura não entrega snapshot, cursor persistente nem replay
+portável. A leitura tem timeout e o fechamento cancela a leitura pendente.
+Redis requer notificações de keyspace `K$gxe` (ou `KA`) e acesso a
+`CONFIG GET notify-keyspace-events` e `PSUBSCRIBE`. A Engine não altera a
+configuração Redis. JetStream usa observação de mudanças novas no bucket.
+
 O incremento KV soma um delta inteiro a um inteiro JSON. Para chave ausente,
 usa zero e cria o valor de forma condicional. O valor anterior, o delta e o
 resultado devem caber no intervalo de inteiros exatos do JavaScript

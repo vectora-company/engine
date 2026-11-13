@@ -686,6 +686,61 @@ impl KvStoreAdapter {
         }
     }
 
+    /// Watches live changes to keys matching a literal prefix in this namespace.
+    pub async fn watch(&self, prefix: &str) -> Result<KvWatch, MessagingError> {
+        if !prefix.is_empty() {
+            validate_key(prefix)?;
+        }
+        let source = match self {
+            Self::Redis(store) => {
+                let mut conn = store.connection().await?;
+                let settings: std::collections::HashMap<String, String> = redis::cmd("CONFIG")
+                    .arg("GET")
+                    .arg("notify-keyspace-events")
+                    .query_async(&mut conn)
+                    .await
+                    .map_err(|_| MessagingError::Storage)?;
+                let flags = settings
+                    .get("notify-keyspace-events")
+                    .map(String::as_str)
+                    .unwrap_or_default();
+                if !flags.contains('K')
+                    || !(flags.contains('A')
+                        || ['g', '$', 'x', 'e']
+                            .into_iter()
+                            .all(|flag| flags.contains(flag)))
+                {
+                    return Err(MessagingError::Unsupported);
+                }
+                let db = store.client.get_connection_info().redis.db;
+                let channel_prefix = format!("__keyspace@{db}__:{}:", store.prefix);
+                let mut pubsub = store
+                    .client
+                    .get_async_pubsub()
+                    .await
+                    .map_err(|_| MessagingError::Storage)?;
+                pubsub
+                    .psubscribe(format!("{channel_prefix}*"))
+                    .await
+                    .map_err(|_| MessagingError::Storage)?;
+                KvWatchSource::Redis {
+                    channel_prefix,
+                    pubsub,
+                }
+            }
+            Self::Nats(store) => {
+                let watch = store
+                    .kv()
+                    .await?
+                    .watch_all()
+                    .await
+                    .map_err(|_| MessagingError::Storage)?;
+                KvWatchSource::Nats(Box::new(watch))
+            }
+        };
+        Ok(KvWatch::new(source, prefix))
+    }
+
     /// Adds an integer delta to a JSON integer, using zero for an absent key.
     /// TTL replaces the prior per-key TTL. Omit it for a persistent value.
     pub async fn increment(
@@ -784,6 +839,121 @@ impl KvStore for KvStoreAdapter {
         match self {
             Self::Redis(store) => store.list_keys(prefix, limit).await,
             Self::Nats(store) => store.list_keys(prefix, limit).await,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KvChangeKind {
+    Put,
+    Remove,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct KvChange {
+    pub key: String,
+    pub kind: KvChangeKind,
+}
+
+enum KvWatchSource {
+    Redis {
+        channel_prefix: String,
+        pubsub: redis::aio::PubSub,
+    },
+    Nats(Box<async_nats::jetstream::kv::Watch>),
+}
+
+/// A live subscription to key invalidations, with no portable replay guarantee.
+#[derive(Clone)]
+pub struct KvWatch {
+    source: std::sync::Arc<tokio::sync::Mutex<Option<KvWatchSource>>>,
+    closed: tokio::sync::watch::Sender<bool>,
+    prefix: std::sync::Arc<str>,
+}
+
+impl KvWatch {
+    fn new(source: KvWatchSource, prefix: &str) -> Self {
+        Self {
+            source: std::sync::Arc::new(tokio::sync::Mutex::new(Some(source))),
+            closed: tokio::sync::watch::channel(false).0,
+            prefix: prefix.into(),
+        }
+    }
+
+    pub async fn receive(&self, timeout: Duration) -> Result<Option<KvChange>, MessagingError> {
+        let mut closed = self.closed.subscribe();
+        tokio::select! {
+            biased;
+            _ = closed.wait_for(|closed| *closed) => Ok(None),
+            result = tokio::time::timeout(timeout, self.next_matching_change()) => {
+                result.unwrap_or(Ok(None))
+            }
+        }
+    }
+
+    pub async fn close(&self) {
+        self.closed.send_replace(true);
+        self.source.lock().await.take();
+    }
+
+    async fn next_matching_change(&self) -> Result<Option<KvChange>, MessagingError> {
+        use async_nats::jetstream::kv::Operation;
+        use futures_util::StreamExt;
+
+        let mut source = self.source.lock().await;
+        let Some(source) = source.as_mut() else {
+            return Ok(None);
+        };
+        loop {
+            let change = match source {
+                KvWatchSource::Redis {
+                    channel_prefix,
+                    pubsub,
+                } => {
+                    let msg = pubsub
+                        .on_message()
+                        .next()
+                        .await
+                        .ok_or(MessagingError::Storage)?;
+                    let channel: Vec<u8> =
+                        msg.get_channel().map_err(|_| MessagingError::Storage)?;
+                    let Some(key) = std::str::from_utf8(&channel)
+                        .ok()
+                        .and_then(|name| name.strip_prefix(channel_prefix.as_str()))
+                    else {
+                        continue;
+                    };
+                    let event: String = msg.get_payload().map_err(|_| MessagingError::Storage)?;
+                    let kind = match event.as_str() {
+                        "set" => KvChangeKind::Put,
+                        "del" | "expired" | "evicted" => KvChangeKind::Remove,
+                        _ => continue,
+                    };
+                    KvChange {
+                        key: key.to_owned(),
+                        kind,
+                    }
+                }
+                KvWatchSource::Nats(watch) => {
+                    let entry = watch
+                        .next()
+                        .await
+                        .ok_or(MessagingError::Storage)?
+                        .map_err(|_| MessagingError::Storage)?;
+                    let kind = match entry.operation {
+                        Operation::Put => KvChangeKind::Put,
+                        Operation::Delete | Operation::Purge => KvChangeKind::Remove,
+                    };
+                    KvChange {
+                        key: entry.key,
+                        kind,
+                    }
+                }
+            };
+            if change.key.starts_with(self.prefix.as_ref()) && validate_key(&change.key).is_ok() {
+                return Ok(Some(change));
+            }
         }
     }
 }

@@ -230,17 +230,16 @@ evidência nesta atualização.
 
 ## Próxima etapa de KV
 
-Os PRs #67–#70 entregam listagem por prefixo, remoção nos bindings, validação
-JetStream e CAS. A branch `feat/storage-kv-atomic-increment` usa o CAS e a
-criação condicional para somar inteiros sem perder escritas concorrentes.
-A observação de mudanças continua pendente.
+Os PRs #67–#71 entregam listagem por prefixo, remoção nos bindings, validação
+JetStream, CAS e incremento. A branch `feat/storage-kv-watch` acrescenta
+observação de mudanças futuras por prefixo em Redis e NATS.
 
 ## Revalidação do loop em 2026-11-12
 
 A referência de `main` foi consultada no remoto em 2026-11-12 (`a13140b`); as
 alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A stack
 ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
-→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66 → #67 → #68 → #69 → #70.
+→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66 → #67 → #68 → #69 → #70 → #71.
 
 | PR                                                       | Entrega na branch do PR                                                             |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
