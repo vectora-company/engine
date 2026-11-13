@@ -140,7 +140,7 @@ Speech do macOS com CI que gera fala. Isso não significa que a Engine já tenha
 essas capacidades. A integração Rust no PR #81 e os bindings no PR #82
 ligaram o preparador ao envio real; o PR #84 adiciona overrides por
 provider/modelo/modalidade. O PR #85, filho do #84, implementa retry textual único após rejeição
-multimodal classificada. O PR #86 em preparação implementa resultados de tool
+multimodal classificada. O PR #86, filho do #85, implementa resultados de tool
 tipados. Permanecem pendentes catálogo automático confiável, limites agregados
 e fixtures comuns.
 
@@ -199,7 +199,7 @@ transforme uma preferência presumida em decisão arquitetural.
 Revisados os 55 arquivos Markdown versionados do repositório. Snapshots de auditorias,
 matrizes e planos antigos foram preservados como históricos quando identificam
 claramente SHA/data; documentos vigentes foram corrigidos para refletir `main`
-(`dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1`), a stack documental aberta até o PR #83 e a implementação local do #82. A revisão
+(`dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1`), a stack documental aberta até o PR #83 e a implementação então local do #82. A revisão
 foi publicada no PR #83, empilhado sobre o #82. Corrigidos, entre outros, o estado dos
 payloads nativos, os três modos dos bindings, o status dos PRs e referências
 quebradas para o guia do GH Bot. A meta de primeira release ampla foi registrada
@@ -272,8 +272,8 @@ o stream ter sido entregue. O registro `media_decisions.reason` e o evento
 ## Partes multimodais em `ToolResult` — decisão e implementação
 
 brunosrz escolheu substituir diretamente `output: String` por `parts`, sem
-manter v1 nem conversores legados. A implementação atual na branch
-`feat/chat-tool-result-parts`, filha do PR [#85](https://github.com/vectora-company/engine/pull/85),
+manter v1 nem conversores legados. A implementação atual no PR [#86](https://github.com/vectora-company/engine/pull/86), branch
+`feat/chat-tool-result-parts` filha do PR #85,
 define partes `text` e `image` por `MediaRef`, expõe a conversão para mensagem
 de tool pelo núcleo Rust nos bindings, e mapeia imagem a Anthropic/Gemini/OpenAI
 Chat Completions. Cohere mantém forma textual porque não declara suporte para
@@ -285,7 +285,7 @@ contrato antigo e conversão para mensagem; `cargo clippy --workspace
 --all-targets --all-features --locked -- -D warnings` e `cargo check --workspace
 --all-targets --all-features --locked` passaram; build, typecheck e 37 testes Node
 passaram (10 testes de serviços foram ignorados sem endpoints); a suíte Python
-passou. Falta rodar hooks completos de pre-commit.
+passou. Todos os hooks de pre-commit passaram, incluindo ty após atualizar os stubs de `_native.pyi`. O PR #86 foi aberto com head `b188a94`.
 
 Os limites do loop contam a representação JSON serializada (texto e metadados da
 referência); os bytes da imagem ficam no store do host e obedecem aos limites de

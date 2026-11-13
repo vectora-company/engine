@@ -43,12 +43,11 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 
 ## Capability ativa
 
-Continuação da spec 17: PR #83 revisa os Markdown, PR #84 adiciona limites
-explícitos por provider/modelo e o PR #85, filho do #84, implementa retry textual único
-após rejeição multimodal classificada. O backlog por fases, os gaps de
-maturidade e as decisões pendentes estão no plano de continuidade. A mídia
-segue parcialmente implementada nos PRs abertos #79–#84;
-storage e runtime não devem ser anunciados como estáveis.
+Continuação da spec 17: PR #83 revisou a documentação inicial; #84 adicionou
+limites por provider/modelo; #85 implementou retry textual único; e #86 substitui
+`ToolResult.output` por partes tipadas. Esses PRs estão abertos e empilhados em
+ordem. A mídia ainda não está integrada em `main`; catálogo automático e limites
+agregados seguem pendentes. Storage e runtime não devem ser anunciados como estáveis.
 
 - Plano de continuidade (plano ativo): [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
 - Spec da mídia: [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md).
@@ -61,9 +60,11 @@ storage e runtime não devem ser anunciados como estáveis.
 Atualize o plano, checklist, spec e análise da capability em cada etapa, com
 branch/PR, SHA e evidência obtida; não descreva trabalho local como publicado.
 A branch `feat/chat-media-rejection-retry` está publicada no PR #85, filha de
-`feat/chat-media-provider-limits-docs83` (#84). brunosrz decidiu substituir diretamente o contrato `ToolResult` sem manter v1;
-a implementação está em `feat/chat-tool-result-parts`, filha do PR #85, e a
-decisão consta em `docs/specs/17-midia-no-chat.md`. Ao criar um Markdown, no mesmo PR
+`feat/chat-media-provider-limits-docs83` (#84). O PR #86, `feat/chat-tool-result-parts`,
+é filho do #85 e implementa a decisão de substituir diretamente `ToolResult` sem
+manter v1; a decisão e o contrato constam em `docs/specs/17-midia-no-chat.md`.
+A revisão documental está no PR [#87](https://github.com/vectora-company/engine/pull/87),
+filho do PR #86. Ao criar um Markdown, no mesmo PR
 vincule-o no índice `docs/README.md`, no prompt
 `docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
 artefatos da capability que dependem dele. Use o caminho completo a partir

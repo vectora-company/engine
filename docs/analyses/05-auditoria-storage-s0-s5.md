@@ -1,9 +1,7 @@
 # Auditoria de storage e ledger S0–S5
 
 **Estado da auditoria (revalidado em 2026-11-13):** os PRs #45–#72 estão
-integrados em `main` (`dc1aa5e`). O PR #77 e os PRs subsequentes de mídia #79–#82
-estão abertos na stack; o #82 é o topo nesta revisão, mas não muda adapters de
-storage. Entregue em `main`: seleção de seis backends, relatório estático de
+integrados em `main` (`dc1aa5e`). O PR #77 e os PRs subsequentes #79–#86 estão abertos na stack atual; #79–#86 tratam de mídia/documentação e não mudam adapters de storage. Esta auditoria de storage é um snapshot da sua própria execução, não status geral da stack. Entregue em `main`: seleção de seis backends, relatório estático de
 capabilities, ledger SQLite com concorrência entre processos e backup
 online/offline, projeção PostgreSQL retomável, vetores com cosseno e limites
 comuns, KV com TTL NATS/CAS/incremento/prefixo/watch e filas com retenção,

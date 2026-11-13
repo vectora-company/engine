@@ -69,9 +69,9 @@ Os bindings serializam os mesmos contratos e chamam a implementação Rust.
   altera o status de `RunLifecycle`; são dois contratos persistentes distintos.
 - Cada loop aceita um único registro de verificação. Repetir a mesma operação
   com conteúdo idêntico é idempotente; outra operação não substitui a evidência.
-- O contrato do snapshot do loop avançou para v2. Checkpoints v1 sem
-  verificação continuam legíveis e são atualizados na próxima gravação; v1
-  nunca pode carregar um registro de verificação.
+- O contrato do snapshot do loop é v3. Snapshots anteriores (v1 e v2) são
+  rejeitados pelo contrato atual; o armazenamento não os converte. A versão do
+  evidence gate permanece v1 e é independente da versão do snapshot do loop.
 - A engine não executa checks, não baixa nem valida o conteúdo referenciado,
   não autentica o host e não prova que `redacted: true` é verdadeiro.
 - A verificação persiste apenas referências opacas, nunca conteúdo de logs ou

@@ -75,7 +75,8 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    exige loop concluído e grava report, policy e avaliação no checkpoint do
    loop; o consumidor ainda executa e autentica os checks. Ambos os caminhos
    estão expostos pelos bindings Python/TypeScript. O contrato de snapshot do
-   loop é v2, com leitura compatível de snapshots v1. Verificação e pedido de
+   loop é v3; snapshots v1/v2 são rejeitados. `ToolResult` é v2 e substitui
+   diretamente a saída textual anterior. Verificação e pedido de
    cancelamento são persistidos no SQLite; o host recebe IDs de tools pendentes
    para interrompê-las e deve registrar o resultado de cada uma. Isso não prova
    que adapters/processos terminaram. Resultados incertos exigem reconciliação
