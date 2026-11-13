@@ -1,10 +1,6 @@
 # Plano de continuidade da Vectora Engine
 
-**Estado verificado:** 13 de novembro de 2026. A stack #73–#95 foi integrada
-em `main`, atualmente `d9497080efee29b816e78fff0c0d6ff2ab6f7147`. Não havia PR
-aberto quando começou a etapa atual. A branch local `test/postgres-concurrent-projectors`
-acrescenta o teste de concorrência registrado neste ciclo; o PR será aberto
-sobre `main`. A stack temática seguinte, depois desta etapa, será a revisão de providers e modalidades de IA com referência ao llama.cpp v1.0.0.
+**Estado verificado:** 13 de novembro de 2026. A stack de storage e mídia até o PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrada em `main`, atualmente `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`. Não há PR aberto. O plano ativo é a revisão e expansão de providers/modalidades, com referência normativa ao `llama.cpp` v1.0.0; seus artefatos estão listados em `docs/README.md` e `docs/goal-loop/README.md`.
 
 **Objetivo de produto:** a primeira release deve ser ampla e completa, não um
 MVP. A proposta de escopo e os gates ainda precisam ser consolidados neste

@@ -43,21 +43,23 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 
 ## Capability ativa
 
-A etapa ativa de storage/ledger verifica concorrência entre projetores. Os PRs #92–#95 foram integrados em `main` (`d9497080efee29b816e78fff0c0d6ff2ab6f7147`) e cobrem projeção SQLite-first, rebuild idempotente e detecção de divergências. A branch local `test/postgres-concurrent-projectors` testa dois projetores independentes concorrendo na mesma outbox; PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`, head `fb1977a`. Depois dele, a stack temática seguinte será providers e modalidades de IA com referência ao llama.cpp v1.0.0, conforme a direção de trabalho informada por brunosrz no chat. A decisão de
-brunosrz no chat combina backup `pg_dump`/gerenciado do PostgreSQL completo com
-reconstrução a partir do SQLite autoritativo. Consulte os artefatos da etapa:
+Providers e modalidades de IA, com referência normativa à release fixa
+[`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0).
+O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado em
+`main` (`f4a8cf9d7e30d9fb667a7f443f6572067e536d81`); a branch atualizada parte
+dessa base. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `dda8b83`; a etapa de implementação é sua filha. Leia os artefatos:
 
-- Plano de continuidade: [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
-- Plano de storage: [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
-- Spec: [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md).
-- Checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
-- Análise: [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
-- Análise geral: [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
-- Loop: [`docs/plans/05-loop-de-desenvolvimento.md`](../plans/05-loop-de-desenvolvimento.md) e checklist geral [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md).
+- Plano: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md).
+- Spec: [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
+- Checklist: [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
+- Análise: [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
+- Plano geral: [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
 
-Pausar writers é requisito operacional durante verify/rebuild para a comparação
-consistir em um ponto estável. Concorrência entre projetores e migrations com
-rollback continuam no backlog; não aguardar CI remoto para avançar a stack.
+A trilha distingue chat, Decision Models, visão e geração de imagem, entrada e
+geração de áudio/vídeo, embeddings e rerank. Compatibilidade OpenAI-compatible
+não implica suporte a todas essas operações; cada API/provider/modelo precisa
+de evidência e fixtures. Próxima etapa é o adapter HTTP do `llama-server`, sem
+compilar/linkar o runtime C++ dentro da Engine.
 
 ## Regras operacionais do mantenedor
 
