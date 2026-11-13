@@ -208,6 +208,6 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Inventariar providers e operações no core/bindings e conferir APIs HTTP upstream da tag `v1.0.0`.
 - [x] Separar chat, Decision Model, visão/geração de imagem, TTS, ASR/STT, vídeo, embeddings e rerank nos contratos e lacunas.
 - [x] Revisar e sincronizar spec, plano, análise, checklist, índices e goal loop.
-- [ ] Abrir PR documental desta etapa em `main`; depois registrar URL, head e SHA.
+- [x] Abrir o PR documental [#97](https://github.com/vectora-company/engine/pull/97) sobre `main`; head `dda8b83`.
 - [ ] Implementar adapter llama-server incrementalmente com fixtures e paridade de bindings.
 - [ ] Expandir os perfis/providers e modalidades previstos no plano, sem declarar suporte por compatibilidade presumida.

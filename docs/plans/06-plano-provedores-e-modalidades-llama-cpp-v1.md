@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo; etapa documental e inventário iniciados em 13/11/2026.
+**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97) aberto, head `dda8b83`; etapa 2 iniciada em branch filha.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -44,11 +44,9 @@ primeira implementação. Fixar as rotas e diferenças de `llama-server` pela ta
 v1.0.0 e caracterizar os providers nomeados como perfis de protocolo, não
 promessas indiscriminadas.
 
-**Saída:** spec 18, análise e checklist conferidos pelo código e pelas fontes
-primárias fixadas; índices e goal loop atualizados; nenhuma API de produção
-alterada. A documentação está pronta para publicação em PR sobre `main`.
+**Saída:** concluída no PR documental [#97](https://github.com/vectora-company/engine/pull/97), head `dda8b83`, sobre `main`; spec 18, análise, checklist, índices e goal loop atualizados; nenhuma API de produção alterada.
 
-### Etapa 2 — perfil llama.cpp, health e descoberta
+### Etapa 2 — perfil llama.cpp, health e descoberta (ativa; PR filho do #97)
 
 Adicionar settings e adapter Rust sobre HTTP, com model discovery em
 `/v1/models`, estado/capabilities por modelo e chat/text/stream. Testar rotas,
