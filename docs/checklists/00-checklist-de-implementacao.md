@@ -176,5 +176,14 @@ outras etapas aprovadas no plano ativo.
 - [x] Projetar evento + checkpoint atomicamente e de forma idempotente no PostgreSQL.
 - [x] Repetir workspace Rust e matriz de serviços após corrigir a fixture de migração: 175 Rust + 3 fixtures + 1 teste nativo; `storage::` 76/76; 34 testes SQLite focados; PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0 reais. Format, Clippy `-D warnings` e rustdoc passaram. Python 53 e Node 39 (10 sem endpoints ignorados) são da rodada anterior; bindings não mudaram.
 - [x] Commit `b01b20b`, push e abrir o PR [#92](https://github.com/vectora-company/engine/pull/92), filho do #91.
-- [ ] Publicar a correção da fixture de migração e a projeção opt-in no mesmo PR #92.
+- [x] Publicar a correção da fixture de migração e a projeção opt-in no mesmo PR #92 (commit `69af992`).
 - [ ] Projetar reservas/admissions como entidade consultável, criar APIs de leitura PostgreSQL e fechar backup/verify, concorrência de projetores e migrations com rollback.
+
+## Projeção de reservas e admissions — branch filha do PR #92
+
+- [x] Evoluir SQLite ao schema v8 com outbox para reservation standalone, backfill único e vínculo da reserva ao evento admission.
+- [x] Projetar reservation/admission/event/checkpoint atomicamente no PostgreSQL e expor leitura de reserva e admission.
+- [x] Testes SQLite cobrem migração v1, opt-in/backfill, replay e reserva standalone; testes service-real cobrem reservation/admission projetados e APIs de leitura (PostgreSQL 18.6).
+- [x] Workspace Rust 182 + 3 fixtures + 1 teste nativo; `storage::` 83/83 com PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0.
+- [x] Clippy `-D warnings`, rustdoc, formatação e hooks completos passaram.
+- [ ] Commit, push e abrir PR filho do #92.

@@ -371,3 +371,18 @@ Os limites do loop contam a representação JSON serializada (texto e metadados 
 referência); os bytes da imagem ficam no store do host e obedecem aos limites de
 reidratação do contexto de mídia. A implementação não adiciona store persistente
 à Engine.
+
+## Reservation/admission na projeção PostgreSQL — branch filha #93
+
+A branch `feat/postgres-admission-projection`, filha do PR #92, adiciona schema
+SQLite v8, outbox dedicada para reservation standalone, metadados de admission
+na outbox de eventos, backfill único e leitura de reservation/admission no
+`PostgresLedger`. Admission + reservation + evento + checkpoint são gravados na
+mesma transação PostgreSQL; reservation standalone é projetada idempotentemente.
+
+Verificação local após implementação: 182 testes Rust + 3 fixtures + 1 teste nativo Python;
+`storage::` 83/83 contra PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant
+1.18.0. Testes de migração v1/v6, backfill, projection e leitura de admission passaram
+com PostgreSQL real. Clippy `-D warnings`, rustdoc, formatação e hooks completos
+passaram. Ainda faltam backup/verify PostgreSQL, concorrência entre projetores
+e migrations PostgreSQL com rollback.

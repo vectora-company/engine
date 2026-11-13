@@ -7,7 +7,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
 com o estado verificado, a direção de uma primeira release completa e o backlog
-por fases. Em 2026-11-13, a stack aberta segue #82 → #83 → #84 → #85 → #86 → #87 → #88 → #89 → #90 → #91 → #92. O PR #86 substitui diretamente os resultados textuais de tools por partes tipadas; #87 revisa os Markdown; #88 reclassifica MIME na reidratação; #89 registra a fronteira de persistência; #90 implementa a decisão respondida no chat: request persistível separado do envelope efêmero para envio inline. O PR #90 é filho de #89; o PR #91 (diagnósticos da outbox) é filho do #90; o PR #92 (projeção de checkpoints) é filho do #91; ambos estão abertos. Storage e runtime seguem com gaps registrados no plano e nas specs.
+por fases. Em 2026-11-13, a stack aberta segue #82 → #83 → #84 → #85 → #86 → #87 → #88 → #89 → #90 → #91 → #92 → branch local `feat/postgres-admission-projection` (filha do #92; em andamento). O PR #86 substitui diretamente os resultados textuais de tools por partes tipadas; #87 revisa os Markdown; #88 reclassifica MIME na reidratação; #89 registra a fronteira de persistência; #90 implementa a decisão respondida no chat: request persistível separado do envelope efêmero para envio inline. O PR #90 é filho de #89; o PR #91 (diagnósticos da outbox) é filho do #90; o PR #92 (projeção de checkpoints) é filho do #91 e está aberto. A branch local `feat/postgres-admission-projection` é filha do #92 e implementa a etapa seguinte. Storage e runtime seguem com gaps registrados no plano e nas specs.
 
 ## Operação de desenvolvimento
 
