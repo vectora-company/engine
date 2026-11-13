@@ -43,9 +43,7 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 
 ## Capability ativa
 
-A capability ativa voltou a ser storage/ledger. Os PRs #92 e #93 ampliam a
-projeção SQLite-first do PostgreSQL; o PR [#94](https://github.com/vectora-company/engine/pull/94), filho do #93 e aberto no head `984e2d066dcc05b0a98e076361ada632751fc61a`, implementa rebuild
-idempotente e verificação por contagens após perda da projeção; o PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94 e aberto no head `df23e43cda2d24e4a4e169f4da399a1bda4bb795`, testa divergências e linhas extras. A decisão de
+A etapa ativa de storage/ledger verifica concorrência entre projetores. Os PRs #92–#95 foram integrados em `main` (`d9497080efee29b816e78fff0c0d6ff2ab6f7147`) e cobrem projeção SQLite-first, rebuild idempotente e detecção de divergências. A branch local `test/postgres-concurrent-projectors` testa dois projetores independentes concorrendo na mesma outbox; o PR desta etapa será aberto sobre `main`. Depois dele, a stack temática seguinte será providers e modalidades de IA com referência ao llama.cpp v1.0.0, conforme a direção de trabalho informada por brunosrz no chat. A decisão de
 brunosrz no chat combina backup `pg_dump`/gerenciado do PostgreSQL completo com
 reconstrução a partir do SQLite autoritativo. Consulte os artefatos da etapa:
 

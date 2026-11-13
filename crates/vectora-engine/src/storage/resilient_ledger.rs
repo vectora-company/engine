@@ -487,6 +487,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn independent_projectors_drain_the_same_outbox_concurrently() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let path = db_path();
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        for attempt in 0..16 {
+            let scope = format!("projection-race-{suffix}-{attempt}");
+            let mut setup = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+            let event = setup
+                .local
+                .append_with_outbox(EventDraft {
+                    scope: scope.clone(),
+                    aggregate: "thread".into(),
+                    event_id: format!("event-{suffix}-{attempt}"),
+                    idempotency_key: format!("idem-{suffix}-{attempt}"),
+                    event_type: "accepted".into(),
+                    payload: json!({"source":"sqlite","attempt":attempt}),
+                    expected_version: 0,
+                })
+                .unwrap();
+            let next_event = setup
+                .local
+                .append_with_outbox(EventDraft {
+                    scope: scope.clone(),
+                    aggregate: "thread".into(),
+                    event_id: format!("event-next-{suffix}-{attempt}"),
+                    idempotency_key: format!("idem-next-{suffix}-{attempt}"),
+                    event_type: "continued".into(),
+                    payload: json!({"source":"sqlite","attempt":attempt}),
+                    expected_version: 1,
+                })
+                .unwrap();
+            drop(setup);
+
+            let mut first = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+            let mut second = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+            let (first_result, second_result) =
+                tokio::join!(first.flush_outbox(100), second.flush_outbox(100));
+            assert!(
+                first_result.is_ok(),
+                "first projector failed: {first_result:?}"
+            );
+            assert!(
+                second_result.is_ok(),
+                "second projector failed: {second_result:?}"
+            );
+            assert_eq!(first.pending_count().unwrap(), 0);
+            assert_eq!(
+                pg.read(&scope, "thread", 0, 10).await.unwrap(),
+                [event, next_event]
+            );
+            delete_postgres_scope(&pool, &scope).await;
+            drop(first);
+            drop(second);
+        }
+        drop(pool);
+        drop(pg);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
     async fn flush_outbox_validates_limit_even_without_postgres() {
         let path = db_path();
         let mut ledger = ResilientLedger::open(&path, None).unwrap();

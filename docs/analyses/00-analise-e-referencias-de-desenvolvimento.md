@@ -229,7 +229,7 @@ pre-commit, Clippy, fmt e rustdoc passaram; maturin compilou a
 extensão Python; o teste Python específico passou após fixar `PYTHONPATH` para o
 binding deste checkout; `pnpm build`, `tsc` e o teste Node de mídia passaram.
 Um primeiro teste TS falhou porque a fachada não encaminhava `provider_limits`
-ao addon; a serialização foi corrigida e o mesmo teste passou. O PR #84 está aberto e empilhado sobre #83.
+ao addon; a serialização foi corrigida e o mesmo teste passou. O PR #84 foi integrado e empilhado sobre #83.
 
 Limites oficiais variam com protocolo e método de envio, portanto esta etapa
 fornece overrides ao host e não codifica números universais: a documentação
@@ -290,7 +290,7 @@ limite, categoria e data URL. Testes das bindings verificam que a entrada normal
 recusa bytes e que a entrada efêmera exige envelope e limite. Os comandos de
 verificação e resultados finais estão registrados no plano de continuidade e no
 PR [#90](https://github.com/vectora-company/engine/pull/90), filho do
-[#89](https://github.com/vectora-company/engine/pull/89). O PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, está OPEN/CLEAN; o commit de implementação é `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; os checks remotos ainda não apareceram.
+[#89](https://github.com/vectora-company/engine/pull/89). O PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, foi integrado; o commit de implementação é `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; os checks remotos ainda não apareceram.
 
 ## Diagnóstico da outbox SQLite-first nas bindings — PR #91
 
@@ -402,10 +402,12 @@ Não há hoje API de rebuild/verificação integral.
 | Backup lógico da Engine | Export/import versionado das tabelas Engine, com snapshot consistente e verificação de conteúdo.                                                                                        | Portável e seletivo; pode verificar/reconstruir a projeção a partir do SQLite autoritativo. | Cria formato e compatibilidade próprios, exige streaming, permissões e contrato de conflito/restore; não substitui o backup do banco completo.                                    |
 | Combinado (recomendado) | Backup físico/lógico nativo do PostgreSQL para desastre do servidor; Engine oferece `verify_projection` e `rebuild_projection` replayando SQLite, sem inventar outro formato de backup. | Usa recovery nativo e mantém a projeção reconstruível pela fonte de verdade local.          | Requer definir escopo do verificador (contagens/hash/eventos/checkpoints/reservas), bloqueio/consistência durante rebuild e semântica quando o banco contém dados fora da Engine. |
 
-Decisão de brunosrz no chat: combinar backup PostgreSQL nativo (`pg_dump`/backup gerenciado) com API Engine `verify_projection`/`rebuild_projection` que reenvia o SQLite autoritativo, sem formato de backup próprio. O PR [#94](https://github.com/vectora-company/engine/pull/94), commit `984e2d066dcc05b0a98e076361ada632751fc61a` (OPEN), implementa rebuild por scope e verificação das cinco contagens de agregados/versões, eventos, checkpoints, reservas e admissions. Writers devem ser pausados durante a operação; a comparação não representa snapshot distribuído e não cobre conteúdo extra que esteja fora das scopes do SQLite. O teste service-real PostgreSQL apaga e reconstrói uma scope exclusiva com eventos, checkpoint, reservation/admission e reservation standalone. Na suíte `storage::`, 81 passaram e 3 falharam contra o contêiner NATS 2.10 local, inferior ao mínimo 2.11 do contrato TTL; essa falha ambiental não está relacionada ao PR. Referências de implementação e estado:
+Decisão de brunosrz no chat: combinar backup PostgreSQL nativo (`pg_dump`/backup gerenciado) com API Engine `verify_projection`/`rebuild_projection` que reenvia o SQLite autoritativo, sem formato de backup próprio. O PR [#94](https://github.com/vectora-company/engine/pull/94), integrado em `main` (`d949708`), implementa rebuild por scope e verificação das cinco contagens de agregados/versões, eventos, checkpoints, reservas e admissions. Writers devem ser pausados durante a operação; a comparação não representa snapshot distribuído e não cobre conteúdo extra que esteja fora das scopes do SQLite. O teste service-real PostgreSQL apaga e reconstrói uma scope exclusiva com eventos, checkpoint, reservation/admission e reservation standalone. Na suíte `storage::`, 81 passaram e 3 falharam contra o contêiner NATS 2.10 local, inferior ao mínimo 2.11 do contrato TTL; essa falha ambiental não está relacionada ao PR. Referências de implementação e estado:
 [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md),
 [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md),
 [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md) e
 [`docs/analyses/05-auditoria-storage-s0-s5.md`](05-auditoria-storage-s0-s5.md).
 
-O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, head `df23e43cda2d24e4a4e169f4da399a1bda4bb795` (OPEN), cobre as condições negativas da verificação: linha extra na tabela de versões retorna `ProjectionMismatch`; payload divergente para evento existente retorna `ProjectionConflict` e mantém a outbox local pendente. Os dois testes passaram contra PostgreSQL real.
+O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, integrado em `main` (`d949708`), cobre as condições negativas da verificação: linha extra na tabela de versões retorna `ProjectionMismatch`; payload divergente para evento existente retorna `ProjectionConflict` e mantém a outbox local pendente. Os dois testes passaram contra PostgreSQL real.
+
+Esta etapa, baseada em main após o #95, registra 16 rodadas service-real com dois handles de `ResilientLedger` independentes processando a mesma outbox de duas sequências de um agregado. Nenhum evento foi duplicado, ambas as operações terminaram sem erro e não restaram pendências. Isso não equivale ainda a concorrência entre processos independentes; essa cobertura e admissions concorrentes seguem pendentes.
