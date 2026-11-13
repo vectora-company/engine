@@ -1,4 +1,14 @@
-# Plano do próximo PR: primeira capacidade LLM em Rust
+# Plano de portabilidade de LLM para Rust
+
+**Estado (13 de novembro de 2026):** registro histórico do início da
+migração. A trilha de LLM PR 1–6 foi entregue em `main` (#3 bindings e chat
+base, #4 perfil OpenAI-compatible, #5 Anthropic e Google, #6 Cohere, #7
+fallback no core, #8 embeddings e rerank). O PR 7 (STT, imagem, TTS, vídeo, web
+search) e a adoção por consumidor seguem pendentes na Fase 6 do
+[plano ativo](03-plano-continuidade.md). A trilha de storage abaixo usa a
+numeração antiga S0–S4; a numeração vigente, S0–S5, está no
+[plano de storage](04-plano-storage-ledger.md). O texto a seguir descreve a
+intenção original do primeiro PR.
 
 ## Objetivo
 
@@ -40,7 +50,7 @@ O primeiro PR deve confirmar os contratos exatos dos modelos Python usados pelo 
 - **Binding TypeScript/Node/npm:** expõe a mesma capacidade Rust por uma fronteira nativa Node, com tipos TypeScript, streaming assíncrono, cancelamento, erros e shutdown coerentes com o contrato canônico. Não implementa um segundo motor TypeScript.
 - **Distribuição Rust:** crate `vectora-engine` no crates.io é a interface direta para consumidores Rust; PyPI/npm são fachadas sobre a implementação Rust, não forks da engine.
 - **Loop atual:** segue sendo dono de tools, persistência, autorização, HITL, orçamento de produto, workspace e composição da conversa. A engine LLM não executa tools recebidas do modelo; apenas devolve tool calls tipadas.
-- **Fallback:** permanece coordenado pelo consumidor Python nesta primeira etapa. O adapter Rust retorna erros estáveis e classificados; só o Python percorre a cadeia existente. Não habilitar fallback em dois lugares.
+- **Fallback:** permanecia coordenado pelo consumidor Python nesta primeira etapa; desde o #7 o fallback é um coordenador do core Rust (`chat/fallback.rs`). O adapter Rust retorna erros estáveis e classificados; só o Python percorre a cadeia existente. Não habilitar fallback em dois lugares.
 - **Compatibilidade:** o cliente Python atual continua como caminho de referência e fallback operacional. A integração nativa é opt-in, desligável e reversível por configuração de runtime.
 
 ## Escopo proposto do PR 1
@@ -139,6 +149,11 @@ S1–S3 podem ser empilhados sobre S0; dependências entre APIs de storage e con
 - Testes de conformidade precisam separar comportamento protocolar compartilhado de extensões específicas de cada gateway.
 
 ## Decisões abertas antes de iniciar implementação
+
+Estado atual: Python 3.13+ está fixado em `bindings/python/pyproject.toml` e Node
+22.13+ em `bindings/typescript/package.json`. Continuam abertas a matriz de
+wheels e binários N-API, o workflow de release e a política de versão entre os
+três pacotes (hoje o crate está em `0.0.1` e os bindings em `0.1.0`).
 
 - Versões de Python e sistemas/arquiteturas mínimas suportadas pelo binding.
 - Matriz de wheels e empacotamento da extensão Python para os sistemas e arquiteturas suportados.

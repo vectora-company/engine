@@ -51,7 +51,7 @@ Estados dos itens: `pendente`, `feito`, `bloqueado` ou `não aplicável`. Para
 - [ ] Análise e plano atualizados para refletir o código e evidências. Evidência: [ ]
 - [ ] Critérios de aceite concluídos ou gaps transferidos explicitamente. Evidência: [ ]
 - [ ] Próxima etapa e dependências registradas. Evidência: [ ]
-- [ ] Commit/PR preparados conforme as regras do repositório e instruções do mantenedor. Evidência: [ ]
+- [ ] Commit, push e PR feitos, com base na branch do PR anterior da stack, conforme `docs/goal-loop/README.md`. Evidência: [ ]
 
 ## Critério de fechamento desta etapa
 

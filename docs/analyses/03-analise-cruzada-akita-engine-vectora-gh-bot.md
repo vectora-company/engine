@@ -19,13 +19,13 @@ direta dessas teses.
 
 ### Snapshots usados
 
-| Fonte            | Snapshot consultado                                                                                                           | Uso                                                                           |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Livro            | `CompetenteOSuficiente` em `b0e7e1c0ec1411113ae5e8d893ebe05ead89535e`                                                         | Argumentos e experiências do autor; edição local em `book/pt/`.               |
-| Engine           | topo da stack, PR [#34](https://github.com/vectora-company/engine/pull/34), commit `a2afb65dc898a6214dd83a6473967132b6a9ac79` | Contratos e fixture de conformidade disponíveis nesta etapa.                  |
-| Vectora          | `origin/master` em `bf1732ac92eac21671881cc34a530c2ddb7186de`                                                                 | Implementação atual do backend consumidor para a comparação.                  |
-| GH Bot           | `main` em `b489b90263e3a4ace94cfdce45763489918a3671`                                                                          | Bootstrap e documentação atuais; integração com a Engine ainda é roadmap.     |
-| Contexto Vectora | issue [#387](https://github.com/vectora-company/vectora/issues/387)                                                           | Tese de produto e perguntas de arquitetura; não substitui inspeção do código. |
+| Fonte            | Snapshot consultado                                                                                                           | Uso                                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Livro            | `CompetenteOSuficiente` em `b0e7e1c0ec1411113ae5e8d893ebe05ead89535e`                                                         | Argumentos e experiências do autor; edição local em `book/pt/`.                                                                             |
+| Engine           | topo da stack, PR [#34](https://github.com/vectora-company/engine/pull/34), commit `a2afb65dc898a6214dd83a6473967132b6a9ac79` | Contratos e fixture de conformidade disponíveis nesta etapa.                                                                                |
+| Vectora          | `origin/master` em `bf1732ac92eac21671881cc34a530c2ddb7186de`                                                                 | Implementação atual do backend consumidor para a comparação.                                                                                |
+| GH Bot           | `main` em `b489b90263e3a4ace94cfdce45763489918a3671` (revalidado: `2a7acbf`, #4)                                              | No snapshot, integração era roadmap; desde o #4 o Bot consome a binding TypeScript local, mas usa só `chatStream` e as versões de contrato. |
+| Contexto Vectora | issue [#387](https://github.com/vectora-company/vectora/issues/387)                                                           | Tese de produto e perguntas de arquitetura; não substitui inspeção do código.                                                               |
 
 Os snapshots são diferentes entre si e representam o estado consultado nesta
 análise, não uma afirmação de que os repositórios continuam nesses commits.
@@ -125,9 +125,9 @@ maior maturidade.
    fechar, não uma decisão.
 4. **Adapters reutilizáveis em múltiplas linguagens** para grupos de storage e
    messaging. Isso permite uma base compartilhada para GH Bot e Vectora, mas
-   ainda tem diferenças de TTL, ACK, filtros e score. Cada uma é lacuna a fechar
-   nos dois lados do par ou especialização com motivo de incompatibilidade, e
-   não difere por escolha.
+   ainda tinha diferenças de TTL, ACK, filtros e score neste snapshot. TTL e
+   score foram fechados depois (#59, #57); filtros por metadado seguem como
+   lacuna comum dos dois lados do par.
 5. **Uma fixture compartilhada de conformidade entre Rust/Python/TypeScript**
    no topo do PR #34 para cenários selecionados. É ganho de disciplina
    contratual; não é paridade global.

@@ -23,7 +23,8 @@ release oficial de Protocol Buffers e adicione-o ao `PATH`.
 
 `scons install` baixa dependências Cargo, sincroniza o ambiente Python, instala
 as dependências pnpm, baixa o sidecar NATS e prepara as imagens Podman de
-PostgreSQL, Qdrant e Redis. Não compila o projeto nem inicia containers.
+PostgreSQL, Qdrant, Redis e NATS (o TTL por chave do KV exige NATS Server
+2.11+). Não compila o projeto nem inicia containers.
 `scons build` compila o workspace Rust, gera o wheel Python e compila o addon e
 os arquivos TypeScript; quando existir `bindings/go/go.mod`, também compila Go.
 Cargo e TypeScript mantêm caches incrementais locais entre builds.
@@ -37,7 +38,8 @@ Cargo e TypeScript mantêm caches incrementais locais entre builds.
   `protobuf` no Arch.
 - `scons` para os alvos de desenvolvimento.
 - `uv` e Python 3.13 para tooling e verificações dos bindings Python.
-- `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript.
+- `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript (o pacote
+  aceita Node.js 22.13 ou superior).
 - Podman para preparar as imagens usadas pelos testes de integração com serviços.
 
 Se o pré-requisito `protoc` estiver ausente, `scons install` orienta executar
@@ -64,6 +66,9 @@ Windows.
 - Escreva título e descrição em português e descreva o comportamento entregue.
 - Vincule uma issue pública correspondente em uma linha `Refs: #N` ou
   `Closes: #N`; não invente vínculo quando a mudança não tem issue.
-- Informe os checks executados e qualquer contrato ou consumidor afetado.
+- Informe os checks executados localmente e qualquer contrato ou consumidor
+  afetado; resultado de CI remoto não substitui a verificação local.
+- PRs são empilhados: cada PR novo usa como base a branch do PR anterior aberto
+  (veja `docs/plans/05-loop-de-desenvolvimento.md`).
 - Não declare a engine pronta para integração estável antes de versionar a API
   e executar a conformidade nos bindings relevantes.

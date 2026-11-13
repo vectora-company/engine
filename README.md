@@ -57,7 +57,8 @@ não compila o projeto e não inicia containers.
 
 Em macOS e Windows, instale os requisitos de `CONTRIBUTING.md` diretamente.
 `scons install` instala dependências do projeto, baixa o binário NATS e prepara
-imagens Podman de PostgreSQL, Qdrant e Redis para desenvolvimento. Não compila
+imagens Podman de PostgreSQL, Qdrant, Redis e NATS (2.15.3; o TTL por chave do
+KV exige NATS Server 2.11+) para desenvolvimento. Não compila
 bindings nem inicia containers. `scons build` é o alvo explícito para compilar o
 workspace Rust e os bindings presentes.
 

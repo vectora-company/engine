@@ -162,11 +162,14 @@ especialização; se o outro lado puder oferecê-lo, volta para a base.
 
 ## Ledger e estado de execução
 
-Estado experimental revalidado em `main` (`22c861f`): há ledger/checkpoints em
-SQLite, stores SQLite especializados de lifecycle, loop e policy, um
+Estado experimental verificado em 13 de novembro de 2026 (topo da stack sobre
+`main` `dc1aa5e`): há ledger/checkpoints em SQLite com backup online e offline,
+stores SQLite especializados de lifecycle, loop e policy, um
 `PostgresLedger` usado como projeção, e `ResilientLedger` que grava localmente
 com outbox antes de projetar para PostgreSQL. Também existem adapters vetoriais
-LanceDB/Qdrant e messaging Redis/NATS para KV, fila e pub/sub. Consulte a
+LanceDB/Qdrant com score cosseno comum e messaging Redis/NATS para KV (TTL,
+CAS, incremento, prefixo e watch), filas com retenção, tentativas e DLQ e
+pub/sub. Consulte a
 [`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
 para APIs, bindings, testes e limites por adapter.
 
@@ -178,8 +181,10 @@ implementações em memória são doubles internos de teste e não fazem parte d
 configuração de produto. Não há ainda APIs de Memory, Context Planner,
 compactação/context engineering, indexação documental ou RAG. Os bindings de
 ledger exigem arquivo SQLite persistente. A presença de adapters não prova
-equivalência operacional: testes de integração service-real, falhas/restart e
-retention continuam gaps.
+equivalência operacional: há testes service-real de restart, retenção e DLQ,
+mas eles são condicionais às variáveis `VECTORA_TEST_*`, e faltam shutdown,
+redrive atômico, filtros vetoriais e health (veja o
+[plano de storage](../plans/04-plano-storage-ledger.md)).
 
 - Separar registro append-only de eventos, projeções consultáveis, checkpoints, cursor e referências a artifacts.
 - Envelope deve carregar `event_id`, sequência por agregado/stream, versão do schema, idempotency key, run/turno e escopo confiável do consumidor.
@@ -238,7 +243,7 @@ A ordem pode mudar conforme dependências reais, mas não remove os gates de con
 - Toda capability presente em um lado de um par e viável no outro está implementada nos dois e passa pela mesma suíte de conformidade; cada diferença restante tem motivo de incompatibilidade registrado.
 - Testes reais de serviços cobrem restart/reconnect, timeout, cancelamento, concorrência, idempotência e ciclo de vida; mocks não substituem esses testes.
 - SQL cobre transactions, migrations, lock/contention, conflicts, rollback, paginação e diferenças de tipos.
-- LanceDB e Qdrant aceitam vetores com 1 a 65536 componentes finitos na gravação e na busca. O adapter valida esse intervalo antes de acessar o backend.
+- LanceDB e Qdrant aceitam vetores com 1 a 65536 componentes finitos na gravação e na busca. O adapter valida esse intervalo antes de acessar o backend. Uma consulta com dimensão diferente da coleção existente retorna erro de entrada inválida. Buscar em coleção ausente retorna erro de storage e não a cria.
 - Vector stores cobrem IDs, upsert/delete, filtros, dimensões, ranking, score, ordenação, coleção ausente e erro de indexação.
 - Redis/NATS cobrem TTL/retention, ack/redelivery, duplicate event, replay, disconnect, shutdown e degradação.
 - Contratos de memória/Context Planner não ultrapassam tenant/escopo autorizado e preservam origem, confiança e motivo.

@@ -62,70 +62,62 @@ Garantias dependem da configuração do serviço; não inferir durabilidade apen
 pelo nome do backend. A coluna "base equivalente" não é uma lista de
 diferenças aceitas: cada item ausente em um lado é lacuna na matriz abaixo.
 
-## Matriz de equivalência por par (estado verificado em 2026-11-12)
+## Matriz de equivalência por par (verificada em 2026-11-13)
 
-Fonte: código dos adapters nas branches da stack e testes locais. "Lacuna"
-significa que o outro lado consegue e a Engine ainda não entrega; "base comum
-ausente" significa que nenhum dos dois lados expõe a capacidade hoje.
+Fonte: código dos adapters na branch do topo da stack (PR #77, sobre `main`
+`dc1aa5e`) e os testes citados na
+[auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md). "Lacuna"
+significa que um lado tem e o outro não; "base comum ausente" significa que
+nenhum dos dois lados expõe a capacidade.
 
-| Par                       | Lacuna (um lado tem, o outro não)                                                                                                                                                                                                                                                                                    | Base comum ainda ausente nos dois lados                                                                                                                                                                               |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite × PostgreSQL       | PostgreSQL não tem os stores de lifecycle, loop e policy nem backup/restore/verify equivalentes. Decisão do mantenedor: SQLite é sempre a cópia local obrigatória e autoridade de recuperação do ledger e demais estados críticos internos; PostgreSQL é projeção/replicação retomável e nunca substitui essa cópia. | Interface SQL transacional tipada e limitada (spec 02) em ambos; completar stores PostgreSQL sem retirar a escrita SQLite-first.                                                                                      |
-| LanceDB × Qdrant          | A branch do PR #57 fixa `Cosine` no LanceDB e normaliza os dois resultados para similaridade `[-1, 1]` (maior é melhor); testes com vetores não unitários passam nos dois adapters. O PR #65 aplica o intervalo comum de 1 a 65536 dimensões em gravação e busca, antes de chamar cada backend.                      | Filtro por metadado além do escopo, criação/parâmetros de índice ANN, quantização, busca lexical/híbrida, backup/snapshot, health.                                                                                    |
-| Redis × NATS JetStream KV | A branch empilhada sobre #57 implementa TTL por mensagem em NATS e marca o bucket com `AllowMsgTTL`; exige NATS 2.11+. Teste real de create/update/expiração passou com NATS 2.15.3 e Redis 8.10.3. As imagens de teste do workspace foram atualizadas.                                                              | CAS no #70. Incremento atômico no #71. Observação de mudanças futuras na branch sobre #71. Listagem por prefixo no #67. Remoção em Python e TypeScript no #68. O #69 alinha a validação de chaves NATS com e sem TTL. |
-| Redis Streams × JetStream | PR #60 configura retenção por contagem (padrão 100000); a branch `feat/storage-queue-retries-dlq` limita a cinco entregas e move falhas à DLQ consumível nos dois. Rust service-real 14/14; bindings Python 50 e Node 35 passam. ACK confirma sucesso do job.                                                        | Shutdown gracioso e operação de redrive; o consumidor pode reenfileirar a mensagem via `enqueue`, sem atomicidade com o ACK da DLQ. NATS DLQ é at-least-once após publicação.                                         |
-| Redis Pub/Sub × NATS Core | Nenhuma lacuna de contrato conhecida (ambos efêmeros; mensagem sem assinante é descartada, provado por teste).                                                                                                                                                                                                       | Assinatura por padrão/curinga e reconexão observável.                                                                                                                                                                 |
+| Par                       | Base equivalente já entregue                                                                                                                                                                           | Lacuna (um lado tem, o outro não)                                                                                                                                                                                                       | Base comum ainda ausente nos dois lados                                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite × PostgreSQL       | Ledger com idempotência, conflito de versão, paginação, reserva/admissão e checkpoints; projeção SQLite-first com outbox (`resilient_ledger.rs`).                                                      | PostgreSQL não tem os stores de lifecycle, loop e policy nem backup/restore/verify (o SQLite tem `sqlite/backup.rs`). Decisão do mantenedor: SQLite é sempre a cópia local e autoridade; PostgreSQL é projeção ou replicação retomável. | Interface SQL transacional tipada e limitada; testes concorrentes do PostgreSQL com serviço real; migrations PostgreSQL além da v1 com rollback documentado.                                              |
+| LanceDB × Qdrant          | Cosseno normalizado em `[-1, 1]` (#57); dimensões de 1 a 65536 (#65); dimensão divergente da coleção retorna `InvalidInput` (#77); coleção ausente e reinício (#51).                                   | Nenhuma conhecida no contrato atual.                                                                                                                                                                                                    | Filtro por metadado além do escopo, índice ANN parametrizado, quantização, busca lexical/híbrida, falhas de indexação visíveis, backup/snapshot e health.                                                 |
+| Redis × NATS JetStream KV | TTL por chave (NATS 2.11+, #59), listagem por prefixo (#67), remoção nos bindings (#68), validação de chaves (#69), CAS por revisão (#70), incremento (#71) e watch por prefixo (#72).                 | Nenhuma de contrato. O watch do Redis depende de `notify-keyspace-events` no servidor e retorna `Unsupported` sem ele; isso precisa constar em `capabilities()`.                                                                        | Testes Rust e Python de CAS, incremento, prefixo, watch e remoção (hoje só Node).                                                                                                                         |
+| Redis Streams × JetStream | Grupos, ACK, retenção finita (100000, #60), cinco tentativas e DLQ consumível (#61), recuperação da transferência para a DLQ (#62), uma entrega por leitura (#63) e preservação da configuração (#64). | Deduplicação nativa existe só no JetStream e não é usada no `enqueue`.                                                                                                                                                                  | NACK e reentrega com atraso, deduplicação na publicação, replay e ordenação com contrato, shutdown gracioso, redrive atômico da DLQ, envelope de job versionado e validação real dos cenários de #62–#64. |
+| Redis Pub/Sub × NATS Core | Entrega efêmera; mensagem sem assinante é descartada (teste `pubsub_drops_messages_published_without_a_subscriber`).                                                                                   | Nenhuma conhecida.                                                                                                                                                                                                                      | Reconexão observável e assinatura por padrão/curinga.                                                                                                                                                     |
 
-O relatório atual `capabilities()` enumera implementado/não implementado e
-notas, mas não tem um campo estruturado para diferenciar lacuna, emulação e
-especialização com justificativa de incompatibilidade. Essa parte do contrato
-de descoberta também precisa ser definida e implementada antes de anunciar
-especializações como suportadas.
+`capabilities()` enumera implementado, não implementado e notas, mas não tem
+campo estruturado para separar lacuna, emulação e especialização com motivo de
+incompatibilidade. Também omite o backup do SQLite e as ausências reais das
+filas e do vetorial. Corrigir isso faz parte da Fase 0 e da Fase 2 do
+[plano ativo](03-plano-continuidade.md).
 
-O contrato vetorial compartilhado usa vetores não unitários para distinguir
-Cosine de L2: com os mesmos dados, o ranking por norma L2 difere, enquanto os
-dois adapters devem ordenar por similaridade cosseno. A implementação e os
-testes estão na branch do PR #57, ainda não integrada em `main`. O PR #59 atualiza
-dependências lockadas e adiciona TTL nativo de NATS KV. PR #60 adiciona retenção
-finita comum por contagem às filas Redis/NATS. A branch empilhada atual limita
-tentativas a cinco, envia falhas à DLQ consumível e expõe o recebimento da DLQ
-nos bindings; shutdown gracioso permanece pendente.
+O contrato vetorial compartilhado usa vetores não unitários, de modo que L2 e
+cosseno ordenariam diferente; os dois adapters ordenam por cosseno.
 
-## Estado revalidado contra `main` (`22c861f`)
+## Estado das fases S0–S5 (verificado em 2026-11-13)
 
 As fases abaixo foram escritas como plano de implementação original. A tabela
-separa o que já existe do que ainda precisa ser implementado ou provado; não
-interprete uma fase marcada como implementada como pronta para produção.
+separa o que existe do que falta; "implementada" não significa pronta para
+produção.
 
-| Fase                             | Estado atual                                                                                                                                                                                      | Trabalho que continua pendente                                                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| S0 — contratos                   | **Parcial.** Seleção versionada independente e contratos de ledger/vector/messaging existem; seleções públicas rejeitam `memory`, que não tem adapter nem faz parte dos seis backends do produto. | Fixtures comuns entre bindings; capability/readiness observável; revisar diferenças e erros por adapter.                               |
-| S1 — SQLite e ledger             | **Implementada experimentalmente.** Ledger, reserva/admissão, checkpoints, stores de lifecycle, loop e policy expostos em Rust/Python/TS.                                                         | Backup/restore, concorrência multi-processo e recovery operacional com evidência; completar conformidade compartilhada.                |
-| S2 — PostgreSQL                  | **Parcial.** `PostgresLedger` e projeção via `ResilientLedger` existem; SQLite continua autoridade local do append resiliente.                                                                    | Não existe SQL genérico nem store Postgres para lifecycle/loop/policy; provar serviço real, conflitos, restart e recovery.             |
-| S3 — Redis/NATS                  | **Implementada experimentalmente.** KV, Redis Streams/NATS JetStream queues e Redis/NATS Core pub/sub existem.                                                                                    | Testes integrados comuns de desconexão, restart, redelivery, ACK, retention, TTL e shutdown.                                           |
-| S4 — LanceDB/Qdrant              | **Implementada experimentalmente.** `VectorStore` tem adapters de LanceDB e Qdrant e bindings.                                                                                                    | Cobrir filtros/isolamento e falhas contra serviços reais; explicitar diferenças de score e limites sem alegar equivalência.            |
-| S5 — recuperação/contexto/adoção | **Parcial no recovery; planejada em contexto/adoção.** Run/loop têm persistência/reconciliação SQLite.                                                                                            | Efeitos externos seguem sob o host; Memory/Context Planner/RAG e integração com GH Bot/Vectora não existem como capabilities adotadas. |
+| Fase                                | Estado atual                                                                                                                                                                                                        | Trabalho que continua pendente                                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S0 — contratos                      | **Parcial.** Seleção versionada com os seis backends (`memory` rejeitado), contratos de ledger, vetor e mensageria, relatório estático `capabilities()` (#46) e fixture comum `tests/fixtures/conformance-v1.json`. | Fixtures comuns de KV, filas e vetores; `capabilities()` estruturado; health/readiness; contratos de shutdown e cancelamento de filas e pub/sub.               |
+| S1 — SQLite e ledger                | **Implementada experimentalmente.** Ledger, admissão, checkpoints, stores de lifecycle/loop/policy, backup online/offline (#53) e concorrência entre processos (#49).                                               | Procedimento operacional de recovery documentado para o consumidor.                                                                                            |
+| S2 — PostgreSQL                     | **Parcial.** `PostgresLedger` e projeção via `ResilientLedger`, com queda e retorno do serviço testados.                                                                                                            | Stores de lifecycle/loop/policy como projeção, backup/verify, testes concorrentes com serviço real, SQL genérico, `flush_outbox`/`pending_count` nos bindings. |
+| S3 — Redis/NATS                     | **Implementada experimentalmente.** KV completo (TTL, CAS, incremento, prefixo, watch), filas com retenção, tentativas e DLQ, pub/sub efêmero, reinício dos serviços testado.                                       | NACK/atraso, deduplicação, replay, shutdown, redrive atômico, reconexão de pub/sub e validação real de #62–#64.                                                |
+| S4 — LanceDB/Qdrant                 | **Implementada experimentalmente.** Score cosseno alinhado, limites de dimensão, dimensão divergente, coleção ausente e reinício do Qdrant.                                                                         | Filtros de metadado, índice ANN, quantização, busca híbrida, falhas de indexação e backup/snapshot.                                                            |
+| S5 — recuperação, contexto e adoção | **Parcial no recovery; planejada em contexto e adoção.** Run e loop têm persistência e reconciliação SQLite.                                                                                                        | Memória, Context Planner e RAG não existem; nenhum consumidor adotou storage da Engine.                                                                        |
 
-A matriz detalhada por contrato e binding está em
+A matriz por contrato e binding está em
 [`02-matriz-conformidade-capabilities.md`](../analyses/02-matriz-conformidade-capabilities.md).
 
 Os contratos de vetores (`VectorStore`) e KV (`KvStore`) têm adapters que
-selecionam uma implementação por configuração. Filas duráveis e pub/sub também
-possuem APIs distintas (`DurableQueue` e `EphemeralPubSub`): a fila entrega um
-handle que deve receber ACK após o processamento; liberar o handle sem ACK
-mantém a possibilidade de redelivery conforme o visibility timeout. O binding
-retorna bytes sem reinterpretar o payload. Handles de entrega e assinaturas são
-locais ao processo e não devem ser persistidos em configuração.
+selecionam uma implementação por configuração. Filas duráveis e pub/sub têm
+APIs distintas (`DurableQueue` e `EphemeralPubSub`): a fila entrega um handle
+que deve receber ACK após o processamento; liberar o handle sem ACK mantém a
+possibilidade de redelivery conforme o visibility timeout, até o teto de
+tentativas, quando a mensagem vai para a DLQ. O binding retorna bytes sem
+reinterpretar o payload. Handles de entrega e assinaturas são locais ao
+processo e não devem ser persistidos em configuração.
 
 Redis Streams recupera entregas pendentes com `XAUTOCLAIM`; NATS JetStream usa
-consumidores duráveis e `ack_wait`. KV Redis aceita TTL por chave; JetStream KV
-não implementa o mesmo contrato de TTL e retorna erro `Unsupported` quando ele
-é solicitado em `main` (`22c861f`), o que é uma lacuna de equivalência corrigida
-na branch empilhada atual. LanceDB reporta distância
-(_menor é mais próximo_, métrica padrão L2); Qdrant reporta similaridade cosseno
-(_maior é mais próximo_). Esse é o estado atual, não o contrato desejado: a
-meta é alinhar a métrica e normalizar o score para um contrato único. Até lá,
-não comparar os scores entre adapters.
+consumidores duráveis e `ack_wait`. O TTL por chave existe nos dois KV (no
+NATS via TTL de mensagem do JetStream, que exige NATS 2.11+). Os dois adapters
+vetoriais reportam similaridade cosseno em `[-1, 1]`, maior é mais próximo.
 
 No ledger, `ResilientLedger` grava evento e outbox atomicamente em SQLite antes
 de tentar a projeção PostgreSQL. O resultado informa `synchronized`, `pending`
@@ -254,32 +246,25 @@ ocorre sem conformidade, evidência operacional e rollback.
 - Revisar instalação, empacotamento e plataformas suportadas antes de publicar;
   segredo e credenciais nunca entram em logs, fixtures ou exportações.
 
-## Revalidação do loop em 2026-11-12
+## Histórico das entregas de storage
 
-PRs empilhados ainda sujeitos a revisão, não incorporados em `main`:
+As etapas S0–S5 entregues pela stack #45–#72 estão integradas em `main`
+(`dc1aa5e`) e listadas na tabela de fases acima. A execução combinada mais
+recente dos testes service-real está registrada na
+[auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md), com a
+contagem e os serviços usados. Resultado local; CI remoto não é usado como
+evidência.
 
-- #46: relatório estático de capabilities e binding TypeScript.
-- #47: matriz service-real de Redis, NATS, Qdrant e PostgreSQL.
-- #48: reinício de Redis/NATS e queda/retorno PostgreSQL.
-- #49: concorrência do ledger entre processos independentes.
-- #51: erro para coleção vetorial ausente e reinício do Qdrant, com resultado
-  atualizado na auditoria.
+## Decisões
 
-Os itens de capabilities, testes de storage service-real, restart de Redis/NATS,
-recovery da projeção PostgreSQL (teste isolado) e concorrência do ledger estão
-implementados nas branches da stack e têm os resultados registrados em
-[`05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
-Não são ainda capacidades integradas em `main`. Backup/restore do ledger (online e offline coordenado) está implementado após decisão do mantenedor; restam shutdown gracioso, retenção/limites JetStream e limites/falhas de
-indexação vetorial. A execução combinada inicial de 55 testes teve uma falha
-porque `podman stop` removeu o PostgreSQL auto-removível; após recriar o
-container sem remoção automática e proteger o teste, a execução mais recente
-passou 58/58 com os quatro serviços e reinícios habilitados.
+Já decididas por `brunosrz`: SQLite como autoridade local e PostgreSQL como
+projeção; backup online e offline coordenado; sem limite novo de payload; TTL
+com NATS 2.11+; filas com retenção finita (100000), cinco tentativas e DLQ;
+equivalência por par antes da especialização.
 
-## Decisões a fechar durante S0
-
-Definir APIs assíncronas e formato de configuração sem impor framework; versão
-e granularidade dos crates; política de compatibilidade dos schemas e bindings;
-versão esperada/escopo dos agregados; retenção, compactação e cursores; limites
-e estratégia de migração; requisitos reais de entrega, outbox e DLQ; e perfil
-de deployment do primeiro fluxo do GH Bot. Essas decisões dependem do inventário
-e de provas de conformidade, não devem ser presumidas por similaridade de API.
+Ainda abertas: granularidade e versão dos crates; política de compatibilidade
+de schemas e bindings; retenção e compactação do ledger; envelope de job;
+mapeamento comum de índices vetoriais; formato estruturado de
+`capabilities()`; perfil de deployment do primeiro fluxo do GH Bot. Elas
+dependem de inventário e de provas de conformidade e são perguntadas no chat
+quando a etapa correspondente começar.

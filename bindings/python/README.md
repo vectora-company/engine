@@ -24,8 +24,18 @@ O Rust da extensão fica em `native/`, e a API Python de ergonomia mínima em
 `python/vectora_engine/`. O build de wheels multi-plataforma e publicação no
 PyPI serão habilitados em um workflow de release separado.
 
-Anthropic Messages e Google Gemini usam `native_chat_complete` e
-`native_chat_stream` com o mesmo contrato Rust. `settings.provider` deve ser
-`anthropic` ou `google`; credenciais e configuração específica pertencem ao
+Anthropic Messages, Google Gemini e Cohere Chat v2 usam `native_chat_complete`
+e `native_chat_stream` com o mesmo contrato Rust. `settings.provider` deve ser
+`anthropic`, `google` ou `cohere`; credenciais e configuração específica pertencem ao
 consumer. Campos como Gemini `safetySettings` podem ser passados em
 `request["extensions"]`, sem defaults de política de produto.
+
+## Famílias de API
+
+Além do chat, o binding expõe o mesmo núcleo Rust para: fallback de chat,
+montagem de turno, embeddings e rerank com fallback; run lifecycle, dispatch e
+policy de tools, loop modelo/tool e gates de verificação; stores SQLite de
+lifecycle, loop e policy; ledger SQLite com backup e restore e projeção
+PostgreSQL; seleção de storage e `capabilities`; vetores (LanceDB e Qdrant), KV,
+filas com DLQ e pub/sub (Redis e NATS). Todas são experimentais; o estado de
+cada uma está em `docs/plans/03-plano-continuidade.md`.

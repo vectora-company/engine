@@ -11,21 +11,21 @@
 
 ## Fontes consultadas
 
-| Fonte | Localização/símbolo | O que confirma | Limite da fonte |
-| --- | --- | --- | --- |
-| Spec/requisito | `[caminho]` | [intenção] | Não prova implementação |
-| Código | `[caminho:símbolo]` | [comportamento observado] | [limite] |
-| Teste | `[caminho:nome]` | [comportamento exercitado] | Não prova cenários não cobertos |
-| Documento primário externo | [link/título] | [fato] | [versão/data] |
+| Fonte                      | Localização/símbolo | O que confirma             | Limite da fonte                 |
+| -------------------------- | ------------------- | -------------------------- | ------------------------------- |
+| Spec/requisito             | `[caminho]`         | [intenção]                 | Não prova implementação         |
+| Código                     | `[caminho:símbolo]` | [comportamento observado]  | [limite]                        |
+| Teste                      | `[caminho:nome]`    | [comportamento exercitado] | Não prova cenários não cobertos |
+| Documento primário externo | [link/título]       | [fato]                     | [versão/data]                   |
 
 ## Estado observado por camada
 
-| Camada/consumidor | Implementado | Testado | Limites/gaps |
-| --- | --- | --- | --- |
-| Core Rust | [símbolos e arquivos] | [testes] | [gaps] |
-| Python | [API/stub] | [testes] | [gaps] |
-| TypeScript/Node | [API/types] | [testes] | [gaps] |
-| Host/consumidor | [integração] | [evidência] | [gaps] |
+| Camada/consumidor | Implementado          | Testado     | Limites/gaps |
+| ----------------- | --------------------- | ----------- | ------------ |
+| Core Rust         | [símbolos e arquivos] | [testes]    | [gaps]       |
+| Python            | [API/stub]            | [testes]    | [gaps]       |
+| TypeScript/Node   | [API/types]           | [testes]    | [gaps]       |
+| Host/consumidor   | [integração]          | [evidência] | [gaps]       |
 
 ## Contratos e invariantes
 
@@ -43,22 +43,23 @@ garantias de nomes de tipos ou da presença de um adapter.
 
 ## Findings
 
-| ID | Finding | Evidência reproduzível | Severidade/impacto | Ação/plano |
-| --- | --- | --- | --- | --- |
-| A1 | [fato ou hipótese claramente identificado] | [caminhos, símbolos, comando/teste] | [impacto] | [ação] |
+| ID  | Finding                                    | Evidência reproduzível              | Severidade/impacto | Ação/plano |
+| --- | ------------------------------------------ | ----------------------------------- | ------------------ | ---------- |
+| A1  | [fato ou hipótese claramente identificado] | [caminhos, símbolos, comando/teste] | [impacto]          | [ação]     |
 
 ## Alternativas e decisões
 
-| Opção | Benefícios | Custos/riscos | Decisão e responsável |
-| --- | --- | --- | --- |
-| [opção] | [benefícios] | [riscos] | [decisão ou pendente de brunosrz] |
+| Opção   | Benefícios   | Custos/riscos | Decisão e responsável             |
+| ------- | ------------ | ------------- | --------------------------------- |
+| [opção] | [benefícios] | [riscos]      | [decisão ou pendente de brunosrz] |
 
 ## Decisão vital pendente
 
 Se houver decisão que altere contrato, dados, segurança, compatibilidade ou
 escopo, registrar a pergunta, opções, impactos, trabalho dependente e condição
-para retomada. O loop para até `brunosrz` responder. Se não houver, registrar
-`nenhuma`.
+para retomada. Conclua o trabalho independente da decisão, pergunte a
+`brunosrz` no chat e pare apenas o trabalho dependente até a resposta. Se não
+houver, registrar `nenhuma`.
 
 ## Conclusão limitada pela evidência
 

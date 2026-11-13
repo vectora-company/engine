@@ -5,15 +5,23 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 ## Capability ativa
 
-Consulte os [documentos de storage no goal loop](goal-loop/README.md#capability-ativa).
+O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
+com o estado verificado e o backlog por fases. A etapa em andamento e seus
+documentos estão no [registro da capability ativa](goal-loop/README.md#capability-ativa):
+Fase 0 e mídia no chat ([`docs/specs/17-midia-no-chat.md`](specs/17-midia-no-chat.md));
+storage segue na Fase 2.
 
 ## Operação de desenvolvimento
 
 - [Prompt curto para o goal](plans/00-prompt-loop-goal.md): texto reutilizável
   para iniciar o loop, apontando para os documentos de referência e as regras
   de encerramento.
-- [Pacote do goal loop](goal-loop/README.md): plano operacional, checklist
-  completo, hierarquia de fontes/evidências e critérios para encerrar.
+- [Pacote do goal loop](goal-loop/README.md): índice e regras operacionais do
+  mantenedor, com
+  [`docs/goal-loop/01-plano-operacional.md`](goal-loop/01-plano-operacional.md),
+  [`docs/goal-loop/02-checklist-do-loop.md`](goal-loop/02-checklist-do-loop.md),
+  [`docs/goal-loop/03-fontes-e-evidencias.md`](goal-loop/03-fontes-e-evidencias.md) e
+  [`docs/goal-loop/04-criterios-de-encerramento.md`](goal-loop/04-criterios-de-encerramento.md).
 - [Plano do loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md): ordem
   de leitura, ciclo de implementação, atualização dos documentos e critérios
   explícitos para continuar ou encerrar o loop.
@@ -26,7 +34,9 @@ Consulte os [documentos de storage no goal loop](goal-loop/README.md#capability-
   hierarquia das fontes, investigação obrigatória, registro de decisões e
   limites para inferências.
 - [Templates de desenvolvimento](templates/README.md): modelos reutilizáveis
-  para planos, análises de referências e checklists completos por etapa.
+  [`docs/templates/00-plano-de-capability.md`](templates/00-plano-de-capability.md),
+  [`docs/templates/01-analise-de-capability.md`](templates/01-analise-de-capability.md) e
+  [`docs/templates/02-checklist-de-etapa.md`](templates/02-checklist-de-etapa.md).
 - [Auditoria de review do PR #3](analyses/01-auditoria-review-pr3.md): findings
   revalidados contra a implementação atual, com evidências e limitações.
 - [Matriz de conformidade das capabilities](analyses/02-matriz-conformidade-capabilities.md):
@@ -38,7 +48,11 @@ Consulte os [documentos de storage no goal loop](goal-loop/README.md#capability-
   consumidores e frameworks/harnesses relacionados. Atualize-a em cada ciclo
   do goal loop conforme o [prompt](plans/00-prompt-loop-goal.md).
 - [Checklist da matriz de conformidade](checklists/02-matriz-conformidade-capabilities.md):
-  inventário concluído e trabalho pendente antes da próxima etapa do plano.
+  inventário de 11 de novembro de 2026, concluído; registro histórico.
+- [Auditoria de storage S0–S5](analyses/05-auditoria-storage-s0-s5.md):
+  evidências, execuções service-real e decisões do mantenedor sobre storage.
+- [Checklist da auditoria de storage](checklists/03-auditoria-storage-s0-s5.md):
+  itens feitos e pendentes da capability de storage.
 
 ## Planos
 

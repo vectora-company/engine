@@ -1,5 +1,9 @@
 # Auditoria e walkthrough da `main`
 
+> Registro histórico de 2026-11-09. O estado atual está no
+> [plano ativo](../plans/03-plano-continuidade.md); não trate as observações
+> abaixo como estado corrente sem revalidar o código.
+
 **Data da revisão:** 2026-11-09
 **Base auditada:** `main` em `43a26552194d979f64d2fe12f1464f14f23f07a2`
 **Escopo:** todos os 12 commits da linha principal, do commit inicial até o loop
