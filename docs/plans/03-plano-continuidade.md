@@ -209,7 +209,8 @@ Uma capability só avança de experimental quando:
 ## Próxima entrega recomendada
 
 O PR #65 unifica a validação de dimensões de busca e gravação em LanceDB e
-Qdrant. O core compilou. Ainda falta verificar os extremos em execução.
+Qdrant. A branch sobre #72 cobre os extremos com os dois backends e alinha
+o erro de dimensão incompatível com uma coleção existente.
 As próximas lacunas independentes incluem CAS por revisão, incremento,
 prefixo e watch nos dois KV stores, além de filtros e índices vetoriais.
 Em filas, faltam shutdown gracioso e redrive atômico. Os cenários de falha
@@ -231,15 +232,15 @@ evidência nesta atualização.
 ## Próxima etapa de KV
 
 Os PRs #67–#71 entregam listagem por prefixo, remoção nos bindings, validação
-JetStream, CAS e incremento. A branch `feat/storage-kv-watch` acrescenta
-observação de mudanças futuras por prefixo em Redis e NATS.
+JetStream, CAS e incremento. O PR #72 acrescenta observação de mudanças
+futuras por prefixo em Redis e NATS.
 
 ## Revalidação do loop em 2026-11-12
 
 A referência de `main` foi consultada no remoto em 2026-11-12 (`a13140b`); as
 alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A stack
 ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
-→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66 → #67 → #68 → #69 → #70 → #71.
+→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66 → #67 → #68 → #69 → #70 → #71 → #72.
 
 | PR                                                       | Entrega na branch do PR                                                             |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |

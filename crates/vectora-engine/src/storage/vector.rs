@@ -183,6 +183,25 @@ fn lance_batch(
     Ok(Box::new(RecordBatchIterator::new(vec![Ok(batch)], schema)))
 }
 
+async fn validate_lance_dimensions(
+    table: &lancedb::Table,
+    expected: usize,
+) -> Result<(), VectorError> {
+    let schema = table.schema().await.map_err(|_| VectorError::Storage)?;
+    let field = schema
+        .field_with_name("vector")
+        .map_err(|_| VectorError::Storage)?;
+    match field.data_type() {
+        arrow_schema::DataType::FixedSizeList(_, dimensions)
+            if usize::try_from(*dimensions).ok() == Some(expected) =>
+        {
+            Ok(())
+        }
+        arrow_schema::DataType::FixedSizeList(_, _) => Err(VectorError::InvalidInput),
+        _ => Err(VectorError::Storage),
+    }
+}
+
 #[async_trait]
 impl VectorStore for LanceDbStore {
     async fn upsert(&self, collection: &str, record: VectorRecord) -> Result<(), VectorError> {
@@ -204,20 +223,7 @@ impl VectorStore for LanceDbStore {
                 .execute()
                 .await
                 .map_err(|_| VectorError::Storage)?;
-            let schema = table.schema().await.map_err(|_| VectorError::Storage)?;
-            let dimensions =
-                schema
-                    .field_with_name("vector")
-                    .ok()
-                    .and_then(|field| match field.data_type() {
-                        arrow_schema::DataType::FixedSizeList(_, dimensions) => {
-                            usize::try_from(*dimensions).ok()
-                        }
-                        _ => None,
-                    });
-            if dimensions != Some(record.vector.len()) {
-                return Err(VectorError::InvalidInput);
-            }
+            validate_lance_dimensions(&table, record.vector.len()).await?;
             let mut merge = table.merge_insert(&["scope", "id"]);
             merge
                 .when_matched_update_all(None)
@@ -273,6 +279,7 @@ impl VectorStore for LanceDbStore {
             .execute()
             .await
             .map_err(|_| VectorError::Storage)?;
+        validate_lance_dimensions(&table, vector.len()).await?;
         let scope = scope.replace('\'', "''");
         let mut stream = table
             .query()
@@ -429,8 +436,29 @@ impl VectorStore for QdrantStore {
         if scope.trim().is_empty() || !valid_vector(&vector) || !(1..=1000).contains(&limit) {
             return Err(VectorError::InvalidInput);
         }
+        let dimensions = vector.len() as u64;
         let response = self.request(reqwest::Method::POST, &format!("/collections/{collection}/points/search"))
             .json(&serde_json::json!({"vector":vector,"filter":{"must":[{"key":"_vectora_scope","match":{"value":scope}}]},"limit":limit,"with_payload":true})).send().await.map_err(|_| VectorError::Storage)?;
+        if response.status() == reqwest::StatusCode::BAD_REQUEST {
+            let collection_response = self
+                .request(reqwest::Method::GET, &format!("/collections/{collection}"))
+                .send()
+                .await
+                .map_err(|_| VectorError::Storage)?;
+            if collection_response.status().is_success() {
+                let config: Value = collection_response
+                    .json()
+                    .await
+                    .map_err(|_| VectorError::Storage)?;
+                if config
+                    .pointer("/result/config/params/vectors/size")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|size| size != dimensions)
+                {
+                    return Err(VectorError::InvalidInput);
+                }
+            }
+        }
         if !response.status().is_success() {
             return Err(VectorError::Storage);
         }

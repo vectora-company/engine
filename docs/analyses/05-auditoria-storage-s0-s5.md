@@ -365,7 +365,7 @@ Qdrant aplicava o teto na gravação e na criação da coleção. A busca nos do
 adapters e a gravação no LanceDB só verificavam se o vetor era vazio ou tinha
 componentes não finitos. O PR #65 usa a mesma validação de
 1 a 65536 dimensões finitas nos quatro caminhos. A verificação dos extremos
-em execução fica pendente.
+em execução foi feita na etapa descrita em Dimensão da coleção em busca vetorial.
 
 ## Listagem KV por prefixo
 
@@ -444,7 +444,7 @@ passaram. A suíte Rust completa não foi repetida.
 
 ## Observação de mudanças no KV
 
-A branch sobre #71 expõe assinatura por prefixo literal em Rust, Python e
+O PR #72 expõe assinatura por prefixo literal em Rust, Python e
 TypeScript. O Redis usa [notificações de keyspace](https://redis.io/docs/latest/develop/pubsub/keyspace-notifications/)
 com as classes de gravação, remoção, expiração e eviction. O JetStream
 usa [watch_all](https://docs.rs/async-nats/0.52.0/async_nats/jetstream/kv/struct.Store.html#method.watch_all)
@@ -459,6 +459,19 @@ passou gravação, remoção e cancelamento nos dois serviços. O Redis recusou
 watch com notificações desligadas. A configuração temporária do contêiner
 de teste foi restaurada. Typecheck e linters dos bindings passaram. A suíte
 Rust completa não foi repetida.
+
+## Dimensão da coleção em busca vetorial
+
+A branch sobre #72 distingue a dimensão incompatível de outras falhas. LanceDB
+lê a dimensão da coluna vetorial no schema da tabela. Qdrant confirma a
+dimensão com [Get collection](https://api.qdrant.tech/v-1-18-x/api-reference/collections/get-collection)
+apenas após resposta HTTP 400 da busca. Uma busca bem-sucedida continua com
+uma única requisição. Nenhum dos adapters cria uma coleção para responder à
+busca. A suíte Node tem um cenário compartilhado para os extremos 1 e 65536,
+entradas fora do intervalo, coleção ausente e divergência com a coleção.
+O build Node em release e a suíte Node passaram (46/46), com LanceDB 0.22.3
+local e Qdrant 1.18.0 real, além de Redis e NATS nos casos de mensageria.
+A suíte Rust completa e a wheel Python não foram repetidas nesta etapa.
 
 ## Verificação da branch empilhada sobre #57
 

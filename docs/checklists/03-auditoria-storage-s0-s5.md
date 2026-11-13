@@ -57,7 +57,7 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 [`04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
 
 - [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local (branch do PR #57; não integrado em `main`).
-- [ ] Vetorial: verificar os extremos do limite compartilhado de 1 a 65536 dimensões na busca e gravação em LanceDB e Qdrant. O core compilou no PR #65.
+- [x] Vetorial: verificar os extremos de 1 a 65536 dimensões na busca e gravação em LanceDB local e Qdrant 1.18.0, incluindo coleção ausente e dimensão incompatível. Suíte Node 46/46.
 - [x] Verificar listagem KV em Redis e NATS reais: prefixo literal, ordenação, limite, exclusão de chaves expiradas e isolamento do namespace, via addon Node.
 - [x] Expor remoção em Python e TypeScript. Verificar leitura e listagem após remoção explícita e repetida em Redis e NATS reais, com Node e wheel CPython 3.13.
 - [x] Verificar em NATS real a validação de chaves na leitura, remoção e escrita com ou sem TTL. Suíte Node 38/38.

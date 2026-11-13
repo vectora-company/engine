@@ -27,6 +27,8 @@ import {
   modelToolLoopContractVersion,
   rerank,
   rerankContractVersion,
+  vectorStoreSearch,
+  vectorStoreUpsert,
   kvWatchOpen,
   kvWatchReceive,
   kvWatchClose,
@@ -1540,6 +1542,43 @@ for (const [backend, endpoint] of [
       await kvStoreDelete(config, "job.old");
       await kvStoreDelete(config, "other");
       await kvStoreDelete(other, "job.foreign");
+    }
+  });
+}
+
+for (const backend of ["lance_db", "qdrant"]) {
+  test(`vector dimension bounds and collection mismatch agree in ${backend}`, {
+    skip: backend === "qdrant" && !process.env.VECTORA_TEST_QDRANT_URL,
+  }, async () => {
+    const dir = backend === "lance_db" ? await mkdtemp(join(tmpdir(), "engine-vector-")) : null;
+    const endpoint = dir ?? process.env.VECTORA_TEST_QDRANT_URL;
+    const config = { backend, endpoint };
+    const name = `vector_dim_${randomUUID()}`;
+    const record = vector => ({ id: 1, scope: "scope", vector, metadata: {} });
+    const created = [];
+    try {
+      for (const vector of [[], Array(65_537).fill(1)]) {
+        await assert.rejects(vectorStoreUpsert(config, name, record(vector)), /invalid vector request/);
+        await assert.rejects(vectorStoreSearch(config, name, "scope", vector), /invalid vector request/);
+      }
+      await assert.rejects(vectorStoreSearch(config, name, "scope", [1]), /vector-store operation failed/);
+      for (const [suffix, vector] of [["min", [1]], ["max", Array(65_536).fill(1)]]) {
+        const collection = `${name}_${suffix}`;
+        created.push(collection);
+        await vectorStoreUpsert(config, collection, record(vector));
+        const hits = await vectorStoreSearch(config, collection, "scope", vector);
+        assert.equal(hits[0].id, 1);
+        await assert.rejects(vectorStoreSearch(config, collection, "scope", [1, 2]), /invalid vector request/);
+      }
+    } finally {
+      if (dir) {
+        await rm(dir, { recursive: true, force: true });
+      } else {
+        for (const collection of created) {
+          const response = await fetch(new URL(`/collections/${collection}`, endpoint), { method: "DELETE" });
+          assert.ok(response.ok || response.status === 404);
+        }
+      }
     }
   });
 }
