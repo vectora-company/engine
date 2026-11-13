@@ -7,7 +7,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
 com o estado verificado, a direção de uma primeira release completa e o backlog
-por fases. A revisão documental corrente está empilhada sobre o PR #82 da spec 17. Storage e runtime seguem com gaps registrados no plano e nas specs.
+por fases. A stack atual verificada em 2026-11-13 é #82 → #83 → #84 → #85 → #86; o PR #86 tipa resultados de tools e está aberto. A branch `docs/revisao-markdown-pos-86` prepara uma revisão documental ampla como filha do #86. Storage e runtime seguem com gaps registrados no plano e nas specs.
 
 ## Operação de desenvolvimento
 

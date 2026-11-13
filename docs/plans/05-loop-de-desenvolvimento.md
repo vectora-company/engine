@@ -82,8 +82,8 @@ O checklist específico de mídia atual é
 ## Stack de PRs
 
 - Cada PR novo usa como base a branch do PR anterior (não `main`), para que o
-  mantenedor aprove em cascata. Exemplo (stack atual): `main` ← #73 ← #76 ←
-  #77 ← #79 ← #80 ← #81 ← #82 ← branch de limites atual. Quando um PR já estiver integrado, o seguinte passa a ter
+  mantenedor aprove em cascata. Exemplo (stack verificada em 2026-11-13): `main` ← #73 ← #76 ←
+  #77 ← #79 ← #80 ← #81 ← #82 ← #83 ← #84 ← #85 ← #86 ← próxima branch documental. Quando um PR já estiver integrado, o seguinte passa a ter
   como base a branch seguinte da stack ou `main`.
 - Faça push para `https://github.com/vectora-company/engine.git` e crie o PR com
   `gh pr create --base <branch do PR anterior> --head <branch nova>`. Título e

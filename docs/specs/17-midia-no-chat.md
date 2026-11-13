@@ -1,13 +1,13 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada na stack aberta #79–#85; a substituição
-direta de `ToolResult` está em implementação local na branch filha do #85. Nada
+**Estado:** parcialmente implementada na stack aberta #79–#86. A substituição
+direta de `ToolResult` está no PR #86, filho do #85; não há compatibilidade v1. Nada
 desta stack está integrado em `main`. Tipos, classificação por bytes, capabilities,
 decisões por parte, payloads nativos e preparo Rust estão implementados para os
 protocolos descritos abaixo. Retry textual único em incompatibilidade multimodal
 está no PR aberto [#85](https://github.com/vectora-company/engine/pull/85), filho
-do #84. A substituição de `ToolResult.output: String` por partes tipadas está em
-implementação na branch `feat/chat-tool-result-parts`, filha do #85. O PR #82
+do #84. A substituição de `ToolResult.output: String` por partes tipadas está no
+PR aberto [#86](https://github.com/vectora-company/engine/pull/86), filho do #85. O PR #82
 expõe preparo manual, contexto por chamada e contexto padrão nos bindings Python e TypeScript. O mapa temporário é
 `asset_id → bytes`; autorização e persistência dos assets continuam sob
 responsabilidade do host. O limite global padrão é 20 MiB por asset e pode ser
@@ -15,7 +15,7 @@ configurado; a preparação atual cobre o turno de usuário mais recente e os
 resultados subsequentes de tools, e devolve evidências sem bytes. Overrides de limites por provider/modelo/modalidade já são aceitos no contexto
 de execução e limitados pelo teto global por asset; descoberta automática dos
 limites e limites agregados de request seguem pendentes; resultados de tool
-passam a partes tipadas nesta branch local. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
+estão tipados no PR #86. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
 do Vectora foi integrada em 19 PRs, mas não prova paridade da Engine. UI, STT
 local, prévias e empacotamento permanecem no Vectora. Veja o estado e os critérios
 em [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).

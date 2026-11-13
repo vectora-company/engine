@@ -6,25 +6,23 @@ atualizado durante o trabalho. Não marque um item como feito sem evidência.
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 
-Esta revisão documental está empilhada sobre o PR #82 e alinha o plano à meta
-de uma primeira release completa. Para implementação de mídia, use também
+O estado atual, verificado em 2026-11-13, é PR #86 aberto no topo da stack; esta revisão Markdown está sendo preparada como filha dele. A revisão documental anterior (#83) continua como etapa histórica. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
 permanece geral e não substitui critérios específicos. A etapa de limites explícitos por provider/modelo/modalidade foi publicada no PR [#84](https://github.com/vectora-company/engine/pull/84), filho do #83 (head local/remoto `58980b3`). O retry de incompatibilidade multimodal foi publicado no [PR #85](https://github.com/vectora-company/engine/pull/85), filho do #84.
 
-## Revisão documental completa — `docs/revisao-completa-markdown`
+## Revisão documental anterior — PR #83
 
 - [x] Inventariar os 55 arquivos Markdown versionados e distinguir documentos
       vigentes de snapshots históricos.
-- [x] Revalidar a branch e a stack no GitHub: PR #82 aberto no topo; esta branch
-      é sua filha.
+- [x] Revalidar a branch e stack daquela etapa: PR #82 estava no topo.
 - [x] Corrigir referências contraditórias sobre payloads de mídia, bindings,
       estado de storage, PRs abertos e objetivo da primeira release.
 - [x] Verificar todos os links Markdown locais; todos os destinos existem.
 - [x] Rodar Prettier em todos os Markdown; a segunda execução passou.
 - [x] Executar `git diff --check`.
-- [x] Revisar o diff final; commits documentais `00e2fe9`, `4c9a329` e `9db6d45`, push e abrir o [PR #83](https://github.com/vectora-company/engine/pull/83), empilhado sobre `feat/chat-media-bindings` (PR #82).
+- [x] Revisar o diff final; commits `00e2fe9`, `4c9a329` e `9db6d45`; abrir o [PR #83](https://github.com/vectora-company/engine/pull/83) sobre `feat/chat-media-bindings` (#82).
 
-## Limites de mídia por provider/modelo — etapa seguinte ao PR #83
+## Limites de mídia por provider/modelo — PR #84, filho do #83
 
 - [x] Adicionar limites explícitos por modalidade e par provider/modelo no core Rust; teto global continua como máximo absoluto por asset.
 - [x] Encaminhar configuração equivalente em Python e TypeScript.
@@ -44,6 +42,16 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Commit `0767636`, push e abrir o [PR #85](https://github.com/vectora-company/engine/pull/85), empilhado sobre `feat/chat-media-provider-limits-docs83` (#84).
 - [ ] Aguardar review/CI sem bloquear o início da próxima etapa; PRs continuam sem aprovação pelo agente.
 - [x] Registrar decisão de brunosrz: substituir diretamente `ToolResult.output: String` por partes tipadas, sem compatibilidade v1.
+
+## Revisão documental ampla — filha do PR #86
+
+- [x] Inventariar os 55 Markdown versionados; separar afirmações atuais de snapshots históricos.
+- [x] Conferir a stack no GitHub: PR #86 aberto com head `b188a94`; branch desta revisão criada como sua filha.
+- [x] Procurar versões de contratos obsoletas e atualizar loop v3 / `ToolResult` v2 nos documentos de runtime e verificação.
+- [x] Corrigir estado da mídia, stack de PRs e verificações locais nos índices, plano, análise, checklist, spec e sabatina.
+- [x] Verificar destinos relativos de links nos 55 Markdown versionados: 0 quebrados.
+- [x] Rodar Prettier, hooks aplicáveis e `git diff --check`; links relativos válidos nos 55 Markdown.
+- [ ] Commit, push e abrir PR documental empilhado sobre o #86; registrar URL e SHA.
 
 ## Preparação e escopo
 
@@ -122,7 +130,7 @@ explicitamente registradas, a documentação reflete o código e não há uma de
 vital pendente. Concluir uma etapa não encerra automaticamente o loop se houver
 outras etapas aprovadas no plano ativo.
 
-## Partes multimodais em `ToolResult` — filha do PR #85
+## Partes multimodais em `ToolResult` — PR #86, filho do #85
 
 - [x] Substituir a string por `parts` tipadas e rejeitar formatos/snapshots legados.
 - [x] Incrementar as versões do resultado e do loop; expor as versões aos bindings.
@@ -131,4 +139,4 @@ outras etapas aprovadas no plano ativo.
 - [x] Cobrar texto e metadados serializados nos limites do loop; limitar bytes ao reidratar no contexto de mídia.
 - [x] Rodar suíte Rust workspace (163 testes + 3 fixtures), Clippy, `cargo check` de todos os targets, rustdoc, testes Python, build/typecheck e 37 testes Node (10 testes de serviços ignorados sem URLs).
 - [x] Rodar todos os hooks de pre-commit, corrigir stubs Python ausentes e revisar diffs.
-- [ ] Abrir PR empilhado sobre o #85 e registrar URL/SHA.
+- [x] Abrir PR #86 sobre o #85: https://github.com/vectora-company/engine/pull/86 (head `b188a94`).

@@ -2,8 +2,7 @@
 
 Checklist da [spec de mídia](../specs/17-midia-no-chat.md) e do
 [plano ativo](../plans/03-plano-continuidade.md). O payload (#79), a integração
-Rust (#81) e os bindings (#82) estão implementados em PRs abertos; a stack parte
-de #73 e ainda não está integrada em `main`. A revisão documental está no PR [#83](https://github.com/vectora-company/engine/pull/83), filha do #82. A etapa de limites está no PR [#84](https://github.com/vectora-company/engine/pull/84), filha do #83. O retry multimodal está no PR aberto [#85](https://github.com/vectora-company/engine/pull/85), filho do #84.
+Rust (#81) e bindings (#82) estão em PRs abertos; limites estão no [#84](https://github.com/vectora-company/engine/pull/84), retry no [#85](https://github.com/vectora-company/engine/pull/85) e `ToolResult` tipado no [#86](https://github.com/vectora-company/engine/pull/86). A stack começa em #73 e ainda não está integrada em `main`. O PR #87 faz revisão documental ampla sobre o #86.
 
 ## Contrato e implementação
 
@@ -49,7 +48,7 @@ implementação; não foram adicionados à API pública da Engine.
 
 - OpenAI Responses API não existe neste adapter; o contrato se limita aos
   formatos do Chat Completions.
-- Catálogo automático de capabilities/limites por modelo e limites agregados do request seguem no backlog da spec 17. Partes tipadas em `ToolResult` estão implementadas na branch local filha do PR #85; bindings e adaptadores foram verificados. O retry específico está implementado no PR aberto #85. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
+- Catálogo automático de capabilities/limites por modelo e limites agregados do request seguem no backlog da spec 17. Partes tipadas em `ToolResult` estão no PR aberto #86, filho do #85; bindings e adaptadores foram verificados. O retry específico está implementado no PR aberto #85. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
 
 ## Integração — etapa atual
 

@@ -66,7 +66,7 @@ diferenças aceitas: cada item ausente em um lado é lacuna na matriz abaixo.
 
 Fonte: código dos adapters em `main` (`dc1aa5e`) e nos PRs de storage já
 integrados (#45–#72), com validação da dimensão no PR #77, ainda aberto na stack
-atual sobre #82. As etapas de mídia #79–#82 não alteram os adapters de storage.
+atual sobre #86. As etapas de mídia #79–#86 e a branch de revisão documental atual não altera adapters de storage.
 Consulte também os testes citados na
 [auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md). "Lacuna"
 significa que um lado tem e o outro não; "base comum ausente" significa que
