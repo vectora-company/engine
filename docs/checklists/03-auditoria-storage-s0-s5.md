@@ -39,7 +39,8 @@ evidência local registrada; não implica prontidão de produção.
 - [ ] Testes Rust e Python de CAS, incremento, prefixo, watch e remoção de KV (hoje só Node).
 - [x] Expor `flush_outbox` e `pending_count` do ledger resiliente em Python e TypeScript (PR #91, filho do #90): cobertura offline confirma flush sem PostgreSQL, preservação da fila e validação 1–1000.
 - [x] Enfileirar eventos e checkpoints dos stores SQLite run/loop/policy atomicamente e projetá-los numa transação PostgreSQL (PR aberto #92); verificação de serviço 73/73 com imagens atuais.
-- [ ] Projetar reservas/admissions PostgreSQL como entidade consultável; implementar APIs de leitura, backup/verify e concorrência entre projetores.
+- [x] Projeção consultável de reservations/admissions e APIs de leitura em implementação na branch filha #93; testes locais reais passaram.
+- [ ] Implementar backup/verify PostgreSQL e concorrência entre projetores.
 - [ ] Health/readiness dos backends com os estados da spec 02.
 
 ## Encerramento desta etapa

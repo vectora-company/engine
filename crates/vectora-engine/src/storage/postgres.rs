@@ -145,6 +145,29 @@ impl PostgresLedger {
         event: LedgerEvent,
         checkpoint: Option<Checkpoint>,
     ) -> Result<(), PostgresError> {
+        self.project_record(event, checkpoint, None).await
+    }
+
+    /// Projects a reservation, its admission event and an optional checkpoint atomically.
+    pub async fn project_admission(
+        &self,
+        event: LedgerEvent,
+        checkpoint: Option<Checkpoint>,
+        reservation: RunReservation,
+    ) -> Result<(), PostgresError> {
+        if reservation.scope != event.scope || reservation.thread_id != event.aggregate {
+            return Err(PostgresError::InvalidConfig);
+        }
+        self.project_record(event, checkpoint, Some(reservation))
+            .await
+    }
+
+    async fn project_record(
+        &self,
+        event: LedgerEvent,
+        checkpoint: Option<Checkpoint>,
+        reservation: Option<RunReservation>,
+    ) -> Result<(), PostgresError> {
         if checkpoint.as_ref().is_some_and(|checkpoint| {
             checkpoint.scope != event.scope
                 || checkpoint.aggregate != event.aggregate
@@ -162,6 +185,27 @@ impl PostgresLedger {
             payload: event.payload.clone(),
             expected_version: event.sequence.saturating_sub(1),
         };
+        if let Some(reservation) = reservation {
+            let reservation = reserve_run_tx(&mut tx, reservation).await?;
+            let prior = sqlx::query("SELECT run_id,event_id FROM ve_run_admissions WHERE scope=$1 AND (run_id=$2 OR event_id=$3) FOR UPDATE")
+                .bind(&reservation.scope).bind(&reservation.run_id).bind(&event.event_id).fetch_optional(&mut *tx).await?;
+            if let Some(row) = &prior
+                && (row.try_get::<String, _>("run_id")? != reservation.run_id
+                    || row.try_get::<String, _>("event_id")? != event.event_id)
+            {
+                return Err(PostgresError::IdempotencyConflict);
+            }
+            if prior.is_none() {
+                sqlx::query(
+                    "INSERT INTO ve_run_admissions(scope,run_id,event_id) VALUES($1,$2,$3)",
+                )
+                .bind(&reservation.scope)
+                .bind(&reservation.run_id)
+                .bind(&event.event_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
         if append_tx(&mut tx, draft).await? != event {
             return Err(PostgresError::IdempotencyConflict);
         }
@@ -203,6 +247,68 @@ impl PostgresLedger {
             .collect()
     }
 
+    pub async fn read_run_reservation(
+        &self,
+        scope: &str,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> Result<Option<RunReservation>, PostgresError> {
+        if [scope, thread_id, turn_id]
+            .iter()
+            .any(|value| value.trim().is_empty())
+        {
+            return Err(PostgresError::InvalidConfig);
+        }
+        let row = sqlx::query("SELECT run_id,idempotency_key,request FROM ve_run_reservations WHERE scope=$1 AND thread_id=$2 AND turn_id=$3")
+            .bind(scope).bind(thread_id).bind(turn_id).fetch_optional(&self.pool).await?;
+        row.map(|row| {
+            Ok(RunReservation {
+                scope: scope.to_owned(),
+                thread_id: thread_id.to_owned(),
+                turn_id: turn_id.to_owned(),
+                run_id: row.try_get("run_id")?,
+                idempotency_key: row.try_get("idempotency_key")?,
+                request: row.try_get("request")?,
+            })
+        })
+        .transpose()
+    }
+
+    pub async fn read_run_admission(
+        &self,
+        scope: &str,
+        run_id: &str,
+    ) -> Result<Option<Admission>, PostgresError> {
+        if scope.trim().is_empty() || run_id.trim().is_empty() {
+            return Err(PostgresError::InvalidConfig);
+        }
+        let row = sqlx::query("SELECT r.thread_id,r.turn_id,r.run_id,r.idempotency_key,r.request,e.aggregate_id,e.sequence,e.event_id,e.idempotency_key AS event_idempotency_key,e.event_type,e.payload FROM ve_run_admissions a JOIN ve_run_reservations r ON r.scope=a.scope AND r.run_id=a.run_id JOIN ve_ledger_events e ON e.scope=a.scope AND e.event_id=a.event_id WHERE a.scope=$1 AND a.run_id=$2")
+            .bind(scope).bind(run_id).fetch_optional(&self.pool).await?;
+        row.map(|row| {
+            Ok(Admission {
+                reservation: RunReservation {
+                    scope: scope.to_owned(),
+                    thread_id: row.try_get("thread_id")?,
+                    turn_id: row.try_get("turn_id")?,
+                    run_id: row.try_get("run_id")?,
+                    idempotency_key: row.try_get("idempotency_key")?,
+                    request: row.try_get("request")?,
+                },
+                event: LedgerEvent {
+                    scope: scope.to_owned(),
+                    aggregate: row.try_get("aggregate_id")?,
+                    sequence: u64::try_from(row.try_get::<i64, _>("sequence")?)
+                        .map_err(|_| PostgresError::Storage)?,
+                    event_id: row.try_get("event_id")?,
+                    idempotency_key: row.try_get("event_idempotency_key")?,
+                    event_type: row.try_get("event_type")?,
+                    payload: row.try_get("payload")?,
+                },
+            })
+        })
+        .transpose()
+    }
+
     pub async fn reserve_run(
         &self,
         input: RunReservation,
@@ -211,6 +317,14 @@ impl PostgresLedger {
         reserve_run_tx(&mut tx, input.clone()).await?;
         tx.commit().await?;
         Ok(input)
+    }
+
+    /// Applies one SQLite-authoritative reservation to PostgreSQL idempotently.
+    pub async fn project_reservation(
+        &self,
+        reservation: RunReservation,
+    ) -> Result<(), PostgresError> {
+        self.reserve_run(reservation).await.map(|_| ())
     }
 
     pub async fn admit_run(
@@ -491,6 +605,17 @@ mod tests {
         assert_eq!(
             ledger.admit_run(reservation, event).await.unwrap(),
             admitted
+        );
+        assert_eq!(
+            ledger
+                .read_run_reservation(&suffix, "thread", "turn")
+                .await
+                .unwrap(),
+            Some(admitted.reservation.clone())
+        );
+        assert_eq!(
+            ledger.read_run_admission(&suffix, "run").await.unwrap(),
+            Some(admitted.clone())
         );
         let checkpoint = Checkpoint {
             contract_version: CHECKPOINT_VERSION,

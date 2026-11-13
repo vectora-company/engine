@@ -10,7 +10,7 @@ use thiserror::Error;
 mod backup;
 pub use backup::{BackupReport, verify_backup};
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 8;
 pub const CHECKPOINT_VERSION: u16 = 1;
 const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
 
@@ -107,6 +107,7 @@ pub struct CheckpointedEvent {
 pub struct PendingProjection {
     pub event: LedgerEvent,
     pub checkpoint: Option<Checkpoint>,
+    pub reservation: Option<RunReservation>,
 }
 
 pub struct SqliteLedger {
@@ -207,6 +208,27 @@ impl SqliteLedger {
                 "ALTER TABLE ve_ledger_meta ADD COLUMN projection_enabled INTEGER NOT NULL DEFAULT 0 CHECK(projection_enabled IN (0,1));
             UPDATE ve_ledger_meta SET version=6 WHERE id=1;",
             )?;
+            current = 6;
+        }
+        if current < 7 {
+            tx.execute_batch(
+                "ALTER TABLE ve_ledger_outbox ADD COLUMN reservation_json TEXT;
+            ALTER TABLE ve_ledger_meta ADD COLUMN admission_backfill_complete INTEGER NOT NULL DEFAULT 0 CHECK(admission_backfill_complete IN (0,1));
+            UPDATE ve_ledger_meta SET version=7 WHERE id=1;",
+            )?;
+            current = 7;
+        }
+        if current < 8 {
+            tx.execute_batch(
+                "CREATE TABLE ve_run_reservation_outbox (
+                scope TEXT NOT NULL, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+                reservation_json TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0 CHECK(delivered IN (0,1)),
+                PRIMARY KEY(scope,thread_id,turn_id)
+            );
+            CREATE INDEX ve_run_reservation_outbox_pending ON ve_run_reservation_outbox(delivered,scope,thread_id,turn_id);
+            ALTER TABLE ve_ledger_meta ADD COLUMN reservation_backfill_complete INTEGER NOT NULL DEFAULT 0 CHECK(reservation_backfill_complete IN (0,1));
+            UPDATE ve_ledger_meta SET version=8 WHERE id=1;",
+            )?;
         }
         tx.commit()?;
         Ok(())
@@ -254,7 +276,7 @@ impl SqliteLedger {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let result = Self::append_checkpointed_in(&tx, draft, checkpoint_id, state)?;
-        Self::queue_projection_in(&tx, &result.event, Some(&result.checkpoint))?;
+        Self::queue_projection_in(&tx, &result.event, Some(&result.checkpoint), None)?;
         tx.commit()?;
         Ok(result)
     }
@@ -331,11 +353,99 @@ impl SqliteLedger {
                     break;
                 }
                 for (event, checkpoint) in projections {
-                    Self::queue_projection_in(&tx, &event, checkpoint.as_ref())?;
+                    Self::queue_projection_in(&tx, &event, checkpoint.as_ref(), None)?;
                 }
             }
             tx.execute(
                 "UPDATE ve_ledger_meta SET projection_enabled=1 WHERE id=1",
+                [],
+            )?;
+        }
+        let admission_backfill_complete: bool = tx.query_row(
+            "SELECT admission_backfill_complete FROM ve_ledger_meta WHERE id=1",
+            [],
+            |row| row.get(0),
+        )?;
+        if !admission_backfill_complete {
+            loop {
+                let admissions = {
+                    let mut statement = tx.prepare("SELECT e.scope,e.aggregate_id,e.sequence,e.event_id,e.idempotency_key,e.event_type,e.payload,r.thread_id,r.turn_id,r.run_id,r.idempotency_key,r.request FROM ve_run_admissions a JOIN ve_run_reservations r ON r.scope=a.scope AND r.run_id=a.run_id JOIN ve_ledger_events e ON e.scope=a.scope AND e.event_id=a.event_id LEFT JOIN ve_ledger_outbox o ON o.scope=e.scope AND o.aggregate_id=e.aggregate_id AND o.sequence=e.sequence WHERE o.scope IS NULL OR o.reservation_json IS NULL ORDER BY e.rowid LIMIT 500")?;
+                    let rows = statement.query_map([], |row| {
+                        Ok((
+                            LedgerEvent {
+                                scope: row.get(0)?,
+                                aggregate: row.get(1)?,
+                                sequence: row.get::<_, i64>(2)? as u64,
+                                event_id: row.get(3)?,
+                                idempotency_key: row.get(4)?,
+                                event_type: row.get(5)?,
+                                payload: serde_json::from_str(&row.get::<_, String>(6)?)
+                                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                            },
+                            RunReservation {
+                                scope: row.get(0)?,
+                                thread_id: row.get(7)?,
+                                turn_id: row.get(8)?,
+                                run_id: row.get(9)?,
+                                idempotency_key: row.get(10)?,
+                                request: serde_json::from_str(&row.get::<_, String>(11)?)
+                                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                            },
+                        ))
+                    })?;
+                    let mut admissions = Vec::new();
+                    for row in rows {
+                        admissions.push(row?);
+                    }
+                    admissions
+                };
+                if admissions.is_empty() {
+                    break;
+                }
+                for (event, reservation) in admissions {
+                    Self::queue_projection_in(&tx, &event, None, Some(&reservation))?;
+                }
+            }
+            tx.execute(
+                "UPDATE ve_ledger_meta SET admission_backfill_complete=1 WHERE id=1",
+                [],
+            )?;
+        }
+        let reservation_backfill_complete: bool = tx.query_row(
+            "SELECT reservation_backfill_complete FROM ve_ledger_meta WHERE id=1",
+            [],
+            |row| row.get(0),
+        )?;
+        if !reservation_backfill_complete {
+            loop {
+                let reservations = {
+                    let mut statement = tx.prepare("SELECT r.scope,r.thread_id,r.turn_id,r.run_id,r.idempotency_key,r.request FROM ve_run_reservations r LEFT JOIN ve_run_admissions a ON a.scope=r.scope AND a.run_id=r.run_id LEFT JOIN ve_run_reservation_outbox o ON o.scope=r.scope AND o.thread_id=r.thread_id AND o.turn_id=r.turn_id WHERE a.run_id IS NULL AND o.scope IS NULL ORDER BY r.rowid LIMIT 500")?;
+                    let rows = statement.query_map([], |row| {
+                        Ok(RunReservation {
+                            scope: row.get(0)?,
+                            thread_id: row.get(1)?,
+                            turn_id: row.get(2)?,
+                            run_id: row.get(3)?,
+                            idempotency_key: row.get(4)?,
+                            request: serde_json::from_str(&row.get::<_, String>(5)?)
+                                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                        })
+                    })?;
+                    let mut reservations = Vec::new();
+                    for row in rows {
+                        reservations.push(row?);
+                    }
+                    reservations
+                };
+                if reservations.is_empty() {
+                    break;
+                }
+                for reservation in reservations {
+                    Self::queue_reservation_projection_in(&tx, &reservation)?;
+                }
+            }
+            tx.execute(
+                "UPDATE ve_ledger_meta SET reservation_backfill_complete=1 WHERE id=1",
                 [],
             )?;
         }
@@ -359,7 +469,7 @@ impl SqliteLedger {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let event = Self::append_in(&tx, draft)?;
-        Self::queue_projection_in(&tx, &event, None)?;
+        Self::queue_projection_in(&tx, &event, None, None)?;
         tx.commit()?;
         Ok(event)
     }
@@ -368,15 +478,33 @@ impl SqliteLedger {
         tx: &Transaction<'_>,
         event: &LedgerEvent,
         checkpoint: Option<&Checkpoint>,
+        reservation: Option<&RunReservation>,
     ) -> Result<(), LedgerError> {
         let event_json = serde_json::to_string(event).map_err(|_| LedgerError::InvalidInput)?;
         let checkpoint_json = checkpoint
             .map(serde_json::to_string)
             .transpose()
             .map_err(|_| LedgerError::InvalidInput)?;
+        let reservation_json = reservation
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|_| LedgerError::InvalidInput)?;
         tx.execute(
-            "INSERT INTO ve_ledger_outbox(scope,aggregate_id,sequence,event_json,checkpoint_json) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(scope,aggregate_id,sequence) DO UPDATE SET checkpoint_json=COALESCE(ve_ledger_outbox.checkpoint_json,excluded.checkpoint_json),delivered=CASE WHEN excluded.checkpoint_json IS NOT NULL AND ve_ledger_outbox.checkpoint_json IS NULL THEN 0 ELSE ve_ledger_outbox.delivered END",
-            params![event.scope, event.aggregate, event.sequence as i64, event_json, checkpoint_json],
+            "INSERT INTO ve_ledger_outbox(scope,aggregate_id,sequence,event_json,checkpoint_json,reservation_json) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(scope,aggregate_id,sequence) DO UPDATE SET checkpoint_json=COALESCE(ve_ledger_outbox.checkpoint_json,excluded.checkpoint_json),reservation_json=COALESCE(ve_ledger_outbox.reservation_json,excluded.reservation_json),delivered=CASE WHEN (excluded.checkpoint_json IS NOT NULL AND ve_ledger_outbox.checkpoint_json IS NULL) OR (excluded.reservation_json IS NOT NULL AND ve_ledger_outbox.reservation_json IS NULL) THEN 0 ELSE ve_ledger_outbox.delivered END",
+            params![event.scope, event.aggregate, event.sequence as i64, event_json, checkpoint_json, reservation_json],
+        )?;
+        Ok(())
+    }
+
+    fn queue_reservation_projection_in(
+        tx: &Transaction<'_>,
+        reservation: &RunReservation,
+    ) -> Result<(), LedgerError> {
+        let reservation_json =
+            serde_json::to_string(reservation).map_err(|_| LedgerError::InvalidInput)?;
+        tx.execute(
+            "INSERT INTO ve_run_reservation_outbox(scope,thread_id,turn_id,reservation_json) VALUES(?1,?2,?3,?4) ON CONFLICT(scope,thread_id,turn_id) DO UPDATE SET reservation_json=excluded.reservation_json,delivered=0",
+            params![reservation.scope,reservation.thread_id,reservation.turn_id,reservation_json],
         )?;
         Ok(())
     }
@@ -395,15 +523,22 @@ impl SqliteLedger {
         if !(1..=1000).contains(&limit) {
             return Err(LedgerError::InvalidInput);
         }
-        let mut stmt = self.connection.prepare("SELECT event_json,checkpoint_json FROM ve_ledger_outbox WHERE delivered=0 ORDER BY scope,aggregate_id,sequence LIMIT ?1")?;
+        let mut stmt = self.connection.prepare("SELECT event_json,checkpoint_json,reservation_json FROM ve_ledger_outbox WHERE delivered=0 ORDER BY scope,aggregate_id,sequence LIMIT ?1")?;
         let rows = stmt.query_map([limit], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
         })?;
         rows.map(|row| {
-            let (event, checkpoint) = row?;
+            let (event, checkpoint, reservation) = row?;
             Ok(PendingProjection {
                 event: serde_json::from_str(&event).map_err(|_| LedgerError::Storage)?,
                 checkpoint: checkpoint
+                    .map(|json| serde_json::from_str(&json).map_err(|_| LedgerError::Storage))
+                    .transpose()?,
+                reservation: reservation
                     .map(|json| serde_json::from_str(&json).map_err(|_| LedgerError::Storage))
                     .transpose()?,
             })
@@ -414,11 +549,40 @@ impl SqliteLedger {
     pub fn pending_outbox_count(&self) -> Result<u64, LedgerError> {
         self.connection
             .query_row(
-                "SELECT COUNT(*) FROM ve_ledger_outbox WHERE delivered=0",
+                "SELECT (SELECT COUNT(*) FROM ve_ledger_outbox WHERE delivered=0) + (SELECT COUNT(*) FROM ve_run_reservation_outbox WHERE delivered=0)",
                 [],
                 |row| row.get(0),
             )
             .map_err(Into::into)
+    }
+
+    pub fn pending_reservations(&self, limit: u32) -> Result<Vec<RunReservation>, LedgerError> {
+        if !(1..=1000).contains(&limit) {
+            return Err(LedgerError::InvalidInput);
+        }
+        let mut statement = self.connection.prepare("SELECT reservation_json FROM ve_run_reservation_outbox WHERE delivered=0 ORDER BY scope,thread_id,turn_id LIMIT ?1")?;
+        let rows = statement.query_map([limit], |row| row.get::<_, String>(0))?;
+        rows.map(|row| serde_json::from_str(&row?).map_err(|_| LedgerError::Storage))
+            .collect()
+    }
+
+    pub fn mark_reservation_delivered(
+        &mut self,
+        scope: &str,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> Result<(), LedgerError> {
+        if [scope, thread_id, turn_id]
+            .iter()
+            .any(|value| value.trim().is_empty())
+        {
+            return Err(LedgerError::InvalidInput);
+        }
+        self.connection.execute(
+            "DELETE FROM ve_run_reservation_outbox WHERE scope=?1 AND thread_id=?2 AND turn_id=?3",
+            params![scope, thread_id, turn_id],
+        )?;
+        Ok(())
     }
 
     pub fn mark_outbox_delivered(
@@ -564,6 +728,14 @@ impl SqliteLedger {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let result = Self::reserve_run_in(&tx, input)?;
+        let projection_enabled: bool = tx.query_row(
+            "SELECT projection_enabled FROM ve_ledger_meta WHERE id=1",
+            [],
+            |row| row.get(0),
+        )?;
+        if projection_enabled {
+            Self::queue_reservation_projection_in(&tx, &result)?;
+        }
         tx.commit()?;
         Ok(result)
     }
@@ -597,6 +769,18 @@ impl SqliteLedger {
                 "INSERT INTO ve_run_admissions(scope,run_id,event_id) VALUES(?1,?2,?3)",
                 params![reservation.scope, reservation.run_id, event.event_id],
             )?;
+        }
+        let projection_enabled: bool = tx.query_row(
+            "SELECT projection_enabled FROM ve_ledger_meta WHERE id=1",
+            [],
+            |row| row.get(0),
+        )?;
+        if projection_enabled {
+            tx.execute(
+                "DELETE FROM ve_run_reservation_outbox WHERE scope=?1 AND thread_id=?2 AND turn_id=?3",
+                params![reservation.scope, reservation.thread_id, reservation.turn_id],
+            )?;
+            Self::queue_projection_in(&tx, &event, None, Some(&reservation))?;
         }
         tx.commit()?;
         Ok(Admission { reservation, event })
@@ -657,8 +841,12 @@ impl SqliteLedger {
             |row| row.get(0),
         )?;
         if projection_enabled {
-            Self::queue_projection_in(&tx, &admission_event, None)?;
-            Self::queue_projection_in(&tx, &lifecycle.event, Some(&lifecycle.checkpoint))?;
+            tx.execute(
+                "DELETE FROM ve_run_reservation_outbox WHERE scope=?1 AND thread_id=?2 AND turn_id=?3",
+                params![reservation.scope, reservation.thread_id, reservation.turn_id],
+            )?;
+            Self::queue_projection_in(&tx, &admission_event, None, Some(&reservation))?;
+            Self::queue_projection_in(&tx, &lifecycle.event, Some(&lifecycle.checkpoint), None)?;
         }
         tx.commit()?;
         Ok(CheckpointedAdmission {
@@ -969,7 +1157,7 @@ mod tests {
                 expected_version: 0,
             })
             .unwrap();
-        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; DROP TABLE ve_run_admissions; DROP TABLE ve_ledger_outbox; ALTER TABLE ve_ledger_meta DROP COLUMN projection_enabled; UPDATE ve_ledger_meta SET version=1;").unwrap();
+        ledger.connection.execute_batch("DROP TABLE ve_run_reservation_outbox; DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; DROP TABLE ve_run_admissions; ALTER TABLE ve_ledger_outbox DROP COLUMN reservation_json; DROP TABLE ve_ledger_outbox; ALTER TABLE ve_ledger_meta DROP COLUMN reservation_backfill_complete; ALTER TABLE ve_ledger_meta DROP COLUMN admission_backfill_complete; ALTER TABLE ve_ledger_meta DROP COLUMN projection_enabled; UPDATE ve_ledger_meta SET version=1;").unwrap();
         ledger.migrate().unwrap();
         let version: i64 = ledger
             .connection
@@ -1173,6 +1361,175 @@ mod tests {
             .append_checkpointed_projected(second, "checkpoint-2".into(), json!({"n":2}))
             .unwrap();
         assert_eq!(ledger.pending_outbox_count().unwrap(), 2);
+        ledger.enable_projection().unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn projection_backfills_and_queues_reservation_with_admission() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let reservation = RunReservation {
+            scope: "scope".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            run_id: "run".into(),
+            idempotency_key: "request-1".into(),
+            request: json!({"prompt":"hello"}),
+        };
+        let event = EventDraft {
+            scope: "scope".into(),
+            aggregate: "thread".into(),
+            event_id: "admission-event".into(),
+            idempotency_key: "admission-1".into(),
+            event_type: "run_admitted".into(),
+            payload: json!({"run_id":"run"}),
+            expected_version: 0,
+        };
+        ledger
+            .admit_run_checkpointed(
+                reservation.clone(),
+                event,
+                EventDraft {
+                    scope: "scope".into(),
+                    aggregate: "run".into(),
+                    event_id: "lifecycle-event".into(),
+                    idempotency_key: "lifecycle-1".into(),
+                    event_type: "run_started".into(),
+                    payload: json!({"status":"planned"}),
+                    expected_version: 0,
+                },
+                "run-checkpoint".into(),
+                json!({"status":"planned"}),
+            )
+            .unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 0);
+
+        ledger.enable_projection().unwrap();
+        let pending = ledger.pending_projections(10).unwrap();
+        assert_eq!(pending.len(), 2);
+        let admission = pending
+            .iter()
+            .find(|projection| projection.event.event_id == "admission-event")
+            .unwrap();
+        assert_eq!(admission.reservation, Some(reservation.clone()));
+        assert!(admission.checkpoint.is_none());
+        let lifecycle = pending
+            .iter()
+            .find(|projection| projection.event.event_id == "lifecycle-event")
+            .unwrap();
+        assert_eq!(lifecycle.reservation, None);
+        assert!(lifecycle.checkpoint.is_some());
+
+        ledger.enable_projection().unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn standalone_run_reservations_are_backfilled_and_queued_after_opt_in() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let reservation = RunReservation {
+            scope: "scope".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            run_id: "run".into(),
+            idempotency_key: "request-1".into(),
+            request: json!({"prompt":"hello"}),
+        };
+        ledger.reserve_run(reservation.clone()).unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 0);
+
+        ledger.enable_projection().unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 1);
+        assert_eq!(ledger.pending_reservations(10).unwrap(), vec![reservation]);
+        ledger.enable_projection().unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn admission_without_checkpoint_queues_event_and_reservation_together() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        ledger.enable_projection().unwrap();
+        let reservation = RunReservation {
+            scope: "scope".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            run_id: "run".into(),
+            idempotency_key: "request-1".into(),
+            request: json!({"prompt":"hello"}),
+        };
+        let admission = ledger
+            .admit_run(
+                reservation.clone(),
+                EventDraft {
+                    scope: "scope".into(),
+                    aggregate: "thread".into(),
+                    event_id: "admission-event".into(),
+                    idempotency_key: "admission-1".into(),
+                    event_type: "run_admitted".into(),
+                    payload: json!({"run_id":"run"}),
+                    expected_version: 0,
+                },
+            )
+            .unwrap();
+        assert_eq!(admission.reservation, reservation);
+        let pending = ledger.pending_projections(10).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].event, admission.event);
+        assert_eq!(pending[0].reservation, Some(admission.reservation));
+        assert_eq!(
+            ledger.pending_reservations(10).unwrap(),
+            Vec::<RunReservation>::new()
+        );
+    }
+
+    #[test]
+    fn upgrading_enabled_v6_projection_backfills_reservations_once() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let standalone = RunReservation {
+            scope: "scope".into(),
+            thread_id: "standalone-thread".into(),
+            turn_id: "turn-standalone".into(),
+            run_id: "run-standalone".into(),
+            idempotency_key: "request-standalone".into(),
+            request: json!({"prompt":"standalone"}),
+        };
+        let admitted = RunReservation {
+            scope: "scope".into(),
+            thread_id: "admitted-thread".into(),
+            turn_id: "turn-admitted".into(),
+            run_id: "run-admitted".into(),
+            idempotency_key: "request-admitted".into(),
+            request: json!({"prompt":"admitted"}),
+        };
+        ledger.reserve_run(standalone.clone()).unwrap();
+        ledger
+            .admit_run(
+                admitted.clone(),
+                EventDraft {
+                    scope: admitted.scope.clone(),
+                    aggregate: admitted.thread_id.clone(),
+                    event_id: "admission-event".into(),
+                    idempotency_key: "admission-operation".into(),
+                    event_type: "run_admitted".into(),
+                    payload: json!({"run_id":"run-admitted"}),
+                    expected_version: 0,
+                },
+            )
+            .unwrap();
+        ledger.enable_projection().unwrap();
+        ledger
+            .connection
+            .execute_batch("DELETE FROM ve_ledger_outbox; DELETE FROM ve_run_reservation_outbox; DROP TABLE ve_run_reservation_outbox; ALTER TABLE ve_ledger_outbox DROP COLUMN reservation_json; ALTER TABLE ve_ledger_meta DROP COLUMN admission_backfill_complete; ALTER TABLE ve_ledger_meta DROP COLUMN reservation_backfill_complete; UPDATE ve_ledger_meta SET version=6;")
+            .unwrap();
+
+        ledger.migrate().unwrap();
+        ledger.enable_projection().unwrap();
+        let events = ledger.pending_projections(10).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].reservation, Some(admitted));
+        assert_eq!(ledger.pending_reservations(10).unwrap(), vec![standalone]);
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 2);
+
         ledger.enable_projection().unwrap();
         assert_eq!(ledger.pending_outbox_count().unwrap(), 2);
     }

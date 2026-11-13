@@ -114,7 +114,7 @@ projeto e registrada em `capabilities()` (política na
 
 ## Execução atual — 13 de novembro de 2026
 
-O PR [#91](https://github.com/vectora-company/engine/pull/91) expõe `flush_outbox`/`pending_count`; o PR aberto [#92](https://github.com/vectora-company/engine/pull/92), filho do #91, projeta evento + checkpoint dos stores SQLite lifecycle/loop/policy para PostgreSQL. Workspace Rust: 175 testes + 3 fixtures + 1 teste nativo Python; matriz storage: 76/76 com PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0; 34 testes SQLite focados passaram após a correção da migração v1. Restart opt-in não foi habilitado. CI remoto não foi aguardado. Próxima etapa: projetar reservas/admissions e fechar recuperação/backup dos stores PostgreSQL.
+O PR [#91](https://github.com/vectora-company/engine/pull/91) expõe `flush_outbox`/`pending_count`; #92 projeta evento + checkpoint dos stores SQLite lifecycle/loop/policy para PostgreSQL. O PR aberto [#93](https://github.com/vectora-company/engine/pull/93), filho do #92, implementa reservation standalone, admission e leituras PostgreSQL. Workspace Rust: 182 testes + 3 fixtures + 1 teste nativo; `storage::` 83/83 contra PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0; os testes service-real de reservation/admission passaram. Clippy `-D warnings`, rustdoc, formatação e hooks completos passaram. CI remoto não foi aguardado. Próxima decisão vital: contrato de backup/verify PostgreSQL (dump nativo operacional ou backup lógico da Engine), registrado na análise; depois seguem concorrência dos projetores e migrations com rollback.
 
 A decisão vital sobre bytes inline foi respondida no chat: separar o tipo
 persistível do envelope efêmero. Implementação publicada no PR

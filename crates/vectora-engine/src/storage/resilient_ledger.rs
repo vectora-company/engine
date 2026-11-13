@@ -90,9 +90,20 @@ impl ResilientLedger {
         let pending = self.local.pending_projections(limit)?;
         let mut delivered = 0;
         for projection in pending {
-            let PendingProjection { event, checkpoint } = projection;
+            let PendingProjection {
+                event,
+                checkpoint,
+                reservation,
+            } = projection;
             let pg = self.postgres.as_ref().expect("initialized above");
-            match pg.project(event.clone(), checkpoint).await {
+            let projected = match reservation {
+                Some(reservation) => {
+                    pg.project_admission(event.clone(), checkpoint, reservation)
+                        .await
+                }
+                None => pg.project(event.clone(), checkpoint).await,
+            };
+            match projected {
                 Ok(()) => {
                     self.local.mark_outbox_delivered(
                         &event.scope,
@@ -107,6 +118,29 @@ impl ResilientLedger {
                 Err(_) => {
                     self.postgres = None;
                     break;
+                }
+            }
+        }
+        if self.postgres.is_some() && delivered < limit as usize {
+            let remaining = (limit as usize - delivered) as u32;
+            for reservation in self.local.pending_reservations(remaining)? {
+                let pg = self.postgres.as_ref().expect("initialized above");
+                match pg.project_reservation(reservation.clone()).await {
+                    Ok(()) => {
+                        self.local.mark_reservation_delivered(
+                            &reservation.scope,
+                            &reservation.thread_id,
+                            &reservation.turn_id,
+                        )?;
+                        delivered += 1;
+                    }
+                    Err(PostgresError::IdempotencyConflict | PostgresError::VersionConflict) => {
+                        return Err(ResilientLedgerError::ProjectionConflict);
+                    }
+                    Err(_) => {
+                        self.postgres = None;
+                        break;
+                    }
                 }
             }
         }
@@ -274,6 +308,182 @@ mod tests {
         assert_eq!(
             pg.latest_checkpoint(&scope, &aggregate).await.unwrap(),
             Some(saved.checkpoint)
+        );
+        drop(ledger);
+        drop(pg);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reservation_and_admission_backfill_to_queryable_postgres_rows() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let path = db_path();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let scope = format!("admission-projection-{suffix}");
+        let reservation = super::super::sqlite::RunReservation {
+            scope: scope.clone(),
+            thread_id: format!("thread-{suffix}"),
+            turn_id: "turn-1".into(),
+            run_id: format!("run-{suffix}"),
+            idempotency_key: format!("request-{suffix}"),
+            request: json!({"prompt":"persist locally first"}),
+        };
+        let admission = {
+            let mut local = SqliteLedger::open_persistent(&path).unwrap();
+            local
+                .admit_run_checkpointed(
+                    reservation.clone(),
+                    EventDraft {
+                        scope: scope.clone(),
+                        aggregate: reservation.thread_id.clone(),
+                        event_id: format!("admission-event-{suffix}"),
+                        idempotency_key: format!("admission-{suffix}"),
+                        event_type: "run_admitted".into(),
+                        payload: json!({"run_id":reservation.run_id}),
+                        expected_version: 0,
+                    },
+                    EventDraft {
+                        scope: scope.clone(),
+                        aggregate: reservation.run_id.clone(),
+                        event_id: format!("lifecycle-event-{suffix}"),
+                        idempotency_key: format!("lifecycle-{suffix}"),
+                        event_type: "run_started".into(),
+                        payload: json!({"status":"planned"}),
+                        expected_version: 0,
+                    },
+                    format!("checkpoint-{suffix}"),
+                    json!({"status":"planned"}),
+                )
+                .unwrap()
+        };
+
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(ledger.pending_count().unwrap(), 2);
+        assert_eq!(ledger.flush_outbox(10).await.unwrap(), 2);
+        assert_eq!(ledger.pending_count().unwrap(), 0);
+
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        assert_eq!(
+            pg.read_run_reservation(&scope, &reservation.thread_id, &reservation.turn_id)
+                .await
+                .unwrap(),
+            Some(reservation.clone())
+        );
+        assert_eq!(
+            pg.read_run_admission(&scope, &reservation.run_id)
+                .await
+                .unwrap(),
+            Some(super::super::sqlite::Admission {
+                reservation,
+                event: admission.admission_event,
+            })
+        );
+        assert_eq!(
+            pg.latest_checkpoint(&scope, &admission.lifecycle.event.aggregate)
+                .await
+                .unwrap(),
+            Some(admission.lifecycle.checkpoint)
+        );
+        drop(ledger);
+        drop(pg);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn standalone_reservation_backfill_projects_to_postgres() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let path = db_path();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let reservation = super::super::sqlite::RunReservation {
+            scope: format!("reservation-projection-{suffix}"),
+            thread_id: format!("thread-{suffix}"),
+            turn_id: "turn-1".into(),
+            run_id: format!("run-{suffix}"),
+            idempotency_key: format!("request-{suffix}"),
+            request: json!({"prompt":"reserve before PostgreSQL is available"}),
+        };
+        {
+            let mut local = SqliteLedger::open_persistent(&path).unwrap();
+            local.reserve_run(reservation.clone()).unwrap();
+        }
+
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(ledger.pending_count().unwrap(), 1);
+        assert_eq!(ledger.flush_outbox(10).await.unwrap(), 1);
+        assert_eq!(ledger.pending_count().unwrap(), 0);
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        assert_eq!(
+            pg.read_run_reservation(
+                &reservation.scope,
+                &reservation.thread_id,
+                &reservation.turn_id
+            )
+            .await
+            .unwrap(),
+            Some(reservation)
+        );
+        drop(ledger);
+        drop(pg);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn admission_without_checkpoint_projects_with_its_reservation() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let path = db_path();
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let reservation = super::super::sqlite::RunReservation {
+            scope: format!("admission-only-{suffix}"),
+            thread_id: format!("thread-{suffix}"),
+            turn_id: "turn-1".into(),
+            run_id: format!("run-{suffix}"),
+            idempotency_key: format!("request-{suffix}"),
+            request: json!({"prompt":"no lifecycle checkpoint"}),
+        };
+        let admission = {
+            let mut local = SqliteLedger::open_persistent(&path).unwrap();
+            local
+                .admit_run(
+                    reservation.clone(),
+                    EventDraft {
+                        scope: reservation.scope.clone(),
+                        aggregate: reservation.thread_id.clone(),
+                        event_id: format!("admission-event-{suffix}"),
+                        idempotency_key: format!("admission-{suffix}"),
+                        event_type: "run_admitted".into(),
+                        payload: json!({"run_id":reservation.run_id}),
+                        expected_version: 0,
+                    },
+                )
+                .unwrap()
+        };
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(ledger.pending_count().unwrap(), 1);
+        assert_eq!(ledger.flush_outbox(10).await.unwrap(), 1);
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        assert_eq!(
+            pg.read_run_admission(&reservation.scope, &reservation.run_id)
+                .await
+                .unwrap(),
+            Some(admission)
         );
         drop(ledger);
         drop(pg);
