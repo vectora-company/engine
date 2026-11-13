@@ -99,6 +99,12 @@ e observação de mudanças. Nas filas, ACK/NACK, redelivery com teto, DLQ,
 deduplicação e replay. A disponibilidade nativa ou emulada de cada item ainda
 deve ser confirmada por versão e registrada na matriz do plano.
 
+A listagem KV recebe um prefixo literal, inclusive vazio, e um limite de 1 a 1000. Retorna até esse número de chaves distintas do namespace, em ordem
+lexicográfica por bytes. Chaves removidas ou expiradas antes da varredura
+ficam fora do resultado. Escritas concorrentes podem mudar o que a varredura
+observa. O limite restringe a resposta e o conjunto mantido pela Engine,
+enquanto o custo da varredura depende do tamanho do namespace e do backend.
+
 TurboQuant (arXiv:2504.19874) é quantização de vetores em geral. Qdrant só
 oferece a implementação nativa documentada a partir da versão 1.18.0, enquanto
 o contêiner em execução é 1.12.4 (`SConstruct` provisiona 1.15.5). O suporte equivalente no

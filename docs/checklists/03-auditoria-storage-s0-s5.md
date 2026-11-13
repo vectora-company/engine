@@ -58,6 +58,8 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 
 - [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local (branch do PR #57; não integrado em `main`).
 - [ ] Vetorial: verificar os extremos do limite compartilhado de 1 a 65536 dimensões na busca e gravação em LanceDB e Qdrant. O core compilou no PR #65.
+- [x] Verificar listagem KV em Redis e NATS reais: prefixo literal, ordenação, limite, exclusão de chaves expiradas e isolamento do namespace, via addon Node.
+- [ ] Verificar listagem após remoção explícita nos dois serviços.
 - [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
 - [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens novas. CAS por revisão, incremento, prefixo e watch ainda faltam nos dois.
 - [ ] Filas: `max_deliver`/contagem de entregas, DLQ, NACK/atraso e deduplicação equivalentes nas duas.

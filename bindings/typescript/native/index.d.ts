@@ -80,6 +80,12 @@ export declare function kvStoreGet(
   key: string,
 ): Promise<string>;
 
+export declare function kvStoreListKeys(
+  configJson: string,
+  prefix: string,
+  limit: number,
+): Promise<Array<string>>;
+
 export declare function kvStorePut(
   configJson: string,
   key: string,

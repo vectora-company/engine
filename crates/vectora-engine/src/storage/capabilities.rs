@@ -146,7 +146,7 @@ impl StorageSelection {
             Some(KvBackend::Redis) => backends.push(entry(
                 "kv",
                 "redis",
-                &["kv_store"],
+                &["kv_store", "kv_list_prefix"],
                 &[],
                 Some(true),
                 None,
@@ -156,7 +156,7 @@ impl StorageSelection {
             Some(KvBackend::NatsJetstream) => backends.push(entry(
                 "kv",
                 "nats_jetstream",
-                &["kv_store"],
+                &["kv_store", "kv_list_prefix"],
                 &[],
                 Some(true),
                 None,

@@ -796,6 +796,23 @@ pub async fn kv_store_get(config_json: String, key: String) -> Result<String> {
 }
 
 #[napi]
+pub async fn kv_store_list_keys(
+    config_json: String,
+    prefix: String,
+    limit: u32,
+) -> Result<Vec<String>> {
+    let config =
+        serde_json::from_str(&config_json).map_err(|_| Error::from_reason("invalid KV config"))?;
+    let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    store
+        .list_keys(&prefix, limit)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))
+}
+
+#[napi]
 pub async fn queue_enqueue(config_json: String, payload_json: String) -> Result<String> {
     let config = serde_json::from_str(&config_json)
         .map_err(|_| Error::from_reason("invalid queue config"))?;

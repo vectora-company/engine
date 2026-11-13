@@ -503,6 +503,11 @@ interface NativeBinding {
     ttlSeconds?: number,
   ): Promise<void>;
   kvStoreGet(configJson: string, key: string): Promise<string>;
+  kvStoreListKeys(
+    configJson: string,
+    prefix: string,
+    limit: number,
+  ): Promise<string[]>;
   queueEnqueue(configJson: string, payloadJson: string): Promise<string>;
   queueReceive(
     configJson: string,
@@ -863,6 +868,15 @@ export async function kvStoreGet(
   return JSON.parse(
     await native.kvStoreGet(JSON.stringify(config), key),
   ) as JsonValue | null;
+}
+
+/** List distinct keys matching a literal prefix in ascending byte order. */
+export async function kvStoreListKeys(
+  config: KvStoreConfig,
+  prefix = "",
+  limit = 100,
+): Promise<string[]> {
+  return native.kvStoreListKeys(JSON.stringify(config), prefix, limit);
 }
 
 export interface QueueDelivery {

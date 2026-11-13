@@ -71,6 +71,9 @@ pub trait KvStore: Send + Sync {
         ttl: Option<Duration>,
     ) -> Result<(), MessagingError>;
     async fn delete(&self, key: &str) -> Result<(), MessagingError>;
+    /// Returns up to `limit` distinct keys in ascending byte order.
+    /// Listing is a scan, so concurrent writes may change what is observed.
+    async fn list_keys(&self, prefix: &str, limit: u32) -> Result<Vec<String>, MessagingError>;
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -117,6 +120,23 @@ fn validate_key(key: &str) -> Result<(), MessagingError> {
         Err(MessagingError::InvalidInput)
     } else {
         Ok(())
+    }
+}
+
+fn validate_key_listing(prefix: &str, limit: u32) -> Result<(), MessagingError> {
+    if !(1..=1000).contains(&limit) {
+        return Err(MessagingError::InvalidInput);
+    }
+    if !prefix.is_empty() {
+        validate_key(prefix)?;
+    }
+    Ok(())
+}
+
+fn keep_listed_key(keys: &mut std::collections::BTreeSet<String>, key: String, limit: u32) {
+    keys.insert(key);
+    if keys.len() > limit as usize {
+        keys.pop_last();
     }
 }
 
@@ -181,6 +201,45 @@ impl KvStore for RedisStore {
             .await
             .map_err(|_| MessagingError::Storage)?;
         Ok(())
+    }
+    async fn list_keys(&self, prefix: &str, limit: u32) -> Result<Vec<String>, MessagingError> {
+        validate_key_listing(prefix, limit)?;
+        let namespace = format!("{}:", self.prefix);
+        let mut pattern = namespace.clone();
+        for ch in prefix.chars() {
+            if matches!(ch, '*' | '?' | '[' | ']' | '\\') {
+                pattern.push('\\');
+            }
+            pattern.push(ch);
+        }
+        pattern.push('*');
+        let mut conn = self.connection().await?;
+        let mut keys = std::collections::BTreeSet::new();
+        let mut cursor = 0_u64;
+        loop {
+            let (next, batch): (u64, Vec<Vec<u8>>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("TYPE")
+                .arg("string")
+                .query_async(&mut conn)
+                .await
+                .map_err(|_| MessagingError::Storage)?;
+            for key in batch {
+                if let Ok(key) = std::str::from_utf8(&key)
+                    && let Some(key) = key.strip_prefix(&namespace)
+                    && key.starts_with(prefix)
+                    && validate_key(key).is_ok()
+                {
+                    keep_listed_key(&mut keys, key.to_owned(), limit);
+                }
+            }
+            cursor = next;
+            if cursor == 0 {
+                return Ok(keys.into_iter().collect());
+            }
+        }
     }
 }
 
@@ -347,6 +406,28 @@ impl KvStore for NatsStore {
             .await
             .map_err(|_| MessagingError::Storage)
     }
+    async fn list_keys(&self, prefix: &str, limit: u32) -> Result<Vec<String>, MessagingError> {
+        use futures_util::TryStreamExt;
+
+        validate_key_listing(prefix, limit)?;
+        let mut stream = self
+            .kv()
+            .await?
+            .keys()
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        let mut keys = std::collections::BTreeSet::new();
+        while let Some(key) = stream
+            .try_next()
+            .await
+            .map_err(|_| MessagingError::Storage)?
+        {
+            if key.starts_with(prefix) && validate_key(&key).is_ok() {
+                keep_listed_key(&mut keys, key, limit);
+            }
+        }
+        Ok(keys.into_iter().collect())
+    }
 }
 
 pub enum KvStoreAdapter {
@@ -391,6 +472,12 @@ impl KvStore for KvStoreAdapter {
         match self {
             Self::Redis(store) => store.delete(key).await,
             Self::Nats(store) => store.delete(key).await,
+        }
+    }
+    async fn list_keys(&self, prefix: &str, limit: u32) -> Result<Vec<String>, MessagingError> {
+        match self {
+            Self::Redis(store) => store.list_keys(prefix, limit).await,
+            Self::Nats(store) => store.list_keys(prefix, limit).await,
         }
     }
 }
