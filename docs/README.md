@@ -53,6 +53,8 @@ storage segue na Fase 2.
   evidências, execuções service-real e decisões do mantenedor sobre storage.
 - [Checklist da auditoria de storage](checklists/03-auditoria-storage-s0-s5.md):
   itens feitos e pendentes da capability de storage.
+- [`docs/checklists/04-midia-no-chat.md`](checklists/04-midia-no-chat.md): contrato,
+  payloads nativos e verificações da etapa de mídia.
 
 ## Planos
 

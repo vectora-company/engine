@@ -21,21 +21,21 @@ trabalho independente.
 
 ## Estado verificado
 
-| Capability                                                                              | Estado                                                    | Evidência                                                                                                                                                                             |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chat OpenAI-compatible, Anthropic, Gemini, Cohere, fallback, montagem de turno          | Implementada (experimental), bindings Python e TypeScript | `chat/openai_compatible.rs`, `chat/native_providers.rs`, `chat/fallback.rs`, `chat/turn.rs`; fixture `tests/fixtures/conformance-v1.json` (fallback com cancelamento nos três níveis) |
-| Embeddings e rerank com fallback por quota                                              | Implementada (experimental)                               | `llm/embeddings.rs`, `llm/rerank.rs`; testes Python                                                                                                                                   |
-| Run lifecycle, dispatch, policy/aprovação, loop modelo/tool, gates de verificação       | Implementada no core e nos bindings                       | `harness/*.rs`, `harness/model_tool_loop.rs`, `harness/policy.rs`, `harness/verification.rs`                                                                                          |
-| Stores SQLite de lifecycle, loop e policy                                               | Implementada                                              | `storage/sqlite_run.rs`, `sqlite_loop.rs`, `sqlite_policy.rs`                                                                                                                         |
-| Ledger SQLite: idempotência, conflito de versão, multiprocesso, restart                 | Implementada                                              | `storage/sqlite.rs` (`multiprocess_child_writer`, `concurrent_appends_with_same_expected_version_commit_exactly_one`)                                                                 |
-| Backup/restore SQLite online e offline coordenado                                       | Implementada (#53)                                        | `storage/sqlite/backup.rs` (`backup_online`, `backup_offline`, `verify_backup`, `restore`)                                                                                            |
-| Projeção PostgreSQL com SQLite como autoridade                                          | Implementada                                              | `storage/resilient_ledger.rs` (`flush_outbox`); teste `projection_resumes_after_postgres_is_stopped_and_started`                                                                      |
-| Vetorial: cosseno em `[-1, 1]`, dimensões 1–65536, coleção ausente, dimensão divergente | Implementada (#57, #65, #77)                              | `storage/vector.rs` (`DistanceType::Cosine`, `valid_vector_dimensions`, `validate_lance_dimensions`)                                                                                  |
-| KV: TTL nativo no NATS (2.11+), CAS por revisão, incremento, prefixo, watch             | Implementada (#59, #67–#72)                               | `storage/messaging.rs` (`allow_message_ttl`, `compare_and_set`, `increment`, `list_keys`, `watch`)                                                                                    |
-| Filas: retenção finita (100000), 5 tentativas, DLQ consumível                           | Implementada (#60–#64)                                    | `storage/messaging.rs` (`max_messages`, `max_attempts`, `receive_dead_letter`)                                                                                                        |
-| Relatório estático de capabilities por backend                                          | Implementada (#46)                                        | `storage/capabilities.rs`                                                                                                                                                             |
-| Snapshot de contratos para hosts TypeScript                                             | Implementada (#45)                                        | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                                                                                         |
-| Mídia no chat: tipos, classificação, capability por modalidade, decisão por parte       | Parcial (#76)                                             | `chat/media.rs`; ver Fase 1                                                                                                                                                           |
+| Capability                                                                              | Estado                                                                                                     | Evidência                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat OpenAI-compatible, Anthropic, Gemini, Cohere, fallback, montagem de turno          | Implementada (experimental), bindings Python e TypeScript                                                  | `chat/openai_compatible.rs`, `chat/native_providers.rs`, `chat/fallback.rs`, `chat/turn.rs`; fixture `tests/fixtures/conformance-v1.json` (fallback com cancelamento nos três níveis) |
+| Embeddings e rerank com fallback por quota                                              | Implementada (experimental)                                                                                | `llm/embeddings.rs`, `llm/rerank.rs`; testes Python                                                                                                                                   |
+| Run lifecycle, dispatch, policy/aprovação, loop modelo/tool, gates de verificação       | Implementada no core e nos bindings                                                                        | `harness/*.rs`, `harness/model_tool_loop.rs`, `harness/policy.rs`, `harness/verification.rs`                                                                                          |
+| Stores SQLite de lifecycle, loop e policy                                               | Implementada                                                                                               | `storage/sqlite_run.rs`, `sqlite_loop.rs`, `sqlite_policy.rs`                                                                                                                         |
+| Ledger SQLite: idempotência, conflito de versão, multiprocesso, restart                 | Implementada                                                                                               | `storage/sqlite.rs` (`multiprocess_child_writer`, `concurrent_appends_with_same_expected_version_commit_exactly_one`)                                                                 |
+| Backup/restore SQLite online e offline coordenado                                       | Implementada (#53)                                                                                         | `storage/sqlite/backup.rs` (`backup_online`, `backup_offline`, `verify_backup`, `restore`)                                                                                            |
+| Projeção PostgreSQL com SQLite como autoridade                                          | Implementada                                                                                               | `storage/resilient_ledger.rs` (`flush_outbox`); teste `projection_resumes_after_postgres_is_stopped_and_started`                                                                      |
+| Vetorial: cosseno em `[-1, 1]`, dimensões 1–65536, coleção ausente, dimensão divergente | Implementada (#57, #65, #77)                                                                               | `storage/vector.rs` (`DistanceType::Cosine`, `valid_vector_dimensions`, `validate_lance_dimensions`)                                                                                  |
+| KV: TTL nativo no NATS (2.11+), CAS por revisão, incremento, prefixo, watch             | Implementada (#59, #67–#72)                                                                                | `storage/messaging.rs` (`allow_message_ttl`, `compare_and_set`, `increment`, `list_keys`, `watch`)                                                                                    |
+| Filas: retenção finita (100000), 5 tentativas, DLQ consumível                           | Implementada (#60–#64)                                                                                     | `storage/messaging.rs` (`max_messages`, `max_attempts`, `receive_dead_letter`)                                                                                                        |
+| Relatório estático de capabilities por backend                                          | Implementada (#46)                                                                                         | `storage/capabilities.rs`                                                                                                                                                             |
+| Snapshot de contratos para hosts TypeScript                                             | Implementada (#45)                                                                                         | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                                                                                         |
+| Mídia no chat: tipos, classificação, capability por modalidade, decisão por parte       | Tipos e serialização por protocolo implementados em branch sobre #77; preparação/envio integrado pendentes | `chat/media.rs`, `chat/native_providers.rs`, `chat/openai_compatible.rs`; testes `chat::` 44/44; checklist `docs/checklists/04-midia-no-chat.md`                                      |
 
 Os testes service-real (Redis, NATS, Qdrant, PostgreSQL) são condicionais às
 variáveis `VECTORA_TEST_*`; sem elas contam como não executados. Evidências e
@@ -67,12 +67,14 @@ indicada. Não as reabra sem pedido dele.
 
 ### Fase 0 — correções imediatas
 
-1. **Mídia: decisão `native` sem envio nativo.** `chat/media.rs::decide`
-   registra `native` para PDF, áudio e vídeo, mas os adapters serializam
-   `ContentPart::Inline` como nota textual. Saída: mapear `Inline` por protocolo
-   (Anthropic `document`, Gemini `inlineData`, OpenAI `file`/`input_audio`;
-   Cohere textual) ou rebaixar a decisão quando o adapter não suporta, com teste
-   que compara o corpo enviado ao registro. Origem: spec 17.
+1. **Mídia: decisão `native` sem envio nativo — implementada nesta etapa.**
+   A branch empilhada sobre #77 serializa PDF base64 na Anthropic, PDF e áudio
+   WAV/MP3 no OpenAI Chat Completions, e PDF/áudio/vídeo em `inlineData` no
+   Gemini. Testes `chat::` (44), fmt e Clippy passaram. O PR desta etapa e a
+   integração do preparador no envio ainda pendem; limites, fallback em rejeição
+   e evidência de roteamento permanecem na Fase 1. Checklist:
+   [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+   OpenAI Responses continua fora do adapter. Origem: spec 17.
 2. **Mídia: imagens de resultado de tool descartadas.** `message_text` em
    `chat/native_providers.rs` ignora `ImageUrl` nas mensagens de tool. Saída:
    mapeamento da tabela da spec 17 ou forma textual registrada. Origem: spec 17.
@@ -93,24 +95,36 @@ indicada. Não as reabra sem pedido dele.
 
 ### Fase 1 — spec 17, mídia no chat
 
-Origem: [spec 17](../specs/17-midia-no-chat.md) e
-[issue #58](https://github.com/vectora-company/engine/issues/58).
+Origem: [spec 17](../specs/17-midia-no-chat.md),
+[issue #58](https://github.com/vectora-company/engine/issues/58) e evidência do
+consumidor [Vectora #479–#502](https://github.com/vectora-company/vectora/pulls),
+todos integrados em stack em 2026-11-13. O consumidor fechou a jornada multimodal
+em Python, inclusive UI/transcrição local; a Engine implementa somente contratos
+compartilháveis e mantém sua própria implementação Rust.
 
-1. Resultado de tool em partes (texto e imagem por `MediaRef`) com o mapeamento
-   por protocolo; snapshot do loop novo lendo os anteriores. **[D]**
-   compatibilidade do contrato `ToolResult`.
-2. `Inline` não persistível nem aceito pelos bindings. **[D]** segurança/dados.
-3. Reclassificar os bytes ao reidratar e tratar MIME divergente. **[D]**.
-4. `MediaTooLarge` com limites do consumidor e do provider, rebaixando o modo.
-   **[D]** origem dos limites.
-5. Recuperação: uma repetição com a forma textual quando o provider recusa por
-   mídia; registrar a repetição. **[D]** ordem em relação ao fallback (spec 06).
-6. Reidratar só o turno atual; capability por modelo (não só por provider);
-   `reason` como código estável.
-7. Bindings Python e TypeScript e fixtures de conformidade nos três níveis.
-   **[D]** desenho do `MediaStore` entre linguagens.
-8. OpenAI Responses API não existe na engine; a linha correspondente da tabela
-   da spec fica não aplicável até haver adapter.
+1. **Etapa atual:** serialização de PDF/áudio/vídeo em formatos nativos nos
+   adapters Anthropic, Gemini e OpenAI Chat Completions. Código e testes locais
+   passaram; falta criar PR empilhado sobre #77.
+2. Integrar `prepare_content` ao envio real; resolver capability por modelo com
+   metadados/catálogo e fazer a decisão produzir simultaneamente payload e
+   evidência/evento de roteamento. O evento deve ser provider-neutral e não
+   incluir bytes/segredos (aprendizado dos PRs Vectora #481/#486).
+3. Limitar bytes por provider/modelo e reidratar apenas mídia do turno atual;
+   expor erro estável e fallback textual sem persistir bytes. Validação precisa
+   cobrir limites, MIME/digest e histórico (Vectora #481/#494).
+4. Retry no máximo uma vez como texto apenas em rejeição específica de mídia;
+   preservar erros de rede/autenticação sem retry mascarado (Vectora #481).
+5. Resultado de tool em partes (texto e imagem por `MediaRef`) com mapeamento
+   por protocolo; snapshot do loop lendo os anteriores. **[D]** compatibilidade
+   do contrato `ToolResult`.
+6. `Inline` não persistível nem aceito pelos bindings. **[D]** segurança/dados.
+7. Reclassificar bytes ao reidratar e tratar MIME divergente.
+8. Bindings Python/TypeScript e fixtures de conformidade nos três níveis;
+   resolver o contrato compartilhado de `MediaStore` antes de publicar.
+9. STT, OCR, renderização/previews, UI, permissões de OS e empacotamento são
+   capacidades do consumidor nesta fase. Só promover uma delas ao core após
+   definir contrato comum e necessidade em mais de um consumer.
+10. OpenAI Responses API não existe na Engine; não aplicável até existir adapter.
 
 ### Fase 2 — storage: base equivalente
 

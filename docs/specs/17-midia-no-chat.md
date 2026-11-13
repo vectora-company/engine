@@ -3,11 +3,23 @@
 **Estado:** parcialmente implementada. O núcleo Rust tem os tipos de mídia
 (`MediaRef`, `MediaPart` e as variantes de `ContentPart`), a classificação pelos
 bytes, as capabilities em camadas, a reidratação com conferência de digest e a
-decisão por parte com seu registro (`chat/media.rs`). Ainda não existem: o
-mapeamento nativo por provider (os adapters enviam mídia como forma textual), o
-resultado de tool em partes, a recuperação por recusa do provider e os bindings
-Python e TypeScript. A referência de comportamento é o backend Python do Vectora
-(entrada multimodal da 0.1.25).
+decisão por parte com seu registro (`chat/media.rs`). Uma etapa em
+desenvolvimento, empilhada sobre o PR #77, implementa PDF base64 nos adapters
+Anthropic, Gemini e OpenAI Chat Completions, além de áudio WAV/MP3 em OpenAI e
+áudio/vídeo `inlineData` em Gemini. A verificação local atual passou: 44 testes `chat::`, `cargo fmt --check` e
+Clippy com warnings negados. A integração completa ao envio ainda não existe;
+acompanhe evidência e limites em
+[`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+Ainda não existem integração automática da preparação no fluxo de envio,
+limites por provider/modelo, retry específico por recusa, evidência/evento de
+roteamento, resultado de tool em partes ou bindings Python e TypeScript. A
+experiência do Vectora confirma que decisões de roteamento e evidência precisam
+ser compartilhadas entre envio e consumer, e que histórico antigo não deve
+reidratar bytes automaticamente. A referência de comportamento é o backend Python do Vectora. A stack
+[Vectora #479–#502](https://github.com/vectora-company/vectora/pulls) foi
+integrada em 19 PRs empilhados e resolve a jornada multimodal do produto. A
+Engine usa essa experiência para priorizar contratos compartilháveis, sem
+assumir que UI, STT local ou empacotamento do app sejam APIs do core.
 
 Este documento define como o chat da Engine representa mídia (imagem, áudio,
 vídeo, documento e arquivo genérico) em mensagens e em resultados de tools, como
@@ -17,9 +29,8 @@ rollback.
 
 ## Situação atual da Engine
 
-- `ContentPart` (`crates/vectora-engine/src/chat/types.rs`) tem só `Text` e
-  `ImageUrl`. Não há áudio, documento, vídeo, arquivo, tipo MIME nem referência de
-  mídia.
+- `ContentPart` (`crates/vectora-engine/src/chat/types.rs`) inclui texto,
+  imagem por URL, mídia por referência e mídia inline na cópia do request.
 - O resultado de uma tool é uma `String`; os adapters nativos achatam o resultado
   em texto, e imagens de resultado de tool se perdem fora do caminho
   OpenAI-compatível.
@@ -117,7 +128,10 @@ Cada modelo resolve um conjunto de capabilities: `vision`, `pdf`, `audio_input`,
    imagem; todo o resto `desconhecido`.
 
 `desconhecido` é tratado como não suportado para efeito de envio nativo, e o
-consumidor pode sobrescrever.
+consumidor pode sobrescrever. A capability precisa corresponder ao protocolo
+real do adapter: OpenAI Chat Completions usa `file.file_data` para PDF e
+`input_audio` para WAV/MP3; OpenAI Responses API ainda não tem adapter na
+Engine.
 
 ## Decisão por parte
 

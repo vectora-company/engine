@@ -75,6 +75,8 @@ vincule-o no índice `docs/README.md`, no prompt
 `docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
 artefatos da capability que dependem dele. Use o caminho completo a partir
 da raiz do repositório no texto do link e um destino relativo válido.
+O checklist específico de mídia atual é
+[`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 
 ## Stack de PRs
 

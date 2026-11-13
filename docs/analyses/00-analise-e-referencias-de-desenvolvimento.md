@@ -94,6 +94,58 @@ vincule-o no índice `docs/README.md`, no prompt
 `docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
 artefatos da capability que dependem dele. Use o caminho completo a partir
 da raiz do repositório no texto do link e um destino relativo válido.
+Para a etapa ativa de mídia, o checklist específico é
+[`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+
+## Etapa multimodal empilhada sobre o PR #77 — 2026-11-13
+
+O código-base do PR #77 (`fix/storage-vector-collection-dimensions`) declara
+PDF como suportado para `openai` em `chat/media.rs::known_provider`, embora o
+adapter `chat/openai_compatible.rs` use Chat Completions e transforme
+`ContentPart::Inline` em texto. Os adapters Anthropic e Gemini também só
+serializavam `Inline` como texto em `native_providers.rs`. Isso fazia a decisão
+`native` divergir do payload de rede.
+
+A correção em desenvolvimento na branch empilhada mapeia PDF para o bloco
+`document` base64 da Anthropic, `inlineData` no Gemini e `file.file_data` no
+OpenAI Chat Completions. O áudio WAV/MP3 usa `input_audio` no OpenAI; o Gemini
+usa `inlineData` para áudio e vídeo. OpenAI Responses continua fora do escopo
+porque não há adapter para essa API. Fontes primárias: [PDF na Anthropic](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support), [Part e `inlineData` na API Gemini](https://ai.google.dev/api/generate-content), [formatos suportados no Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) e [PDF nos dois endpoints OpenAI](https://developers.openai.com/api/docs/guides/file-inputs).
+
+O teste de payload inicialmente falhou porque a seleção de conteúdo Anthropic
+continuava ativando o formato em blocos somente para `ImageUrl`. A condição foi
+corrigida para reconhecer o PDF inline. Verificação local concluída: `cargo fmt
+--all -- --check`, `cargo test -p vectora-engine --lib chat:: --locked` (44
+passaram), Clippy de todos os targets/features com `-D warnings`, Prettier e
+`git diff --check` passaram. O PR ainda não foi criado neste registro; a entrega
+continua pendente no checklist específico.
+
+### Evidência atualizada do Vectora consumidor
+
+A stack de mídia do Vectora contém 19 PRs empilhados (#479, #480, #481, #482,
+#483, #486, #487, #488, #490–#494, #496, #497, #499–#502); confirmei no GitHub
+que todos estão `MERGED`, incluindo o #502, integrado em 2026-11-13 às 04:41:07
+UTC. PRs intermediários ausentes na sequência (#485, #489, #495 e #498) não são
+contados como entregas dessa stack. Ver [PRs do Vectora](https://github.com/vectora-company/vectora/pulls).
+
+A implementação do produto resolveu a jornada multimodal do chat e acrescentou
+lições concretas para o core: roteamento nativo por modelo com catálogo para
+OpenRouter/9router; evidência de roteamento usada tanto pelo backend quanto pela
+UI; limites por provider; apenas o turno atual reidrata bytes; tentativa única
+em texto somente para rejeição específica de mídia; imagens de ferramentas MCP
+como assets; conversão local de áudio/PDF/vídeo; transcrição offline e helper
+Speech do macOS com CI que gera fala. Isso não significa que a Engine já tenha
+essas capacidades. Esta etapa Engine fecha somente o defeito de formato do
+payload para as modalidades mapeadas; o preparador ainda não está ligado ao
+envio real e faltam limite, retry, evidência/evento de roteamento e suporte de
+resultado multimodal de tool.
+
+A fronteira de produto deve ser preservada: STT local, permissões do macOS,
+configuração UI, geração de prévias e empacotamento SCons estão implementados no
+Vectora e não são automaticamente contratos portáveis do core. Devem ser
+reavaliados individualmente se outro consumidor demonstrar necessidade e houver
+um contrato comum. O plano de continuidade foi atualizado para as próximas
+etapas sem copiar essa implementação Python para a Engine.
 
 ## Decisões que exigem o mantenedor
 

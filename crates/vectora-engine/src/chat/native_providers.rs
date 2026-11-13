@@ -595,10 +595,16 @@ fn cohere_content(content: &MessageContent) -> Value {
         MessageContent::Text(text) => return json!(text),
         MessageContent::Parts(parts) => parts,
     };
-    if !parts
-        .iter()
-        .any(|part| matches!(part, super::ContentPart::ImageUrl { .. }))
-    {
+    if !parts.iter().any(|part| {
+        matches!(
+            part,
+            super::ContentPart::ImageUrl { .. }
+                | super::ContentPart::Inline(super::media::InlineMedia {
+                    kind: super::media::MediaKind::Document,
+                    ..
+                })
+        )
+    }) {
         return json!(
             parts
                 .iter()
@@ -829,10 +835,15 @@ fn anthropic_content(content: &MessageContent) -> Value {
     let MessageContent::Parts(parts) = content else {
         return serde_json::to_value(content).unwrap_or(Value::Null);
     };
-    if !parts
-        .iter()
-        .any(|part| matches!(part, super::ContentPart::ImageUrl { .. }))
-    {
+    if !parts.iter().any(|part| {
+        matches!(part, super::ContentPart::ImageUrl { .. })
+            || matches!(
+                part,
+                super::ContentPart::Inline(item)
+                    if item.kind == super::media::MediaKind::Document
+                        && item.mime_type == "application/pdf"
+            )
+    }) {
         return json!(
             parts
                 .iter()
@@ -849,6 +860,12 @@ fn anthropic_content(content: &MessageContent) -> Value {
             .map(|part| match part {
                 super::ContentPart::Text { text } => json!({"type":"text","text":text}),
                 super::ContentPart::ImageUrl { image_url } => anthropic_image(&image_url.url),
+                super::ContentPart::Inline(item)
+                    if item.kind == super::media::MediaKind::Document
+                        && item.mime_type == "application/pdf" =>
+                {
+                    json!({"type":"document","source":{"type":"base64","media_type":item.mime_type,"data":item.data_base64}})
+                }
                 other => json!({
                     "type":"text",
                     "text": other.fallback_text().unwrap_or_default(),
@@ -893,6 +910,9 @@ fn google_parts(content: &MessageContent) -> Vec<Value> {
                         } else {
                             parts.push(json!({"fileData":{"fileUri":url}}));
                         }
+                    }
+                    super::ContentPart::Inline(item) => {
+                        parts.push(json!({"inlineData":{"mimeType":item.mime_type,"data":item.data_base64}}));
                     }
                     other => {
                         if let Some(text) = other.fallback_text() {
@@ -1476,6 +1496,61 @@ mod tests {
         );
         assert_eq!(payload["messages"][1]["content"][0]["is_error"], true);
         assert_eq!(payload["stream"], true);
+    }
+
+    #[test]
+    fn native_media_uses_provider_wire_formats() {
+        let mut request = req();
+        request.messages[0].content = MessageContent::Parts(vec![
+            super::super::ContentPart::Text {
+                text: "inspect this".into(),
+            },
+            super::super::ContentPart::Inline(super::super::media::InlineMedia {
+                kind: super::super::media::MediaKind::Document,
+                mime_type: "application/pdf".into(),
+                name: "report.pdf".into(),
+                data_base64: "JVBERi0=".into(),
+            }),
+            super::super::ContentPart::Inline(super::super::media::InlineMedia {
+                kind: super::super::media::MediaKind::Audio,
+                mime_type: "audio/wav".into(),
+                name: "voice.wav".into(),
+                data_base64: "UklGRg==".into(),
+            }),
+            super::super::ContentPart::Inline(super::super::media::InlineMedia {
+                kind: super::super::media::MediaKind::Video,
+                mime_type: "video/mp4".into(),
+                name: "clip.mp4".into(),
+                data_base64: "AAAA".into(),
+            }),
+        ]);
+
+        let anthropic = anthropic_payload(&request, false).unwrap();
+        assert_eq!(anthropic["messages"][0]["content"][0]["type"], "text");
+        assert_eq!(anthropic["messages"][0]["content"][1]["type"], "document");
+        assert_eq!(
+            anthropic["messages"][0]["content"][1]["source"],
+            json!({
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": "JVBERi0="
+            })
+        );
+
+        let google = google_payload(&request).unwrap();
+        assert_eq!(google["contents"][0]["parts"][0]["text"], "inspect this");
+        assert_eq!(
+            google["contents"][0]["parts"][1]["inlineData"],
+            json!({"mimeType":"application/pdf","data":"JVBERi0="})
+        );
+        assert_eq!(
+            google["contents"][0]["parts"][2]["inlineData"],
+            json!({"mimeType":"audio/wav","data":"UklGRg=="})
+        );
+        assert_eq!(
+            google["contents"][0]["parts"][3]["inlineData"],
+            json!({"mimeType":"video/mp4","data":"AAAA"})
+        );
     }
 
     #[test]
