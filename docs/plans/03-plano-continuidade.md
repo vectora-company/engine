@@ -10,7 +10,7 @@ squash). A stack aberta é `main` ← [#73](https://github.com/vectora-company/e
 [#81](https://github.com/vectora-company/engine/pull/81) ←
 [#82](https://github.com/vectora-company/engine/pull/82). O PR #82 está aberto;
 seu head é `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83),
-head `00e2fe996135d1a4b0913116484c43857bd0be28`, está empilhado sobre a
+está empilhado sobre a
 branch `feat/chat-media-bindings` do #82.
 
 **Objetivo de produto:** a primeira release deve ser ampla e completa, não um
