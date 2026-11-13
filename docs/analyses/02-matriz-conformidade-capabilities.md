@@ -2,7 +2,7 @@
 
 **Base de código auditada:** `main` em `22c861f` (11 de novembro de 2026); as
 linhas de storage, mensageria e mídia foram revalidadas em 13 de novembro de
-2026 contra os PRs #79–#81, empilhados sobre #77 e `main` `dc1aa5e`; o estado dos bindings é verificado na branch atual, filha do #81.
+2026 contra os PRs #79–#82, empilhados sobre #77 e `main` `dc1aa5e`; capabilities por modelo/provider são o próximo item do plano.
 **Plano:** [`03-plano-continuidade.md`](../plans/03-plano-continuidade.md)
 **Checklist:** [`02-matriz-conformidade-capabilities.md`](../checklists/02-matriz-conformidade-capabilities.md)
 

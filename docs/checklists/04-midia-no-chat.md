@@ -70,7 +70,7 @@ implementação; não foram adicionados à API pública da Engine.
 - [x] Verificar TypeScript: build, typecheck e testes; 37 passaram e 10 testes
       dependentes de serviços externos foram ignorados sem URLs configuradas.
 - [x] Verificar Python: build editável e `test_binding.py` — 51 passaram.
-- [ ] Commit, push e abrir PR filho do #81.
+- [x] Commit, push e abrir o PR #82, filho do #81: https://github.com/vectora-company/engine/pull/82.
 - [x] Expor os três modos nos bindings Python/TypeScript com mapa temporário
       `asset_id → bytes`; documentar a autorização no host.
 - [ ] Criar fixtures de conformidade comuns para conteúdo de mídia.

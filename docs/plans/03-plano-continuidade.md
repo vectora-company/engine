@@ -1,17 +1,17 @@
 # Plano de continuidade da Vectora Engine
 
-**Estado verificado:** 13 de novembro de 2026. A integração Rust está no PR
-[#81](https://github.com/vectora-company/engine/pull/81), sobre #80; o trabalho
-ativo anterior está na stack #79 ← #80. A branch atual
-`feat/chat-media-bindings`, filha de #81, expõe os três modos nos bindings.
+**Estado verificado:** 13 de novembro de 2026. O core está no PR
+[#81](https://github.com/vectora-company/engine/pull/81), e os bindings Python/TS
+no PR [#82](https://github.com/vectora-company/engine/pull/82), filho do #81.
 **`main` no GitHub:** `dc1aa5e` (PRs #45–#72 integrados por squash).
 **Stack aberta:** `main` ← [#73](https://github.com/vectora-company/engine/pull/73)
 (spec 17) ← [#76](https://github.com/vectora-company/engine/pull/76) ←
 [#77](https://github.com/vectora-company/engine/pull/77) ←
 [#79](https://github.com/vectora-company/engine/pull/79) ←
 [#80](https://github.com/vectora-company/engine/pull/80) ←
-[#81](https://github.com/vectora-company/engine/pull/81) ← branch atual
-`feat/chat-media-bindings`.
+[#81](https://github.com/vectora-company/engine/pull/81) ←
+[#82](https://github.com/vectora-company/engine/pull/82); branch atual da próxima
+etapa: `feat/chat-media-provider-limits`, filha do #82.
 **Objetivo:** transformar as capabilities experimentais numa engine
 distribuível e adotável com segurança, sem substituir o backend Python nem
 presumir paridade.
@@ -117,13 +117,14 @@ Vectora consumidor.
    de tools posteriores, e reporta decisões sem bytes na completion e no stream.
    Entregue no PR #81. Verificações: 49 testes `chat::`, testes Rust do workspace
    e docs no hook, fmt, Clippy e typecheck TS passaram.
-4. **Etapa atual — bindings:** branch filha do #81 expõe `prepare_chat_content`/`prepareChatContent`,
-   contexto efêmero e contexto padrão em Python e TypeScript. O host passa um mapa
-   temporário `asset_id → bytes` depois da leitura autorizada no seu AssetStore;
-   o limite segue configurável e os bytes não entram em `ChatRequest`.
-5. Resolver capability por modelo com metadados/catálogo e limites específicos
-   por provider/modelo; erro estável e fallback textual. Validar MIME/digest e
-   histórico (Vectora #481/#494).
+4. **Bindings — entregue no PR #82:** `prepare_chat_content`/`prepareChatContent`,
+   contexto efêmero e contexto padrão em Python/TypeScript. O host passa um mapa
+   temporário `asset_id → bytes` após leitura autorizada no AssetStore; bytes não
+   entram em `ChatRequest`. Rust 158 testes + 3 fixtures; Python 51; Node 37
+   passaram, com 10 testes de serviço pulados sem URLs configuradas.
+5. **Etapa atual — capabilities e limites:** resolver capacidades por modelo com
+   metadados/catálogo e limites específicos por provider/modelo; erro estável e
+   fallback textual. Validar MIME/digest e histórico (Vectora #481/#494).
 6. Retry no máximo uma vez como texto apenas em rejeição específica de mídia;
    preservar erros de rede/autenticação sem retry mascarado (Vectora #481).
 7. Resultado de tool em partes (texto e imagem por `MediaRef`) com mapeamento

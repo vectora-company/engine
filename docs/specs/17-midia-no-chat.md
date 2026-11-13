@@ -4,9 +4,9 @@
 capabilities e decisões por parte existem no core Rust. O PR #79 adicionou
 serialização nativa de PDF/áudio/vídeo; o PR #81 integra `MediaStore` async e os
 três modos nos adapters Rust. A branch filha de #81 implementa os bindings
-Python e TypeScript: preparo manual, contexto por chamada e contexto padrão no
-cliente. O mapa temporário usa `asset_id → bytes`; o host continua responsável
-por autorizar a leitura. O core limita assets a 20 MiB por padrão, configurável,
+Python e TypeScript estão entregues no PR #82: preparo manual, contexto por
+chamada e contexto padrão no cliente. O mapa temporário usa `asset_id → bytes`;
+o host continua responsável por autorizar a leitura. O core limita assets a 20 MiB por padrão, configurável,
 reidrata apenas o turno de usuário atual e resultados posteriores de tools e
 reporta decisões sem bytes em completion/stream. Limites por provider/modelo,
 retry e resultados de tool em partes seguem pendentes. A referência é o backend Python do Vectora; a
