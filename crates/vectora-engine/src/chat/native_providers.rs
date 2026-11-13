@@ -14,8 +14,8 @@ use tokio::time::{Instant, timeout_at};
 use url::Url;
 
 use super::{
-    ChatError, ChatEvent, ChatEventKind, ChatRequest, FinishReason, Message, MessageContent,
-    MessageRole, ToolArguments, ToolCall, ToolCallDelta, Usage,
+    ChatError, ChatEvent, ChatEventKind, ChatRequest, FinishReason, MediaExecutionContext, Message,
+    MessageContent, MessageRole, PreparedRequest, ToolArguments, ToolCall, ToolCallDelta, Usage,
     error::classify_provider_error,
     openai_compatible::{ChatStream, validate_request},
     sse::SseDecoder,
@@ -92,6 +92,7 @@ enum NativeProtocolClient {
 /// Unified native-protocol facade used by both language bindings.
 pub struct NativeChatClient {
     inner: NativeProtocolClient,
+    media_context: Option<MediaExecutionContext>,
 }
 
 impl fmt::Debug for NativeChatClient {
@@ -201,10 +202,42 @@ impl NativeChatClient {
                 NativeProvider::Google => NativeProtocolClient::Google(protocol),
                 NativeProvider::Cohere => NativeProtocolClient::Cohere(protocol),
             },
+            media_context: None,
         })
     }
 
     pub async fn complete(&self, request: ChatRequest) -> Result<ChatCompletion, ChatError> {
+        if let Some(context) = &self.media_context {
+            let provider = self.provider_name();
+            let PreparedRequest { request, decisions } =
+                context.prepare_request(provider, request).await;
+            let mut completion = self.complete_prepared(request).await?;
+            completion.media_decisions = decisions;
+            return Ok(completion);
+        }
+        self.complete_prepared(request).await
+    }
+
+    /// Configure the default context used by `complete` and `stream`.
+    pub fn with_media_context(mut self, context: MediaExecutionContext) -> Self {
+        self.media_context = Some(context);
+        self
+    }
+
+    /// Complete with an ephemeral context overriding the client default.
+    pub async fn complete_with_media(
+        &self,
+        request: ChatRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<ChatCompletion, ChatError> {
+        let PreparedRequest { request, decisions } =
+            context.prepare_request(self.provider_name(), request).await;
+        let mut completion = self.complete_prepared(request).await?;
+        completion.media_decisions = decisions;
+        Ok(completion)
+    }
+
+    async fn complete_prepared(&self, request: ChatRequest) -> Result<ChatCompletion, ChatError> {
         match &self.inner {
             NativeProtocolClient::Anthropic(client) => client.complete(request).await,
             NativeProtocolClient::Google(client) => client.complete(request).await,
@@ -213,6 +246,46 @@ impl NativeChatClient {
     }
 
     pub async fn stream(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
+        let prepared = match &self.media_context {
+            Some(context) => Some(
+                context
+                    .prepare_request(self.provider_name(), request.clone())
+                    .await,
+            ),
+            None => None,
+        };
+        let (request, decisions) = prepared
+            .map(|prepared| (prepared.request, prepared.decisions))
+            .unwrap_or((request, Vec::new()));
+        let stream = self.stream_prepared(request).await?;
+        Ok(super::openai_compatible::with_media_evidence(
+            stream, decisions,
+        ))
+    }
+
+    /// Stream with an ephemeral context overriding the client default.
+    pub async fn stream_with_media(
+        &self,
+        request: ChatRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<ChatStream, ChatError> {
+        let PreparedRequest { request, decisions } =
+            context.prepare_request(self.provider_name(), request).await;
+        let stream = self.stream_prepared(request).await?;
+        Ok(super::openai_compatible::with_media_evidence(
+            stream, decisions,
+        ))
+    }
+
+    fn provider_name(&self) -> &'static str {
+        match self.inner {
+            NativeProtocolClient::Anthropic(_) => "anthropic",
+            NativeProtocolClient::Google(_) => "google",
+            NativeProtocolClient::Cohere(_) => "cohere",
+        }
+    }
+
+    async fn stream_prepared(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
         match &self.inner {
             NativeProtocolClient::Anthropic(client) => client.stream(request).await,
             NativeProtocolClient::Google(client) => client.stream(request).await,
@@ -701,6 +774,7 @@ fn parse_cohere_completion(value: Value) -> Result<ChatCompletion, ChatError> {
         tool_calls: calls,
         finish_reason,
         usage,
+        media_decisions: Vec::new(),
     })
 }
 
@@ -1049,6 +1123,7 @@ fn parse_anthropic_completion(value: Value) -> Result<ChatCompletion, ChatError>
         tool_calls: calls,
         finish_reason,
         usage,
+        media_decisions: Vec::new(),
     })
 }
 
@@ -1084,6 +1159,7 @@ fn parse_google_completion(value: Value) -> Result<ChatCompletion, ChatError> {
         tool_calls: calls,
         finish_reason,
         usage: parse_google_usage(value.get("usageMetadata")),
+        media_decisions: Vec::new(),
     })
 }
 

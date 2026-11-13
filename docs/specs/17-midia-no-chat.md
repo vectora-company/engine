@@ -1,25 +1,19 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada. O núcleo Rust tem os tipos de mídia
-(`MediaRef`, `MediaPart` e as variantes de `ContentPart`), a classificação pelos
-bytes, as capabilities em camadas, a reidratação com conferência de digest e a
-decisão por parte com seu registro (`chat/media.rs`). Uma etapa em
-do PR #79, empilhada sobre o PR #77, implementou PDF base64 nos adapters
-Anthropic, Gemini e OpenAI Chat Completions, além de áudio WAV/MP3 em OpenAI e
-áudio/vídeo `inlineData` em Gemini. A verificação local atual passou: 44 testes `chat::`, `cargo fmt --check` e
-Clippy com warnings negados. A integração completa ao envio ainda não existe;
-acompanhe evidência e limites em
-[`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
-Ainda não existem integração automática da preparação no fluxo de envio,
-limites por provider/modelo, retry específico por recusa, evidência/evento de
-roteamento, resultado de tool em partes ou bindings Python e TypeScript. A
-experiência do Vectora confirma que decisões de roteamento e evidência precisam
-ser compartilhadas entre envio e consumer, e que histórico antigo não deve
-reidratar bytes automaticamente. A referência de comportamento é o backend Python do Vectora. A stack
-[Vectora #479–#502](https://github.com/vectora-company/vectora/pulls) foi
-integrada em 19 PRs empilhados e resolve a jornada multimodal do produto. A
-Engine usa essa experiência para priorizar contratos compartilháveis, sem
-assumir que UI, STT local ou empacotamento do app sejam APIs do core.
+**Estado:** parcialmente implementada. Tipos, classificação pelos bytes,
+capabilities e decisões por parte existem no core Rust. O PR #79 adicionou
+serialização nativa de PDF/áudio/vídeo. A branch filha do PR #80 integra
+`MediaStore` async e os três modos (preparo manual, contexto efêmero por chamada
+e padrão no cliente) aos adapters Rust. O contexto limita assets a 20 MiB por
+padrão, pode ser configurado, só reidrata o turno de usuário atual e resultados
+de tools posteriores e reporta decisões sem bytes em completion/stream. 49
+testes `chat::`, fmt, Clippy e TypeScript typecheck passaram. Os bindings ainda
+não expõem o store/contexto; limites por provider/modelo, retry e resultados de
+tool em partes seguem pendentes. A referência é o backend Python do Vectora; a
+stack [#479–#502](https://github.com/vectora-company/vectora/pulls) foi integrada
+em 19 PRs e fechou a jornada do produto, mas não prova paridade da Engine. UI,
+STT local, prévias e empacotamento seguem específicos do Vectora. Estado e
+critérios: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 
 Este documento define como o chat da Engine representa mídia (imagem, áudio,
 vídeo, documento e arquivo genérico) em mensagens e em resultados de tools, como
@@ -34,22 +28,23 @@ rollback.
 - O resultado de uma tool é uma `String`; os adapters nativos achatam o resultado
   em texto, e imagens de resultado de tool se perdem fora do caminho
   OpenAI-compatível.
-- Não existe tabela de capability por modalidade. A incompatibilidade só é
-  detectada pelo texto do erro (`ChatError::MultimodalIncompatible`).
-- Não existe store de mídia; o único ponteiro de artefato é
-  `VerificationEvidence.artifact_ref`.
+- O core tem capabilities/resolução de preparo por provider, mas ainda não um
+  catálogo completo por modelo nem limites por provider/modelo.
+- `MediaStore` assíncrono e `MediaExecutionContext` existem no core; os bindings
+  ainda não expõem o store/contexto. `VerificationEvidence.artifact_ref` atende
+  a outro contrato e não substitui o store de mídia do consumidor.
 
 ## Integração com o envio
 
 O consumidor terá três modos: chamar `prepare_content` manualmente antes do
 adapter; passar `MediaExecutionContext` por chamada; ou configurar contexto
-padrão no cliente. O contexto por chamada prevalece sobre o padrão do cliente.
-Partes já preparadas não são processadas de novo. `ChatRequest` continua sem
-bytes persistidos. A leitura de `MediaStore` é assíncrona para não bloquear o
-runtime. Estado da implementação e precedência estão em
+padrão no cliente. O contexto por chamada prevalece sobre o padrão. Partes já
+preparadas não são processadas de novo. `ChatRequest` permanece sem bytes
+persistidos; `MediaStore` é async. O contexto limita cada asset a 20 MiB por
+padrão, configurável, e só reidrata a mensagem de usuário atual e resultados de
+tools posteriores. A completion e o stream reportam decisões sem bytes. Os
+bindings ainda não expõem o contexto. Estado e precedência:
 [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
-Até o pipeline ficar integrado, anexos por referência não são reidratados
-automaticamente pelos adapters.
 
 ## Responsabilidades
 

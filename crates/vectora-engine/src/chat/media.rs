@@ -8,8 +8,9 @@
 //! texto ou referência. A decisão é devolvida como registro auditável, sem o
 //! conteúdo da mídia.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
+use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use serde::{Deserialize, Serialize};
@@ -464,8 +465,96 @@ pub enum MediaError {
 
 /// Store de mídia do consumidor. A autorização de acesso é dele: a Engine só
 /// pede os bytes de uma referência que ele mesmo entregou.
-pub trait MediaStore {
-    fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError>;
+#[async_trait]
+pub trait MediaStore: Send + Sync {
+    async fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError>;
+}
+
+/// Runtime-only media dependencies. This context is never serialized into a
+/// chat request or persisted in conversation history.
+#[derive(Clone)]
+pub struct MediaExecutionContext {
+    pub resolver: CapabilityResolver,
+    pub store: Arc<dyn MediaStore>,
+    pub max_media_bytes: u64,
+}
+
+impl std::fmt::Debug for MediaExecutionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MediaExecutionContext")
+            .field("resolver", &self.resolver)
+            .field("store", &"[consumer-owned]")
+            .field("max_media_bytes", &self.max_media_bytes)
+            .finish()
+    }
+}
+
+impl MediaExecutionContext {
+    pub fn new(resolver: CapabilityResolver, store: Arc<dyn MediaStore>) -> Self {
+        Self {
+            resolver,
+            store,
+            max_media_bytes: 20 * 1024 * 1024,
+        }
+    }
+
+    pub fn with_max_media_bytes(mut self, max_media_bytes: u64) -> Self {
+        self.max_media_bytes = max_media_bytes;
+        self
+    }
+
+    /// Prepares media in the current user turn and following tool results.
+    pub async fn prepare_request(
+        &self,
+        provider: &str,
+        mut request: super::ChatRequest,
+    ) -> PreparedRequest {
+        let start = request
+            .messages
+            .iter()
+            .rposition(|message| message.role == super::MessageRole::User)
+            .unwrap_or(request.messages.len());
+        let capabilities = self.resolver.resolve(provider, &request.model);
+        let mut decisions = Vec::new();
+        for (message_index, message) in request.messages.iter_mut().enumerate().skip(start) {
+            if !matches!(
+                message.role,
+                super::MessageRole::User | super::MessageRole::Tool
+            ) {
+                continue;
+            }
+            let site = if message.role == super::MessageRole::Tool {
+                ContentSite::ToolResult
+            } else {
+                ContentSite::UserMessage
+            };
+            let super::MessageContent::Parts(parts) = &mut message.content else {
+                continue;
+            };
+            let prepared = prepare_content_with_limit(
+                std::mem::take(parts),
+                &capabilities,
+                self.store.as_ref(),
+                &request.model,
+                site,
+                self.max_media_bytes,
+            )
+            .await;
+            *parts = prepared.parts;
+            decisions.extend(prepared.decisions.into_iter().map(|mut decision| {
+                decision.message_index = message_index;
+                decision
+            }));
+        }
+        PreparedRequest { request, decisions }
+    }
+}
+
+/// A prepared request and redacted routing evidence for its media parts.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreparedRequest {
+    pub request: super::ChatRequest,
+    pub decisions: Vec<MediaDecision>,
 }
 
 /// Como uma parte de mídia segue ao modelo.
@@ -481,6 +570,8 @@ pub enum MediaMode {
 /// Registro da decisão tomada para uma parte; não contém o conteúdo.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct MediaDecision {
+    /// Index in `ChatRequest.messages`; zero for standalone `prepare_content`.
+    pub message_index: usize,
     pub part_index: usize,
     pub name: String,
     pub mime_type: String,
@@ -512,12 +603,24 @@ pub enum ContentSite {
 /// reidratada (digest e tamanho conferidos), e vira nativa, imagens, texto ou
 /// referência conforme as capabilities. Asset ausente ou adulterado nunca é
 /// erro: a parte vira uma nota e o motivo fica na decisão.
-pub fn prepare_content(
+pub async fn prepare_content(
     parts: Vec<ContentPart>,
     capabilities: &ModalityCapabilities,
     store: &dyn MediaStore,
     model: &str,
     site: ContentSite,
+) -> PreparedContent {
+    prepare_content_with_limit(parts, capabilities, store, model, site, u64::MAX).await
+}
+
+/// Prepare media while refusing to read assets that exceed a byte limit.
+pub async fn prepare_content_with_limit(
+    parts: Vec<ContentPart>,
+    capabilities: &ModalityCapabilities,
+    store: &dyn MediaStore,
+    model: &str,
+    site: ContentSite,
+    max_media_bytes: u64,
 ) -> PreparedContent {
     let mut prepared = Vec::with_capacity(parts.len());
     let mut decisions = Vec::new();
@@ -526,8 +629,9 @@ pub fn prepare_content(
             prepared.push(part);
             continue;
         };
-        let outcome = decide(kind, media, capabilities, store, site);
+        let outcome = decide(kind, media, capabilities, store, site, max_media_bytes).await;
         decisions.push(MediaDecision {
+            message_index: 0,
             part_index: index,
             name: media.media_ref.name.clone(),
             mime_type: media.media_ref.mime_type.clone(),
@@ -566,10 +670,21 @@ fn text_part(text: String) -> ContentPart {
     ContentPart::Text { text }
 }
 
-fn read_verified(media_ref: &MediaRef, store: &dyn MediaStore) -> Result<Vec<u8>, String> {
+async fn read_verified(
+    media_ref: &MediaRef,
+    store: &dyn MediaStore,
+    max_media_bytes: u64,
+) -> Result<Vec<u8>, String> {
+    if media_ref.size_bytes > max_media_bytes {
+        return Err("mídia excede o limite configurado".to_owned());
+    }
     let data = store
         .read(media_ref)
+        .await
         .map_err(|_| "asset indisponível".to_owned())?;
+    if data.len() as u64 > max_media_bytes {
+        return Err("mídia excede o limite configurado".to_owned());
+    }
     if data.len() as u64 != media_ref.size_bytes {
         return Err("tamanho divergente do registrado".to_owned());
     }
@@ -600,7 +715,7 @@ fn unavailable(media: &MediaPart, why: &str) -> Outcome {
         mode: MediaMode::Reference,
         reason: why.to_owned(),
         parts: vec![text_part(format!(
-            "[anexo indisponível: {}]",
+            "[anexo não enviado: {}]",
             media.media_ref.name
         ))],
     }
@@ -615,12 +730,13 @@ fn inline(kind: MediaKind, media_ref: &MediaRef, data: &[u8]) -> InlineMedia {
     }
 }
 
-fn decide(
+async fn decide(
     kind: MediaKind,
     media: &MediaPart,
     capabilities: &ModalityCapabilities,
     store: &dyn MediaStore,
     site: ContentSite,
+    max_media_bytes: u64,
 ) -> Outcome {
     let vision = capabilities.vision.is_supported();
     let native = match kind {
@@ -638,7 +754,7 @@ fn decide(
     };
 
     if native {
-        return match read_verified(&media.media_ref, store) {
+        return match read_verified(&media.media_ref, store, max_media_bytes).await {
             Ok(data) => {
                 let item = inline(kind, &media.media_ref, &data);
                 let part = if kind == MediaKind::Image {
@@ -657,6 +773,7 @@ fn decide(
                     parts: vec![part],
                 }
             }
+            Err(why) if why == "mídia excede o limite configurado" => fallback(kind, media, &why),
             Err(why) => unavailable(media, &why),
         };
     }
@@ -668,13 +785,16 @@ fn decide(
     if derives_images {
         let mut parts = vec![text_part(media.textual_form(kind))];
         for preview in &media.previews {
-            match read_verified(preview, store) {
+            match read_verified(preview, store, max_media_bytes).await {
                 Ok(data) => parts.push(ContentPart::ImageUrl {
                     image_url: ImageUrl {
                         url: inline(MediaKind::Image, preview, &data).data_url(),
                         detail: None,
                     },
                 }),
+                Err(why) if why == "mídia excede o limite configurado" => {
+                    return fallback(kind, media, &why);
+                }
                 Err(why) => return unavailable(media, &why),
             }
         }
@@ -710,8 +830,9 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl MediaStore for MemoryStore {
-        fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
+        async fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
             self.0
                 .get(&media_ref.asset_id)
                 .cloned()
@@ -880,8 +1001,8 @@ mod tests {
         assert_eq!(capabilities.pdf, CapabilityState::Supported);
     }
 
-    #[test]
-    fn imagem_nativa_vira_data_url_e_registra_a_decisao() {
+    #[tokio::test]
+    async fn imagem_nativa_vira_data_url_e_registra_a_decisao() {
         let mut store = MemoryStore::default();
         let media = part(store.put("a", PNG), None, vec![]);
         let result = prepare_content(
@@ -890,7 +1011,8 @@ mod tests {
             &store,
             "modelo",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(result.parts.len(), 2);
         match &result.parts[1] {
             ContentPart::ImageUrl { image_url } => {
@@ -904,8 +1026,8 @@ mod tests {
         assert_eq!(result.decisions[0].model, "modelo");
     }
 
-    #[test]
-    fn imagem_sem_visao_cai_na_forma_textual_ou_na_referencia() {
+    #[tokio::test]
+    async fn imagem_sem_visao_cai_na_forma_textual_ou_na_referencia() {
         let mut store = MemoryStore::default();
         let com_texto = part(store.put("a", PNG), Some("[imagem: gato]"), vec![]);
         let sem_texto = part(reference("b", PNG, "foto.png"), None, vec![]);
@@ -915,7 +1037,8 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(result.decisions[0].mode, MediaMode::Text);
         assert_eq!(result.decisions[1].mode, MediaMode::Reference);
         assert!(
@@ -923,8 +1046,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn imagem_de_resultado_de_tool_exige_a_capability_propria() {
+    #[tokio::test]
+    async fn imagem_de_resultado_de_tool_exige_a_capability_propria() {
         let mut store = MemoryStore::default();
         let media = part(store.put("a", PNG), None, vec![]);
         let mut capabilities = caps(true, false);
@@ -935,12 +1058,13 @@ mod tests {
             &store,
             "m",
             ContentSite::ToolResult,
-        );
+        )
+        .await;
         assert_eq!(result.decisions[0].mode, MediaMode::Reference);
     }
 
-    #[test]
-    fn pdf_nativo_so_quando_o_modelo_le_pdf() {
+    #[tokio::test]
+    async fn pdf_nativo_so_quando_o_modelo_le_pdf() {
         let mut store = MemoryStore::default();
         let media = part(store.put("p", PDF), Some("texto extraído"), vec![]);
         let nativo = prepare_content(
@@ -949,7 +1073,8 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(nativo.decisions[0].mode, MediaMode::Native);
         assert!(
             matches!(&nativo.parts[0], ContentPart::Inline(item) if item.mime_type == "application/pdf")
@@ -961,13 +1086,14 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(texto.decisions[0].mode, MediaMode::Text);
         assert!(matches!(&texto.parts[0], ContentPart::Text { text } if text == "texto extraído"));
     }
 
-    #[test]
-    fn pdf_vira_imagens_quando_o_modelo_so_le_imagem() {
+    #[tokio::test]
+    async fn pdf_vira_imagens_quando_o_modelo_so_le_imagem() {
         let mut store = MemoryStore::default();
         let page = store.put("pg1", PNG);
         let media = part(store.put("p", PDF), Some("[documento: a.pdf]"), vec![page]);
@@ -977,14 +1103,15 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(result.decisions[0].mode, MediaMode::Image);
         assert_eq!(result.parts.len(), 2);
         assert!(matches!(result.parts[1], ContentPart::ImageUrl { .. }));
     }
 
-    #[test]
-    fn digest_adulterado_ou_asset_ausente_vira_nota_com_motivo() {
+    #[tokio::test]
+    async fn digest_adulterado_ou_asset_ausente_vira_nota_com_motivo() {
         let mut store = MemoryStore::default();
         let mut media = part(store.put("a", PNG), None, vec![]);
         media.media_ref.sha256 = sha256_hex(b"outro conteudo");
@@ -994,11 +1121,12 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(adulterado.decisions[0].mode, MediaMode::Reference);
         assert!(adulterado.decisions[0].reason.contains("digest"));
         assert!(
-            matches!(&adulterado.parts[0], ContentPart::Text { text } if text.contains("indisponível"))
+            matches!(&adulterado.parts[0], ContentPart::Text { text } if text.contains("não enviado"))
         );
 
         let ausente = prepare_content(
@@ -1011,12 +1139,13 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert!(ausente.decisions[0].reason.contains("indisponível"));
     }
 
-    #[test]
-    fn arquivo_generico_nunca_vai_nativo() {
+    #[tokio::test]
+    async fn arquivo_generico_nunca_vai_nativo() {
         let store = MemoryStore::default();
         let media = part(
             reference("z", b"PK\x03\x04\0\0\0\0outro", "dados.zip"),
@@ -1029,11 +1158,31 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(result.decisions[0].mode, MediaMode::Reference);
         assert!(
             matches!(&result.parts[0], ContentPart::Text { text } if text.contains("dados.zip"))
         );
+    }
+
+    #[tokio::test]
+    async fn size_limit_is_checked_before_reading_media() {
+        let mut store = MemoryStore::default();
+        let media = part(store.put("large", PDF), Some("extracted text"), vec![]);
+        let result = prepare_content_with_limit(
+            vec![ContentPart::Document(media)],
+            &caps(true, true),
+            &store,
+            "m",
+            ContentSite::UserMessage,
+            4,
+        )
+        .await;
+
+        assert_eq!(result.decisions[0].mode, MediaMode::Text);
+        assert!(result.decisions[0].reason.contains("limite"));
+        assert!(matches!(&result.parts[0], ContentPart::Text { text } if text == "extracted text"));
     }
 
     #[test]
@@ -1048,8 +1197,65 @@ mod tests {
         assert!(json.contains("\"type\":\"image\""));
     }
 
-    #[test]
-    fn partes_que_nao_sao_midia_passam_sem_mudanca() {
+    #[tokio::test]
+    async fn execution_context_prepares_only_the_current_user_turn() {
+        use std::sync::Arc;
+
+        use super::super::{ChatRequest, Message, MessageContent, MessageRole};
+
+        let mut store = MemoryStore::default();
+        let mut old = store.put("old", PDF);
+        old.name = "old.pdf".into();
+        let mut current = store.put("current", PDF);
+        current.name = "current.pdf".into();
+        let request = ChatRequest::new(
+            "gemini-2.5-pro",
+            vec![
+                Message {
+                    role: MessageRole::User,
+                    content: MessageContent::Parts(vec![ContentPart::Document(part(
+                        old,
+                        Some("old text"),
+                        vec![],
+                    ))]),
+                    tool_calls: Vec::new(),
+                    tool_call_id: None,
+                    name: None,
+                    is_error: false,
+                },
+                Message::text(MessageRole::Assistant, "older response"),
+                Message {
+                    role: MessageRole::User,
+                    content: MessageContent::Parts(vec![ContentPart::Document(part(
+                        current,
+                        None,
+                        vec![],
+                    ))]),
+                    tool_calls: Vec::new(),
+                    tool_call_id: None,
+                    name: None,
+                    is_error: false,
+                },
+            ],
+        );
+        let context = MediaExecutionContext::new(CapabilityResolver::new(), Arc::new(store));
+
+        let prepared = context.prepare_request("google", request).await;
+        assert!(matches!(
+            &prepared.request.messages[0].content,
+            MessageContent::Parts(parts) if matches!(&parts[0], ContentPart::Document(_))
+        ));
+        assert!(matches!(
+            &prepared.request.messages[2].content,
+            MessageContent::Parts(parts) if matches!(&parts[0], ContentPart::Inline(_))
+        ));
+        assert_eq!(prepared.decisions.len(), 1);
+        assert_eq!(prepared.decisions[0].message_index, 2);
+        assert_eq!(prepared.decisions[0].name, "current.pdf");
+    }
+
+    #[tokio::test]
+    async fn partes_que_nao_sao_midia_passam_sem_mudanca() {
         let store = MemoryStore::default();
         let result = prepare_content(
             vec![text_part("oi".into())],
@@ -1057,7 +1263,8 @@ mod tests {
             &store,
             "m",
             ContentSite::UserMessage,
-        );
+        )
+        .await;
         assert_eq!(result.parts, vec![text_part("oi".into())]);
         assert!(result.decisions.is_empty());
     }

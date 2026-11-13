@@ -5,9 +5,9 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 
 use super::{
-    ChatCompletion, ChatError, ChatEvent, ChatEventKind, ChatRequest, NativeChatClient,
-    NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
-    openai_compatible::ChatStream,
+    ChatCompletion, ChatError, ChatEvent, ChatEventKind, ChatRequest, MediaExecutionContext,
+    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
+    PreparedRequest, openai_compatible::ChatStream,
 };
 
 /// Explicit ordered candidates. Consumers resolve settings and credentials;
@@ -35,6 +35,7 @@ pub enum FallbackClientSettings {
 #[derive(Clone)]
 struct Candidate {
     model_id: String,
+    provider: String,
     model: String,
     client: Arc<ProviderClient>,
 }
@@ -63,6 +64,7 @@ impl ProviderClient {
 /// Fallback runner over caller-supplied, already eligible provider candidates.
 pub struct FallbackChatClient {
     candidates: Vec<Candidate>,
+    media_context: Option<MediaExecutionContext>,
 }
 
 impl FallbackChatClient {
@@ -105,10 +107,11 @@ impl FallbackChatClient {
                 }
             };
             if primary_provider.is_none() {
-                primary_provider = Some(provider);
+                primary_provider = Some(provider.clone());
             }
             candidates.push(Candidate {
                 model_id,
+                provider,
                 model,
                 client: Arc::new(client),
             });
@@ -118,16 +121,55 @@ impl FallbackChatClient {
                 "at least one eligible fallback candidate is required",
             ));
         }
-        Ok(Self { candidates })
+        Ok(Self {
+            candidates,
+            media_context: None,
+        })
     }
 
-    pub async fn complete(&self, mut request: ChatRequest) -> Result<ChatCompletion, ChatError> {
+    /// Configure the default media context used by chat calls.
+    pub fn with_media_context(mut self, context: MediaExecutionContext) -> Self {
+        self.media_context = Some(context);
+        self
+    }
+
+    pub async fn complete(&self, request: ChatRequest) -> Result<ChatCompletion, ChatError> {
+        if let Some(context) = &self.media_context {
+            return self.complete_with_media(request, context).await;
+        }
+        self.complete_candidates(request, None).await
+    }
+
+    /// Complete using an ephemeral context that overrides the client default.
+    pub async fn complete_with_media(
+        &self,
+        request: ChatRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<ChatCompletion, ChatError> {
+        self.complete_candidates(request, Some(context)).await
+    }
+
+    async fn complete_candidates(
+        &self,
+        mut request: ChatRequest,
+        context: Option<&MediaExecutionContext>,
+    ) -> Result<ChatCompletion, ChatError> {
         let mut last_error = None;
         for candidate in &self.candidates {
             request.model.clone_from(&candidate.model);
-            match candidate.client.complete(request.clone()).await {
+            let (candidate_request, decisions) = match context {
+                Some(context) => {
+                    let PreparedRequest { request, decisions } = context
+                        .prepare_request(&candidate.provider, request.clone())
+                        .await;
+                    (request, decisions)
+                }
+                None => (request.clone(), Vec::new()),
+            };
+            match candidate.client.complete(candidate_request).await {
                 Ok(mut completion) => {
                     completion.selected_model_id = Some(candidate.model_id.clone());
+                    completion.media_decisions = decisions;
                     return Ok(completion);
                 }
                 Err(error) if can_fallback(&error) => last_error = Some(error),
@@ -143,6 +185,24 @@ impl FallbackChatClient {
     }
 
     pub async fn stream(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
+        self.stream_candidates(request, self.media_context.clone())
+            .await
+    }
+
+    /// Stream using an ephemeral context that overrides the client default.
+    pub async fn stream_with_media(
+        &self,
+        request: ChatRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<ChatStream, ChatError> {
+        self.stream_candidates(request, Some(context.clone())).await
+    }
+
+    async fn stream_candidates(
+        &self,
+        request: ChatRequest,
+        context: Option<MediaExecutionContext>,
+    ) -> Result<ChatStream, ChatError> {
         let candidates = self.candidates.clone();
         let stream = stream! {
             let mut final_error = None;
@@ -156,13 +216,30 @@ impl FallbackChatClient {
                 }
                 let mut candidate_request = request.clone();
                 candidate_request.model.clone_from(&candidate.model);
+                let decisions = if let Some(context) = &context {
+                    let PreparedRequest { request: prepared, decisions } =
+                        context
+                            .prepare_request(&candidate.provider, candidate_request)
+                            .await;
+                    candidate_request = prepared;
+                    decisions
+                } else {
+                    Vec::new()
+                };
                 let candidate_error = match candidate.client.stream(candidate_request).await {
                     Ok(mut response_stream) => {
                         let mut emitted = false;
+                        let mut media_reported = false;
                         let mut failure = None;
                         while let Some(item) = response_stream.next().await {
                             match item {
                                 Ok(event) => {
+                                    if !media_reported && !decisions.is_empty() {
+                                        yield Ok(ChatEvent::new(ChatEventKind::MediaRouted {
+                                            decisions: decisions.clone(),
+                                        }));
+                                        media_reported = true;
+                                    }
                                     emitted = true;
                                     yield Ok(event);
                                 }
@@ -175,6 +252,9 @@ impl FallbackChatClient {
                                     break;
                                 }
                             }
+                        }
+                        if failure.is_none() && !media_reported && !decisions.is_empty() {
+                            yield Ok(ChatEvent::new(ChatEventKind::MediaRouted { decisions }));
                         }
                         failure
                     }

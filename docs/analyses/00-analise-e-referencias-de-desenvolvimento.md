@@ -97,7 +97,7 @@ da raiz do repositório no texto do link e um destino relativo válido.
 Para a etapa ativa de mídia, o checklist específico é
 [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 
-## Etapa multimodal empilhada sobre o PR #77 — 2026-11-13
+## Registro inicial da etapa multimodal sobre o PR #77 — 2026-11-13
 
 O código-base do PR #77 (`fix/storage-vector-collection-dimensions`) declara
 PDF como suportado para `openai` em `chat/media.rs::known_provider`, embora o
@@ -136,9 +136,9 @@ em texto somente para rejeição específica de mídia; imagens de ferramentas M
 como assets; conversão local de áudio/PDF/vídeo; transcrição offline e helper
 Speech do macOS com CI que gera fala. Isso não significa que a Engine já tenha
 essas capacidades. Esta etapa Engine fecha somente o defeito de formato do
-payload para as modalidades mapeadas; o preparador ainda não está ligado ao
-envio real e faltam limite, retry, evidência/evento de roteamento e suporte de
-resultado multimodal de tool.
+payload para as modalidades mapeadas; Naquele snapshot inicial, o preparador ainda não estava ligado ao envio real.
+Esse estado foi superado pela implementação descrita abaixo; continuam pendentes
+limites por provider/modelo, retry específico e resultado multimodal de tool.
 
 A fronteira de produto deve ser preservada: STT local, permissões do macOS,
 configuração UI, geração de prévias e empacotamento SCons estão implementados no
@@ -161,12 +161,13 @@ sem bytes:
    padrão; contexto explícito por chamada tem precedência. Dados já preparados
    (`Inline`/imagem resolvida) não são preparados duas vezes.
 
-A leitura do `MediaStore` será assíncrona: o chat e seus transportes já são
-async, e o store pode fazer I/O; não bloquear executor com leitura de arquivo ou
-serviço. O contrato deve limitar tamanho antes de codificar base64 e registrar
-somente metadados/digest/modo/motivo, nunca bytes. A decisão está implementada
-no plano e será entregue em etapas Rust e bindings. Não há decisão vital
-pendente nesta integração neste momento.
+A leitura do `MediaStore` é assíncrona; o contrato limita cada asset a 20 MiB
+por padrão (configurável) antes de codificar base64, e registra metadados,
+digest, modo e motivo, nunca bytes. O core Rust integra os três modos nos
+clients OpenAI-compatible/native/fallback, limita reidratação ao turno atual e
+expõe evidência em completion/stream. 49 testes `chat::`, fmt, Clippy e
+TypeScript typecheck passaram. Bindings ainda pendentes; não há decisão vital
+aberta para esta etapa.
 
 ## Decisões que exigem o mantenedor
 

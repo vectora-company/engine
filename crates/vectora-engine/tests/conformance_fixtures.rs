@@ -253,6 +253,7 @@ async fn shared_fallback_fixture_conforms_to_completion_and_streaming() {
         .iter()
         .map(|event| match &event.event {
             ChatEventKind::ModelSwitched { .. } => "model_switched",
+            ChatEventKind::MediaRouted { .. } => "media_routed",
             ChatEventKind::TextDelta { .. } => "text_delta",
             ChatEventKind::Usage { .. } => "usage",
             ChatEventKind::Completed { .. } => "completed",
@@ -294,6 +295,7 @@ async fn shared_fallback_fixture_conforms_to_completion_and_streaming() {
     while let Some(event) = stream.try_next().await.unwrap() {
         let event_type = match event.event {
             ChatEventKind::ModelSwitched { .. } => "model_switched",
+            ChatEventKind::MediaRouted { .. } => "media_routed",
             ChatEventKind::TextDelta { .. } => "text_delta",
             ChatEventKind::Usage { .. } => "usage",
             ChatEventKind::Completed { .. } => "completed",

@@ -59,9 +59,22 @@ export interface ChatEvent {
     | "reasoning_delta"
     | "tool_call_delta"
     | "model_switched"
+    | "media_routed"
     | "usage"
     | "completed";
   [key: string]: JsonValue;
+}
+
+export interface MediaDecision {
+  message_index: number;
+  part_index: number;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  sha256: string;
+  mode: "native" | "image" | "text" | "reference";
+  reason: string;
+  model: string;
 }
 
 export interface ChatCompletion {
@@ -73,6 +86,7 @@ export interface ChatCompletion {
   tool_calls: JsonValue[];
   finish_reason: JsonValue;
   usage: JsonValue;
+  media_decisions?: MediaDecision[];
 }
 
 export interface TurnAccumulatorSettings {

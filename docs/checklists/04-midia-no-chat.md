@@ -2,8 +2,8 @@
 
 Etapa da [spec de mídia](../specs/17-midia-no-chat.md) e do
 [plano ativo](../plans/03-plano-continuidade.md). A etapa de payload foi entregue
-no PR #79 sobre #77; esta branch filha registra a decisão para integrar a mídia
-no envio.
+no PR #79 sobre #77. A decisão registrada no PR #80 foi implementada nesta
+branch filha, que integra a mídia no envio pelos três modos escolhidos.
 
 ## Contrato e implementação
 
@@ -31,7 +31,7 @@ no envio.
 - [x] Abrir o PR #79 sobre a branch do PR #77.
 - [x] Iniciar a próxima etapa em `feat/chat-media-routing-evidence`, filha do PR #79.
 - [x] Commit, push e abrir o PR #80 empilhado sobre #79, sem marcar brunosrz no GitHub.
-- [ ] Aguardar a resposta no chat; manter bloqueadas as mudanças de API que dependem da decisão.
+- [x] Registrar a decisão de brunosrz no chat: oferecer os três modos de integração.
 
 ## Evidência do consumidor Vectora
 
@@ -49,14 +49,38 @@ implementação; não foram adicionados à API pública da Engine.
 
 - OpenAI Responses API não existe neste adapter; o contrato se limita aos
   formatos do Chat Completions.
-- A integração do preparador no fluxo real de envio, fallback após rejeição,
-  limites e roteamento/evidência seguem no backlog da spec 17.
+- Retry após rejeição específica, limites por provider/modelo, catálogo de
+  capabilities por modelo e bindings seguem no backlog da spec 17.
 
-## Próxima etapa — decisão vital
+## Integração — etapa atual
 
-- [x] Concluir e verificar a serialização de payloads específica do PR #79.
-- [x] Investigar o caminho de envio e confirmar que os adapters não recebem
-      `MediaStore` nem `CapabilityResolver`.
-- [x] Registrar as opções de API e a decisão de síncrono/assíncrono em
-      [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
-- [ ] Aguardar a resposta de brunosrz no chat antes de alterar a API pública.
+- [x] brunosrz escolheu oferecer preparo manual, contexto por chamada e
+      contexto padrão por cliente.
+- [x] Contexto por chamada prevalece sobre o padrão; mídia já preparada não é
+      processada de novo.
+- [x] `MediaStore` async e `ChatRequest` sem bytes persistidos.
+- [x] Implementar preparo no core Rust para OpenAI-compatible, native e fallback.
+- [x] Reidratar só a mensagem de usuário atual e resultados de tools posteriores.
+- [x] Limitar cada asset a 20 MiB por padrão, configurável, antes da leitura.
+- [x] Incluir evidência sem bytes em `ChatCompletion` e evento `media_routed`.
+- [x] Cobrir no teste HTTP o contexto explícito por chamada prevalecendo sobre
+      o padrão do cliente.
+- [ ] Reexecutar verificações após a cobertura do modo por chamada.
+- [ ] Commit, push e abrir PR empilhado sobre #80.
+- [ ] Expor os três modos nos bindings Python/TypeScript e criar fixtures comuns.
+- [ ] Implementar limites por provider/modelo e retry de rejeição específica.
+
+## Evidência do consumidor Vectora
+
+A stack de mídia da Vectora, PRs [#479–#502](https://github.com/vectora-company/vectora/pulls),
+foi integrada em 19 PRs empilhados em 2026-11-13; isso confirma a necessidade
+funcional no consumidor, não paridade da Engine. Padrões transferíveis ainda
+pendentes: catálogo de modalidades por modelo, limites por provider, retry
+específico e imagens em resultados de tools. STT local, conversão de PDF/vídeo,
+preferências UI, permissões e empacotamento SCons permanecem capacidades do
+Vectora nesta implementação.
+
+## Limites
+
+- OpenAI Responses API não existe neste adapter; o contrato é Chat Completions.
+- Bindings ainda não recebem contexto/store; esta branch cobre o core Rust.

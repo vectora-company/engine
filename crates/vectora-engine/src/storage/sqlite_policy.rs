@@ -502,6 +502,7 @@ mod tests {
                 arguments: ToolArguments::from_json(&json!({"path": path}).to_string()),
             }],
             usage: None,
+            media_decisions: Vec::new(),
         }
     }
 

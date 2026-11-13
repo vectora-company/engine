@@ -3,15 +3,16 @@
 **Estado verificado:** 13 de novembro de 2026, contra o código da branch do topo
 da stack (`fix/storage-vector-collection-dimensions`, PR
 [#77](https://github.com/vectora-company/engine/pull/77) ←
-[#79](https://github.com/vectora-company/engine/pull/79); a branch local
-[#80](https://github.com/vectora-company/engine/pull/80) registra a decisão
-vital sobre integração, aguardando resposta no chat.
+[#79](https://github.com/vectora-company/engine/pull/79) ←
+[#80](https://github.com/vectora-company/engine/pull/80); branch atual
+`feat/chat-media-execution-context` implementa a decisão de oferecer os três modos.
 **`main` no GitHub:** `dc1aa5e` (PRs #45–#72 integrados por squash).
 **Stack aberta:** `main` ← [#73](https://github.com/vectora-company/engine/pull/73)
 (spec 17) ← [#76](https://github.com/vectora-company/engine/pull/76) (tipos de
 mídia) ← [#77](https://github.com/vectora-company/engine/pull/77) (dimensão
 vetorial) ← [#79](https://github.com/vectora-company/engine/pull/79) (payload
-nativo).
+nativo) ← [#80](https://github.com/vectora-company/engine/pull/80) (decisão
+sobre os três modos); branch atual `feat/chat-media-execution-context`.
 **Objetivo:** transformar as capabilities experimentais numa engine
 distribuível e adotável com segurança, sem substituir o backend Python nem
 presumir paridade.
@@ -39,7 +40,7 @@ trabalho independente.
 | Filas: retenção finita (100000), 5 tentativas, DLQ consumível                           | Implementada (#60–#64)                                                       | `storage/messaging.rs` (`max_messages`, `max_attempts`, `receive_dead_letter`)                                                                                                        |
 | Relatório estático de capabilities por backend                                          | Implementada (#46)                                                           | `storage/capabilities.rs`                                                                                                                                                             |
 | Snapshot de contratos para hosts TypeScript                                             | Implementada (#45)                                                           | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                                                                                         |
-| Mídia no chat: tipos, classificação, capability por modalidade, decisão por parte       | Tipos e serialização por protocolo no PR #79; integração e limites pendentes | `chat/media.rs`, `chat/native_providers.rs`, `chat/openai_compatible.rs`; testes `chat::` 44/44; checklist `docs/checklists/04-midia-no-chat.md`                                      |
+| Mídia no chat: tipos, preparação, contexto e serialização por protocolo                 | Contexto Rust na branch sobre #80; bindings e limites por provider pendentes | `chat/media.rs`, clientes OpenAI/native/fallback; 49 testes `chat::`; checklist `docs/checklists/04-midia-no-chat.md`                                                                 |
 
 Os testes service-real (Redis, NATS, Qdrant, PostgreSQL) são condicionais às
 variáveis `VECTORA_TEST_*`; sem elas contam como não executados. Evidências e
@@ -102,35 +103,33 @@ indicada. Não as reabra sem pedido dele.
 Origem: [spec 17](../specs/17-midia-no-chat.md),
 [issue #58](https://github.com/vectora-company/engine/issues/58) e evidência do
 consumidor [Vectora #479–#502](https://github.com/vectora-company/vectora/pulls),
-todos integrados em stack em 2026-11-13. O consumidor fechou a jornada multimodal
-em Python, inclusive UI/transcrição local; a Engine implementa somente contratos
-compartilháveis e mantém sua própria implementação Rust.
+todos integrados em stack em 2026-11-13. A Engine mantém implementação Rust e
+contratos compartilháveis; UI, STT local, previews e empacotamento permanecem no
+Vectora consumidor.
 
-1. **Etapa atual:** serialização de PDF/áudio/vídeo em formatos nativos nos
-   adapters Anthropic, Gemini e OpenAI Chat Completions. Código e testes locais
-   passaram; PR #79 foi aberto sobre #77. A próxima etapa registra a decisão vital em branch filha.
-2. **Decisão resolvida:** oferecer preparo manual, contexto efêmero por chamada
-   e contexto padrão por cliente; chamada explícita prevalece sobre padrão e
-   mídia preparada não é processada duas vezes. Leitura do store é async para
-   não bloquear o runtime. Implementar a integração em Rust, depois expor os três
-   caminhos nos bindings. Resolver capability por modelo com metadados/catálogo
-   e produzir payload mais evidência/evento provider-neutral sem bytes/segredos.
-3. Limitar bytes por provider/modelo e reidratar apenas mídia do turno atual;
-   expor erro estável e fallback textual sem persistir bytes. Validação precisa
-   cobrir limites, MIME/digest e histórico (Vectora #481/#494).
-4. Retry no máximo uma vez como texto apenas em rejeição específica de mídia;
+1. **Payload nativo:** PR #79 sobre #77 implementou Anthropic, Gemini e OpenAI
+   Chat Completions.
+2. **Decisão resolvida no PR #80:** oferecer preparo manual, contexto efêmero por
+   chamada e contexto padrão por cliente; chamada explícita prevalece sobre o
+   padrão. `MediaStore` é async e `ChatRequest` não carrega bytes persistidos.
+3. **Etapa atual — core Rust:** branch filha do #80 integra o contexto aos
+   clients OpenAI-compatible, native e fallback. Limita cada asset a 20 MiB por
+   padrão (configurável), prepara apenas a mensagem do usuário atual e resultados
+   de tools posteriores, e reporta decisões sem bytes na completion e no stream.
+   49 testes `chat::`, fmt, Clippy e TypeScript typecheck passaram.
+4. Expor helper manual, contexto por chamada e contexto padrão nos bindings
+   Python/TypeScript, com store do consumidor e fixtures comuns.
+5. Resolver capability por modelo com metadados/catálogo e limites específicos
+   por provider/modelo; erro estável e fallback textual. Validar MIME/digest e
+   histórico (Vectora #481/#494).
+6. Retry no máximo uma vez como texto apenas em rejeição específica de mídia;
    preservar erros de rede/autenticação sem retry mascarado (Vectora #481).
-5. Resultado de tool em partes (texto e imagem por `MediaRef`) com mapeamento
-   por protocolo; snapshot do loop lendo os anteriores. **[D]** compatibilidade
-   do contrato `ToolResult`.
-6. `Inline` não persistível nem aceito pelos bindings. **[D]** segurança/dados.
-7. Reclassificar bytes ao reidratar e tratar MIME divergente.
-8. Bindings Python/TypeScript e fixtures de conformidade nos três níveis;
-   resolver o contrato compartilhado de `MediaStore` antes de publicar.
-9. STT, OCR, renderização/previews, UI, permissões de OS e empacotamento são
-   capacidades do consumidor nesta fase. Só promover uma delas ao core após
-   definir contrato comum e necessidade em mais de um consumer.
-10. OpenAI Responses API não existe na Engine; não aplicável até existir adapter.
+7. Resultado de tool em partes (texto e imagem por `MediaRef`) com mapeamento
+   por protocolo; snapshot do loop lendo anteriores. **[D]** compatibilidade do
+   contrato `ToolResult`.
+8. `Inline` não persistível nem aceito pelos bindings. **[D]** segurança/dados.
+9. Reclassificar bytes ao reidratar e tratar MIME divergente.
+10. OpenAI Responses API não existe na Engine; não aplicável até haver adapter.
 
 ### Fase 2 — storage: base equivalente
 

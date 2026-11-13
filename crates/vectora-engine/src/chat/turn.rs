@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use super::MediaDecision;
 use super::types::{
     CHAT_CONTRACT_VERSION, ChatCompletion, ChatEvent, ChatEventKind, FinishReason, ToolArguments,
     ToolCall, Usage,
@@ -73,6 +74,7 @@ pub struct TurnAccumulator {
     content_bytes: usize,
     tool_calls: BTreeMap<u32, ToolCallFragments>,
     usage: Option<Usage>,
+    media_decisions: Vec<MediaDecision>,
     selected_model_id: Option<String>,
     finish_reason: Option<FinishReason>,
     completed: bool,
@@ -89,6 +91,7 @@ impl TurnAccumulator {
             content_bytes: 0,
             tool_calls: BTreeMap::new(),
             usage: None,
+            media_decisions: Vec::new(),
             selected_model_id: None,
             finish_reason: None,
             completed: false,
@@ -107,6 +110,9 @@ impl TurnAccumulator {
             return Err(TurnError::EventAfterCompletion);
         }
         match event.event {
+            ChatEventKind::MediaRouted { decisions } => {
+                self.media_decisions.extend(decisions);
+            }
             ChatEventKind::TextDelta { text } => {
                 self.received_provider_event = true;
                 let next_size = self.content_bytes.saturating_add(text.len());
@@ -183,6 +189,7 @@ impl TurnAccumulator {
             tool_calls: calls,
             finish_reason: self.finish_reason.clone(),
             usage: self.usage.clone(),
+            media_decisions: self.media_decisions.clone(),
         })
     }
 
@@ -267,7 +274,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::chat::{ChatEventKind, ToolCallDelta};
+    use crate::chat::{ChatEventKind, MediaDecision, MediaMode, ToolCallDelta};
 
     fn event(event: ChatEventKind) -> ChatEvent {
         ChatEvent {
@@ -278,6 +285,35 @@ mod tests {
 
     fn settings() -> TurnAccumulatorSettings {
         TurnAccumulatorSettings::new("turn-42")
+    }
+
+    #[test]
+    fn keeps_media_routing_evidence_in_the_completed_turn() {
+        let decision = MediaDecision {
+            message_index: 2,
+            part_index: 1,
+            name: "report.pdf".into(),
+            mime_type: "application/pdf".into(),
+            size_bytes: 12,
+            sha256: "digest".into(),
+            mode: MediaMode::Native,
+            reason: "model supports pdf".into(),
+            model: "model-x".into(),
+        };
+        let completion = assemble_turn(
+            settings(),
+            [
+                event(ChatEventKind::MediaRouted {
+                    decisions: vec![decision.clone()],
+                }),
+                event(ChatEventKind::Completed {
+                    finish_reason: Some(FinishReason::Stop),
+                }),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(completion.media_decisions, [decision]);
     }
 
     #[test]
