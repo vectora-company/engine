@@ -462,7 +462,7 @@ Rust completa não foi repetida.
 
 ## Dimensão da coleção em busca vetorial
 
-A branch sobre #72 distingue a dimensão incompatível de outras falhas. LanceDB
+O PR #77 distingue a dimensão incompatível de outras falhas. LanceDB
 lê a dimensão da coluna vetorial no schema da tabela. Qdrant confirma a
 dimensão com [Get collection](https://api.qdrant.tech/v-1-18-x/api-reference/collections/get-collection)
 apenas após resposta HTTP 400 da busca. Uma busca bem-sucedida continua com

@@ -209,7 +209,7 @@ Uma capability só avança de experimental quando:
 ## Próxima entrega recomendada
 
 O PR #65 unifica a validação de dimensões de busca e gravação em LanceDB e
-Qdrant. A branch sobre #72 cobre os extremos com os dois backends e alinha
+Qdrant. O PR #77 cobre os extremos com os dois backends e alinha
 o erro de dimensão incompatível com uma coleção existente.
 As próximas lacunas independentes incluem CAS por revisão, incremento,
 prefixo e watch nos dois KV stores, além de filtros e índices vetoriais.
