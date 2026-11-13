@@ -161,13 +161,18 @@ sem bytes:
    padrão; contexto explícito por chamada tem precedência. Dados já preparados
    (`Inline`/imagem resolvida) não são preparados duas vezes.
 
-A leitura do `MediaStore` é assíncrona; o contrato limita cada asset a 20 MiB
-por padrão (configurável) antes de codificar base64, e registra metadados,
-digest, modo e motivo, nunca bytes. O core Rust integra os três modos nos
-clients OpenAI-compatible/native/fallback, limita reidratação ao turno atual e
-expõe evidência em completion/stream. 49 testes `chat::`, fmt, Clippy e
-TypeScript typecheck passaram. Bindings ainda pendentes; não há decisão vital
-aberta para esta etapa.
+O `MediaStore` é async; cada asset tem limite padrão configurável de 20 MiB.
+O core Rust integra os três modos em OpenAI-compatible/native/fallback e expõe
+evidência sem bytes. Os bindings Python/TS recebem mapa temporário
+`asset_id → bytes` e oferecem preparo manual, contexto por chamada e padrão.
+No Vectora, `AssetStore.read` autoriza por owner/workspace/thread e devolve os
+bytes; `media_hydration` limita a reidratação ao turno atual e a imagens recentes
+de tools. Referência consultada no Vectora SHA
+[`9bbd4dd`](https://github.com/vectora-company/vectora/tree/9bbd4dd49b2f7a468a5431da63c8b8c0d3d3401b):
+[`backend/services/assets.py`](https://github.com/vectora-company/vectora/blob/9bbd4dd49b2f7a468a5431da63c8b8c0d3d3401b/backend/services/assets.py)
+e [`backend/services/media_hydration.py`](https://github.com/vectora-company/vectora/blob/9bbd4dd49b2f7a468a5431da63c8b8c0d3d3401b/backend/services/media_hydration.py).
+Verificações locais desta etapa: build e testes Node, typecheck, build editável e
+suíte Python passaram; detalhes no checklist específico.
 
 ## Decisões que exigem o mantenedor
 

@@ -6,14 +6,17 @@ use std::{
     },
 };
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use futures_util::StreamExt;
 use napi::{Error, Result};
 use napi_derive::napi;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
-    CHAT_CONTRACT_VERSION, ChatCompletion, ChatEvent, ChatRequest, FallbackChatClient,
-    FallbackChatSettings, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
-    OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn,
+    CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ContentPart,
+    ContentSite, FallbackChatClient, FallbackChatSettings, MediaError, MediaExecutionContext,
+    MediaRef, MediaStore, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
+    OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn, prepare_content_with_limit,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -85,15 +88,107 @@ fn pubsub_subscriptions() -> &'static Mutex<
     PUBSUB_SUBSCRIPTIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BindingMediaContext {
+    #[serde(default)]
+    assets: HashMap<String, String>,
+    #[serde(default)]
+    max_media_bytes: Option<u64>,
+}
+
+struct BindingMediaStore(HashMap<String, Vec<u8>>);
+
+#[async_trait::async_trait]
+impl MediaStore for BindingMediaStore {
+    async fn read(&self, media_ref: &MediaRef) -> std::result::Result<Vec<u8>, MediaError> {
+        self.0
+            .get(&media_ref.asset_id)
+            .cloned()
+            .ok_or(MediaError::Unavailable)
+    }
+}
+
+fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionContext> {
+    let settings: BindingMediaContext =
+        serde_json::from_value(value).map_err(|_| Error::from_reason("invalid media context"))?;
+    let assets = settings
+        .assets
+        .into_iter()
+        .map(|(id, encoded)| {
+            STANDARD
+                .decode(encoded)
+                .map(|bytes| (id, bytes))
+                .map_err(|_| Error::from_reason("invalid base64 media asset"))
+        })
+        .collect::<Result<HashMap<_, _>>>()?;
+    let mut context = MediaExecutionContext::new(
+        CapabilityResolver::new(),
+        Arc::new(BindingMediaStore(assets)),
+    );
+    if let Some(limit) = settings.max_media_bytes {
+        context = context.with_max_media_bytes(limit);
+    }
+    Ok(context)
+}
+
+fn split_media_context(
+    settings_json: &str,
+) -> Result<(serde_json::Value, Option<MediaExecutionContext>)> {
+    let mut settings: serde_json::Value = serde_json::from_str(settings_json)
+        .map_err(|_| Error::from_reason("invalid client settings"))?;
+    let context = settings
+        .as_object_mut()
+        .and_then(|settings| settings.remove("media_context"))
+        .map(binding_media_context)
+        .transpose()?;
+    Ok((settings, context))
+}
+
+#[napi]
+pub async fn chat_prepare_content(
+    provider: String,
+    model: String,
+    parts_json: String,
+    media_context_json: String,
+) -> Result<String> {
+    let parts: Vec<ContentPart> = serde_json::from_str(&parts_json)
+        .map_err(|_| Error::from_reason("invalid chat content parts"))?;
+    let context = binding_media_context(
+        serde_json::from_str(&media_context_json)
+            .map_err(|_| Error::from_reason("invalid media context"))?,
+    )?;
+    let capabilities = context.resolver.resolve(&provider, &model);
+    let prepared = prepare_content_with_limit(
+        parts,
+        &capabilities,
+        context.store.as_ref(),
+        &model,
+        ContentSite::UserMessage,
+        context.max_media_bytes,
+    )
+    .await;
+    serde_json::to_string(&serde_json::json!({
+        "parts": prepared.parts,
+        "decisions": prepared.decisions,
+    }))
+    .map_err(|_| Error::from_reason("could not encode prepared content"))
+}
+
 fn parse_inputs(
     settings_json: &str,
     request_json: &str,
 ) -> Result<(OpenAiCompatibleClient, ChatRequest)> {
-    let settings: OpenAiCompatibleSettings = serde_json::from_str(settings_json)
+    let (settings_json, media_context) = split_media_context(settings_json)?;
+    let settings: OpenAiCompatibleSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid client settings"))?;
     let request: ChatRequest = serde_json::from_str(request_json)
         .map_err(|_| Error::from_reason("invalid chat request"))?;
-    let client = OpenAiCompatibleClient::new(settings.into_config())
+    let mut config = settings.into_config();
+    if let Some(context) = media_context {
+        config = config.media_context("openai", context);
+    }
+    let client = OpenAiCompatibleClient::new(config)
         .map_err(|error| Error::from_reason(error.to_string()))?;
     Ok((client, request))
 }
@@ -102,12 +197,16 @@ fn parse_native_inputs(
     settings_json: &str,
     request_json: &str,
 ) -> Result<(NativeChatClient, ChatRequest)> {
-    let settings: NativeChatSettings = serde_json::from_str(settings_json)
+    let (settings_json, media_context) = split_media_context(settings_json)?;
+    let settings: NativeChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid native provider settings"))?;
     let request: ChatRequest = serde_json::from_str(request_json)
         .map_err(|_| Error::from_reason("invalid chat request"))?;
-    let client =
+    let mut client =
         NativeChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    if let Some(context) = media_context {
+        client = client.with_media_context(context);
+    }
     Ok((client, request))
 }
 
@@ -115,12 +214,16 @@ fn parse_fallback_inputs(
     settings_json: &str,
     request_json: &str,
 ) -> Result<(FallbackChatClient, ChatRequest)> {
-    let settings: FallbackChatSettings = serde_json::from_str(settings_json)
+    let (settings_json, media_context) = split_media_context(settings_json)?;
+    let settings: FallbackChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid fallback settings"))?;
     let request: ChatRequest = serde_json::from_str(request_json)
         .map_err(|_| Error::from_reason("invalid chat request"))?;
-    let client =
+    let mut client =
         FallbackChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    if let Some(context) = media_context {
+        client = client.with_media_context(context);
+    }
     Ok((client, request))
 }
 

@@ -2,13 +2,51 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from . import _native
 
 JsonObject = Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class MediaExecutionContext:
+    """Temporary assets keyed by the consumer's opaque asset IDs."""
+
+    assets: Mapping[str, bytes]
+    max_media_bytes: int | None = None
+
+
+def _media_settings(
+    settings: JsonObject, explicit: MediaExecutionContext | None
+) -> str:
+    payload = dict(settings)
+    default = payload.pop("media_context", None)
+    context: Any = explicit if explicit is not None else default
+    if context is not None:
+        assets = (
+            context.assets
+            if isinstance(context, MediaExecutionContext)
+            else context["assets"]
+        )
+        limit = (
+            context.max_media_bytes
+            if isinstance(context, MediaExecutionContext)
+            else context.get("max_media_bytes")
+        )
+        encoded: dict[str, str] = {}
+        for asset_id, data in assets.items():
+            if not isinstance(data, (bytes, bytearray, memoryview)):
+                raise TypeError(f"media asset {asset_id!r} must be bytes-like")
+            encoded[asset_id] = base64.b64encode(data).decode("ascii")
+        payload["media_context"] = {"assets": encoded}
+        if limit is not None:
+            payload["media_context"]["max_media_bytes"] = limit
+    return json.dumps(payload, separators=(",", ":"))
 
 
 def validate_storage_selection(selection: JsonObject) -> dict[str, Any]:
@@ -757,21 +795,46 @@ async def fallback_rerank(settings: JsonObject, request: JsonObject) -> dict[str
     return json.loads(result)
 
 
-async def chat_complete(settings: JsonObject, request: JsonObject) -> dict[str, Any]:
+async def chat_complete(
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> dict[str, Any]:
     """Complete a chat request using the Rust transport."""
     result = await _native.chat_complete(
-        json.dumps(settings, separators=(",", ":")),
+        _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
     )
     return json.loads(result)
 
 
+async def prepare_chat_content(
+    provider: str,
+    model: str,
+    parts: Sequence[JsonObject],
+    media_context: MediaExecutionContext,
+) -> dict[str, Any]:
+    """Prepare content manually with the Rust media capability resolver."""
+    encoded_settings = json.loads(_media_settings({}, media_context))
+    result = await _native.chat_prepare_content(
+        provider,
+        model,
+        json.dumps(parts, separators=(",", ":")),
+        json.dumps(encoded_settings["media_context"], separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
 async def native_chat_complete(
-    settings: JsonObject, request: JsonObject
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
 ) -> dict[str, Any]:
     """Call Anthropic Messages, Google Gemini, or Cohere Chat through Rust."""
     result = await _native.native_chat_complete(
-        json.dumps(settings, separators=(",", ":")),
+        _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
     )
     return json.loads(result)
@@ -780,10 +843,12 @@ async def native_chat_complete(
 async def chat_stream(
     settings: JsonObject,
     request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield Rust chat events; closing this iterator cancels the HTTP stream."""
     stream_id = await _native.chat_stream_start(
-        json.dumps(settings, separators=(",", ":")),
+        _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
     )
     try:
@@ -796,10 +861,12 @@ async def chat_stream(
 async def native_chat_stream(
     settings: JsonObject,
     request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield native-provider events; closing this iterator cancels the request."""
     stream_id = await _native.native_chat_stream_start(
-        json.dumps(settings, separators=(",", ":")),
+        _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
     )
     try:
@@ -810,22 +877,28 @@ async def native_chat_stream(
 
 
 async def fallback_chat_complete(
-    settings: JsonObject, request: JsonObject
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
 ) -> dict[str, Any]:
     """Try caller-ordered eligible candidates using the Rust fallback policy."""
     result = await _native.fallback_chat_complete(
-        json.dumps(settings, separators=(",", ":")),
+        _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
     )
     return json.loads(result)
 
 
 async def fallback_chat_stream(
-    settings: JsonObject, request: JsonObject
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield fallback stream events; partial output is never replayed."""
     stream_id = await _native.fallback_chat_stream_start(
-        json.dumps(settings, separators=(",", ":")),
+        _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
     )
     try:
@@ -836,6 +909,7 @@ async def fallback_chat_stream(
 
 
 __all__ = [
+    "MediaExecutionContext",
     "accept_model_turn",
     "assemble_turn",
     "authorize_tool_dispatch",
@@ -865,6 +939,7 @@ __all__ = [
     "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_stream",
+    "prepare_chat_content",
     "prepare_tool_dispatch",
     "pubsub_publish",
     "pubsub_receive",

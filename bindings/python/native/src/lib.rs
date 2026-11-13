@@ -6,14 +6,17 @@ use std::{
     },
 };
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use futures_util::StreamExt;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
-    CHAT_CONTRACT_VERSION, ChatCompletion, ChatEvent, ChatRequest, FallbackChatClient,
-    FallbackChatSettings, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
-    OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn,
+    CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ContentPart,
+    ContentSite, FallbackChatClient, FallbackChatSettings, MediaError, MediaExecutionContext,
+    MediaRef, MediaStore, NativeChatClient, NativeChatSettings, OpenAiCompatibleClient,
+    OpenAiCompatibleSettings, TurnAccumulatorSettings, assemble_turn, prepare_content_with_limit,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -85,16 +88,77 @@ fn pubsub_subscriptions() -> &'static Mutex<
     PUBSUB_SUBSCRIPTIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BindingMediaContext {
+    #[serde(default)]
+    assets: HashMap<String, String>,
+    #[serde(default)]
+    max_media_bytes: Option<u64>,
+}
+
+struct BindingMediaStore(HashMap<String, Vec<u8>>);
+
+#[async_trait::async_trait]
+impl MediaStore for BindingMediaStore {
+    async fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
+        self.0
+            .get(&media_ref.asset_id)
+            .cloned()
+            .ok_or(MediaError::Unavailable)
+    }
+}
+
+fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionContext, String> {
+    let settings: BindingMediaContext =
+        serde_json::from_value(value).map_err(|_| "invalid media context".to_owned())?;
+    let assets = settings
+        .assets
+        .into_iter()
+        .map(|(id, encoded)| {
+            STANDARD
+                .decode(encoded)
+                .map(|bytes| (id, bytes))
+                .map_err(|_| "invalid base64 media asset".to_owned())
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
+    let mut context = MediaExecutionContext::new(
+        CapabilityResolver::new(),
+        Arc::new(BindingMediaStore(assets)),
+    );
+    if let Some(limit) = settings.max_media_bytes {
+        context = context.with_max_media_bytes(limit);
+    }
+    Ok(context)
+}
+
+fn split_media_context(
+    settings_json: &str,
+) -> Result<(serde_json::Value, Option<MediaExecutionContext>), String> {
+    let mut settings: serde_json::Value =
+        serde_json::from_str(settings_json).map_err(|_| "invalid client settings".to_owned())?;
+    let context = settings
+        .as_object_mut()
+        .and_then(|settings| settings.remove("media_context"))
+        .map(binding_media_context)
+        .transpose()?;
+    Ok((settings, context))
+}
+
 fn parse_inputs(
     settings_json: &str,
     request_json: &str,
 ) -> Result<(OpenAiCompatibleClient, ChatRequest), String> {
+    let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: OpenAiCompatibleSettings =
-        serde_json::from_str(settings_json).map_err(|_| "invalid client settings".to_owned())?;
+        serde_json::from_value(settings_json).map_err(|_| "invalid client settings".to_owned())?;
     let request: ChatRequest =
         serde_json::from_str(request_json).map_err(|_| "invalid chat request".to_owned())?;
-    let client =
-        OpenAiCompatibleClient::new(settings.into_config()).map_err(|error| error.to_string())?;
+    let mut config = settings.into_config();
+    if let Some(context) = media_context {
+        config = config.media_context("openai", context);
+    }
+    let client = OpenAiCompatibleClient::new(config).map_err(|error| error.to_string())?;
     Ok((client, request))
 }
 
@@ -102,11 +166,15 @@ fn parse_native_inputs(
     settings_json: &str,
     request_json: &str,
 ) -> Result<(NativeChatClient, ChatRequest), String> {
-    let settings: NativeChatSettings = serde_json::from_str(settings_json)
+    let (settings_json, media_context) = split_media_context(settings_json)?;
+    let settings: NativeChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| "invalid native provider settings".to_owned())?;
     let request: ChatRequest =
         serde_json::from_str(request_json).map_err(|_| "invalid chat request".to_owned())?;
-    let client = NativeChatClient::new(settings).map_err(|error| error.to_string())?;
+    let mut client = NativeChatClient::new(settings).map_err(|error| error.to_string())?;
+    if let Some(context) = media_context {
+        client = client.with_media_context(context);
+    }
     Ok((client, request))
 }
 
@@ -114,11 +182,15 @@ fn parse_fallback_inputs(
     settings_json: &str,
     request_json: &str,
 ) -> Result<(FallbackChatClient, ChatRequest), String> {
-    let settings: FallbackChatSettings =
-        serde_json::from_str(settings_json).map_err(|_| "invalid fallback settings".to_owned())?;
+    let (settings_json, media_context) = split_media_context(settings_json)?;
+    let settings: FallbackChatSettings = serde_json::from_value(settings_json)
+        .map_err(|_| "invalid fallback settings".to_owned())?;
     let request: ChatRequest =
         serde_json::from_str(request_json).map_err(|_| "invalid chat request".to_owned())?;
-    let client = FallbackChatClient::new(settings).map_err(|error| error.to_string())?;
+    let mut client = FallbackChatClient::new(settings).map_err(|error| error.to_string())?;
+    if let Some(context) = media_context {
+        client = client.with_media_context(context);
+    }
     Ok((client, request))
 }
 
@@ -1656,6 +1728,37 @@ fn chat_complete<'py>(
 }
 
 #[pyfunction]
+fn chat_prepare_content<'py>(
+    py: Python<'py>,
+    provider: String,
+    model: String,
+    parts_json: String,
+    media_context_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let parts: Vec<ContentPart> = serde_json::from_str(&parts_json)
+            .map_err(|_| py_error("invalid chat content parts"))?;
+        let context_value: serde_json::Value = serde_json::from_str(&media_context_json)
+            .map_err(|_| py_error("invalid media context"))?;
+        let context = binding_media_context(context_value).map_err(py_error)?;
+        let capabilities = context.resolver.resolve(&provider, &model);
+        let prepared = prepare_content_with_limit(
+            parts,
+            &capabilities,
+            context.store.as_ref(),
+            &model,
+            ContentSite::UserMessage,
+            context.max_media_bytes,
+        )
+        .await;
+        encode_json(&serde_json::json!({
+            "parts": prepared.parts,
+            "decisions": prepared.decisions,
+        }))
+    })
+}
+
+#[pyfunction]
 fn chat_stream_start<'py>(
     py: Python<'py>,
     settings_json: String,
@@ -1929,6 +2032,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(chat_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(chat_assemble_turn, module)?)?;
     module.add_function(wrap_pyfunction!(chat_complete, module)?)?;
+    module.add_function(wrap_pyfunction!(chat_prepare_content, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_start, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_next, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_cancel, module)?)?;

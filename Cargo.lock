@@ -7004,6 +7004,8 @@ dependencies = [
 name = "vectora-engine-node"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
+ "base64 0.22.1",
  "futures-util",
  "napi",
  "napi-build",
@@ -7018,6 +7020,8 @@ dependencies = [
 name = "vectora-engine-python"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
+ "base64 0.22.1",
  "futures-util",
  "pyo3",
  "pyo3-async-runtimes",

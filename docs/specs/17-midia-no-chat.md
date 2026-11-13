@@ -2,14 +2,14 @@
 
 **Estado:** parcialmente implementada. Tipos, classificação pelos bytes,
 capabilities e decisões por parte existem no core Rust. O PR #79 adicionou
-serialização nativa de PDF/áudio/vídeo. A branch filha do PR #80 integra
-`MediaStore` async e os três modos (preparo manual, contexto efêmero por chamada
-e padrão no cliente) aos adapters Rust. O contexto limita assets a 20 MiB por
-padrão, pode ser configurado, só reidrata o turno de usuário atual e resultados
-de tools posteriores e reporta decisões sem bytes em completion/stream. 49
-testes `chat::`, fmt, Clippy e TypeScript typecheck passaram. Os bindings ainda
-não expõem o store/contexto; limites por provider/modelo, retry e resultados de
-tool em partes seguem pendentes. A referência é o backend Python do Vectora; a
+serialização nativa de PDF/áudio/vídeo; o PR #81 integra `MediaStore` async e os
+três modos nos adapters Rust. A branch filha de #81 implementa os bindings
+Python e TypeScript estão entregues no PR #82: preparo manual, contexto por
+chamada e contexto padrão no cliente. O mapa temporário usa `asset_id → bytes`;
+o host continua responsável por autorizar a leitura. O core limita assets a 20 MiB por padrão, configurável,
+reidrata apenas o turno de usuário atual e resultados posteriores de tools e
+reporta decisões sem bytes em completion/stream. Limites por provider/modelo,
+retry e resultados de tool em partes seguem pendentes. A referência é o backend Python do Vectora; a
 stack [#479–#502](https://github.com/vectora-company/vectora/pulls) foi integrada
 em 19 PRs e fechou a jornada do produto, mas não prova paridade da Engine. UI,
 STT local, prévias e empacotamento seguem específicos do Vectora. Estado e
@@ -30,20 +30,23 @@ rollback.
   OpenAI-compatível.
 - O core tem capabilities/resolução de preparo por provider, mas ainda não um
   catálogo completo por modelo nem limites por provider/modelo.
-- `MediaStore` assíncrono e `MediaExecutionContext` existem no core; os bindings
-  ainda não expõem o store/contexto. `VerificationEvidence.artifact_ref` atende
-  a outro contrato e não substitui o store de mídia do consumidor.
+- `MediaStore` assíncrono e `MediaExecutionContext` existem no core. Os bindings
+  recebem um mapa efêmero de bytes indexado por `asset_id`; no Vectora o host
+  alimenta esse mapa após `AssetStore.read` validar usuário/workspace/thread.
+  `VerificationEvidence.artifact_ref` atende a outro contrato e não substitui
+  o store de mídia do consumidor.
 
 ## Integração com o envio
 
-O consumidor terá três modos: chamar `prepare_content` manualmente antes do
-adapter; passar `MediaExecutionContext` por chamada; ou configurar contexto
-padrão no cliente. O contexto por chamada prevalece sobre o padrão. Partes já
+Os bindings Python e TypeScript expõem três modos: preparar partes manualmente
+com `prepare_chat_content`/`prepareChatContent`; fornecer `MediaExecutionContext`
+na chamada `complete/stream`; ou configurar o contexto padrão no cliente. O
+contexto explícito prevalece sobre o padrão. O mapa temporário é
+`asset_id → bytes`, e o host só deve passar assets que já autorizou. Partes
 preparadas não são processadas de novo. `ChatRequest` permanece sem bytes
-persistidos; `MediaStore` é async. O contexto limita cada asset a 20 MiB por
-padrão, configurável, e só reidrata a mensagem de usuário atual e resultados de
-tools posteriores. A completion e o stream reportam decisões sem bytes. Os
-bindings ainda não expõem o contexto. Estado e precedência:
+persistidos; o limite padrão configurável é 20 MiB por asset; somente a mensagem
+de usuário atual e resultados posteriores de tools são reidratados. Completion
+e stream reportam decisões sem bytes. Estado e precedência:
 [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 
 ## Responsabilidades

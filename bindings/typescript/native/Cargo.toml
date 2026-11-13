@@ -11,6 +11,8 @@ build = "build.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
+async-trait.workspace = true
+base64.workspace = true
 futures-util.workspace = true
 napi.workspace = true
 napi-derive.workspace = true
