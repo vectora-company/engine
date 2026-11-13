@@ -9,7 +9,7 @@ squash). A stack aberta é `main` ← [#73](https://github.com/vectora-company/e
 [#80](https://github.com/vectora-company/engine/pull/80) ←
 [#81](https://github.com/vectora-company/engine/pull/81) ←
 [#82](https://github.com/vectora-company/engine/pull/82) ← PR documental
-[#83](https://github.com/vectora-company/engine/pull/83) ← [#84](https://github.com/vectora-company/engine/pull/84) ← [#85](https://github.com/vectora-company/engine/pull/85). Os PRs #82–#85 estão abertos; o #82 tem head `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83) está
+[#83](https://github.com/vectora-company/engine/pull/83) ← [#84](https://github.com/vectora-company/engine/pull/84) ← [#85](https://github.com/vectora-company/engine/pull/85) ← próxima etapa local `feat/chat-tool-result-parts`. Os PRs #82–#85 estão abertos; o #82 tem head `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83) está
 empilhado sobre a branch `feat/chat-media-bindings` do #82. A branch filha `feat/chat-media-provider-limits-docs83` está publicada no [PR
 #84](https://github.com/vectora-company/engine/pull/84), head
 `58980b3647e96b495756f7986bfdbfdd40d09e8c` (limites por provider/modelo; docs sincronizados).
@@ -104,11 +104,9 @@ indicada. Não as reabra sem pedido dele.
    #79 adiciona payloads nativos nos protocolos cobertos; #81 conecta `MediaStore`
    ao envio Rust; #82 expõe preparo manual, contexto efêmero por chamada e contexto
    padrão nos bindings. Como a stack ainda está aberta, isso não está integrado
-   em `main`. Retry textual único para rejeição multimodal classificada está implementado no PR aberto #85, filho do #84; catálogo automático e resultado multimodal de tool permanecem pendentes. OpenAI Responses não tem adapter.
+   em `main`. Retry textual único para rejeição multimodal classificada está implementado no PR aberto #85, filho do #84; `ToolResult` tipado está implementado localmente na branch filha do #85; catálogo automático permanece pendente. OpenAI Responses não tem adapter.
    Evidências e critérios: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
-2. **Mídia: imagens de resultado de tool descartadas.** `message_text` em
-   `chat/native_providers.rs` ignora `ImageUrl` nas mensagens de tool. Saída:
-   mapeamento da tabela da spec 17 ou forma textual registrada. Origem: spec 17.
+2. **Mídia: imagens de resultado de tool — implementado nesta etapa.** `ToolResult` usa partes tipadas; Anthropic, Gemini e OpenAI Chat Completions mapeiam imagens conforme a spec 17. Cohere mantém representação textual porque o protocolo não declara suporte a imagem no resultado. Evidência e testes estão registrados na spec 17 e checklist de mídia.
 3. **Segredo em `Debug`.** `storage/vector.rs::VectorStoreConfig` deriva
    `Debug` com `api_key`. Saída: `Debug` manual com redação, como em
    `chat/openai_compatible.rs`. Origem: spec 01.
@@ -159,10 +157,7 @@ Vectora consumidor.
    a análise de referências. Catálogo/metadado automático,
    endpoint/protocolo, limites agregados, MIME/digest e histórico (Vectora #481/#494) permanecem etapas posteriores.
 6. **Retry textual único — PR aberto [#85](https://github.com/vectora-company/engine/pull/85), filho do #84:** somente `MultimodalIncompatible` após rejeição HTTP 400 reconhecida; no mesmo provider/modelo, uma vez, inclusive no fallback. Streams só repetem antes de devolver o stream ao consumidor; erros de autenticação/rede e erros após início do stream não são convertidos em retry. Os 51 testes `chat::` passaram; os hooks completos (Clippy, suíte Rust do workspace e rustdoc), fmt, Prettier e `git diff --check` passaram no commit `0767636ee88567b19ddce93f1e8d0b15cace396f`. Origem: Vectora #481.
-7. Resultado de tool em partes (texto e imagem por `MediaRef`) com mapeamento
-   por protocolo; snapshot do loop lendo anteriores. **[D]** compatibilidade do
-   contrato `ToolResult`; alternativas e impactos registrados nesta spec, antes
-   de alterar os bindings.
+7. **Partes tipadas em `ToolResult` — decisão resolvida:** brunosrz decidiu substituir `output: String` diretamente sem manter v1. A branch local `feat/chat-tool-result-parts` (filha do PR #85) implementa `parts` com texto/imagem, conversão central Rust e mapeamento de imagens por protocolo; bump do loop v2→v3 e resultado v1→v2, sem compatibilidade legada. A suíte Rust do workspace (163 testes + 3 fixtures), Clippy, typecheck/check de todos os targets, rustdoc, hooks completos, Python e Node passaram localmente; Python passou e Node teve 37 aprovados/10 testes de serviços ignorados sem endpoints. PR empilhado e SHA serão registrados após publicação.
 8. `Inline` não persistível nem aceito pelos bindings. **[D]** segurança/dados.
 9. Reclassificar bytes ao reidratar e tratar MIME divergente.
 10. OpenAI Responses API não existe na Engine; não aplicável até haver adapter.

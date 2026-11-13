@@ -38,9 +38,9 @@ de #73 e ainda não está integrada em `main`. A revisão documental está no PR
 A stack de mídia da Vectora, PRs [#479–#502](https://github.com/vectora-company/vectora/pulls),
 foi integrada em 19 PRs empilhados em 2026-11-13; isso confirma a necessidade
 funcional no consumidor, não paridade da Engine. Padrões transferíveis e ainda
-pendentes na Engine: roteamento por modelo/catálogo, limites de bytes por
-provider, reidratação apenas no turno atual, retry único em rejeição específica
-de mídia e evento/evidência de roteamento compartilhados com o consumidor.
+pendentes na Engine: roteamento por modelo/catálogo e limites por provider.
+Reidratação no turno atual, retry textual único, evidência de roteamento e
+partes tipadas em `ToolResult` estão implementados nesta stack aberta.
 STT local (faster-whisper/Speech do macOS), conversão de PDF/vídeo, preferências
 UI, permissões e empacotamento SCons são responsabilidades do Vectora nesta
 implementação; não foram adicionados à API pública da Engine.
@@ -49,7 +49,7 @@ implementação; não foram adicionados à API pública da Engine.
 
 - OpenAI Responses API não existe neste adapter; o contrato se limita aos
   formatos do Chat Completions.
-- Catálogo automático de capabilities/limites por modelo, limites agregados do request e `ToolResult` multimodal seguem no backlog da spec 17. O retry específico está implementado no PR aberto #85. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
+- Catálogo automático de capabilities/limites por modelo e limites agregados do request seguem no backlog da spec 17. Partes tipadas em `ToolResult` estão implementadas na branch local filha do PR #85; bindings e adaptadores foram verificados. O retry específico está implementado no PR aberto #85. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
 
 ## Integração — etapa atual
 
@@ -81,9 +81,12 @@ implementação; não foram adicionados à API pública da Engine.
       incompatibilidade multimodal, no mesmo modelo; preservar erros de
       autenticação/rede e não repetir erros após abertura do stream. Os 51 testes
       `chat::` incluem classificação, retry complete/stream no cliente direto e
-      retry de completion no wrapper fallback. Falta rodar hooks completos.
-- [ ] Representar resultados de tool como partes tipadas e preservar imagens
-      nos protocolos compatíveis.
+      retry de completion no wrapper fallback. 51 testes `chat::` e hooks
+      completos passaram no SHA `0767636` do PR #85.
+- [x] Substituir `ToolResult.output: String` por partes `text`/`image` em
+      Rust, Python e TypeScript; converter pelo helper Rust e mapear para
+      Anthropic, Gemini e OpenAI Chat Completions, com referência textual no
+      Cohere. Implementação local verificada: 163 testes Rust, suíte Python, build/typecheck e 37 testes Node passaram; 10 testes Node condicionais a serviços externos foram ignorados.
 - [ ] Definir se a Engine permanece consumidora de um store do host ou se ganha
       um asset store persistente próprio; não ligar armazenamento persistente à
       leitura de mídia antes de fechar ownership e autorização.
@@ -95,7 +98,7 @@ implementação; não foram adicionados à API pública da Engine.
 A stack de mídia da Vectora, PRs [#479–#502](https://github.com/vectora-company/vectora/pulls),
 foi integrada em 19 PRs empilhados em 2026-11-13; isso confirma a necessidade
 funcional no consumidor, não paridade da Engine. Padrões transferíveis ainda
-pendentes: catálogo automático de modalidades/limites por modelo e imagens em resultados de tools. O retry está implementado no PR aberto #85, com cobertura de cliente direto e wrapper fallback; 51 testes `chat::` e hooks completos passaram no SHA `0767636`. A API já aceita overrides explícitos por provider/modelo/modalidade; ainda não consulta catálogo nem deriva limites automaticamente. STT local, conversão de PDF/vídeo,
+pendentes: catálogo automático de modalidades/limites por modelo. O retry está implementado no PR aberto #85, com cobertura de cliente direto e wrapper fallback; 51 testes `chat::` e hooks completos passaram no SHA `0767636`. A API já aceita overrides explícitos por provider/modelo/modalidade; ainda não consulta catálogo nem deriva limites automaticamente. STT local, conversão de PDF/vídeo,
 preferências UI, permissões e empacotamento SCons permanecem capacidades do
 Vectora nesta implementação.
 

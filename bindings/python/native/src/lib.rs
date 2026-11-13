@@ -1604,6 +1604,18 @@ fn model_tool_loop_contract_version() -> u16 {
 }
 
 #[pyfunction]
+fn tool_result_contract_version() -> u16 {
+    vectora_engine::harness::TOOL_RESULT_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn tool_result_to_chat_message(result_json: String) -> PyResult<String> {
+    let result: ToolResult =
+        serde_json::from_str(&result_json).map_err(|_| py_error("invalid tool result"))?;
+    encode_json(&result.to_chat_message())
+}
+
+#[pyfunction]
 fn model_tool_loop_start(
     run_id: String,
     turn_id: String,
@@ -2018,6 +2030,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(prepare_tool_dispatch_json, module)?)?;
     module.add_function(wrap_pyfunction!(tool_chat_definitions_json, module)?)?;
     module.add_function(wrap_pyfunction!(model_tool_loop_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(tool_result_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(tool_result_to_chat_message, module)?)?;
     module.add_function(wrap_pyfunction!(model_tool_loop_start, module)?)?;
     module.add_function(wrap_pyfunction!(model_tool_loop_accept_model_turn, module)?)?;
     module.add_function(wrap_pyfunction!(

@@ -43,7 +43,7 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Rodar Clippy, format, suíte Rust workspace, rustdoc, Prettier e hooks de pre-commit; revisar docs/diff.
 - [x] Commit `0767636`, push e abrir o [PR #85](https://github.com/vectora-company/engine/pull/85), empilhado sobre `feat/chat-media-provider-limits-docs83` (#84).
 - [ ] Aguardar review/CI sem bloquear o início da próxima etapa; PRs continuam sem aprovação pelo agente.
-- [ ] Obter decisão de brunosrz sobre compatibilidade do contrato `ToolResult` antes de iniciar a implementação multimodal dependente.
+- [x] Registrar decisão de brunosrz: substituir diretamente `ToolResult.output: String` por partes tipadas, sem compatibilidade v1.
 
 ## Preparação e escopo
 
@@ -121,3 +121,14 @@ implementados, os checks pertinentes passaram ou suas limitações foram
 explicitamente registradas, a documentação reflete o código e não há uma decisão
 vital pendente. Concluir uma etapa não encerra automaticamente o loop se houver
 outras etapas aprovadas no plano ativo.
+
+## Partes multimodais em `ToolResult` — filha do PR #85
+
+- [x] Substituir a string por `parts` tipadas e rejeitar formatos/snapshots legados.
+- [x] Incrementar as versões do resultado e do loop; expor as versões aos bindings.
+- [x] Converter resultado em mensagem de tool por helper no núcleo Rust, compartilhado pelos bindings.
+- [x] Serializar imagens de resultado em Anthropic, Gemini e OpenAI Chat Completions; manter fallback textual de Cohere.
+- [x] Cobrar texto e metadados serializados nos limites do loop; limitar bytes ao reidratar no contexto de mídia.
+- [x] Rodar suíte Rust workspace (163 testes + 3 fixtures), Clippy, `cargo check` de todos os targets, rustdoc, testes Python, build/typecheck e 37 testes Node (10 testes de serviços ignorados sem URLs).
+- [x] Rodar todos os hooks de pre-commit, corrigir stubs Python ausentes e revisar diffs.
+- [ ] Abrir PR empilhado sobre o #85 e registrar URL/SHA.

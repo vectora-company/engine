@@ -23,7 +23,9 @@ backends.
 - `ledger_sequence` fornece controle otimista: uma transição baseada em estado
   antigo falha em vez de sobrescrever uma versão posterior.
 - `load_latest` valida versão do contrato, escopo, identidade run/turno,
-  invariantes do loop e sequência do checkpoint.
+  invariantes do loop e sequência do checkpoint. O snapshot atual usa contrato
+  v3 e contém `ToolResult` v2 com partes tipadas; snapshots v1/v2 não são
+  migrados nem aceitos.
 - Recovery persiste `recovery_required`; ele não repete adapters. O host ainda
   deve autenticar o reconciliador e confirmar o efeito externo antes de chamar
   `reconcile_tool_result`.
@@ -32,8 +34,9 @@ backends.
   checkpoint. A execução dos checks e a autenticação de suas evidências
   continuam sob responsabilidade do consumidor. Uma verificação registrada é
   imutável; replay idêntico é idempotente.
-- Snapshots v1 sem verificação continuam legíveis. A gravação seguinte os
-  atualiza para o contrato v2, que inclui o campo opcional `verification`.
+- Snapshots do loop anteriores ao contrato v3 não são compatíveis com a nova
+  forma tipada de `ToolResult`; esta quebra foi aceita antes da primeira release.
+  O campo opcional `verification` permanece parte do estado versionado.
 
 ## Limites e responsabilidades
 

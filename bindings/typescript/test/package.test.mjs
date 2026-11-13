@@ -46,6 +46,8 @@ import {
   toolChatDefinitions,
   toolDispatchContractVersion,
   toolPolicyContractVersion,
+  toolResultContractVersion,
+  toolResultToChatMessage,
   startModelToolLoop,
   submitToolResult,
   validateStorageSelection,
@@ -318,7 +320,7 @@ test("exports the Rust chat contract version", () => {
 
 test("contract snapshot reports the native Rust APIs available to a host", () => {
   assert.deepEqual(engineContractSnapshot(), {
-    contract_version: 1,
+    contract_version: 2,
     chat: chatContractVersion(),
     embeddings: embeddingContractVersion(),
     reranking: rerankContractVersion(),
@@ -328,6 +330,7 @@ test("contract snapshot reports the native Rust APIs available to a host", () =>
     tool_dispatch: toolDispatchContractVersion(),
     tool_policy: toolPolicyContractVersion(),
     model_tool_loop: modelToolLoopContractVersion(),
+    tool_result: toolResultContractVersion(),
   });
 });
 
@@ -750,7 +753,8 @@ test("SQLite tool policy persists approvals, rejects stale states, and reopens",
 });
 
 test("model/tool loop round trip is exposed through the Node binding", () => {
-  assert.equal(modelToolLoopContractVersion(), 2);
+  assert.equal(modelToolLoopContractVersion(), 3);
+  assert.equal(toolResultContractVersion(), 2);
   const state = startModelToolLoop("run-1", "turn-1");
   assert.equal(state.phase, "awaiting_model");
   assert.equal(state.settings.max_model_turns, 50);
@@ -795,18 +799,45 @@ test("model/tool loop round trip is exposed through the Node binding", () => {
   assert.equal(transition.action.action, "execute_tools");
   assert.equal(transition.action.assistant_completion.reasoning, undefined);
   const next = submitToolResult(transition.state, {
-    contract_version: 1,
+    contract_version: 2,
     run_id: "run-1",
     turn_id: "turn-1",
     call_id: "call-1",
     tool_name: "lookup",
     status: "succeeded",
     effect_state: "not_applicable",
-    output: "found",
+    parts: [{ type: "text", text: "found" }],
   });
   assert.equal(next.state.phase, "awaiting_model");
   assert.equal(next.action.action, "continue_with_tool_results");
-  assert.equal(next.action.results[0].output, "found");
+  assert.deepEqual(next.action.results[0].parts, [
+    { type: "text", text: "found" },
+  ]);
+  const message = toolResultToChatMessage({
+    contract_version: 2,
+    run_id: "run-1",
+    turn_id: "turn-1",
+    call_id: "call-1",
+    tool_name: "lookup",
+    status: "succeeded",
+    effect_state: "not_applicable",
+    parts: [
+      { type: "text", text: "found" },
+      {
+        type: "image",
+        media_ref: {
+          asset_id: "image-1",
+          sha256: "a".repeat(64),
+          mime_type: "image/png",
+          size_bytes: 12,
+          name: "result.png",
+        },
+      },
+    ],
+  });
+  assert.equal(message.role, "tool");
+  assert.equal(message.tool_call_id, "call-1");
+  assert.equal(message.content[1].type, "image");
 });
 
 test("cancellation returns pending calls and waits for their outcomes", () => {
@@ -843,14 +874,14 @@ test("cancellation returns pending calls and waits for their outcomes", () => {
     calls: [{ call_id: "call-cancel", tool_name: "publish" }],
   });
   const result = submitToolResult(cancellation.state, {
-    contract_version: 1,
+    contract_version: 2,
     run_id: "run-cancel",
     turn_id: "turn-cancel",
     call_id: "call-cancel",
     tool_name: "publish",
     status: "cancelled",
     effect_state: "not_applied",
-    output: "cancelled",
+    parts: [{ type: "text", text: "cancelled" }],
   });
   assert.equal(result.state.phase, "cancelled");
   assert.equal(result.action.action, "cancelled");

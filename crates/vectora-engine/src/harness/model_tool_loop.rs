@@ -3,7 +3,10 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::chat::{CHAT_CONTRACT_VERSION, ChatCompletion};
+use crate::chat::{
+    CHAT_CONTRACT_VERSION, ChatCompletion, ContentPart, MediaPart, MediaRef, Message,
+    MessageContent, MessageRole,
+};
 
 use super::{
     TOOL_DISPATCH_CONTRACT_VERSION, ToolDecision, ToolDenialCode, ToolDispatch, ToolEffect,
@@ -11,9 +14,8 @@ use super::{
 };
 
 /// Version of the model/tool round state machine.
-pub const MODEL_TOOL_LOOP_CONTRACT_VERSION: u16 = 2;
-const LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION: u16 = 1;
-const TOOL_RESULT_CONTRACT_VERSION: u16 = 1;
+pub const MODEL_TOOL_LOOP_CONTRACT_VERSION: u16 = 3;
+pub const TOOL_RESULT_CONTRACT_VERSION: u16 = 2;
 const DEFAULT_MAX_MODEL_TURNS: u32 = 50;
 const DEFAULT_MAX_TOOL_CALLS: u32 = 128;
 const DEFAULT_MAX_RESULT_BYTES: usize = 1024 * 1024;
@@ -128,8 +130,50 @@ pub struct ToolResult {
     pub effect_state: ToolEffectState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
-    /// Consumer-redacted output supplied to the next model turn.
-    pub output: String,
+    /// Ordered, consumer-redacted content supplied to the next model turn.
+    pub parts: Vec<ToolResultPart>,
+}
+
+/// One typed part of a tool result. Images remain references to consumer-owned
+/// assets; their bytes are loaded only by the media execution context.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolResultPart {
+    Text { text: String },
+    Image { media_ref: MediaRef },
+}
+
+impl ToolResult {
+    /// Converts this result into the correlated chat message used for the next
+    /// model turn. Provider adapters decide how to encode its typed parts.
+    pub fn to_chat_message(&self) -> Message {
+        let content = self
+            .parts
+            .iter()
+            .map(|part| match part {
+                ToolResultPart::Text { text } => ContentPart::Text { text: text.clone() },
+                ToolResultPart::Image { media_ref } => ContentPart::Image(MediaPart {
+                    media_ref: media_ref.clone(),
+                    text: None,
+                    previews: Vec::new(),
+                }),
+            })
+            .collect();
+        Message {
+            role: MessageRole::Tool,
+            content: MessageContent::Parts(content),
+            tool_calls: Vec::new(),
+            tool_call_id: Some(self.call_id.clone()),
+            name: Some(self.tool_name.clone()),
+            is_error: self.status != ToolResultStatus::Succeeded,
+        }
+    }
+}
+
+fn result_size_bytes(result: &ToolResult) -> Option<usize> {
+    serde_json::to_vec(&result.parts)
+        .ok()
+        .map(|encoded| encoded.len())
 }
 
 /// Expected invocation and optional result kept while adapters are running.
@@ -495,7 +539,8 @@ pub fn submit_tool_result(
     if result.run_id != state.run_id || result.turn_id != state.turn_id {
         return Err(ModelToolLoopError::ResultIdentityMismatch);
     }
-    if result.output.len() > state.settings.max_tool_result_bytes {
+    let result_size = result_size_bytes(&result).ok_or(ModelToolLoopError::ToolResultTooLarge)?;
+    if result_size > state.settings.max_tool_result_bytes {
         return Err(ModelToolLoopError::ToolResultTooLarge);
     }
     validate_result_shape(&result)?;
@@ -542,7 +587,10 @@ pub fn submit_tool_result(
         .pending_results
         .iter()
         .filter_map(|item| item.result.as_ref())
-        .map(|item| item.output.len())
+        .map(result_size_bytes)
+        .collect::<Option<Vec<_>>>()
+        .ok_or(ModelToolLoopError::ToolResultsTooLarge)?
+        .into_iter()
         .try_fold(0usize, usize::checked_add)
         .ok_or(ModelToolLoopError::ToolResultsTooLarge)?;
     if result_bytes > next.settings.max_tool_results_bytes_per_turn {
@@ -697,7 +745,8 @@ pub fn reconcile_tool_result(
     if result.run_id != state.run_id || result.turn_id != state.turn_id {
         return Err(ModelToolLoopError::ResultIdentityMismatch);
     }
-    if result.output.len() > state.settings.max_tool_result_bytes {
+    let result_size = result_size_bytes(&result).ok_or(ModelToolLoopError::ToolResultTooLarge)?;
+    if result_size > state.settings.max_tool_result_bytes {
         return Err(ModelToolLoopError::ToolResultTooLarge);
     }
     validate_result_shape(&result)?;
@@ -736,7 +785,10 @@ pub fn reconcile_tool_result(
         .pending_results
         .iter()
         .filter_map(|item| item.result.as_ref())
-        .map(|item| item.output.len())
+        .map(result_size_bytes)
+        .collect::<Option<Vec<_>>>()
+        .ok_or(ModelToolLoopError::ToolResultsTooLarge)?
+        .into_iter()
         .try_fold(0usize, usize::checked_add)
         .ok_or(ModelToolLoopError::ToolResultsTooLarge)?;
     if result_bytes > next.settings.max_tool_results_bytes_per_turn {
@@ -790,10 +842,7 @@ fn recovery_action(state: &ModelToolLoopState) -> Result<ModelToolLoopAction, Mo
 }
 
 fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> {
-    if !matches!(
-        state.contract_version,
-        LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION | MODEL_TOOL_LOOP_CONTRACT_VERSION
-    ) {
+    if state.contract_version != MODEL_TOOL_LOOP_CONTRACT_VERSION {
         return Err(ModelToolLoopError::UnsupportedLoopContractVersion {
             received: state.contract_version,
         });
@@ -806,9 +855,7 @@ fn validate_state(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError> 
         state.phase,
         ModelToolLoopPhase::Cancelling | ModelToolLoopPhase::Cancelled
     );
-    if (state.contract_version == LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION
-        && (state.cancellation_requested || cancellation_phase))
-        || (cancellation_phase && !state.cancellation_requested)
+    if (cancellation_phase && !state.cancellation_requested)
         || (state.cancellation_requested
             && !cancellation_phase
             && state.phase != ModelToolLoopPhase::RecoveryRequired)
@@ -909,7 +956,8 @@ fn validate_pending(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError
                 || result.call_id != pending.call_id
                 || result.tool_name != pending.tool_name
                 || result.contract_version != TOOL_RESULT_CONTRACT_VERSION
-                || result.output.len() > state.settings.max_tool_result_bytes)
+                || result_size_bytes(result)
+                    .is_none_or(|size| size > state.settings.max_tool_result_bytes))
         {
             return Err(ModelToolLoopError::InvalidState);
         }
@@ -918,7 +966,7 @@ fn validate_pending(state: &ModelToolLoopState) -> Result<(), ModelToolLoopError
             validate_effect_state(pending.effect, result.status, result.effect_state)
                 .map_err(|_| ModelToolLoopError::InvalidState)?;
             result_bytes = result_bytes
-                .checked_add(result.output.len())
+                .checked_add(result_size_bytes(result).ok_or(ModelToolLoopError::InvalidState)?)
                 .ok_or(ModelToolLoopError::InvalidState)?;
             has_unknown_effect |= result.effect_state == ToolEffectState::Unknown;
         }
@@ -948,6 +996,23 @@ fn validate_result_shape(result: &ToolResult) -> Result<(), ModelToolLoopError> 
             Err(ModelToolLoopError::InvalidToolResult)
         }
         _ if result.code.as_deref().is_some_and(|code| !valid_code(code)) => {
+            Err(ModelToolLoopError::InvalidToolResult)
+        }
+        _ if result.parts.iter().any(|part| match part {
+            ToolResultPart::Text { .. } => false,
+            ToolResultPart::Image { media_ref } => {
+                media_ref.asset_id.trim().is_empty()
+                    || media_ref.mime_type.trim().is_empty()
+                    || media_ref.name.trim().is_empty()
+                    || media_ref.size_bytes == 0
+                    || media_ref.sha256.len() != 64
+                    || !media_ref
+                        .sha256
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit())
+            }
+        }) =>
+        {
             Err(ModelToolLoopError::InvalidToolResult)
         }
         _ => Ok(()),
@@ -1004,7 +1069,9 @@ fn denied_result(
         tool_name,
         status: ToolResultStatus::Denied,
         effect_state: ToolEffectState::NotApplied,
-        output: format!("tool_denied:{code}"),
+        parts: vec![ToolResultPart::Text {
+            text: format!("tool_denied:{code}"),
+        }],
         code: Some(code.into()),
     }
 }
@@ -1109,8 +1176,55 @@ mod tests {
             status: ToolResultStatus::Succeeded,
             effect_state: ToolEffectState::Applied,
             code: None,
-            output: format!("result-{call_id}"),
+            parts: vec![ToolResultPart::Text {
+                text: format!("result-{call_id}"),
+            }],
         }
+    }
+
+    #[test]
+    fn tool_result_parts_convert_to_a_correlated_chat_message() {
+        let mut result = result("call-image", "capture");
+        result.parts.push(ToolResultPart::Image {
+            media_ref: MediaRef {
+                asset_id: "asset-1".into(),
+                sha256: "a".repeat(64),
+                mime_type: "image/png".into(),
+                size_bytes: 12,
+                name: "capture.png".into(),
+            },
+        });
+        let message = result.to_chat_message();
+        assert_eq!(message.role, MessageRole::Tool);
+        assert_eq!(message.tool_call_id.as_deref(), Some("call-image"));
+        assert_eq!(message.name.as_deref(), Some("capture"));
+        assert!(matches!(
+            &message.content,
+            MessageContent::Parts(parts)
+                if matches!(&parts[1], ContentPart::Image(media) if media.media_ref.asset_id == "asset-1")
+        ));
+    }
+
+    #[test]
+    fn legacy_string_tool_results_and_loop_snapshots_are_rejected() {
+        let legacy = serde_json::json!({
+            "contract_version": 1,
+            "run_id": "run-1",
+            "turn_id": "turn-1",
+            "call_id": "call-1",
+            "tool_name": "lookup",
+            "status": "succeeded",
+            "effect_state": "not_applicable",
+            "output": "old string output"
+        });
+        assert!(serde_json::from_value::<ToolResult>(legacy).is_err());
+
+        let mut old_state = state(5, 10);
+        old_state.contract_version = 2;
+        assert!(matches!(
+            validate_state(&old_state),
+            Err(ModelToolLoopError::UnsupportedLoopContractVersion { received: 2 })
+        ));
     }
 
     #[test]
@@ -1182,7 +1296,9 @@ mod tests {
             ModelToolLoopAction::ContinueWithToolResults { results, .. }
                 if results[0].status == ToolResultStatus::Denied
                     && results[0].effect_state == ToolEffectState::NotApplied
-                    && results[0].output == "tool_denied:capability_not_granted"
+                    && results[0].parts == [ToolResultPart::Text {
+                        text: "tool_denied:capability_not_granted".into()
+                    }]
         ));
     }
 
@@ -1219,21 +1335,6 @@ mod tests {
             ModelToolLoopAction::Cancelled { .. }
         ));
         assert_eq!(cancel_model_tool_loop(&cancelled.state).unwrap(), cancelled);
-        validate_state(&cancelled.state).unwrap();
-    }
-
-    #[test]
-    fn legacy_v1_snapshots_remain_readable_until_cancelled() {
-        let mut legacy = state(5, 10);
-        legacy.contract_version = LEGACY_MODEL_TOOL_LOOP_CONTRACT_VERSION;
-        validate_state(&legacy).unwrap();
-
-        let cancelled = cancel_model_tool_loop(&legacy).unwrap();
-        assert_eq!(
-            cancelled.state.contract_version,
-            MODEL_TOOL_LOOP_CONTRACT_VERSION
-        );
-        assert_eq!(cancelled.state.phase, ModelToolLoopPhase::Cancelled);
         validate_state(&cancelled.state).unwrap();
     }
 

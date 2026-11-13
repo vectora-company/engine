@@ -66,6 +66,8 @@ from vectora_engine import (
     tool_contract_version,
     tool_dispatch_contract_version,
     tool_policy_contract_version,
+    tool_result_contract_version,
+    tool_result_to_chat_message,
     transition_run,
     validate_storage_selection,
 )
@@ -1040,7 +1042,8 @@ def test_sqlite_tool_policy_is_registered_and_survives_reopen(tmp_path: Any) -> 
 
 
 def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:
-    assert model_tool_loop_contract_version() == 2
+    assert model_tool_loop_contract_version() == 3
+    assert tool_result_contract_version() == 2
     state = start_model_tool_loop("run-1", "turn-1")
     assert state["phase"] == "awaiting_model"
     assert state["settings"]["max_model_turns"] == 50
@@ -1093,19 +1096,48 @@ def test_model_tool_loop_round_trip_is_exposed_through_python_binding() -> None:
     result = submit_tool_result(
         transition["state"],
         {
-            "contract_version": 1,
+            "contract_version": 2,
             "run_id": "run-1",
             "turn_id": "turn-1",
             "call_id": "call-1",
             "tool_name": "lookup",
             "status": "succeeded",
             "effect_state": "not_applicable",
-            "output": "found",
+            "parts": [{"type": "text", "text": "found"}],
         },
     )
     assert result["state"]["phase"] == "awaiting_model"
     assert result["action"]["action"] == "continue_with_tool_results"
-    assert result["action"]["results"][0]["output"] == "found"
+    assert result["action"]["results"][0]["parts"] == [
+        {"type": "text", "text": "found"}
+    ]
+    message = tool_result_to_chat_message(
+        {
+            "contract_version": 2,
+            "run_id": "run-1",
+            "turn_id": "turn-1",
+            "call_id": "call-1",
+            "tool_name": "lookup",
+            "status": "succeeded",
+            "effect_state": "not_applicable",
+            "parts": [
+                {"type": "text", "text": "found"},
+                {
+                    "type": "image",
+                    "media_ref": {
+                        "asset_id": "image-1",
+                        "sha256": "a" * 64,
+                        "mime_type": "image/png",
+                        "size_bytes": 12,
+                        "name": "result.png",
+                    },
+                },
+            ],
+        }
+    )
+    assert message["role"] == "tool"
+    assert message["tool_call_id"] == "call-1"
+    assert message["content"][1]["type"] == "image"
 
 
 def test_model_tool_loop_cancel_waits_for_inflight_tool_result() -> None:
@@ -1149,14 +1181,14 @@ def test_model_tool_loop_cancel_waits_for_inflight_tool_result() -> None:
     result = submit_tool_result(
         cancellation["state"],
         {
-            "contract_version": 1,
+            "contract_version": 2,
             "run_id": "run-cancel",
             "turn_id": "turn-cancel",
             "call_id": "call-1",
             "tool_name": "write",
             "status": "cancelled",
             "effect_state": "not_applied",
-            "output": "cancelled",
+            "parts": [{"type": "text", "text": "cancelled"}],
         },
     )
     assert result["state"]["phase"] == "cancelled"

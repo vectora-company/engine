@@ -599,7 +599,7 @@ fn request_payload(request: &ChatRequest, stream: bool) -> Value {
     let messages = request
         .messages
         .iter()
-        .map(message_payload)
+        .flat_map(message_payloads)
         .collect::<Vec<_>>();
     let mut payload = json!({ "model": request.model, "messages": messages });
     if let Some(temperature) = request.options.temperature {
@@ -630,6 +630,46 @@ fn request_payload(request: &ChatRequest, stream: bool) -> Value {
         payload["stream"] = Value::Bool(true);
     }
     payload
+}
+
+fn message_payloads(message: &Message) -> Vec<Value> {
+    if message.role != MessageRole::Tool {
+        return vec![message_payload(message)];
+    }
+    let images = match &message.content {
+        MessageContent::Parts(parts) => parts
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::ImageUrl { image_url } => Some(json!({
+                    "type": "image_url",
+                    "image_url": { "url": image_url.url },
+                })),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        MessageContent::Text(_) => Vec::new(),
+    };
+    let mut tool_message = message_payload(message);
+    tool_message["content"] = json!(tool_result_text(&message.content));
+    let mut payloads = vec![tool_message];
+    if !images.is_empty() {
+        payloads.push(json!({ "role": "user", "content": images }));
+    }
+    payloads
+}
+
+fn tool_result_text(content: &MessageContent) -> String {
+    match content {
+        MessageContent::Text(text) => text.clone(),
+        MessageContent::Parts(parts) => parts
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::Text { text } => Some(text.clone()),
+                ContentPart::ImageUrl { .. } => None,
+                other => other.fallback_text(),
+            })
+            .collect(),
+    }
 }
 
 fn message_payload(message: &Message) -> Value {
@@ -1358,6 +1398,40 @@ mod tests {
             validate_request(&request),
             Err(ChatError::InvalidConfiguration(_))
         ));
+    }
+
+    #[test]
+    fn chat_completions_places_tool_images_after_tool_text() {
+        let request = ChatRequest::new(
+            "model-x",
+            vec![Message {
+                role: MessageRole::Tool,
+                content: MessageContent::Parts(vec![
+                    ContentPart::Text {
+                        text: "screenshot attached".into(),
+                    },
+                    ContentPart::ImageUrl {
+                        image_url: super::super::ImageUrl {
+                            url: "data:image/png;base64,abc".into(),
+                            detail: None,
+                        },
+                    },
+                ]),
+                tool_calls: Vec::new(),
+                tool_call_id: Some("call-1".into()),
+                name: Some("capture".into()),
+                is_error: false,
+            }],
+        );
+        let payload = request_payload(&request, false);
+        assert_eq!(payload["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(payload["messages"][0]["role"], "tool");
+        assert_eq!(payload["messages"][0]["content"], "screenshot attached");
+        assert_eq!(payload["messages"][1]["role"], "user");
+        assert_eq!(
+            payload["messages"][1]["content"][0]["image_url"]["url"],
+            "data:image/png;base64,abc"
+        );
     }
 
     #[tokio::test]

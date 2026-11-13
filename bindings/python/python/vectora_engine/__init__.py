@@ -681,6 +681,19 @@ def model_tool_loop_contract_version() -> int:
     return _native.model_tool_loop_contract_version()
 
 
+def tool_result_contract_version() -> int:
+    """Return the version of the typed tool result contract."""
+    return _native.tool_result_contract_version()
+
+
+def tool_result_to_chat_message(result: JsonObject) -> dict[str, Any]:
+    """Convert a typed tool result into a chat message via the Rust core."""
+    encoded = _native.tool_result_to_chat_message(
+        json.dumps(result, separators=(",", ":"))
+    )
+    return json.loads(encoded)
+
+
 def start_model_tool_loop(
     run_id: str,
     turn_id: str,
@@ -999,6 +1012,8 @@ __all__ = [
     "tool_contract_version",
     "tool_dispatch_contract_version",
     "tool_policy_contract_version",
+    "tool_result_contract_version",
+    "tool_result_to_chat_message",
     "transition_run",
     "validate_storage_selection",
     "vector_store_delete",

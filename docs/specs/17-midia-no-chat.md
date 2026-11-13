@@ -1,19 +1,21 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada no código dos PRs abertos #79–#82; ainda
-não integrada em `main`. Tipos, classificação por bytes, capabilities,
+**Estado:** parcialmente implementada na stack aberta #79–#85; a substituição
+direta de `ToolResult` está em implementação local na branch filha do #85. Nada
+desta stack está integrado em `main`. Tipos, classificação por bytes, capabilities,
 decisões por parte, payloads nativos e preparo Rust estão implementados para os
 protocolos descritos abaixo. Retry textual único em incompatibilidade multimodal
-está implementado no PR aberto [#85](https://github.com/vectora-company/engine/pull/85),
-filho do #84. O PR #82 expõe preparo manual, contexto por
-chamada e contexto padrão nos bindings Python e TypeScript. O mapa temporário é
+está no PR aberto [#85](https://github.com/vectora-company/engine/pull/85), filho
+do #84. A substituição de `ToolResult.output: String` por partes tipadas está em
+implementação na branch `feat/chat-tool-result-parts`, filha do #85. O PR #82
+expõe preparo manual, contexto por chamada e contexto padrão nos bindings Python e TypeScript. O mapa temporário é
 `asset_id → bytes`; autorização e persistência dos assets continuam sob
 responsabilidade do host. O limite global padrão é 20 MiB por asset e pode ser
 configurado; a preparação atual cobre o turno de usuário mais recente e os
 resultados subsequentes de tools, e devolve evidências sem bytes. Overrides de limites por provider/modelo/modalidade já são aceitos no contexto
 de execução e limitados pelo teto global por asset; descoberta automática dos
-limites, limites agregados de request e resultados de tool em partes seguem
-pendentes. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
+limites e limites agregados de request seguem pendentes; resultados de tool
+passam a partes tipadas nesta branch local. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
 do Vectora foi integrada em 19 PRs, mas não prova paridade da Engine. UI, STT
 local, prévias e empacotamento permanecem no Vectora. Veja o estado e os critérios
 em [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
@@ -115,28 +117,24 @@ indisponível: nome]`) e a decisão registra o motivo.
 
 ## Resultado de tool com partes
 
-`ToolResult.output` é atualmente uma `String`; a extensão multimodal está
-planejada, mas sua forma pública ainda depende de decisão de compatibilidade.
-A proposta funcional é representar texto e imagem (`MediaRef`) como partes e
-manter uma forma textual legível pelo loop e pelo ledger.
+`ToolResult` usa `parts: Vec<ToolResultPart>` (contrato v2), em ordem. Cada parte
+é `{ "type": "text", "text": "…" }` ou `{ "type": "image", "media_ref": MediaRef }`. A imagem referencia um asset do host;
+bytes não entram no resultado serializado. `ToolResult::to_chat_message` e os
+helpers Python/TypeScript retornam uma `MessageRole::Tool` com as partes
+correspondentes. O loop modelo/tool usa contrato v3; snapshots v1/v2 e resultados
+v1 com `output: String` são rejeitados. Não há conversão nem compatibilidade com
+o campo anterior.
 
-### Decisão pendente — compatibilidade de `ToolResult`
+O limite do loop mede os bytes serializados das partes (texto e referência). O
+limite do asset binário é aplicado ao reidratar por `MediaExecutionContext`; o
+host continua responsável por autorizar o `MediaStore`.
 
-Antes de alterar o contrato Rust/ Python/TypeScript, escolha uma estratégia:
+### Decisão resolvida — substituição direta do contrato
 
-1. **Mudança direta:** substituir `output: String` por `parts: Vec<ToolResultPart>`.
-   Modelo mais simples, mas quebra consumidores Rust e formatos serializados
-   existentes.
-2. **Extensão aditiva:** manter `output: String` e acrescentar `content` opcional
-   com partes tipadas. Mantém compatibilidade de leitura, mas exige definir qual
-   campo é canônico e como texto e partes permanecem consistentes.
-3. **Contrato versionado novo:** manter `ToolResult` v1 e criar v2 com partes;
-   migração explícita e sem ambiguidade, ao custo de duas APIs e conversores
-   durante a transição.
-
-A escolha afeta API pública, serialização, persistência/replay e os dois bindings;
-por isso a implementação fica parada até a decisão. Nenhuma alternativa está
-selecionada.
+brunosrz decidiu substituir `output: String` por partes tipadas, sem preservar
+v1 ou manter camada de compatibilidade. Essa mudança afeta resultados, snapshots
+e serialização do loop e foi implementada como quebra de contrato antes da
+primeira release da Engine.
 
 Mapeamento por provider:
 
@@ -144,7 +142,7 @@ Mapeamento por provider:
 | ----------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------- |
 | Anthropic Messages                                          | `tool_result` com `content` em partes | Bloco `image` dentro do `tool_result`.                                            |
 | Google Gemini                                               | `functionResponse`                    | Parte inline (`inlineData`) no mesmo turno do `functionResponse`.                 |
-| OpenAI Responses                                            | `function_call_output`                | Item de entrada com imagem logo após o `function_call_output`.                    |
+| OpenAI Responses (sem adapter Engine)                       | Não aplicável                         | Não implementado.                                                                 |
 | OpenAI Chat Completions e compatíveis (OpenRouter, 9router) | mensagem `tool`                       | Mensagem de `user` seguinte com a imagem, pois a mensagem `tool` aceita só texto. |
 | Cohere Chat v2                                              | mensagem `tool`                       | Sem imagem em resultado de tool: a imagem vira forma textual com a referência.    |
 
