@@ -266,6 +266,16 @@ export declare function resilientLedgerAppend(
   postgresUrl?: string | undefined | null,
 ): Promise<string>;
 
+export declare function resilientLedgerFlushOutbox(
+  path: string,
+  limit: number,
+  postgresUrl?: string | null,
+): Promise<number>;
+
+export declare function resilientLedgerPendingCount(
+  path: string,
+): Promise<string>;
+
 export declare function runContractVersion(): number;
 
 export declare function runCreate(identityJson: string): string;

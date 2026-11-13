@@ -52,6 +52,9 @@ import {
   submitToolResult,
   validateStorageSelection,
   storageCapabilities,
+  resilientLedgerAppend,
+  resilientLedgerFlushOutbox,
+  resilientLedgerPendingCount,
   sqliteLedgerAppend,
   sqliteLedgerAppendCheckpointed,
   sqliteModelToolLoopAcceptModelTurn,
@@ -262,6 +265,21 @@ test("sqlite ledger persists and retries safely through Node", async () => {
     assert.equal(result.event.sequence, 1);
     assert.deepEqual(await sqliteAdmitRun(path, admission, admissionEvent), result);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("resilient ledger outbox diagnostics expose the local retry queue", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-resilient-ledger-"));
+  try {
+    const path = join(dir, "ledger.db");
+    const draft = { scope: "team", aggregate: "run", event_id: "local-event", idempotency_key: "local-key", event_type: "started", payload: {}, expected_version: 0 };
+    assert.equal((await resilientLedgerAppend(path, draft)).mirror, "pending");
+    assert.equal(await resilientLedgerPendingCount(path), 1n);
+    assert.equal(await resilientLedgerFlushOutbox(path, 100), 0);
+    assert.equal(await resilientLedgerPendingCount(path), 1n);
+    await assert.rejects(resilientLedgerFlushOutbox(path, 1001));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("storage capabilities state backend differences from Rust", () => {

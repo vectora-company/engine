@@ -399,6 +399,19 @@ async def resilient_ledger_append(
     )
 
 
+async def resilient_ledger_flush_outbox(
+    path: str, limit: int = 100, postgres_url: str | None = None
+) -> int:
+    """Retry up to ``limit`` SQLite outbox events in PostgreSQL, if configured."""
+    encoded = await _native.resilient_ledger_flush_outbox(path, postgres_url, limit)
+    return json.loads(encoded)
+
+
+async def resilient_ledger_pending_count(path: str) -> int:
+    """Count locally committed ledger events that PostgreSQL has not projected."""
+    return json.loads(await _native.resilient_ledger_pending_count(path))
+
+
 async def sqlite_reserve_run(path: str, reservation: JsonObject) -> dict[str, Any]:
     """Reserve an idempotent run; the host authorizes and redacts input."""
     return json.loads(await _native.sqlite_reserve_run(path, json.dumps(reservation)))
@@ -1097,6 +1110,8 @@ __all__ = [
     "rerank",
     "rerank_contract_version",
     "resilient_ledger_append",
+    "resilient_ledger_flush_outbox",
+    "resilient_ledger_pending_count",
     "run_contract_version",
     "sqlite_admit_run",
     "sqlite_latest_checkpoint",

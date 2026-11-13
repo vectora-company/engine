@@ -70,12 +70,12 @@ impl ResilientLedger {
     }
 
     pub async fn flush_outbox(&mut self, limit: u32) -> Result<usize, ResilientLedgerError> {
-        let Some(url) = self.postgres_url.as_deref() else {
-            return Ok(0);
-        };
         if !(1..=1000).contains(&limit) {
             return Err(LedgerError::InvalidInput.into());
         }
+        let Some(url) = self.postgres_url.as_deref() else {
+            return Ok(0);
+        };
         if self.postgres.is_none() {
             if let Ok(pg) = PostgresLedger::connect(url, 4).await {
                 self.postgres = Some(pg);
@@ -177,6 +177,23 @@ mod tests {
         drop(ledger);
         let ledger = ResilientLedger::open(&path, None).unwrap();
         assert_eq!(ledger.pending_count().unwrap(), 1);
+        drop(ledger);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn flush_outbox_validates_limit_even_without_postgres() {
+        let path = db_path();
+        let mut ledger = ResilientLedger::open(&path, None).unwrap();
+        assert!(matches!(
+            ledger.flush_outbox(0).await,
+            Err(ResilientLedgerError::Sqlite(LedgerError::InvalidInput))
+        ));
+        assert!(matches!(
+            ledger.flush_outbox(1001).await,
+            Err(ResilientLedgerError::Sqlite(LedgerError::InvalidInput))
+        ));
+        assert_eq!(ledger.flush_outbox(100).await.unwrap(), 0);
         drop(ledger);
         std::fs::remove_file(path).unwrap();
     }
