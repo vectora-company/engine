@@ -576,14 +576,46 @@ impl MediaExecutionContext {
     pub async fn prepare_request(
         &self,
         provider: &str,
+        request: super::ChatRequest,
+    ) -> PreparedRequest {
+        let capabilities = self.resolver.resolve(provider, &request.model);
+        self.prepare_request_with_capabilities(provider, request, capabilities)
+            .await
+    }
+
+    /// Prepares the request as text/reference only after a provider specifically
+    /// rejects a multimodal payload. This is a single retry path, not a default.
+    pub async fn prepare_request_text_fallback(
+        &self,
+        provider: &str,
+        request: super::ChatRequest,
+    ) -> PreparedRequest {
+        let unsupported = CapabilityState::Unsupported;
+        self.prepare_request_with_capabilities(
+            provider,
+            request,
+            ModalityCapabilities {
+                vision: unsupported,
+                pdf: unsupported,
+                audio_input: unsupported,
+                video_input: unsupported,
+                tool_result_images: unsupported,
+            },
+        )
+        .await
+    }
+
+    async fn prepare_request_with_capabilities(
+        &self,
+        provider: &str,
         mut request: super::ChatRequest,
+        capabilities: ModalityCapabilities,
     ) -> PreparedRequest {
         let start = request
             .messages
             .iter()
             .rposition(|message| message.role == super::MessageRole::User)
             .unwrap_or(request.messages.len());
-        let capabilities = self.resolver.resolve(provider, &request.model);
         let mut decisions = Vec::new();
         for (message_index, message) in request.messages.iter_mut().enumerate().skip(start) {
             if !matches!(
@@ -650,6 +682,18 @@ pub struct MediaDecision {
     pub mode: MediaMode,
     pub reason: String,
     pub model: String,
+}
+
+pub(crate) fn has_native_media(decisions: &[MediaDecision]) -> bool {
+    decisions
+        .iter()
+        .any(|decision| matches!(decision.mode, MediaMode::Native | MediaMode::Image))
+}
+
+pub(crate) fn mark_text_retry(decisions: &mut [MediaDecision]) {
+    for decision in decisions {
+        decision.reason = "provider rejeitou mídia; única nova tentativa em texto".to_owned();
+    }
 }
 
 /// Conteúdo pronto para o provider e as decisões que o produziram.

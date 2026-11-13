@@ -4,6 +4,7 @@ use async_stream::stream;
 use futures_util::StreamExt;
 use serde::Deserialize;
 
+use super::media::{has_native_media, mark_text_retry};
 use super::{
     ChatCompletion, ChatError, ChatEvent, ChatEventKind, ChatRequest, MediaExecutionContext,
     NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
@@ -157,7 +158,7 @@ impl FallbackChatClient {
         let mut last_error = None;
         for candidate in &self.candidates {
             request.model.clone_from(&candidate.model);
-            let (candidate_request, decisions) = match context {
+            let (candidate_request, mut decisions) = match context {
                 Some(context) => {
                     let PreparedRequest { request, decisions } = context
                         .prepare_request(&candidate.provider, request.clone())
@@ -166,7 +167,21 @@ impl FallbackChatClient {
                 }
                 None => (request.clone(), Vec::new()),
             };
-            match candidate.client.complete(candidate_request).await {
+            let result = candidate.client.complete(candidate_request).await;
+            let result = match (result, context) {
+                (Err(ChatError::MultimodalIncompatible), Some(context))
+                    if has_native_media(&decisions) =>
+                {
+                    let fallback = context
+                        .prepare_request_text_fallback(&candidate.provider, request.clone())
+                        .await;
+                    decisions = fallback.decisions;
+                    mark_text_retry(&mut decisions);
+                    candidate.client.complete(fallback.request).await
+                }
+                (result, _) => result,
+            };
+            match result {
                 Ok(mut completion) => {
                     completion.selected_model_id = Some(candidate.model_id.clone());
                     completion.media_decisions = decisions;
@@ -216,7 +231,7 @@ impl FallbackChatClient {
                 }
                 let mut candidate_request = request.clone();
                 candidate_request.model.clone_from(&candidate.model);
-                let decisions = if let Some(context) = &context {
+                let mut decisions = if let Some(context) = &context {
                     let PreparedRequest { request: prepared, decisions } =
                         context
                             .prepare_request(&candidate.provider, candidate_request)
@@ -226,7 +241,23 @@ impl FallbackChatClient {
                 } else {
                     Vec::new()
                 };
-                let candidate_error = match candidate.client.stream(candidate_request).await {
+                let initial_stream = candidate.client.stream(candidate_request).await;
+                let initial_stream = match (initial_stream, &context) {
+                    (Err(ChatError::MultimodalIncompatible), Some(context))
+                        if has_native_media(&decisions) =>
+                    {
+                        let mut text_request = request.clone();
+                        text_request.model.clone_from(&candidate.model);
+                        let fallback = context
+                            .prepare_request_text_fallback(&candidate.provider, text_request)
+                            .await;
+                        decisions = fallback.decisions;
+                        mark_text_retry(&mut decisions);
+                        candidate.client.stream(fallback.request).await
+                    }
+                    (result, _) => result,
+                };
+                let candidate_error = match initial_stream {
                     Ok(mut response_stream) => {
                         let mut emitted = false;
                         let mut media_reported = false;
@@ -315,8 +346,112 @@ fn exhausted_error(candidate: &Candidate, last_error: ChatError) -> ChatError {
 
 #[cfg(test)]
 mod tests {
-    use super::{can_fallback, normalize_provider};
-    use crate::chat::ChatError;
+    use std::{
+        collections::HashMap,
+        io::{Read, Write},
+        net::TcpListener,
+        sync::Arc,
+        thread,
+    };
+
+    use async_trait::async_trait;
+    use serde_json::Value;
+
+    use super::{FallbackChatClient, can_fallback, normalize_provider};
+    use crate::chat::{
+        CapabilityResolver, ChatError, ChatRequest, ContentPart, MediaError, MediaExecutionContext,
+        MediaPart, MediaRef, MediaStore, Message, MessageContent, MessageRole, sha256_hex,
+    };
+
+    struct Store(HashMap<String, Vec<u8>>);
+
+    #[async_trait]
+    impl MediaStore for Store {
+        async fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
+            self.0
+                .get(&media_ref.asset_id)
+                .cloned()
+                .ok_or(MediaError::Unavailable)
+        }
+    }
+
+    fn pdf_request(bytes: &[u8]) -> ChatRequest {
+        ChatRequest::new(
+            "model-x",
+            vec![Message {
+                role: MessageRole::User,
+                content: MessageContent::Parts(vec![ContentPart::Document(MediaPart {
+                    media_ref: MediaRef {
+                        asset_id: "pdf".into(),
+                        sha256: sha256_hex(bytes),
+                        mime_type: "application/pdf".into(),
+                        size_bytes: bytes.len() as u64,
+                        name: "report.pdf".into(),
+                    },
+                    text: Some("extracted text".into()),
+                    previews: Vec::new(),
+                })]),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
+                name: None,
+                is_error: false,
+            }],
+        )
+    }
+
+    fn test_server() -> (String, thread::JoinHandle<Vec<Value>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for index in 0..2 {
+                let (mut socket, _) = listener.accept().unwrap();
+                let mut received = Vec::new();
+                let mut chunk = [0; 4096];
+                let (body_start, content_length) = loop {
+                    let count = socket.read(&mut chunk).unwrap();
+                    assert_ne!(count, 0);
+                    received.extend_from_slice(&chunk[..count]);
+                    if let Some(start) =
+                        received.windows(4).position(|window| window == b"\r\n\r\n")
+                    {
+                        let headers = String::from_utf8_lossy(&received[..start]);
+                        let length = headers
+                            .lines()
+                            .find_map(|line| {
+                                let (name, value) = line.split_once(':')?;
+                                name.eq_ignore_ascii_case("content-length")
+                                    .then(|| value.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap();
+                        if received.len() >= start + 4 + length {
+                            break (start + 4, length);
+                        }
+                    }
+                };
+                requests.push(
+                    serde_json::from_slice(&received[body_start..body_start + content_length])
+                        .unwrap(),
+                );
+                let (status, body) = if index == 0 {
+                    (
+                        "400 Bad Request",
+                        br#"{"error":{"message":"PDF input is not supported"}}"#.as_slice(),
+                    )
+                } else {
+                    (
+                        "200 OK",
+                        br#"{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}"#
+                            .as_slice(),
+                    )
+                };
+                write!(socket, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+                socket.write_all(body).unwrap();
+            }
+            requests
+        });
+        (format!("http://{address}/v1"), server)
+    }
 
     #[test]
     fn provider_aliases_are_normalized_before_same_provider_filtering() {
@@ -353,5 +488,40 @@ mod tests {
             ChatError::Cancelled,
         ];
         assert!(permanent.iter().all(|error| !can_fallback(error)));
+    }
+
+    #[tokio::test]
+    async fn fallback_retries_same_candidate_as_text_before_exhausting_candidates() {
+        let (base_url, server) = test_server();
+        let settings: super::FallbackChatSettings = serde_json::from_value(serde_json::json!({
+            "candidates": [{
+                "model_id": "openai:model-x",
+                "client": {
+                    "protocol": "open_ai_compatible",
+                    "settings": { "base_url": base_url }
+                }
+            }]
+        }))
+        .unwrap();
+        let client = FallbackChatClient::new(settings).unwrap();
+        let bytes = b"%PDF-1.7\ncontents";
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::new(),
+            Arc::new(Store(HashMap::from([("pdf".into(), bytes.to_vec())]))),
+        );
+        let completion = client
+            .complete_with_media(pdf_request(bytes), &context)
+            .await
+            .unwrap();
+        assert_eq!(completion.content, "ok");
+        assert!(
+            completion.media_decisions[0]
+                .reason
+                .contains("única nova tentativa")
+        );
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0]["messages"][0]["content"][0]["type"], "file");
+        assert_eq!(requests[1]["messages"][0]["content"][0]["type"], "text");
     }
 }

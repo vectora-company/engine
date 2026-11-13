@@ -75,8 +75,19 @@ pub(crate) fn classify_provider_error(
             "image input is not supported",
             "image_url is not supported",
             "unsupported content type: image",
+            "unsupported content type: audio",
+            "unsupported content type: video",
+            "unsupported content type: application/pdf",
             "does not support image",
+            "does not support pdf",
+            "does not support audio",
+            "does not support video",
             "model does not support vision",
+            "model does not support audio",
+            "model does not support video",
+            "pdf input is not supported",
+            "audio input is not supported",
+            "video input is not supported",
         ]
         .iter()
         .any(|marker| message.contains(marker))
@@ -113,6 +124,14 @@ mod tests {
         assert!(matches!(
             classify_provider_error(400, None, b"model does not support vision"),
             ChatError::MultimodalIncompatible
+        ));
+        assert!(matches!(
+            classify_provider_error(400, None, b"audio input is not supported"),
+            ChatError::MultimodalIncompatible
+        ));
+        assert!(matches!(
+            classify_provider_error(401, None, b"image input is not supported"),
+            ChatError::Authentication
         ));
         assert!(matches!(
             classify_provider_error(500, None, b"internal error"),
