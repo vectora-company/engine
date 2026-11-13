@@ -622,6 +622,17 @@ mod tests {
         direction: super::super::capabilities::ScoreDirection,
     ) {
         use super::super::capabilities::ScoreDirection;
+        assert!(matches!(
+            store
+                .search(
+                    &format!("{collection}_missing"),
+                    "one",
+                    vec![1.0, 0.0, 0.0],
+                    10,
+                )
+                .await,
+            Err(VectorError::Storage)
+        ));
         for item in [
             record(1, "one", [1.0, 0.0, 0.0], "exact"),
             record(2, "one", [0.8, 0.6, 0.0], "near"),
@@ -693,6 +704,66 @@ mod tests {
             super::super::capabilities::ScoreDirection::HigherIsCloser,
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn qdrant_collection_and_records_survive_service_restart() {
+        let (Ok(endpoint), Ok(container)) = (
+            std::env::var("VECTORA_TEST_QDRANT_URL"),
+            std::env::var("VECTORA_TEST_QDRANT_CONTAINER"),
+        ) else {
+            return;
+        };
+        if std::env::var("VECTORA_TEST_PODMAN_RESTART").is_err() {
+            return;
+        }
+        assert!(
+            !container.is_empty()
+                && container
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'),
+            "test container name must be a plain Podman identifier"
+        );
+        let store = QdrantStore::new(&endpoint, None).unwrap();
+        let collection = format!(
+            "restart_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        store
+            .upsert(
+                &collection,
+                record(7, "scope", [1.0, 0.0, 0.0], "persisted"),
+            )
+            .await
+            .unwrap();
+
+        let status = std::process::Command::new("podman")
+            .args(["restart", "-t", "5", &container])
+            .status()
+            .expect("podman is required for the opt-in Qdrant restart test");
+        assert!(status.success(), "podman restart {container} failed");
+
+        let mut recovered = false;
+        for _ in 0..60 {
+            if let Ok(hits) = store
+                .search(&collection, "scope", vec![1.0, 0.0, 0.0], 10)
+                .await
+                && hits.len() == 1
+                && hits[0].metadata["text"] == "persisted"
+            {
+                recovered = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        assert!(
+            recovered,
+            "Qdrant did not recover the collection and point after restart"
+        );
     }
 
     #[tokio::test]

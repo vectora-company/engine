@@ -20,9 +20,10 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Cobrir concorrência entre conexões (threads), conflito de versão/idempotência, retry idêntico concorrente, restart do arquivo e limites de leitura do ledger SQLite.
 - [x] Cobrir concorrência entre processos independentes no ledger SQLite (3 processos, mesma versão esperada: 1 commit e 2 `VersionConflict`; PR #49).
 - [ ] Cobrir backup/restore e recovery operacional do ledger (requer decisão de contrato sobre o mecanismo de backup).
-- [x] Rodar os testes service-real existentes e novos de ACK/redelivery, TTL, pub/sub sem assinante e isolamento de namespace contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 52 testes de `storage::` passam.
+- [x] Rodar testes service-real de ACK/redelivery, TTL, pub/sub sem assinante, isolamento KV, projeção PostgreSQL e vetores contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 58 testes passam na execução combinada mais recente.
 - [x] Reinício de Redis e NATS JetStream: KV/jobs sobrevivem e os adapters voltam a operar. PostgreSQL parado/religado: o teste isolado passou; a execução combinada registrou uma falha ao parar um container com `AutoRemove=true`, que o Podman removeu. O teste agora confere `AutoRemove=false` antes de parar o serviço. Habilitado por `VECTORA_TEST_PODMAN_RESTART`.
-- [ ] Cobrir shutdown gracioso do adapter, retenção/limites JetStream e reinício do Qdrant.
+- [x] Reiniciar o Qdrant local e confirmar que coleção/ponto persistem e o adapter recupera a busca no mesmo contêiner.
+- [ ] Cobrir shutdown gracioso do adapter e retenção/limites JetStream.
 - [x] Cobrir ordenação, `limit`, direção do score, upsert idempotente, mesmo id em escopos distintos, delete por escopo e dimensão inválida em LanceDB e Qdrant (contrato comum).
 - [ ] Cobrir limites de payload e falhas de indexação dos stores vetoriais.
 - [ ] Definir limite/semântica comum sem esconder diferenças específicas.
