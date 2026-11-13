@@ -44,7 +44,7 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 ## Capability ativa
 
 A capability ativa voltou a ser storage/ledger. Os PRs #92 e #93 ampliam a
-projeção SQLite-first do PostgreSQL; o PR #94, filho do #93, implementa rebuild
+projeção SQLite-first do PostgreSQL; o PR [#94](https://github.com/vectora-company/engine/pull/94), filho do #93 e aberto no head `984e2d066dcc05b0a98e076361ada632751fc61a`, implementa rebuild
 idempotente e verificação por contagens após perda da projeção. A decisão de
 brunosrz no chat combina backup `pg_dump`/gerenciado do PostgreSQL completo com
 reconstrução a partir do SQLite autoritativo. Consulte os artefatos da etapa:

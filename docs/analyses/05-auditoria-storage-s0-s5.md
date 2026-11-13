@@ -217,7 +217,9 @@ Ao registrar o PR #93, backup/verify ainda eram pendências; a decisão posterio
 
 ## Recuperação após perda integral do PostgreSQL — decisão respondida; implementação no PR #94
 
-## Rebuild da projeção PostgreSQL — PR #94, filha do PR #93
+## Rebuild da projeção PostgreSQL — PR [#94](https://github.com/vectora-company/engine/pull/94), filha do PR #93
+
+Branch `feat/postgres-projection-recovery`, commit `984e2d066dcc05b0a98e076361ada632751fc61a` (OPEN).
 
 `ResilientLedger::rebuild_projection` repõe as outboxes no SQLite em uma
 transação `IMMEDIATE`, faz replay idempotente e compara contagens de agregados/versões, eventos,

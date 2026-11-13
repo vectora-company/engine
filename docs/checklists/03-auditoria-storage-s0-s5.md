@@ -88,4 +88,4 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [x] Expor operação Rust, Python e TypeScript; bindings rejeitam operação sem URL PostgreSQL.
 - [ ] Testar linhas extras, conflito de conteúdo e indisponibilidade remota.
 - [ ] Executar suíte NATS com versão 2.11+ (servidor local é 2.10).
-- [ ] Commit/push/abrir PR empilhado no #93; checks remotos não são gate para iniciar a próxima etapa.
+- [x] Commit `984e2d066dcc05b0a98e076361ada632751fc61a`, push e abrir PR [#94](https://github.com/vectora-company/engine/pull/94), filho do #93.
