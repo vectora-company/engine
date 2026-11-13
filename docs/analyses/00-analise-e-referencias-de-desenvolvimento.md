@@ -296,9 +296,9 @@ Opções para a primeira release, sem camada v1:
 **Pergunta a brunosrz:** qual fronteira adotar — 1, 2 ou 3? Recomendação: 3,
 por preservar os três modos já decididos e evitar que bytes base64 entrem no
 contrato persistível. Até a resposta, ficam aguardadas alterações em tipos,
-desserialização, métodos dos bindings e versionamento. O PR [#89](https://github.com/vectora-company/engine/pull/89)
-registra esta decisão como bloqueio documentado; a pergunta é feita aqui no chat,
-sem mencionar brunosrz em comentários do GitHub.
+desserialização, métodos dos bindings e versionamento. A pergunta e as opções estão registradas no PR [#89](https://github.com/vectora-company/engine/pull/89),
+filho do #88, head `2d5ff88`. A implementação permanece parada; a escolha é
+solicitada aqui no chat, sem mencionar brunosrz em comentários do GitHub.
 
 ## Reclassificação MIME na reidratação — implementação local
 

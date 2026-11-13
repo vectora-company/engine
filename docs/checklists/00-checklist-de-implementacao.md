@@ -67,6 +67,7 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Confirmar que `ContentPart::Inline` e `ImageUrl` com `data:` são aceitos pelo contrato serializado e que o host pode persistir esses bytes.
 - [x] Registrar as opções: entrada ref-only, inline com aviso, ou request durável separado de envio efêmero.
 - [x] Concluir etapas independentes, incluindo PRs #87 e #88; registrar impacto no modo manual já aprovado.
+- [x] Registrar pergunta e opções na análise e no PR [#89](https://github.com/vectora-company/engine/pull/89), sem marcar brunosrz no GitHub.
 - [ ] Aguardar decisão de brunosrz no chat antes de alterar tipos públicos, bindings ou versionamento.
 
 ## Preparação e escopo
