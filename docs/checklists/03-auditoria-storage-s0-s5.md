@@ -79,3 +79,13 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [ ] SQL: interface transacional genérica tipada e limitada nos dois (decisão do mantenedor pendente).
 - [x] Decisão do mantenedor: SQLite permanece cópia local obrigatória e autoridade de recovery para ledger e estado crítico interno; PostgreSQL recebe projeções/replicação retomável. Credenciais e autenticação/RBAC do produto ficam no host.
 - [ ] Especializações: registrar cada uma em `capabilities()` com o motivo de incompatibilidade verificado na documentação.
+
+## Recovery da projeção PostgreSQL — PR #94, filha do #93
+
+- [x] Repor a outbox inteira sob transação SQLite sem janela de writes sem outbox.
+- [x] Reexecutar projeção PostgreSQL idempotente e comparar contagens de agregados/versões por scope.
+- [x] Testar serviço real: apagar scope temporária e reconstruir eventos, checkpoint, admission, reservations e reserva standalone.
+- [x] Expor operação Rust, Python e TypeScript; bindings rejeitam operação sem URL PostgreSQL.
+- [ ] Testar linhas extras, conflito de conteúdo e indisponibilidade remota.
+- [ ] Executar suíte NATS com versão 2.11+ (servidor local é 2.10).
+- [x] Commit `984e2d066dcc05b0a98e076361ada632751fc61a`, push e abrir PR [#94](https://github.com/vectora-company/engine/pull/94), filho do #93.

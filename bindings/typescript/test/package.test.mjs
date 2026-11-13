@@ -54,6 +54,7 @@ import {
   storageCapabilities,
   resilientLedgerAppend,
   resilientLedgerFlushOutbox,
+  resilientLedgerRebuildProjection,
   resilientLedgerPendingCount,
   sqliteLedgerAppend,
   sqliteLedgerAppendCheckpointed,
@@ -277,6 +278,7 @@ test("resilient ledger outbox diagnostics expose the local retry queue", async (
     assert.equal(await resilientLedgerFlushOutbox(path, 100), 0);
     assert.equal(await resilientLedgerPendingCount(path), 1n);
     await assert.rejects(resilientLedgerFlushOutbox(path, 1001));
+    await assert.rejects(resilientLedgerRebuildProjection(path));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

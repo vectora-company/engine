@@ -792,6 +792,28 @@ fn resilient_ledger_flush_outbox<'py>(
 }
 
 #[pyfunction]
+fn resilient_ledger_rebuild_projection<'py>(
+    py: Python<'py>,
+    path: String,
+    postgres_url: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let runtime = tokio::runtime::Handle::current();
+        let report = tokio::task::spawn_blocking(move || {
+            let mut ledger = vectora_engine::storage::resilient_ledger::ResilientLedger::open(
+                path,
+                postgres_url,
+            )?;
+            runtime.block_on(ledger.rebuild_projection())
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&report)
+    })
+}
+
+#[pyfunction]
 fn resilient_ledger_pending_count<'py>(
     py: Python<'py>,
     path: String,
@@ -2228,6 +2250,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_flush_outbox, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        resilient_ledger_rebuild_projection,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_pending_count, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_backup_online, module)?)?;

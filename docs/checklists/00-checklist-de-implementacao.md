@@ -6,7 +6,7 @@ atualizado durante o trabalho. Não marque um item como feito sem evidência.
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 
-O estado verificado em 2026-11-13 inclui os PRs #92 e #93 abertos e empilhados sobre #91. O #93 projeta reservations/admissions e passou os testes service-real; a próxima etapa depende da decisão de contrato de backup/verify PostgreSQL registrada na análise. Revisões documentais anteriores são registros históricos. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
+O estado verificado em 2026-11-13 inclui os PRs #92 e #93 abertos e empilhados sobre #91, além do PR [#94](https://github.com/vectora-company/engine/pull/94), aberto sobre #93, head `984e2d066dcc05b0a98e076361ada632751fc61a`. A decisão de brunosrz no chat combina `pg_dump`/backup gerenciado com verify/rebuild da projeção a partir do SQLite; ver evidências e limites na análise. Revisões documentais anteriores são registros históricos. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
 permanece geral e não substitui critérios específicos. A etapa de limites explícitos por provider/modelo/modalidade foi publicada no PR [#84](https://github.com/vectora-company/engine/pull/84), filho do #83 (head local/remoto `58980b3`). O retry de incompatibilidade multimodal foi publicado no [PR #85](https://github.com/vectora-company/engine/pull/85), filho do #84.
 
@@ -178,7 +178,14 @@ outras etapas aprovadas no plano ativo.
 - [x] Commit `b01b20b`, push e abrir o PR [#92](https://github.com/vectora-company/engine/pull/92), filho do #91.
 - [x] Publicar a correção da fixture de migração e a projeção opt-in no mesmo PR #92 (commit `69af992`).
 - [x] Projetar reservas/admissions como entidade consultável e criar APIs de leitura PostgreSQL no PR [#93](https://github.com/vectora-company/engine/pull/93).
-- [ ] Definir contrato de backup/verify PostgreSQL; decisão vital pendente de brunosrz no chat. Depois implementar; em seguida tratar concorrência de projetores e migrations com rollback.
+- [x] Registrar a decisão de backup gerenciado/`pg_dump` e verify/rebuild da projeção a partir do SQLite. PR [#94](https://github.com/vectora-company/engine/pull/94) aberto sobre #93; head `984e2d066dcc05b0a98e076361ada632751fc61a`.
+- [x] Verificar reconstrução service-real PostgreSQL após apagar a scope isolada; eventos, checkpoint, reservations/admissions e reserva standalone restaurados com contagens iguais.
+- [x] Binding Python: `maturin develop` e `pytest` local explícito — 53 passaram.
+- [x] Binding TypeScript: `pnpm typecheck`, `pnpm build` e `pnpm test` — 39 passaram, 10 ignorados sem endpoints.
+- [x] Simular perda de eventos, checkpoints, reservas/admissions e reserva standalone na scope de teste.
+- [ ] Cobrir conteúdo extra/incompatível e indisponibilidade remota durante a reconstrução.
+- [ ] Reexecutar a suíte NATS com servidor 2.11+; o contêiner atual é 2.10 e falhou em 3 testes que exigem TTL de KV.
+- [ ] Em seguida tratar concorrência de projetores e migrations PostgreSQL com rollback.
 
 ## Projeção de reservas e admissions — PR #93, filho do PR #92
 

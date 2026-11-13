@@ -272,6 +272,11 @@ export declare function resilientLedgerFlushOutbox(
   postgresUrl?: string | null,
 ): Promise<number>;
 
+export declare function resilientLedgerRebuildProjection(
+  path: string,
+  postgresUrl?: string | null,
+): Promise<string>;
+
 export declare function resilientLedgerPendingCount(
   path: string,
 ): Promise<string>;

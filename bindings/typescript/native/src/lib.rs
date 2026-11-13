@@ -779,6 +779,23 @@ pub async fn resilient_ledger_flush_outbox(
 }
 
 #[napi]
+pub async fn resilient_ledger_rebuild_projection(
+    path: String,
+    postgres_url: Option<String>,
+) -> Result<String> {
+    let runtime = tokio::runtime::Handle::current();
+    let report = tokio::task::spawn_blocking(move || {
+        let mut ledger =
+            vectora_engine::storage::resilient_ledger::ResilientLedger::open(path, postgres_url)?;
+        runtime.block_on(ledger.rebuild_projection())
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    serde_json::to_string(&report).map_err(|_| Error::from_reason("ledger report encoding failed"))
+}
+
+#[napi]
 pub async fn resilient_ledger_pending_count(path: String) -> Result<String> {
     let count = tokio::task::spawn_blocking(move || {
         vectora_engine::storage::resilient_ledger::ResilientLedger::open(path, None)?
