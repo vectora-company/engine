@@ -86,6 +86,7 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [x] Reexecutar projeção PostgreSQL idempotente e comparar contagens de agregados/versões por scope.
 - [x] Testar serviço real: apagar scope temporária e reconstruir eventos, checkpoint, admission, reservations e reserva standalone.
 - [x] Expor operação Rust, Python e TypeScript; bindings rejeitam operação sem URL PostgreSQL.
-- [ ] Testar linhas extras, conflito de conteúdo e indisponibilidade remota.
+- [x] PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94: testar linha extra em `ve_ledger_versions` (`ProjectionMismatch`) e payload alterado (`ProjectionConflict`) contra PostgreSQL real.
+- [ ] Testar indisponibilidade remota durante a reconstrução.
 - [ ] Executar suíte NATS com versão 2.11+ (servidor local é 2.10).
 - [x] Commit `984e2d066dcc05b0a98e076361ada632751fc61a`, push e abrir PR [#94](https://github.com/vectora-company/engine/pull/94), filho do #93.

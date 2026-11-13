@@ -240,6 +240,24 @@ mod tests {
         ))
     }
 
+    async fn delete_postgres_scope(pool: &sqlx::PgPool, scope: &str) {
+        let mut tx = pool.begin().await.unwrap();
+        for table in [
+            "ve_run_admissions",
+            "ve_ledger_checkpoints",
+            "ve_run_reservations",
+            "ve_ledger_events",
+            "ve_ledger_versions",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table} WHERE scope=$1"))
+                .bind(scope)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+        }
+        tx.commit().await.unwrap();
+    }
+
     #[tokio::test]
     async fn sqlite_accepts_events_while_postgres_is_unavailable_and_persists_retry_queue() {
         let path = db_path();
@@ -336,21 +354,7 @@ mod tests {
         assert_eq!(ledger.pending_count().unwrap(), 0);
 
         let pool = sqlx::PgPool::connect(&url).await.unwrap();
-        let mut tx = pool.begin().await.unwrap();
-        for table in [
-            "ve_run_admissions",
-            "ve_ledger_checkpoints",
-            "ve_run_reservations",
-            "ve_ledger_events",
-            "ve_ledger_versions",
-        ] {
-            sqlx::query(&format!("DELETE FROM {table} WHERE scope=$1"))
-                .bind(&scope)
-                .execute(&mut *tx)
-                .await
-                .unwrap();
-        }
-        tx.commit().await.unwrap();
+        delete_postgres_scope(&pool, &scope).await;
 
         let report = ledger.rebuild_projection().await.unwrap();
         assert_eq!(report.expected.events, 2);
@@ -388,6 +392,97 @@ mod tests {
         drop(pool);
         drop(ledger);
         drop(pg);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn rebuild_rejects_extra_postgres_projection_rows() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let scope = format!("projection-extra-{suffix}");
+        let path = db_path();
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        ledger
+            .append(EventDraft {
+                scope: scope.clone(),
+                aggregate: "thread".into(),
+                event_id: format!("event-{suffix}"),
+                idempotency_key: format!("idem-{suffix}"),
+                event_type: "accepted".into(),
+                payload: json!({"source":"sqlite"}),
+                expected_version: 0,
+            })
+            .await
+            .unwrap();
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        sqlx::query(
+            "INSERT INTO ve_ledger_versions(scope,aggregate_id,version) VALUES($1,'orphan',0)",
+        )
+        .bind(&scope)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(matches!(
+            ledger.rebuild_projection().await,
+            Err(ResilientLedgerError::ProjectionMismatch)
+        ));
+        assert_eq!(ledger.pending_count().unwrap(), 0);
+        delete_postgres_scope(&pool, &scope).await;
+        drop(ledger);
+        drop(pool);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn rebuild_rejects_changed_postgres_event_content() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let scope = format!("projection-conflict-{suffix}");
+        let path = db_path();
+        let event_id = format!("event-{suffix}");
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        ledger
+            .append(EventDraft {
+                scope: scope.clone(),
+                aggregate: "thread".into(),
+                event_id: event_id.clone(),
+                idempotency_key: format!("idem-{suffix}"),
+                event_type: "accepted".into(),
+                payload: json!({"source":"sqlite"}),
+                expected_version: 0,
+            })
+            .await
+            .unwrap();
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        sqlx::query("UPDATE ve_ledger_events SET payload=$1::jsonb WHERE scope=$2 AND event_id=$3")
+            .bind(r#"{"source":"modified"}"#)
+            .bind(&scope)
+            .bind(&event_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            ledger.rebuild_projection().await,
+            Err(ResilientLedgerError::ProjectionConflict)
+        ));
+        assert_eq!(ledger.pending_count().unwrap(), 1);
+        delete_postgres_scope(&pool, &scope).await;
+        drop(ledger);
+        drop(pool);
         std::fs::remove_file(path).unwrap();
     }
 
