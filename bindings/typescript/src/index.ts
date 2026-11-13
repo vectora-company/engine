@@ -477,6 +477,7 @@ export interface FallbackRerankSettings {
 
 interface NativeBinding {
   storageValidateSelection(selectionJson: string): string;
+  storageCapabilities(selectionJson: string): string;
   vectorStoreUpsert(
     configJson: string,
     collection: string,
@@ -923,6 +924,33 @@ export function validateStorageSelection(
   return JSON.parse(
     native.storageValidateSelection(JSON.stringify(selection)),
   ) as StorageSelection;
+}
+
+export type ScoreDirection = "lower_is_closer" | "higher_is_closer";
+
+export interface BackendCapabilities {
+  kind: "sql" | "vector" | "kv" | "queue" | "pubsub";
+  backend: string;
+  implemented: string[];
+  not_implemented: string[];
+  ttl?: boolean;
+  score_direction?: ScoreDirection;
+  durable?: boolean;
+  notes: string[];
+}
+
+export interface StorageCapabilities {
+  contract_version: number;
+  backends: BackendCapabilities[];
+}
+
+/** Describe the adapters behind a selection; no service is contacted. */
+export function storageCapabilities(
+  selection: StorageSelection,
+): StorageCapabilities {
+  return JSON.parse(
+    native.storageCapabilities(JSON.stringify(selection)),
+  ) as StorageCapabilities;
 }
 
 export interface LedgerDraft {

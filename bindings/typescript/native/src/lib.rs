@@ -232,6 +232,17 @@ pub fn storage_validate_selection(selection_json: String) -> Result<String> {
 }
 
 #[napi]
+pub fn storage_capabilities(selection_json: String) -> Result<String> {
+    let selection: vectora_engine::storage::StorageSelection =
+        serde_json::from_str(&selection_json)
+            .map_err(|_| Error::from_reason("invalid storage selection"))?;
+    selection
+        .validate()
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&selection.capabilities())
+}
+
+#[napi]
 pub async fn sqlite_ledger_append(path: String, draft_json: String) -> Result<String> {
     let draft = serde_json::from_str(&draft_json)
         .map_err(|_| Error::from_reason("invalid ledger event"))?;

@@ -16,6 +16,11 @@ def validate_storage_selection(selection: JsonObject) -> dict[str, Any]:
     return json.loads(_native.storage_validate_selection(json.dumps(selection)))
 
 
+def storage_capabilities(selection: JsonObject) -> dict[str, Any]:
+    """Describe the adapters behind a selection; no service is contacted."""
+    return json.loads(_native.storage_capabilities(json.dumps(selection)))
+
+
 async def vector_store_upsert(
     config: JsonObject, collection: str, record: JsonObject
 ) -> None:
@@ -796,6 +801,7 @@ __all__ = [
     "sqlite_tool_policy_record_approval",
     "sqlite_tool_policy_save",
     "start_model_tool_loop",
+    "storage_capabilities",
     "submit_tool_result",
     "tool_chat_definitions",
     "tool_contract_version",

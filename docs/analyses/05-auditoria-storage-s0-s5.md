@@ -75,6 +75,40 @@ Esta auditoria não declara paridade operacional dos adapters nem substitui os
 testes com serviços reais. A identificação exata da revisão publicada fica no
 histórico Git e no pull request desta correção.
 
+## Etapa S0: relatório de capabilities (branch `feat/storage-readiness-matrix`)
+
+Decisão de contrato: `StorageSelection::capabilities()` devolve um relatório
+estático e versionado (`STORAGE_CONTRACT_VERSION`, aditivo) com, por backend
+selecionado, o que o adapter implementa, o que não implementa, suporte a TTL,
+direção do score vetorial e durabilidade. Os fatos vêm do código dos adapters
+(`messaging.rs`: TTL do JetStream KV retorna `Unsupported`; `vector.rs`:
+LanceDB devolve distância e Qdrant similaridade cosseno; `storage/postgres.rs`:
+somente projeção de ledger). O relatório não contata serviços, não é health
+check e não prova garantias operacionais. Alternativa descartada: probe ativo
+de serviço, por exigir credenciais/rede e misturar readiness com configuração.
+Exposto em Rust, Python (`storage_capabilities`) e TypeScript
+(`storageCapabilities`). Estado: ver checklist; testes ainda dependem de
+compilação nesta máquina.
+
+## Etapa S1: concorrência e restart do ledger SQLite
+
+Testes adicionados em `storage/sqlite.rs` (conexões independentes em threads
+sobre o mesmo arquivo): dois appends com a mesma `expected_version` confirmam
+exatamente um evento e o outro recebe `VersionConflict`; retries idênticos
+concorrentes devolvem o mesmo evento sem duplicar; eventos e idempotência
+sobrevivem à reabertura do arquivo; cursor/limite inválidos falham com
+`InvalidInput`. Resultado local: 12 testes de `storage::sqlite::tests` passam;
+nenhum defeito reproduzido. Limites: threads não substituem processos
+independentes, e backup/restore e recovery operacional não foram cobertos.
+
+## Matriz service-real
+
+Os serviços de teste (Redis, NATS com JetStream, Qdrant e PostgreSQL) existem
+como contêineres Podman locais (`vectora-engine-*`). Os testes condicionais
+leem `VECTORA_TEST_POSTGRES_URL`, `VECTORA_TEST_REDIS_URL`,
+`VECTORA_TEST_NATS_URL` e `VECTORA_TEST_QDRANT_URL`; sem elas retornam sem
+validar o serviço. Resultados desta execução: ver a seção seguinte.
+
 ## Trabalho que permanece
 
 - Criar uma matriz de conformidade por backend com o mesmo corpus e as mesmas

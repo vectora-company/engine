@@ -913,4 +913,123 @@ mod tests {
         assert!(ledger.pending_outbox(10).unwrap().is_empty());
         assert_eq!(ledger.read("s", "a", 0, 10).unwrap().len(), 1);
     }
+
+    fn temp_ledger_path(label: &str) -> std::path::PathBuf {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        std::env::temp_dir().join(format!(
+            "vectora-ledger-{label}-{}-{}.db",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    fn draft(event_id: &str, key: &str, expected_version: u64) -> EventDraft {
+        EventDraft {
+            scope: "scope".into(),
+            aggregate: "run".into(),
+            event_id: event_id.into(),
+            idempotency_key: key.into(),
+            event_type: "step".into(),
+            payload: json!({"id": event_id}),
+            expected_version,
+        }
+    }
+
+    #[test]
+    fn concurrent_appends_with_same_expected_version_commit_exactly_one() {
+        use std::sync::{Arc, Barrier};
+        let path = temp_ledger_path("version");
+        drop(SqliteLedger::open_persistent(&path).unwrap());
+        let barrier = Arc::new(Barrier::new(2));
+        let threads: Vec<_> = ["one", "two"]
+            .into_iter()
+            .map(|id| {
+                let path = path.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let mut ledger = SqliteLedger::open_persistent(path).unwrap();
+                    barrier.wait();
+                    ledger.append(draft(id, id, 0))
+                })
+            })
+            .collect();
+        let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+        assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|r| matches!(r, Err(LedgerError::VersionConflict)))
+                .count(),
+            1
+        );
+        let ledger = SqliteLedger::open_persistent(&path).unwrap();
+        assert_eq!(ledger.read("scope", "run", 0, 10).unwrap().len(), 1);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn concurrent_identical_retries_return_one_event() {
+        use std::sync::{Arc, Barrier};
+        let path = temp_ledger_path("retry");
+        drop(SqliteLedger::open_persistent(&path).unwrap());
+        let barrier = Arc::new(Barrier::new(2));
+        let threads: Vec<_> = (0..2)
+            .map(|_| {
+                let path = path.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let mut ledger = SqliteLedger::open_persistent(path).unwrap();
+                    barrier.wait();
+                    ledger.append(draft("e1", "key", 0))
+                })
+            })
+            .collect();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap().unwrap().sequence, 1);
+        }
+        let ledger = SqliteLedger::open_persistent(&path).unwrap();
+        assert_eq!(ledger.read("scope", "run", 0, 10).unwrap().len(), 1);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn persisted_events_and_idempotency_survive_reopen() {
+        let path = temp_ledger_path("restart");
+        {
+            let mut ledger = SqliteLedger::open_persistent(&path).unwrap();
+            ledger.append(draft("e1", "k1", 0)).unwrap();
+            ledger.append(draft("e2", "k2", 1)).unwrap();
+        }
+        let mut ledger = SqliteLedger::open_persistent(&path).unwrap();
+        let events = ledger.read("scope", "run", 0, 10).unwrap();
+        assert_eq!(
+            events.iter().map(|e| e.sequence).collect::<Vec<_>>(),
+            [1, 2]
+        );
+        assert_eq!(ledger.append(draft("e1", "k1", 0)).unwrap().sequence, 1);
+        assert!(matches!(
+            ledger.append(draft("e3", "k3", 1)),
+            Err(LedgerError::VersionConflict)
+        ));
+        assert_eq!(ledger.append(draft("e3", "k3", 2)).unwrap().sequence, 3);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn read_rejects_invalid_cursor_and_limit() {
+        let ledger = SqliteLedger::open(":memory:").unwrap();
+        for (after, limit) in [(0, 0), (0, 1001), (i64::MAX as u64 + 1, 10)] {
+            assert!(matches!(
+                ledger.read("scope", "run", after, limit),
+                Err(LedgerError::InvalidInput)
+            ));
+        }
+        assert!(matches!(
+            ledger.read(" ", "run", 0, 10),
+            Err(LedgerError::InvalidInput)
+        ));
+    }
 }

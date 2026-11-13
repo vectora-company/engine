@@ -225,6 +225,14 @@ fn storage_validate_selection(selection_json: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn storage_capabilities(selection_json: String) -> PyResult<String> {
+    let selection: vectora_engine::storage::StorageSelection =
+        serde_json::from_str(&selection_json).map_err(|_| py_error("invalid storage selection"))?;
+    selection.validate().map_err(py_error)?;
+    encode_json(&selection.capabilities())
+}
+
+#[pyfunction]
 fn sqlite_ledger_append<'py>(
     py: Python<'py>,
     path: String,
@@ -1548,6 +1556,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evidence_gate_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(evaluate_verification_json, module)?)?;
     module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
+    module.add_function(wrap_pyfunction!(storage_capabilities, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append_checkpointed, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_start, module)?)?;

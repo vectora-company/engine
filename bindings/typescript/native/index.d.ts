@@ -128,6 +128,8 @@ export declare function sqliteToolPolicyRecordApproval(path: string, scope: stri
 
 export declare function sqliteToolPolicySave(path: string, scope: string, runJson: string, snapshotJson: string, operationId: string, nowMs: number): Promise<string>
 
+export declare function storageCapabilities(selectionJson: string): string
+
 export declare function storageValidateSelection(selectionJson: string): string
 
 export declare function toolChatDefinitionsJson(contractsJson: string): string
