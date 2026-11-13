@@ -6,7 +6,7 @@ atualizado durante o trabalho. Não marque um item como feito sem evidência.
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 
-Para a etapa de mídia ativa sobre o PR #77, use também
+Para a etapa de mídia ativa empilhada sobre o PR #79, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
 permanece o checklist geral, não substitui os critérios específicos.
 

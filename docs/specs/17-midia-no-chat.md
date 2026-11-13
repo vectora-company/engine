@@ -4,7 +4,7 @@
 (`MediaRef`, `MediaPart` e as variantes de `ContentPart`), a classificação pelos
 bytes, as capabilities em camadas, a reidratação com conferência de digest e a
 decisão por parte com seu registro (`chat/media.rs`). Uma etapa em
-desenvolvimento, empilhada sobre o PR #77, implementa PDF base64 nos adapters
+do PR #79, empilhada sobre o PR #77, implementou PDF base64 nos adapters
 Anthropic, Gemini e OpenAI Chat Completions, além de áudio WAV/MP3 em OpenAI e
 áudio/vídeo `inlineData` em Gemini. A verificação local atual passou: 44 testes `chat::`, `cargo fmt --check` e
 Clippy com warnings negados. A integração completa ao envio ainda não existe;
@@ -38,6 +38,16 @@ rollback.
   detectada pelo texto do erro (`ChatError::MultimodalIncompatible`).
 - Não existe store de mídia; o único ponteiro de artefato é
   `VerificationEvidence.artifact_ref`.
+
+## Integração com o envio — decisão pendente
+
+A função `prepare_content` e o trait `MediaStore` existem no core, mas os
+clients de chat ainda recebem somente `ChatRequest` e não conseguem reidratar
+`MediaRef`. A forma pública de passar store e capabilities ao envio, inclusive
+se a leitura do store é síncrona ou assíncrona, aguarda decisão registrada em
+[`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
+Até essa decisão, consumidores não devem inferir que anexos por referência são
+reidratados automaticamente pelos adapters.
 
 ## Responsabilidades
 

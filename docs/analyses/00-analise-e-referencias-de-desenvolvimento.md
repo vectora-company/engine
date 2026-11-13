@@ -147,6 +147,37 @@ reavaliados individualmente se outro consumidor demonstrar necessidade e houver
 um contrato comum. O plano de continuidade foi atualizado para as próximas
 etapas sem copiar essa implementação Python para a Engine.
 
+### Decisão vital pendente — integração do `MediaStore` no envio
+
+A análise do fluxo atual confirma que `prepare_content` existe como função
+pura síncrona, mas `OpenAiCompatibleClient` e `NativeChatClient` recebem apenas
+`ChatRequest`; nenhum deles recebe `MediaStore` nem `CapabilityResolver`. Portanto,
+os adapters não conseguem reidratar `MediaRef` no envio. A stack do Vectora
+confirma que a decisão deve acontecer por modelo/turno e que payload, evidência
+e UI precisam refletir a mesma rota.
+
+**Pergunta para brunosrz:** qual fronteira pública deve fornecer o `MediaStore`
+e a política/capabilities ao envio real?
+
+- **A — contexto efêmero por chamada (recomendação):** adicionar um contexto de
+  execução separado de `ChatRequest`, entregue a `complete`/`stream`. Mantém
+  referências serializáveis no histórico e evita compartilhar store mutável entre
+  chamadas; exige desenhar callbacks/trait assíncrono compatível com Rust, Python
+  e TypeScript.
+- **B — dependência no cliente:** configurar `MediaStore` e resolver no cliente.
+  Simplifica chamadas, mas fixa ownership/lifecycle no cliente e dificulta
+  chamadas concorrentes com stores ou permissões diferentes.
+- **C — consumidor prepara antes do adapter:** não muda a API de envio, porém
+  deixa a reidratação, escolha por turno e evidência fora do core, contrariando a
+  meta de decisão e payload coerentes da Engine.
+
+A resposta também determina se a leitura do store pode bloquear (o trait atual é
+síncrono) ou precisa ser async para stores de arquivo/rede e bindings não
+bloqueantes. Não incluí bytes no `ChatRequest`: isso mistura dados efêmeros com
+histórico persistível. Trabalho bloqueado: integrar preparação, limite, retry e
+evento de roteamento aos clientes. Permanecem independentes e já concluídos: o
+mapeamento de payload do PR #79 e a documentação da evidência Vectora.
+
 ## Decisões que exigem o mantenedor
 
 Pare antes de implementar a parte dependente quando uma resposta alterar de
