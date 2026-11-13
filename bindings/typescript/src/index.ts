@@ -503,6 +503,7 @@ interface NativeBinding {
     ttlSeconds?: number,
   ): Promise<void>;
   kvStoreGet(configJson: string, key: string): Promise<string>;
+  kvStoreDelete(configJson: string, key: string): Promise<void>;
   kvStoreListKeys(
     configJson: string,
     prefix: string,
@@ -868,6 +869,14 @@ export async function kvStoreGet(
   return JSON.parse(
     await native.kvStoreGet(JSON.stringify(config), key),
   ) as JsonValue | null;
+}
+
+/** Remove a key from the selected KV namespace. */
+export async function kvStoreDelete(
+  config: KvStoreConfig,
+  key: string,
+): Promise<void> {
+  await native.kvStoreDelete(JSON.stringify(config), key);
 }
 
 /** List distinct keys matching a literal prefix in ascending byte order. */

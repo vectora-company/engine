@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -26,6 +27,10 @@ import {
   modelToolLoopContractVersion,
   rerank,
   rerankContractVersion,
+  kvStoreDelete,
+  kvStoreGet,
+  kvStoreListKeys,
+  kvStorePut,
   queueReceiveDeadLetter,
   runContractVersion,
   transitionRun,
@@ -1377,3 +1382,28 @@ test("fallback never retries after partial provider output", async () => {
     await Promise.all([first.close(), second.close()]);
   }
 });
+
+for (const [backend, endpoint] of [
+  ["redis", process.env.VECTORA_TEST_REDIS_URL],
+  ["nats_jetstream", process.env.VECTORA_TEST_NATS_URL],
+]) {
+  test(`KV delete removes the key from get and listing in ${backend}`, { skip: !endpoint }, async () => {
+    const namespace = `kv_delete_${randomUUID()}`;
+    const config = { backend, endpoint, namespace };
+    const other = { backend, endpoint, namespace: `${namespace}_other` };
+    try {
+      await kvStorePut(config, "job.remove", 1, 60);
+      await kvStorePut(config, "job.keep", 2, 60);
+      await kvStorePut(other, "job.remove", 3, 60);
+      assert.deepEqual(await kvStoreListKeys(config, "job."), ["job.keep", "job.remove"]);
+      await kvStoreDelete(config, "job.remove");
+      await kvStoreDelete(config, "job.remove");
+      assert.equal(await kvStoreGet(config, "job.remove"), null);
+      assert.deepEqual(await kvStoreListKeys(config, "job."), ["job.keep"]);
+      assert.equal(await kvStoreGet(other, "job.remove"), 3);
+    } finally {
+      await kvStoreDelete(config, "job.keep");
+      await kvStoreDelete(other, "job.remove");
+    }
+  });
+}

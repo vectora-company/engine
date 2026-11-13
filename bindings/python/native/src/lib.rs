@@ -856,6 +856,22 @@ fn kv_store_get<'py>(
 }
 
 #[pyfunction]
+fn kv_store_delete<'py>(
+    py: Python<'py>,
+    config_json: String,
+    key: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid KV config"))?;
+        let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        store.delete(&key).await.map_err(py_error)
+    })
+}
+
+#[pyfunction]
 fn kv_store_list_keys<'py>(
     py: Python<'py>,
     config_json: String,
@@ -1721,6 +1737,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(vector_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_put, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_get, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_list_keys, module)?)?;
     module.add_function(wrap_pyfunction!(queue_enqueue, module)?)?;
     module.add_function(wrap_pyfunction!(queue_receive, module)?)?;

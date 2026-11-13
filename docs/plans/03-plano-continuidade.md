@@ -230,16 +230,17 @@ evidência nesta atualização.
 
 ## Próxima etapa de KV
 
-A branch `feat/storage-kv-list-prefix`, empilhada sobre o PR #66 de
-documentação, implementa listagem literal por prefixo nos dois adapters.
-CAS por revisão, incremento e watch continuam pendentes.
+O PR #67 implementa listagem literal por prefixo nos dois adapters. A branch
+`feat/storage-kv-delete-bindings` expõe remoção nos bindings Python e Node e
+verifica que leitura e listagem refletem a remoção. CAS por revisão, incremento
+e watch continuam pendentes.
 
 ## Revalidação do loop em 2026-11-12
 
 A referência de `main` foi consultada no remoto em 2026-11-12 (`a13140b`); as
 alterações abaixo estão em PRs abertos e não são atribuídas a `main`. A stack
 ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 → #53 → #54
-→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66.
+→ #55 → #56 → #57 → #59 → #60 → #61 → #62 → #63 → #64 → #65 → #66 → #67.
 
 | PR                                                       | Entrega na branch do PR                                                             |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
