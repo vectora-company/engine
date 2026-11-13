@@ -199,7 +199,8 @@ Revisados os 55 arquivos Markdown versionados do repositório. Snapshots de audi
 matrizes e planos antigos foram preservados como históricos quando identificam
 claramente SHA/data; documentos vigentes foram corrigidos para refletir `main`
 (`dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1`), a stack aberta até o PR #82 e a
-implementação local nele contida. Corrigidos, entre outros, o estado dos
+implementação local nele contida. Esta revisão foi publicada no PR #83,
+empilhado sobre o #82 (`00e2fe996135d1a4b0913116484c43857bd0be28`). Corrigidos, entre outros, o estado dos
 payloads nativos, os três modos dos bindings, o status dos PRs e referências
 quebradas para o guia do GH Bot. A meta de primeira release ampla foi registrada
 no plano como proposta a decompor, sem declarar capabilities planejadas prontas.

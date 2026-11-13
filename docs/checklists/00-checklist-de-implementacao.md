@@ -22,8 +22,7 @@ permanece geral e não substitui critérios específicos.
 - [x] Verificar todos os links Markdown locais; todos os destinos existem.
 - [x] Rodar Prettier em todos os Markdown; a segunda execução passou.
 - [x] Executar `git diff --check`.
-- [ ] Revisar o diff final, commit, push e abrir PR empilhado sobre a branch
-      `feat/chat-media-bindings`.
+- [x] Revisar o diff final; commit `00e2fe9`, push e abrir o [PR #83](https://github.com/vectora-company/engine/pull/83), empilhado sobre `feat/chat-media-bindings` (PR #82).
 
 ## Preparação e escopo
 

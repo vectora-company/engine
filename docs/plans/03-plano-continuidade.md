@@ -9,8 +9,9 @@ squash). A stack aberta é `main` ← [#73](https://github.com/vectora-company/e
 [#80](https://github.com/vectora-company/engine/pull/80) ←
 [#81](https://github.com/vectora-company/engine/pull/81) ←
 [#82](https://github.com/vectora-company/engine/pull/82). O PR #82 está aberto;
-seu head é `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. Este PR de documentação é
-empilhado sobre a branch `feat/chat-media-bindings` do #82.
+seu head é `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83),
+head `00e2fe996135d1a4b0913116484c43857bd0be28`, está empilhado sobre a
+branch `feat/chat-media-bindings` do #82.
 
 **Objetivo de produto:** a primeira release deve ser ampla e completa, não um
 MVP. A proposta de escopo e os gates ainda precisam ser consolidados neste
@@ -264,8 +265,8 @@ conformidade para o estado e a cobertura de cada capability.
 
 ## Próxima etapa
 
-Este PR revisa e corrige a documentação Markdown da Engine, empilhado sobre o
-PR #82. Depois da revisão, consolidar uma proposta verificável de charter para a
+A revisão documental foi publicada no PR #83, empilhado sobre o PR #82. A
+próxima etapa independente é consolidar uma proposta verificável de charter para a
 primeira release completa: áreas incluídas, critérios de maturidade, paridade
 Rust/Python/TypeScript, compatibilidade, suporte de plataformas, publicação e
 adoção-piloto. O plano atual contém gaps por capability, mas ainda não os
