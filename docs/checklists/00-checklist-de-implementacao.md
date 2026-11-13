@@ -9,7 +9,7 @@ Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 Esta revisão documental está empilhada sobre o PR #82 e alinha o plano à meta
 de uma primeira release completa. Para implementação de mídia, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
-permanece geral e não substitui critérios específicos.
+permanece geral e não substitui critérios específicos. A branch ativa local `feat/chat-media-provider-limits-docs83` é filha do PR #83 e está implementando limites explícitos por provider/modelo/modalidade.
 
 ## Revisão documental completa — `docs/revisao-completa-markdown`
 
@@ -23,6 +23,15 @@ permanece geral e não substitui critérios específicos.
 - [x] Rodar Prettier em todos os Markdown; a segunda execução passou.
 - [x] Executar `git diff --check`.
 - [x] Revisar o diff final; commits documentais `00e2fe9` e `4c9a329`, push e abrir o [PR #83](https://github.com/vectora-company/engine/pull/83), empilhado sobre `feat/chat-media-bindings` (PR #82).
+
+## Limites de mídia por provider/modelo — etapa seguinte ao PR #83
+
+- [x] Adicionar limites explícitos por modalidade e par provider/modelo no core Rust; teto global continua como máximo absoluto por asset.
+- [x] Encaminhar configuração equivalente em Python e TypeScript.
+- [x] Verificar 18 testes `chat::media::tests`; teste de binding Python (1) e Node (1); build maturin e `pnpm build`.
+- [ ] Registrar limites oficiais por endpoint/protocolo/modelo com fonte e data, sem inferir um teto universal por marca de provider.
+- [ ] Avaliar limites totais do payload, contagem de partes, duração/resolução e consistência com gateways OpenAI-compatible.
+- [ ] Executar verificações finais, atualizar análise/spec, commit, push e abrir PR empilhado sobre o PR #83.
 
 ## Preparação e escopo
 

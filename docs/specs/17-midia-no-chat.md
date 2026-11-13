@@ -8,9 +8,10 @@ chamada e contexto padrão nos bindings Python e TypeScript. O mapa temporário 
 `asset_id → bytes`; autorização e persistência dos assets continuam sob
 responsabilidade do host. O limite global padrão é 20 MiB por asset e pode ser
 configurado; a preparação atual cobre o turno de usuário mais recente e os
-resultados subsequentes de tools, e devolve evidências sem bytes. Limites por
-provider/modelo, retry específico e resultados de tool em partes seguem
-pendentes. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
+resultados subsequentes de tools, e devolve evidências sem bytes. Overrides de limites por provider/modelo/modalidade já são aceitos no contexto
+de execução e limitados pelo teto global por asset; descoberta automática dos
+limites, limites agregados de request, retry específico e resultados de tool em
+partes seguem pendentes. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
 do Vectora foi integrada em 19 PRs, mas não prova paridade da Engine. UI, STT
 local, prévias e empacotamento permanecem no Vectora. Veja o estado e os critérios
 em [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
@@ -28,8 +29,9 @@ rollback.
 - O resultado de uma tool é uma `String`; os adapters nativos achatam o resultado
   em texto. O contrato atual não representa imagens de tool como partes tipadas;
   esse suporte segue pendente em todos os adapters.
-- O core tem capabilities/resolução de preparo por provider, mas ainda não um
-  catálogo completo por modelo nem limites por provider/modelo.
+- O core resolve modalidades por provider e aceita overrides de limites de bytes
+  por provider/modelo/modalidade. Ainda não consulta catálogo automático nem
+  aplica limites totais de request, duração ou resolução.
 - `MediaStore` assíncrono e `MediaExecutionContext` existem no core. Os bindings
   recebem um mapa efêmero de bytes indexado por `asset_id`; no Vectora o host
   alimenta esse mapa após `AssetStore.read` validar usuário/workspace/thread.
@@ -46,7 +48,11 @@ contexto explícito prevalece sobre o padrão. O mapa temporário é
 preparadas não são processadas de novo. `ChatRequest` permanece sem bytes
 persistidos; o limite padrão configurável é 20 MiB por asset; somente a mensagem
 de usuário atual e resultados posteriores de tools são reidratados. Completion
-e stream reportam decisões sem bytes. Estado e precedência:
+e stream reportam decisões sem bytes. `provider_limits` aceita entradas com
+`provider`, `model` e `limits` (`image_bytes`, `audio_bytes`, `video_bytes`,
+`document_bytes`, `file_bytes`). O menor valor entre o limite da modalidade e
+`max_media_bytes` governa cada asset; ausência de override usa só o teto global
+e não presume limite universal do provider. Estado e precedência:
 [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 
 ## Responsabilidades

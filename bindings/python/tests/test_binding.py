@@ -1741,12 +1741,28 @@ def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
     )
     assert prepared["decisions"][0]["mode"] == "native"
     assert prepared["parts"][0]["type"] == "inline"
+    limited = MediaExecutionContext(
+        {"asset-pdf": pdf},
+        provider_limits=[
+            {
+                "provider": "openai",
+                "model": "fixture-model",
+                "limits": {"document_bytes": 4},
+            }
+        ],
+    )
+    limited_result = asyncio.run(
+        prepare_chat_content("openai", "fixture-model", [media_part], limited)
+    )
+    assert limited_result["decisions"][0]["mode"] == "reference"
+    assert "limite" in limited_result["decisions"][0]["reason"]
 
     response = json.dumps(
         {"choices": [{"message": {"content": "answer"}, "finish_reason": "stop"}]}
     ).encode()
     request = {
         **REQUEST,
+        "model": "fixture-model",
         "messages": [{"role": "user", "content": [media_part]}],
     }
 
@@ -1779,6 +1795,30 @@ def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
         default_thread.join()
         default_server.server_close()
     assert default_capture["body"]["messages"][0]["content"][0]["type"] == "file"
+
+    limited_server, limited_thread, limited_capture = serve(
+        response, "application/json"
+    )
+    limited_settings = {
+        "base_url": endpoint(limited_server),
+        "media_context": {
+            "assets": {"asset-pdf": pdf},
+            "provider_limits": [
+                {
+                    "provider": "openai",
+                    "model": "fixture-model",
+                    "limits": {"document_bytes": 4},
+                }
+            ],
+        },
+    }
+    try:
+        asyncio.run(chat_complete(limited_settings, request))
+    finally:
+        limited_server.shutdown()
+        limited_thread.join()
+        limited_server.server_close()
+    assert limited_capture["body"]["messages"][0]["content"][0]["type"] != "file"
 
 
 def test_stream_keeps_reasoning_and_text_in_separate_events() -> None:

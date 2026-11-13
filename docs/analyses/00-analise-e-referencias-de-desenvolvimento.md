@@ -198,9 +198,8 @@ transforme uma preferência presumida em decisão arquitetural.
 Revisados os 55 arquivos Markdown versionados do repositório. Snapshots de auditorias,
 matrizes e planos antigos foram preservados como históricos quando identificam
 claramente SHA/data; documentos vigentes foram corrigidos para refletir `main`
-(`dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1`), a stack aberta até o PR #82 e a
-implementação local nele contida. Esta revisão foi publicada no PR #83,
-empilhado sobre o #82; seu SHA é conferido no PR remoto, pois a branch recebeu atualização de checklist após a abertura. Corrigidos, entre outros, o estado dos
+(`dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1`), a stack documental aberta até o PR #83 e a implementação local do #82. A revisão
+foi publicada no PR #83, empilhado sobre o #82. Corrigidos, entre outros, o estado dos
 payloads nativos, os três modos dos bindings, o status dos PRs e referências
 quebradas para o guia do GH Bot. A meta de primeira release ampla foi registrada
 no plano como proposta a decompor, sem declarar capabilities planejadas prontas.
@@ -212,3 +211,31 @@ foi executado, pois o escopo deste PR é documental. Ver o andamento no
 [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md)
 e o objetivo/escopo proposto no
 [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
+
+## Overrides de limite multimodal — 2026-11-13
+
+A branch `feat/chat-media-provider-limits-docs83`, filha do PR documental #83,
+implementa `provider_limits` como lista explícita de `{provider, model, limits}`
+nos contextos Python e TypeScript. O resolver Rust seleciona limites por
+modalidade e par; cada asset continua limitado pelo menor valor entre o teto
+global (`max_media_bytes`, padrão de 20 MiB) e o override correspondente.
+Ausência de override não presume o limite do provider, e o escopo não inclui
+limite agregado da requisição.
+
+Verificação local: 18 testes `chat::media::tests` passaram; maturin compilou a
+extensão Python; o teste Python específico passou após fixar `PYTHONPATH` para o
+binding deste checkout; `pnpm build`, `tsc` e o teste Node de mídia passaram.
+Um primeiro teste TS falhou porque a fachada não encaminhava `provider_limits`
+ao addon; a serialização foi corrigida e o mesmo teste passou.
+
+Limites oficiais variam com protocolo e método de envio, portanto esta etapa
+fornece overrides ao host e não codifica números universais: a documentação
+OpenAI separa Images/Vision e File Inputs; Anthropic documenta limites de
+requisição e páginas para PDFs; Gemini separa dados inline de Files API. Fontes
+primárias: [OpenAI Images and vision](https://developers.openai.com/api/docs/guides/images-vision),
+[OpenAI File inputs](https://developers.openai.com/api/docs/guides/file-inputs),
+[Anthropic PDF support](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support),
+[Gemini Files API](https://ai.google.dev/gemini-api/docs/files),
+[Gemini Audio understanding](https://ai.google.dev/gemini-api/docs/audio) e
+[Gemini Video understanding](https://ai.google.dev/gemini-api/docs/video-understanding).
+A matriz concreta por modelo/endpoint e as restrições agregadas seguem pendentes.

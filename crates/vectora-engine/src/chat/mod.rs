@@ -15,9 +15,10 @@ pub use fallback::{
 };
 pub use media::{
     CapabilityResolver, CapabilityState, Classified, ContentSite, InlineMedia, MediaDecision,
-    MediaError, MediaExecutionContext, MediaKind, MediaMode, MediaPart, MediaRef, MediaStore,
-    Modality, ModalityCapabilities, PartialCapabilities, PreparedContent, PreparedRequest,
-    classify, prepare_content, prepare_content_with_limit, sha256_hex,
+    MediaError, MediaExecutionContext, MediaKind, MediaMode, MediaPart, MediaRef, MediaSizeLimits,
+    MediaStore, Modality, ModalityCapabilities, PartialCapabilities, PreparedContent,
+    PreparedRequest, ProviderMediaLimits, classify, prepare_content, prepare_content_with_limit,
+    prepare_content_with_limits, sha256_hex,
 };
 pub use native_providers::{NativeChatClient, NativeChatSettings, NativeProvider};
 pub use openai_compatible::{

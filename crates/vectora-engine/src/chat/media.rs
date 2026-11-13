@@ -341,6 +341,45 @@ pub struct PartialCapabilities {
     pub tool_result_images: Option<CapabilityState>,
 }
 
+/// Optional per-modality byte ceilings supplied for one provider/model pair.
+/// Values represent the transport limit known by the consumer; the global
+/// `MediaExecutionContext` limit remains an upper bound.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MediaSizeLimits {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_bytes: Option<u64>,
+}
+
+/// A provider/model-specific media limit entry accepted by both bindings.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderMediaLimits {
+    pub provider: String,
+    pub model: String,
+    pub limits: MediaSizeLimits,
+}
+
+impl MediaSizeLimits {
+    fn for_kind(self, kind: MediaKind) -> Option<u64> {
+        match kind {
+            MediaKind::Image => self.image_bytes,
+            MediaKind::Audio => self.audio_bytes,
+            MediaKind::Video => self.video_bytes,
+            MediaKind::Document => self.document_bytes,
+            MediaKind::Text | MediaKind::File => self.file_bytes,
+        }
+    }
+}
+
 impl PartialCapabilities {
     fn get(&self, modality: Modality) -> Option<CapabilityState> {
         match modality {
@@ -394,6 +433,7 @@ fn known_provider(provider: &str) -> PartialCapabilities {
 pub struct CapabilityResolver {
     overrides: BTreeMap<String, PartialCapabilities>,
     gateway: BTreeMap<String, PartialCapabilities>,
+    media_limits: BTreeMap<String, MediaSizeLimits>,
 }
 
 fn model_key(provider: &str, model: &str) -> String {
@@ -427,6 +467,35 @@ impl CapabilityResolver {
         self.gateway
             .insert(model_key(provider, model), capabilities);
         self
+    }
+
+    /// Adds per-modality byte ceilings for a provider/model pair.
+    pub fn with_media_limits(
+        mut self,
+        provider: &str,
+        model: &str,
+        limits: MediaSizeLimits,
+    ) -> Self {
+        self.media_limits.insert(model_key(provider, model), limits);
+        self
+    }
+
+    fn media_limit(&self, provider: &str, model: &str, kind: MediaKind) -> Option<u64> {
+        self.media_limits
+            .get(&model_key(provider, model))
+            .copied()
+            .and_then(|limits| limits.for_kind(kind))
+    }
+
+    /// Returns the configured per-modality ceilings for a provider/model pair.
+    pub fn media_limits_for(&self, provider: &str, model: &str) -> MediaSizeLimits {
+        MediaSizeLimits {
+            image_bytes: self.media_limit(provider, model, MediaKind::Image),
+            audio_bytes: self.media_limit(provider, model, MediaKind::Audio),
+            video_bytes: self.media_limit(provider, model, MediaKind::Video),
+            document_bytes: self.media_limit(provider, model, MediaKind::Document),
+            file_bytes: self.media_limit(provider, model, MediaKind::File),
+        }
     }
 
     pub fn resolve(&self, provider: &str, model: &str) -> ModalityCapabilities {
@@ -531,13 +600,14 @@ impl MediaExecutionContext {
             let super::MessageContent::Parts(parts) = &mut message.content else {
                 continue;
             };
-            let prepared = prepare_content_with_limit(
+            let prepared = prepare_content_with_limits(
                 std::mem::take(parts),
                 &capabilities,
                 self.store.as_ref(),
                 &request.model,
                 site,
                 self.max_media_bytes,
+                self.resolver.media_limits_for(provider, &request.model),
             )
             .await;
             *parts = prepared.parts;
@@ -622,6 +692,29 @@ pub async fn prepare_content_with_limit(
     site: ContentSite,
     max_media_bytes: u64,
 ) -> PreparedContent {
+    prepare_content_with_limits(
+        parts,
+        capabilities,
+        store,
+        model,
+        site,
+        max_media_bytes,
+        MediaSizeLimits::default(),
+    )
+    .await
+}
+
+/// Prepare media with both a global ceiling and optional modality-specific
+/// ceilings. The lower configured ceiling applies to each asset.
+pub async fn prepare_content_with_limits(
+    parts: Vec<ContentPart>,
+    capabilities: &ModalityCapabilities,
+    store: &dyn MediaStore,
+    model: &str,
+    site: ContentSite,
+    max_media_bytes: u64,
+    model_limits: MediaSizeLimits,
+) -> PreparedContent {
     let mut prepared = Vec::with_capacity(parts.len());
     let mut decisions = Vec::new();
     for (index, part) in parts.into_iter().enumerate() {
@@ -629,7 +722,13 @@ pub async fn prepare_content_with_limit(
             prepared.push(part);
             continue;
         };
-        let outcome = decide(kind, media, capabilities, store, site, max_media_bytes).await;
+        let limit = model_limits
+            .for_kind(kind)
+            .map_or(max_media_bytes, |specific| max_media_bytes.min(specific));
+        let image_limit = model_limits
+            .image_bytes
+            .map_or(max_media_bytes, |specific| max_media_bytes.min(specific));
+        let outcome = decide(kind, media, capabilities, store, site, limit, image_limit).await;
         decisions.push(MediaDecision {
             message_index: 0,
             part_index: index,
@@ -737,6 +836,7 @@ async fn decide(
     store: &dyn MediaStore,
     site: ContentSite,
     max_media_bytes: u64,
+    max_image_bytes: u64,
 ) -> Outcome {
     let vision = capabilities.vision.is_supported();
     let native = match kind {
@@ -785,7 +885,7 @@ async fn decide(
     if derives_images {
         let mut parts = vec![text_part(media.textual_form(kind))];
         for preview in &media.previews {
-            match read_verified(preview, store, max_media_bytes).await {
+            match read_verified(preview, store, max_image_bytes).await {
                 Ok(data) => parts.push(ContentPart::ImageUrl {
                     image_url: ImageUrl {
                         url: inline(MediaKind::Image, preview, &data).data_url(),
@@ -1183,6 +1283,55 @@ mod tests {
         assert_eq!(result.decisions[0].mode, MediaMode::Text);
         assert!(result.decisions[0].reason.contains("limite"));
         assert!(matches!(&result.parts[0], ContentPart::Text { text } if text == "extracted text"));
+    }
+
+    #[tokio::test]
+    async fn model_document_limit_applies_without_restricting_other_modalities() {
+        let mut store = MemoryStore::default();
+        let media = part(store.put("limited", PDF), Some("extracted text"), vec![]);
+        let result = prepare_content_with_limits(
+            vec![ContentPart::Document(media)],
+            &caps(true, true),
+            &store,
+            "model-a",
+            ContentSite::UserMessage,
+            1024,
+            MediaSizeLimits {
+                document_bytes: Some(4),
+                ..MediaSizeLimits::default()
+            },
+        )
+        .await;
+        assert_eq!(result.decisions[0].mode, MediaMode::Text);
+        assert!(result.decisions[0].reason.contains("limite"));
+
+        let limits = CapabilityResolver::new()
+            .with_media_limits(
+                "provider-a",
+                "model-a",
+                MediaSizeLimits {
+                    document_bytes: Some(4),
+                    ..MediaSizeLimits::default()
+                },
+            )
+            .media_limits_for("provider-a", "model-a");
+        assert_eq!(limits.document_bytes, Some(4));
+        assert_eq!(limits.image_bytes, None);
+        assert_eq!(
+            CapabilityResolver::new()
+                .with_media_limits(
+                    "provider-a",
+                    "model-a",
+                    MediaSizeLimits {
+                        document_bytes: Some(4),
+                        ..MediaSizeLimits::default()
+                    },
+                )
+                .media_limits_for("provider-a", "model-b")
+                .document_bytes,
+            None,
+            "provider/model limits must not leak to sibling models"
+        );
     }
 
     #[test]

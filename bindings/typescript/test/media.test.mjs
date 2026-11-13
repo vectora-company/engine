@@ -53,6 +53,23 @@ test("media bindings support manual, per-call and client-default contexts", asyn
   );
   assert.equal(prepared.decisions[0].mode, "native");
   assert.equal(prepared.parts[0].type, "inline");
+  const limited = await prepareChatContent(
+    "openai",
+    "fixture-model",
+    [mediaPart],
+    {
+      assets: { "asset-pdf": pdf },
+      provider_limits: [
+        {
+          provider: "openai",
+          model: "fixture-model",
+          limits: { document_bytes: 4 },
+        },
+      ],
+    },
+  );
+  assert.equal(limited.decisions[0].mode, "reference");
+  assert.match(limited.decisions[0].reason, /limite/);
 
   const perCall = await startServer();
   try {
@@ -79,5 +96,32 @@ test("media bindings support manual, per-call and client-default contexts", asyn
     assert.equal(clientDefault.captured().messages[0].content[0].type, "file");
   } finally {
     await clientDefault.close();
+  }
+
+  const limitedDefault = await startServer();
+  try {
+    await chatComplete(
+      {
+        ...limitedDefault.settings,
+        media_context: {
+          assets: { "asset-pdf": pdf },
+          provider_limits: [
+            {
+              provider: "openai",
+              model: "fixture-model",
+              limits: { document_bytes: 4 },
+            },
+          ],
+        },
+      },
+      request,
+    );
+    assert.notEqual(
+      limitedDefault.captured().messages[0].content[0].type,
+      "file",
+      "provider/model limit must be enforced on the client request",
+    );
+  } finally {
+    await limitedDefault.close();
   }
 });
