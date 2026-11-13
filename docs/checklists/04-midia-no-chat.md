@@ -2,8 +2,8 @@
 
 Etapa da [spec de mídia](../specs/17-midia-no-chat.md) e do
 [plano ativo](../plans/03-plano-continuidade.md). A etapa de payload foi entregue
-no PR #79 sobre #77. A decisão registrada no PR #80 foi implementada nesta
-branch filha, que integra a mídia no envio pelos três modos escolhidos.
+no PR #79 sobre #77. O core Rust foi entregue no PR #81, filho do #80; a branch
+atual `feat/chat-media-bindings`, filha do #81, expõe os três modos nos bindings.
 
 ## Contrato e implementação
 
@@ -50,7 +50,7 @@ implementação; não foram adicionados à API pública da Engine.
 - OpenAI Responses API não existe neste adapter; o contrato se limita aos
   formatos do Chat Completions.
 - Retry após rejeição específica, limites por provider/modelo, catálogo de
-  capabilities por modelo e bindings seguem no backlog da spec 17.
+  capabilities por modelo e `ToolResult` multimodal seguem no backlog da spec 17.
 
 ## Integração — etapa atual
 
@@ -65,10 +65,15 @@ implementação; não foram adicionados à API pública da Engine.
 - [x] Incluir evidência sem bytes em `ChatCompletion` e evento `media_routed`.
 - [x] Cobrir no teste HTTP o contexto explícito por chamada prevalecendo sobre
       o padrão do cliente.
-- [ ] Reexecutar verificações após a cobertura do modo por chamada.
-- [ ] Commit, push e abrir PR empilhado sobre #80.
-- [ ] Expor os três modos nos bindings Python/TypeScript e criar fixtures comuns.
-- [ ] Implementar limites por provider/modelo e retry de rejeição específica.
+- [x] Verificar Rust: 49 testes `chat::`, suíte Rust do workspace e docs no hook,
+      fmt, Clippy e `git diff --check` passaram.
+- [x] Verificar TypeScript: build, typecheck e testes; 37 passaram e 10 testes
+      dependentes de serviços externos foram ignorados sem URLs configuradas.
+- [x] Verificar Python: build editável e `test_binding.py` — 51 passaram.
+- [ ] Commit, push e abrir PR filho do #81.
+- [x] Expor os três modos nos bindings Python/TypeScript com mapa temporário
+      `asset_id → bytes`; documentar a autorização no host.
+- [ ] Criar fixtures de conformidade comuns para conteúdo de mídia.
 
 ## Evidência do consumidor Vectora
 
@@ -83,4 +88,5 @@ Vectora nesta implementação.
 ## Limites
 
 - OpenAI Responses API não existe neste adapter; o contrato é Chat Completions.
-- Bindings ainda não recebem contexto/store; esta branch cobre o core Rust.
+- O mapa efêmero carrega bytes em memória para a duração da chamada; hosts com
+  stores externos validam escopo antes de montar `asset_id → bytes`.

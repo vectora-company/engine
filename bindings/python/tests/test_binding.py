@@ -1,6 +1,7 @@
 """Contract smoke tests for the Python facade over the Rust core."""
 
 import asyncio
+import hashlib
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any
 
 import pytest
 from vectora_engine import (
+    MediaExecutionContext,
     accept_model_turn,
     assemble_turn,
     authorize_tool_dispatch,
@@ -28,6 +30,7 @@ from vectora_engine import (
     model_tool_loop_contract_version,
     native_chat_complete,
     native_chat_stream,
+    prepare_chat_content,
     prepare_tool_dispatch,
     queue_receive_dead_letter,
     rerank,
@@ -1720,6 +1723,62 @@ def test_completion_uses_profile_prefix_headers_extensions_and_reasoning() -> No
     assert result["content"] == "answer"
     assert result["reasoning"] == "analysis"
     assert result["usage"]["cost"] == 0.0004
+
+
+def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
+    pdf = b"%PDF-1.4\n"
+    media_ref = {
+        "asset_id": "asset-pdf",
+        "sha256": hashlib.sha256(pdf).hexdigest(),
+        "mime_type": "application/pdf",
+        "size_bytes": len(pdf),
+        "name": "report.pdf",
+    }
+    media_part = {"type": "document", "media_ref": media_ref}
+    assets = MediaExecutionContext({"asset-pdf": pdf})
+    prepared = asyncio.run(
+        prepare_chat_content("openai", "fixture-model", [media_part], assets)
+    )
+    assert prepared["decisions"][0]["mode"] == "native"
+    assert prepared["parts"][0]["type"] == "inline"
+
+    response = json.dumps(
+        {"choices": [{"message": {"content": "answer"}, "finish_reason": "stop"}]}
+    ).encode()
+    request = {
+        **REQUEST,
+        "messages": [{"role": "user", "content": [media_part]}],
+    }
+
+    per_call_server, per_call_thread, per_call_capture = serve(
+        response, "application/json"
+    )
+    per_call_settings = {
+        "base_url": endpoint(per_call_server),
+        "media_context": {"assets": {}},
+    }
+    try:
+        asyncio.run(chat_complete(per_call_settings, request, media_context=assets))
+    finally:
+        per_call_server.shutdown()
+        per_call_thread.join()
+        per_call_server.server_close()
+    assert per_call_capture["body"]["messages"][0]["content"][0]["type"] == "file"
+
+    default_server, default_thread, default_capture = serve(
+        response, "application/json"
+    )
+    default_settings = {
+        "base_url": endpoint(default_server),
+        "media_context": {"assets": {"asset-pdf": pdf}},
+    }
+    try:
+        asyncio.run(chat_complete(default_settings, request))
+    finally:
+        default_server.shutdown()
+        default_thread.join()
+        default_server.server_close()
+    assert default_capture["body"]["messages"][0]["content"][0]["type"] == "file"
 
 
 def test_stream_keeps_reasoning_and_text_in_separate_events() -> None:

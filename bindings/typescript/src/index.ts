@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -11,6 +13,7 @@ export interface OpenAiCompatibleSettings {
   retry_connect_attempts?: number;
   max_response_bytes?: number;
   max_event_bytes?: number;
+  media_context?: MediaExecutionContext;
 }
 
 export interface NativeChatSettings {
@@ -21,11 +24,15 @@ export interface NativeChatSettings {
   connect_timeout_ms?: number;
   read_timeout_ms?: number;
   total_timeout_ms?: number;
+  media_context?: MediaExecutionContext;
 }
 
 export type FallbackClientSettings =
-  | { protocol: "open_ai_compatible"; settings: OpenAiCompatibleSettings }
-  | { protocol: "native"; settings: NativeChatSettings };
+  | {
+      protocol: "open_ai_compatible";
+      settings: Omit<OpenAiCompatibleSettings, "media_context">;
+    }
+  | { protocol: "native"; settings: Omit<NativeChatSettings, "media_context"> };
 
 export interface FallbackCandidateSettings {
   model_id: string;
@@ -35,6 +42,19 @@ export interface FallbackCandidateSettings {
 export interface FallbackChatSettings {
   /** Caller-ordered candidates; include only configured and eligible providers. */
   candidates: FallbackCandidateSettings[];
+  /** Default media assets for this call; explicit context takes precedence. */
+  media_context?: MediaExecutionContext;
+}
+
+/** Ephemeral assets keyed by the consumer's opaque asset IDs. */
+export interface MediaExecutionContext {
+  assets: Record<string, Uint8Array>;
+  max_media_bytes?: number;
+}
+
+export interface PreparedContent {
+  parts: JsonValue[];
+  decisions: MediaDecision[];
 }
 
 export interface ChatRequest {
@@ -768,6 +788,12 @@ interface NativeBinding {
   fallbackRerank(settingsJson: string, requestJson: string): Promise<string>;
   chatContractVersion(): number;
   chatAssembleTurn(settingsJson: string, eventsJson: string): string;
+  chatPrepareContent(
+    provider: string,
+    model: string,
+    partsJson: string,
+    mediaContextJson: string,
+  ): Promise<string>;
   chatComplete(settingsJson: string, requestJson: string): Promise<string>;
   chatStreamStart(settingsJson: string, requestJson: string): Promise<string>;
   chatStreamNext(id: string): Promise<string | null>;
@@ -1844,6 +1870,48 @@ export async function fallbackRerank(
 /** Version of the canonical Rust chat contract. */
 export const chatContractVersion = (): number => native.chatContractVersion();
 
+function encodeMediaSettings(
+  settings: object & { media_context?: MediaExecutionContext },
+  explicit?: MediaExecutionContext,
+): string {
+  const { media_context: configured, ...rest } = settings;
+  const context = explicit ?? configured;
+  if (!context) return JSON.stringify(rest);
+  return JSON.stringify({
+    ...rest,
+    media_context: {
+      assets: Object.fromEntries(
+        Object.entries(context.assets).map(([id, bytes]) => [
+          id,
+          Buffer.from(bytes).toString("base64"),
+        ]),
+      ),
+      ...(context.max_media_bytes === undefined
+        ? {}
+        : { max_media_bytes: context.max_media_bytes }),
+    },
+  });
+}
+
+/** Prepare content manually with the same Rust resolver used by chat clients. */
+export async function prepareChatContent(
+  provider: string,
+  model: string,
+  parts: JsonValue[],
+  context: MediaExecutionContext,
+): Promise<PreparedContent> {
+  const encoded = JSON.parse(encodeMediaSettings({}, context)) as {
+    media_context: JsonValue;
+  };
+  const result = await native.chatPrepareContent(
+    provider,
+    model,
+    JSON.stringify(parts),
+    JSON.stringify(encoded.media_context),
+  );
+  return JSON.parse(result) as PreparedContent;
+}
+
 /** Assemble a complete provider event sequence using the canonical Rust core. */
 export function assembleTurn(
   settings: TurnAccumulatorSettings,
@@ -1858,9 +1926,10 @@ export function assembleTurn(
 export async function nativeChatComplete(
   settings: NativeChatSettings,
   request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
 ): Promise<ChatCompletion> {
   const result = await native.nativeChatComplete(
-    JSON.stringify(settings),
+    encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
   return JSON.parse(result) as ChatCompletion;
@@ -1870,9 +1939,10 @@ export async function nativeChatComplete(
 export async function fallbackChatComplete(
   settings: FallbackChatSettings,
   request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
 ): Promise<ChatCompletion> {
   const result = await native.fallbackChatComplete(
-    JSON.stringify(settings),
+    encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
   return JSON.parse(result) as ChatCompletion;
@@ -1882,9 +1952,10 @@ export async function fallbackChatComplete(
 export async function chatComplete(
   settings: OpenAiCompatibleSettings,
   request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
 ): Promise<ChatCompletion> {
   const result = await native.chatComplete(
-    JSON.stringify(settings),
+    encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
   return JSON.parse(result) as ChatCompletion;
@@ -1897,9 +1968,10 @@ export async function chatComplete(
 export async function* chatStream(
   settings: OpenAiCompatibleSettings,
   request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.chatStreamStart(
-    JSON.stringify(settings),
+    encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
   try {
@@ -1917,9 +1989,10 @@ export async function* chatStream(
 export async function* nativeChatStream(
   settings: NativeChatSettings,
   request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.nativeChatStreamStart(
-    JSON.stringify(settings),
+    encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
   try {
@@ -1937,9 +2010,10 @@ export async function* nativeChatStream(
 export async function* fallbackChatStream(
   settings: FallbackChatSettings,
   request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.fallbackChatStreamStart(
-    JSON.stringify(settings),
+    encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
   try {

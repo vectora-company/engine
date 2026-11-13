@@ -32,6 +32,13 @@ export declare function chatComplete(
 
 export declare function chatContractVersion(): number;
 
+export declare function chatPrepareContent(
+  provider: string,
+  model: string,
+  partsJson: string,
+  mediaContextJson: string,
+): Promise<string>;
+
 export declare function chatStreamCancel(id: string): void;
 
 export declare function chatStreamNext(id: string): Promise<string | null>;

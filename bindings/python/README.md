@@ -24,6 +24,12 @@ O Rust da extensão fica em `native/`, e a API Python de ergonomia mínima em
 `python/vectora_engine/`. O build de wheels multi-plataforma e publicação no
 PyPI serão habilitados em um workflow de release separado.
 
+Mídia usa `MediaExecutionContext(assets={asset_id: bytes})`. O mapa é
+temporário; no Vectora, construa-o somente com bytes obtidos por
+`AssetStore.read` após validar owner/workspace/thread. `prepare_chat_content`
+é o modo manual; `chat_complete(..., media_context=ctx)` é por chamada;
+`settings["media_context"] = ctx` configura o padrão. O limite padrão é 20 MiB.
+
 Anthropic Messages, Google Gemini e Cohere Chat v2 usam `native_chat_complete`
 e `native_chat_stream` com o mesmo contrato Rust. `settings.provider` deve ser
 `anthropic`, `google` ou `cohere`; credenciais e configuração específica pertencem ao

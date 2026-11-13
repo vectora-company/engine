@@ -18,6 +18,13 @@ Consuma `chatComplete(settings, request)` como `Promise` ou `chatStream` como
 Os objetos `settings`, `request` e eventos seguem
 `docs/specs/03-chat-openai-compatible.md`.
 
+Mídia usa `MediaExecutionContext` com `assets: Record<string, Uint8Array>`.
+O mapa é temporário; o host valida autorização do asset antes de fornecê-lo.
+`prepareChatContent` prepara manualmente; o terceiro argumento de
+`chatComplete`/`chatStream` fornece contexto por chamada; `media_context` em
+settings configura o padrão. Contexto por chamada tem precedência; limite padrão
+de 20 MiB.
+
 Anthropic Messages, Google Gemini e Cohere Chat v2 usam `nativeChatComplete` e
 `nativeChatStream` com o mesmo contrato Rust. `settings.provider` deve ser
 `anthropic`, `google` ou `cohere`; credenciais e configuração específica pertencem ao
