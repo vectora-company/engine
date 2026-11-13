@@ -280,7 +280,7 @@ Documentos nativos só seguem quando a assinatura identifica PDF.
 
 Verificação local: 22 testes `chat::media::tests` passaram, incluindo casos de
 MIME de imagem adulterado, MIME genérico em PDF e modalidade divergente. Format, Clippy, testes Rust workspace e rustdoc passaram nos hooks; os 22 testes
-focados passaram. Commit, push e abertura do PR filho do #87 ainda estão pendentes.
+focados passaram. A mudança foi publicada no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87, head `18c2eca`.
 
 ## Partes multimodais em `ToolResult` — decisão e implementação
 

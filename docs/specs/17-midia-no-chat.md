@@ -1,6 +1,6 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada na stack aberta #79–#87; reclassificação de MIME está em implementação local na branch `fix/chat-media-reclassify-on-hydration`, filha do #87. A substituição
+**Estado:** parcialmente implementada na stack aberta #79–#88; reclassificação de MIME está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87. A substituição
 direta de `ToolResult` está no PR #86, filho do #85; não há compatibilidade v1. Nada
 desta stack está integrado em `main`. Tipos, classificação por bytes, capabilities,
 decisões por parte, payloads nativos e preparo Rust estão implementados para os

@@ -2,7 +2,7 @@
 
 Checklist da [spec de mídia](../specs/17-midia-no-chat.md) e do
 [plano ativo](../plans/03-plano-continuidade.md). O payload (#79), a integração
-Rust (#81) e bindings (#82) estão em PRs abertos; limites estão no [#84](https://github.com/vectora-company/engine/pull/84), retry no [#85](https://github.com/vectora-company/engine/pull/85) e `ToolResult` tipado no [#86](https://github.com/vectora-company/engine/pull/86). A stack começa em #73 e ainda não está integrada em `main`. A revisão documental ampla está no PR [#87](https://github.com/vectora-company/engine/pull/87), filho do #86. A reclassificação MIME na reidratação está em implementação na branch filha do #87.
+Rust (#81) e bindings (#82) estão em PRs abertos; limites estão no [#84](https://github.com/vectora-company/engine/pull/84), retry no [#85](https://github.com/vectora-company/engine/pull/85) e `ToolResult` tipado no [#86](https://github.com/vectora-company/engine/pull/86). A stack começa em #73 e ainda não está integrada em `main`. A revisão documental ampla está no PR [#87](https://github.com/vectora-company/engine/pull/87), filho do #86. A reclassificação MIME na reidratação está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87.
 
 ## Contrato e implementação
 

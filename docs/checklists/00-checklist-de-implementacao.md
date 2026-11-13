@@ -60,7 +60,7 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Validar previews reidratados como imagens antes de serializar.
 - [x] Adicionar testes para MIME de imagem incorreto, MIME genérico em PDF e divergência entre modalidade declarada e bytes; 22 testes `chat::media::tests` passaram.
 - [x] Rodar hooks completos: format, Prettier, Clippy, testes Rust workspace e rustdoc passaram; os 22 testes focados passaram.
-- [ ] Commit, push e abrir PR filho do #87; registrar URL e SHA.
+- [x] Commit `18c2eca`, push e abrir o [PR #88](https://github.com/vectora-company/engine/pull/88), filho do #87.
 
 ## Preparação e escopo
 
