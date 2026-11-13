@@ -250,6 +250,8 @@ ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 �
 | [#55](https://github.com/vectora-company/engine/pull/55) | Política de equivalência funcional dos pares e matriz de lacunas.                   |
 | [#56](https://github.com/vectora-company/engine/pull/56) | Loop operacional, stack de PRs e regras de decisão/evidência.                       |
 | [#57](https://github.com/vectora-company/engine/pull/57) | Alinhamento do ranking vetorial por cosseno e normalização do score.                |
+| [#59](https://github.com/vectora-company/engine/pull/59) | Atualização das dependências e TTL nativo por chave no NATS JetStream KV.           |
+| Em andamento                                             | Limite de retenção configurável por quantidade nos adapters de filas Redis/NATS.    |
 
 O teste service-real combinado de storage passou 58/58 com Redis, NATS,
 Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros
@@ -266,6 +268,7 @@ contract versions que lê da binding local. A branch local da Engine expõe
 repositório do Bot e fica fora desta stack da Engine.
 
 As decisões sobre TTL, política de filas e autoridade do ledger foram recebidas
-no chat em 2026-11-12. A branch seguinte empilha a atualização de dependências e
-TTL NATS; retenção/DLQ e replicação dos demais estados críticos continuam como
-etapas aprovadas, sem depender de nova resposta.
+no chat em 2026-11-12. PR #59 implementa atualização de dependências e TTL NATS.
+A branch atual implementa limite finito por quantidade para Redis/NATS (100000
+por padrão); cinco tentativas por padrão, DLQ recuperável e shutdown gracioso
+continuam como etapas seguintes aprovadas, sem depender de nova resposta.

@@ -174,7 +174,10 @@ impl StorageSelection {
                 None,
                 None,
                 Some(true),
-                &["Unacknowledged deliveries are reclaimed with XAUTOCLAIM after the visibility timeout."],
+                &[
+                    "Unacknowledged deliveries are reclaimed with XAUTOCLAIM after the visibility timeout.",
+                    "Source stream retention is capped by max_messages (default 100000); oldest entries can be trimmed, including pending deliveries.",
+                ],
             )),
             Some(QueueBackend::NatsJetstream) => backends.push(entry(
                 "queue",
@@ -184,7 +187,10 @@ impl StorageSelection {
                 None,
                 None,
                 Some(true),
-                &["Durable consumers redeliver after ack_wait."],
+                &[
+                    "Durable consumers redeliver after ack_wait.",
+                    "Source stream retention is capped by max_messages (default 100000); oldest entries can be removed, including pending deliveries.",
+                ],
             )),
             None => {}
         }

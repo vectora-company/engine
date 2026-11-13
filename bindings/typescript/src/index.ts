@@ -773,6 +773,8 @@ export interface QueueConfig {
   endpoint: string;
   namespace: string;
   visibility_timeout_seconds?: number;
+  /** Maximum number of messages retained by the queue stream (default 100000). */
+  max_messages?: number;
 }
 export interface PubSubConfig {
   backend: "redis" | "nats_core";

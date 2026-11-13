@@ -2,9 +2,10 @@
 
 **Estado revalidado:** auditoria S0–S5 em andamento; equivalência dos pares
 registrada no PR #55; score vetorial comum no PR #57; TTL nativo de NATS KV e
-atualização das dependências na branch empilhada sobre #57. O mantenedor definiu
-SQLite como cópia local obrigatória do estado crítico, NATS 2.11+ para TTL nativo
-e autorizou escolher a política de filas.
+atualização das dependências no PR #59; retenção finita por contagem em
+implementação na branch empilhada sobre #59. O mantenedor definiu SQLite como
+cópia local obrigatória do estado crítico, NATS 2.11+ para TTL nativo e autorizou
+escolher a política de filas.
 **Branch de origem:** `fix/storage-selection-contract`; o estado posterior está
 separado por PRs na fotografia ao fim desta análise.
 **Escopo:** alinhar o contrato público de seleção às implementações e registrar
@@ -246,9 +247,14 @@ Evidência (testes de caracterização contra Redis e NATS reais, 2026-11-12):
 
 Essa foi a caracterização inicial que levou à pergunta ao mantenedor. A resposta
 de 2026-11-12 escolheu retenção finita configurável, teto de tentativas e DLQ
-recuperável. A implementação nos dois backends continua pendente. ACK significa
-que o consumidor confirmou o sucesso do job; sem ACK, o adapter pode entregá-lo
-novamente após o timeout.
+recuperável. A branch atual aplica limite exato configurável de mensagens aos
+dois brokers (padrão 100000); ao atingir o teto, as mensagens mais antigas
+podem ser descartadas, inclusive se ainda estiverem pendentes. O teste Redis
+real confirma que, com limite 1, fica a mensagem mais nova; o teste NATS real
+confirma `max_messages = 1` no stream. Retry limitado, encaminhamento/consumo da
+DLQ e shutdown gracioso continuam pendentes. ACK significa que o consumidor
+confirmou o sucesso do job; sem ACK, o adapter pode entregá-lo novamente após o
+timeout.
 
 ## Política de equivalência por par (2026-11-12)
 
@@ -293,12 +299,31 @@ como projeção/replicação retomável.
   com caminho de dead-letter. `ACK` (acknowledgement/confirmação) significa que o
   consumidor terminou o job com sucesso; sem ACK, o broker pode entregá-lo de
   novo depois do timeout. O conteúdo retido e falhas terminais devem ser
-  observáveis e recuperáveis, não descartados silenciosamente. Implementação
-  permanece como próxima lacuna; a escolha de produto já não bloqueia o loop.
+  observáveis e recuperáveis, não descartados silenciosamente. A escolha local
+  é cinco tentativas por padrão; a branch atual inicia pela retenção limitada a
+  100000 mensagens nos dois brokers. DLQ e tentativas continuam pendentes.
 
 NATS 2.11 introduziu TTL por mensagem e exige `AllowMsgTTL` no stream ([release
 notes 2.11](https://github.com/nats-io/nats.docs/blob/master/release_notes/whats_new_211.md),
 [configuração do stream](https://github.com/nats-io/nats.docs/blob/master/nats-concepts/jetstream/streams.md)).
+
+## Retenção finita em andamento sobre PR #59
+
+A branch `feat/storage-queue-retention-dlq` acrescenta `QueueConfig.max_messages`
+(default retrocompatível 100000) e aplica limite exato de contagem no `XADD`
+Redis e `max_messages` no stream JetStream. O registro em `capabilities()` e a
+spec esclarecem que a retenção pode remover mensagens pendentes; essa perda
+controlada é inerente ao limite finito escolhido nesta etapa. Teto de cinco
+entregas, DLQ consumível/redrive e shutdown gracioso ainda não foram
+implementados.
+
+Verificação em 2026-11-12: `cargo test -p vectora-engine --lib --locked
+storage::messaging::tests:: -- --test-threads=1` passou 12/12 com Redis 8.10.3
+e NATS 2.15.3 reais, incluindo limites configurados em 1 para os dois brokers e
+leitura de configuração antiga com o default 100000. `cargo fmt --all --
+--check`, `cargo clippy -p vectora-engine --all-targets --all-features --locked
+-- -D warnings`, Prettier e `pnpm typecheck` passaram. A matrix completa do
+workspace não foi rodada nesta branch.
 
 ## Verificação da branch empilhada sobre #57
 
