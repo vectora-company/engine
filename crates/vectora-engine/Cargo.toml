@@ -29,6 +29,8 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-r
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
+sha2 = "0.10"
+base64 = "0.22"
 
 [lib]
 path = "src/lib.rs"

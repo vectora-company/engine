@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::media::{InlineMedia, MediaPart};
+
 pub const CHAT_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -17,8 +19,44 @@ pub enum MessageRole {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
-    Text { text: String },
-    ImageUrl { image_url: ImageUrl },
+    Text {
+        text: String,
+    },
+    ImageUrl {
+        image_url: ImageUrl,
+    },
+    /// Mídia por referência: o histórico guarda só o `MediaRef`.
+    Image(MediaPart),
+    Audio(MediaPart),
+    Video(MediaPart),
+    Document(MediaPart),
+    File(MediaPart),
+    /// Bytes em base64, montados só na cópia do request enviada ao provider
+    /// (ver `prepare_content`). Não deve ser persistido.
+    Inline(InlineMedia),
+}
+
+impl ContentPart {
+    /// Texto que representa uma parte de mídia nos adapters que ainda não a
+    /// enviam como arquivo: a forma textual ou uma nota, nunca os bytes.
+    /// Devolve `None` para texto e imagem por URL, que têm caminho próprio.
+    pub fn fallback_text(&self) -> Option<String> {
+        use super::media::MediaKind;
+        match self {
+            Self::Text { .. } | Self::ImageUrl { .. } => None,
+            Self::Image(media) => Some(media.textual_form(MediaKind::Image)),
+            Self::Audio(media) => Some(media.textual_form(MediaKind::Audio)),
+            Self::Video(media) => Some(media.textual_form(MediaKind::Video)),
+            Self::Document(media) => Some(media.textual_form(MediaKind::Document)),
+            Self::File(media) => Some(media.textual_form(MediaKind::File)),
+            Self::Inline(item) => Some(format!(
+                "[{}: {} — {}]",
+                item.kind.label(),
+                item.name,
+                item.mime_type
+            )),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

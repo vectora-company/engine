@@ -2,6 +2,7 @@
 
 mod error;
 mod fallback;
+mod media;
 mod native_providers;
 mod openai_compatible;
 mod sse;
@@ -11,6 +12,12 @@ mod types;
 pub use error::ChatError;
 pub use fallback::{
     FallbackCandidateSettings, FallbackChatClient, FallbackChatSettings, FallbackClientSettings,
+};
+pub use media::{
+    CapabilityResolver, CapabilityState, Classified, ContentSite, InlineMedia, MediaDecision,
+    MediaError, MediaKind, MediaMode, MediaPart, MediaRef, MediaStore, Modality,
+    ModalityCapabilities, PartialCapabilities, PreparedContent, classify, prepare_content,
+    sha256_hex,
 };
 pub use native_providers::{NativeChatClient, NativeChatSettings, NativeProvider};
 pub use openai_compatible::{

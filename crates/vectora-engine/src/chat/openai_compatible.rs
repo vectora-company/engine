@@ -588,6 +588,10 @@ fn content_payload(content: &MessageContent) -> Value {
                         }
                         json!({ "type": "image_url", "image_url": value })
                     }
+                    other => json!({
+                        "type": "text",
+                        "text": other.fallback_text().unwrap_or_default(),
+                    }),
                 })
                 .collect(),
         ),
