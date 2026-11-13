@@ -761,6 +761,36 @@ pub async fn resilient_ledger_append(
 }
 
 #[napi]
+pub async fn resilient_ledger_flush_outbox(
+    path: String,
+    limit: u32,
+    postgres_url: Option<String>,
+) -> Result<u32> {
+    let runtime = tokio::runtime::Handle::current();
+    let flushed = tokio::task::spawn_blocking(move || {
+        let mut ledger =
+            vectora_engine::storage::resilient_ledger::ResilientLedger::open(path, postgres_url)?;
+        runtime.block_on(ledger.flush_outbox(limit))
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    u32::try_from(flushed).map_err(|_| Error::from_reason("flushed count exceeds u32"))
+}
+
+#[napi]
+pub async fn resilient_ledger_pending_count(path: String) -> Result<String> {
+    let count = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::resilient_ledger::ResilientLedger::open(path, None)?
+            .pending_count()
+    })
+    .await
+    .map_err(|_| Error::from_reason("ledger worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok(count.to_string())
+}
+
+#[napi]
 pub async fn sqlite_ledger_read(
     path: String,
     scope: String,

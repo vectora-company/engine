@@ -714,6 +714,12 @@ interface NativeBinding {
     draftJson: string,
     postgresUrl?: string,
   ): Promise<string>;
+  resilientLedgerFlushOutbox(
+    path: string,
+    limit: number,
+    postgresUrl?: string | undefined | null,
+  ): Promise<number>;
+  resilientLedgerPendingCount(path: string): Promise<string>;
   sqliteLedgerBackupOnline(path: string, destination: string): Promise<string>;
   sqliteLedgerBackupOffline(path: string, destination: string): Promise<string>;
   sqliteLedgerVerifyBackup(path: string): Promise<string>;
@@ -1620,6 +1626,22 @@ export async function resilientLedgerAppend(
       postgresUrl,
     ),
   ) as DurableLedgerAppend;
+}
+
+/** Retry a bounded batch of committed local events in their PostgreSQL projection. */
+export async function resilientLedgerFlushOutbox(
+  path: string,
+  limit = 100,
+  postgresUrl?: string,
+): Promise<number> {
+  return native.resilientLedgerFlushOutbox(path, limit, postgresUrl);
+}
+
+/** Exact count of locally committed events not yet projected to PostgreSQL. */
+export async function resilientLedgerPendingCount(
+  path: string,
+): Promise<bigint> {
+  return BigInt(await native.resilientLedgerPendingCount(path));
 }
 
 export async function sqliteLedgerRead(

@@ -9,7 +9,7 @@ squash). A stack aberta é `main` ← [#73](https://github.com/vectora-company/e
 [#80](https://github.com/vectora-company/engine/pull/80) ←
 [#81](https://github.com/vectora-company/engine/pull/81) ←
 [#82](https://github.com/vectora-company/engine/pull/82) ← PR documental
-[#83](https://github.com/vectora-company/engine/pull/83) ← [#84](https://github.com/vectora-company/engine/pull/84) ← [#85](https://github.com/vectora-company/engine/pull/85) ← [#86](https://github.com/vectora-company/engine/pull/86) ← PR documental [#87](https://github.com/vectora-company/engine/pull/87) (`docs/revisao-markdown-pos-86`) ← [#88](https://github.com/vectora-company/engine/pull/88) (`fix/chat-media-reclassify-on-hydration`) ← [#89](https://github.com/vectora-company/engine/pull/89) (`docs/decision-inline-media-boundary`) ← [#90](https://github.com/vectora-company/engine/pull/90) (`feat/chat-ephemeral-media-request`, commit de implementação `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; OPEN/CLEAN, checks remotos ainda não apareceram). Os PRs #82–#90 estão abertos; o #82 tem head `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83) está
+[#83](https://github.com/vectora-company/engine/pull/83) ← [#84](https://github.com/vectora-company/engine/pull/84) ← [#85](https://github.com/vectora-company/engine/pull/85) ← [#86](https://github.com/vectora-company/engine/pull/86) ← PR documental [#87](https://github.com/vectora-company/engine/pull/87) (`docs/revisao-markdown-pos-86`) ← [#88](https://github.com/vectora-company/engine/pull/88) (`fix/chat-media-reclassify-on-hydration`) ← [#89](https://github.com/vectora-company/engine/pull/89) (`docs/decision-inline-media-boundary`) ← [#90](https://github.com/vectora-company/engine/pull/90) (`feat/chat-ephemeral-media-request`) ← [#91](https://github.com/vectora-company/engine/pull/91) (`feat/storage-outbox-bindings`, filho do #90; OPEN). Os PRs #82–#91 estão abertos; o #82 tem head `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. O PR documental [#83](https://github.com/vectora-company/engine/pull/83) está
 empilhado sobre a branch `feat/chat-media-bindings` do #82. A branch filha `feat/chat-media-provider-limits-docs83` está publicada no [PR
 #84](https://github.com/vectora-company/engine/pull/84), head
 `58980b3647e96b495756f7986bfdbfdd40d09e8c` (limites por provider/modelo; docs sincronizados).
@@ -180,8 +180,7 @@ Origem: [plano de storage](04-plano-storage-ledger.md) e
 5. Health/readiness com os seis estados da spec 02 e observabilidade sem
    segredos (adapter, duração, retry, correlação). **[D]** biblioteca de
    tracing/métricas.
-6. `flush_outbox` e `pending_count` do ledger resiliente nos bindings; fixtures
-   comuns de KV, filas e vetores nos três níveis.
+6. **`flush_outbox` e `pending_count` nos bindings — implementado no PR aberto [#91](https://github.com/vectora-company/engine/pull/91), filho do #90.** Python expõe inteiro; TypeScript expõe `bigint`; limite 1–1000 validado mesmo sem PostgreSQL. Sem URL, flush válido retorna 0 e preserva a outbox SQLite. Verificações locais registradas na análise; fixtures comuns de KV, filas e vetores nos três níveis continuam pendentes.
 7. PostgreSQL como projeção dos stores de lifecycle, loop e policy, backup e
    verificação equivalentes, testes concorrentes com serviço real e migrations
    além da v1 com caminho de rollback documentado.
@@ -263,13 +262,7 @@ conformidade para o estado e a cobertura de cada capability.
 
 ## Próxima etapa
 
-A revisão Markdown inicial foi publicada no PR #83; uma segunda revisão ampla
-está no PR [#87](https://github.com/vectora-company/engine/pull/87), filho do #86, porque a stack posterior tornou
-referências de estado e versões obsoletas. Depois dela, a próxima etapa independente
-é consolidar uma proposta verificável de charter para a primeira release completa: áreas incluídas, critérios de maturidade, paridade
-Rust/Python/TypeScript, compatibilidade, suporte de plataformas, publicação e
-adoção-piloto. O plano atual contém gaps por capability, mas ainda não os
-organiza como um único gate de release 1.0.
+As revisões Markdown #83 e #87 são etapas históricas já publicadas. O trabalho ativo está na Fase 2 de storage: depois de expor os diagnósticos SQLite-first da outbox nos bindings no PR #91, a próxima etapa independente é fechar a equivalência dos stores PostgreSQL para lifecycle, loop e policy, incluindo backup/verificação e concorrência com serviço real. O charter de primeira release completa permanece como trabalho planejado, mas não é o próximo item enquanto houver lacunas de storage anteriores no backlog.
 
 ## Desvios registrados
 

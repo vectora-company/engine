@@ -38,6 +38,9 @@ from vectora_engine import (
     queue_receive_dead_letter,
     rerank,
     rerank_contract_version,
+    resilient_ledger_append,
+    resilient_ledger_flush_outbox,
+    resilient_ledger_pending_count,
     run_contract_version,
     sqlite_admit_run,
     sqlite_latest_checkpoint,
@@ -329,6 +332,7 @@ def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     assert asyncio.run(sqlite_ledger_append(path, event))["sequence"] == 1
     assert len(asyncio.run(sqlite_ledger_read(path, "team", "run"))) == 1
     assert asyncio.run(sqlite_ledger_read(path, "other", "run")) == []
+
     reservation = {
         "scope": "team",
         "thread_id": "thread",
@@ -392,6 +396,26 @@ def test_sqlite_ledger_survives_reopen(tmp_path: Any) -> None:
     first = asyncio.run(sqlite_admit_run(path, admission, admission_event))
     assert first["event"]["sequence"] == 1
     assert asyncio.run(sqlite_admit_run(path, admission, admission_event)) == first
+
+
+def test_resilient_ledger_outbox_diagnostics_are_exposed(tmp_path: Any) -> None:
+    path = str(tmp_path / "resilient-ledger.db")
+    draft = {
+        "scope": "team",
+        "aggregate": "run",
+        "event_id": "local-event",
+        "idempotency_key": "local-key",
+        "event_type": "started",
+        "payload": {},
+        "expected_version": 0,
+    }
+    result = asyncio.run(resilient_ledger_append(path, draft))
+    assert result["mirror"] == "pending"
+    assert asyncio.run(resilient_ledger_pending_count(path)) == 1
+    assert asyncio.run(resilient_ledger_flush_outbox(path, postgres_url=None)) == 0
+    assert asyncio.run(resilient_ledger_pending_count(path)) == 1
+    with pytest.raises(RuntimeError):
+        asyncio.run(resilient_ledger_flush_outbox(path, limit=1001))
 
 
 def test_sqlite_run_lifecycle_admission_and_transitions_survive_reopen(

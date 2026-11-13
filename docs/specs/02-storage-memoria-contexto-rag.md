@@ -194,6 +194,7 @@ redrive atômico, filtros vetoriais e health (veja o
 - Payload grande fica fora do ledger com referência, hash, tamanho, classificação, expiração e política de acesso.
 - Checkpoints são versionados e restauráveis; checkpoint incompatível falha com erro explícito, não inicia estado novo silenciosamente.
 - SQLite permite append de evento e checkpoint na mesma transação por `sqlite_ledger_append_checkpointed`; o snapshot e o evento devem representar o mesmo sequence.
+- O ledger resiliente mantém append local e outbox na mesma transação SQLite. O PR aberto [#91](https://github.com/vectora-company/engine/pull/91) implementa nas bindings `resilient_ledger_flush_outbox`/`resilientLedgerFlushOutbox` (lote limitado a 1–1000) e `resilient_ledger_pending_count`/`resilientLedgerPendingCount`. Sem PostgreSQL, flush válido retorna zero e preserva pendências; SQLite continua autoridade local.
 - Antes de entregar uma tool com efeito externo ao adapter, persista um evento/checkpoint `effect_started`; após o resultado, persista o resultado e novo checkpoint. Uma execução interrompida nesse intervalo é incerta e requer reconciliação explícita.
 
 ## Memória, contexto e RAG
