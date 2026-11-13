@@ -1,8 +1,13 @@
 # Contrato de mídia no chat
 
-**Estado:** planejada. Nenhuma parte deste contrato está implementada na Engine.
-A referência de comportamento é o backend Python do Vectora (entrada multimodal da
-0.1.25), onde o contrato já roda.
+**Estado:** parcialmente implementada. O núcleo Rust tem os tipos de mídia
+(`MediaRef`, `MediaPart` e as variantes de `ContentPart`), a classificação pelos
+bytes, as capabilities em camadas, a reidratação com conferência de digest e a
+decisão por parte com seu registro (`chat/media.rs`). Ainda não existem: o
+mapeamento nativo por provider (os adapters enviam mídia como forma textual), o
+resultado de tool em partes, a recuperação por recusa do provider e os bindings
+Python e TypeScript. A referência de comportamento é o backend Python do Vectora
+(entrada multimodal da 0.1.25).
 
 Este documento define como o chat da Engine representa mídia (imagem, áudio,
 vídeo, documento e arquivo genérico) em mensagens e em resultados de tools, como

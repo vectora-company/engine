@@ -603,8 +603,8 @@ fn cohere_content(content: &MessageContent) -> Value {
             parts
                 .iter()
                 .filter_map(|part| match part {
-                    super::ContentPart::Text { text } => Some(text.as_str()),
-                    _ => None,
+                    super::ContentPart::Text { text } => Some(text.clone()),
+                    other => other.fallback_text(),
                 })
                 .collect::<String>()
         );
@@ -617,6 +617,10 @@ fn cohere_content(content: &MessageContent) -> Value {
                 super::ContentPart::ImageUrl { image_url } => {
                     json!({"type":"image_url","image_url":{"url":image_url.url}})
                 }
+                other => json!({
+                    "type":"text",
+                    "text": other.fallback_text().unwrap_or_default(),
+                }),
             })
             .collect(),
     )
@@ -814,8 +818,8 @@ fn message_text(message: &Message) -> String {
         MessageContent::Parts(parts) => parts
             .iter()
             .filter_map(|part| match part {
-                super::ContentPart::Text { text } => Some(text.as_str()),
-                _ => None,
+                super::ContentPart::Text { text } => Some(text.clone()),
+                other => other.fallback_text(),
             })
             .collect(),
     }
@@ -832,10 +836,9 @@ fn anthropic_content(content: &MessageContent) -> Value {
         return json!(
             parts
                 .iter()
-                .filter_map(|part| if let super::ContentPart::Text { text } = part {
-                    Some(text.as_str())
-                } else {
-                    None
+                .filter_map(|part| match part {
+                    super::ContentPart::Text { text } => Some(text.clone()),
+                    other => other.fallback_text(),
                 })
                 .collect::<String>()
         );
@@ -846,6 +849,10 @@ fn anthropic_content(content: &MessageContent) -> Value {
             .map(|part| match part {
                 super::ContentPart::Text { text } => json!({"type":"text","text":text}),
                 super::ContentPart::ImageUrl { image_url } => anthropic_image(&image_url.url),
+                other => json!({
+                    "type":"text",
+                    "text": other.fallback_text().unwrap_or_default(),
+                }),
             })
             .collect(),
     )
@@ -887,7 +894,11 @@ fn google_parts(content: &MessageContent) -> Vec<Value> {
                             parts.push(json!({"fileData":{"fileUri":url}}));
                         }
                     }
-                    _ => {}
+                    other => {
+                        if let Some(text) = other.fallback_text() {
+                            parts.push(json!({"text":text}));
+                        }
+                    }
                 }
             }
         }
