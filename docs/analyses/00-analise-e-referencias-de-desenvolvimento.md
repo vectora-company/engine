@@ -292,6 +292,23 @@ verificação e resultados finais estão registrados no plano de continuidade e 
 PR [#90](https://github.com/vectora-company/engine/pull/90), filho do
 [#89](https://github.com/vectora-company/engine/pull/89). O PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, está OPEN/CLEAN; o commit de implementação é `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; os checks remotos ainda não apareceram.
 
+## Diagnóstico da outbox SQLite-first nas bindings — PR #91
+
+A Fase 2, item 6 do plano ativo foi implementada na branch
+`feat/storage-outbox-bindings`, PR [#91](https://github.com/vectora-company/engine/pull/91),
+filho do PR #90. Python e TypeScript expõem flush limitado (1–1000) e contagem
+de eventos locais ainda não projetados; TypeScript converte a contagem para
+`bigint`. Sem PostgreSQL configurado, flush válido retorna zero e preserva a
+pendência SQLite. Também foi corrigido o núcleo para validar o limite antes do
+retorno antecipado sem URL.
+
+Verificação local no commit `4f7e980`: workspace Rust 172 testes + 3 fixtures,
+Python 53 testes, Node 39 passaram e 10 dependentes de serviços foram ignorados;
+Clippy `-D warnings`, rustdoc e hooks completos passaram. PostgreSQL real estava
+disponível para os testes direcionados do ledger. Restam fixtures comuns de
+conformidade para KV/filas/vetores e as etapas posteriores de equivalência
+PostgreSQL descritas em `docs/plans/03-plano-continuidade.md`.
+
 ## Reclassificação MIME na reidratação — implementação local
 
 A reidratação compara a assinatura dos bytes já verificados (tamanho e SHA-256)

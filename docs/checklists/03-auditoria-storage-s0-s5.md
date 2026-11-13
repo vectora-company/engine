@@ -37,7 +37,7 @@ evidência local registrada; não implica prontidão de produção.
 - [ ] Falhas de indexação dos stores vetoriais.
 - [ ] Declarar em `capabilities()` o backup do SQLite, a dependência de `notify-keyspace-events` no watch do Redis e as ausências reais das filas e do vetorial (filtros, índice, quantização).
 - [ ] Testes Rust e Python de CAS, incremento, prefixo, watch e remoção de KV (hoje só Node).
-- [ ] Expor `flush_outbox` e `pending_count` do ledger resiliente nos bindings.
+- [x] Expor `flush_outbox` e `pending_count` do ledger resiliente em Python e TypeScript (PR #91, filho do #90): cobertura offline confirma flush sem PostgreSQL, preservação da fila e validação 1–1000.
 - [ ] Health/readiness dos backends com os estados da spec 02.
 
 ## Encerramento desta etapa

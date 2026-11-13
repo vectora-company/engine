@@ -114,6 +114,8 @@ projeto e registrada em `capabilities()` (política na
 
 ## Execução atual — 13 de novembro de 2026
 
+O PR [#91](https://github.com/vectora-company/engine/pull/91), filho do #90, implementa `flush_outbox` e `pending_count` nos bindings Python/TypeScript (commit `4f7e980`). Rust workspace (172 testes + 3 fixtures), Python (53) e Node (39 aprovados; 10 service-real sem endpoints ignorados), Clippy, rustdoc e hooks passaram localmente. CI remoto não foi aguardado. A próxima etapa independente continua na Fase 2 de storage, com projeções PostgreSQL dos stores lifecycle/loop/policy.
+
 A decisão vital sobre bytes inline foi respondida no chat: separar o tipo
 persistível do envelope efêmero. Implementação publicada no PR
 [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, na

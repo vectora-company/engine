@@ -6,7 +6,7 @@ atualizado durante o trabalho. Não marque um item como feito sem evidência.
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 
-O estado atual, verificado em 2026-11-13, é PR #86 aberto no topo da stack; esta revisão Markdown está sendo preparada como filha dele. A revisão documental anterior (#83) continua como etapa histórica. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
+O estado atual, verificado em 2026-11-13, é PR #91 aberto no topo da stack, filho do #90. O item `flush_outbox`/`pending_count` do plano de storage foi implementado e validado localmente; a etapa seguinte começa sem aguardar CI. Revisões documentais anteriores são registros históricos. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
 permanece geral e não substitui critérios específicos. A etapa de limites explícitos por provider/modelo/modalidade foi publicada no PR [#84](https://github.com/vectora-company/engine/pull/84), filho do #83 (head local/remoto `58980b3`). O retry de incompatibilidade multimodal foi publicado no [PR #85](https://github.com/vectora-company/engine/pull/85), filho do #84.
 
@@ -159,3 +159,12 @@ outras etapas aprovadas no plano ativo.
 - [x] Rodar suíte Rust workspace (163 testes + 3 fixtures), Clippy, `cargo check` de todos os targets, rustdoc, testes Python, build/typecheck e 37 testes Node (10 testes de serviços ignorados sem URLs).
 - [x] Rodar todos os hooks de pre-commit, corrigir stubs Python ausentes e revisar diffs.
 - [x] Abrir PR #86 sobre o #85: https://github.com/vectora-company/engine/pull/86 (head `b188a94`).
+
+## Diagnóstico da outbox nos bindings — PR #91
+
+- [x] Expor flush da outbox e contagem pendente em Python e TypeScript; manter SQLite como autoridade local e PostgreSQL como projeção retomável.
+- [x] Validar limite 1–1000 inclusive quando PostgreSQL não está configurado; flush sem URL retorna zero sem remover pendências.
+- [x] Testar contrato offline nos bindings Python e Node e limite no core.
+- [x] Rodar workspace Rust (172 testes + 3 fixtures), Python (53), Node (39 aprovados; 10 testes service-real ignorados sem endpoints), Clippy, rustdoc e hooks completos.
+- [x] Commit `4f7e980`, push e abrir o PR [#91](https://github.com/vectora-company/engine/pull/91), filho do #90.
+- [ ] Criar fixtures comuns de KV, filas e vetores nos três níveis; trabalho continua na Fase 2 do plano.
