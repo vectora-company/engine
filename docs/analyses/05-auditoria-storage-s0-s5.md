@@ -186,27 +186,43 @@ mesmo contêiner de teste, sem volume montado, não após recriação do contêi
 - Exercitar serviço real para desconexão, restart, falha parcial, retry,
   redelivery, ACK, TTL/retention, isolamento e shutdown; Redis, NATS,
   PostgreSQL e Qdrant já têm cobertura local de reinício, com limites detalhados.
-- Definir e testar limites de payload e falhas de indexação de LanceDB/Qdrant;
-  filtros, escopo, dimensão, score, ordenação e coleção ausente têm cobertura.
-- Definir backup/restore e recovery operacional do ledger, além da matriz
-  retenção/shutdown JetStream. Backup/restore requer decisão do mantenedor
-  registrada a seguir.
+- Falhas de indexação de LanceDB/Qdrant; filtros, escopo, dimensão, score,
+  ordenação, coleção ausente e limites de entrada têm cobertura. Sem limite de
+  tamanho de payload por decisão do mantenedor.
+- Retenção/limites e shutdown gracioso do JetStream. Backup/restore do ledger
+  está implementado (ver decisões).
 - Manter interfaces de Memory/Context/RAG e integração dos consumidores em
   etapas separadas, com contratos e fallback próprios.
 
-## Decisão vital aguardando `brunosrz`: backup/restore do ledger
+## Decisões do mantenedor (2026-11-12)
 
-Pergunta: qual contrato de backup/restore SQLite implementar?
+**Backup/restore do ledger SQLite: implementar as duas opções.** Contrato
+implementado em `storage/sqlite/backup.rs` e exposto em Rust, Python e
+TypeScript (`sqlite_ledger_backup_online`, `sqlite_ledger_backup_offline`,
+`sqlite_ledger_verify_backup`, `sqlite_ledger_restore`):
 
-1. API da Engine com snapshot online do SQLite: mantém consistência durante
-   escritores ativos; a Engine assume formato, lifecycle, restore e testes e
-   precisa avaliar a feature necessária no driver.
-2. Backup coordenado pelo host: o consumer pausa/fecha escritores e copia o
-   banco offline; evita API nova, mas exige downtime e procedimento em cada
-   produto consumidor.
+- **Online** (`backup_online`): snapshot consistente via API de backup do SQLite
+  (feature `backup` do `rusqlite`, sem crate nova) enquanto outros escritores
+  continuam; grava `<destino>.partial`, verifica e só então renomeia.
+- **Offline coordenado pelo host** (`backup_offline`): toma `BEGIN EXCLUSIVE`
+  sem espera; se algum escritor ainda estiver ativo retorna `Busy`, o que
+  prova que o host não parou os escritores. Só então copia o arquivo.
+- **Verificação** (`verify_backup`): abre somente leitura, `integrity_check`,
+  versão do esquema (`SchemaVersion` se mais nova que a suportada) e contagem
+  de eventos; arquivo que não é ledger retorna `BackupInvalid`.
+- **Restore** (`restore`): verifica o backup, recusa destino existente sem
+  `replace`, recusa destino com escritor ativo (`Busy`) e, com `replace`, guarda
+  o arquivo anterior em `<destino>.replaced` (não sobrescreve um `.replaced`
+  existente). O host continua responsável por parar os escritores e reabrir.
+- Nenhum modo sobrescreve arquivo existente; falhas removem o `.partial`.
+- Limite: `backup_online` abre o ledger com `open_persistent`, que executa as
+  migrações de esquema pendentes no arquivo de origem.
 
-Não assumir cópia arbitrária do arquivo com SQLite ativo: WAL/sidecars podem
-deixar snapshot incompleto. A escolha afeta consistência, disponibilidade,
-ownership e compatibilidade. O trabalho dependente é implementar e testar
-backup/restore e documentar recovery. Perguntado a `brunosrz` no chat em
-2026-11-12; aguardar resposta antes de fixar o contrato.
+**Limites de tamanho: sem limite novo.** Um banco vetorial é grande; `metadata`
+vetorial, valores de KV e payloads de fila permanecem sem limite de tamanho
+(comportamento atual, sem mudança de contrato). O limite de 1 MiB por payload
+de evento do ledger e as demais validações de entrada existentes continuam.
+
+Evidência local: 5 testes Rust em `sqlite::backup::tests` (snapshot consistente
+com escritor ativo, `Busy`, restore com `.replaced`, destino em uso, arquivos
+corrompidos/estrangeiros/esquema novo) e testes equivalentes em Python e Node.

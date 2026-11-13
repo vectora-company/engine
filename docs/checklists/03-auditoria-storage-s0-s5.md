@@ -19,14 +19,16 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Inventariar adapters vetoriais LanceDB/Qdrant e diferenças conhecidas.
 - [x] Cobrir concorrência entre conexões (threads), conflito de versão/idempotência, retry idêntico concorrente, restart do arquivo e limites de leitura do ledger SQLite.
 - [x] Cobrir concorrência entre processos independentes no ledger SQLite (3 processos, mesma versão esperada: 1 commit e 2 `VersionConflict`; PR #49).
-- [ ] Cobrir backup/restore e recovery operacional do ledger (requer decisão de contrato sobre o mecanismo de backup).
+- [x] Implementar e cobrir backup/restore do ledger SQLite nos dois modos decididos (online e offline coordenado pelo host), com verificação, restore e `.replaced`, em Rust, Python e TypeScript.
+- [ ] Documentar o procedimento operacional de recovery (ordem: parar escritores, `restore`, reabrir) no guia de operação do consumidor.
 - [x] Rodar testes service-real de ACK/redelivery, TTL, pub/sub sem assinante, isolamento KV, projeção PostgreSQL e vetores contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 58 testes passam na execução combinada mais recente.
 - [x] Reinício de Redis e NATS JetStream: KV/jobs sobrevivem e os adapters voltam a operar. PostgreSQL parado/religado: o teste isolado passou; a execução combinada registrou uma falha ao parar um container com `AutoRemove=true`, que o Podman removeu. O teste agora confere `AutoRemove=false` antes de parar o serviço. Habilitado por `VECTORA_TEST_PODMAN_RESTART`.
 - [x] Reiniciar o Qdrant local e confirmar que coleção/ponto persistem e o adapter recupera a busca no mesmo contêiner.
 - [ ] Cobrir shutdown gracioso do adapter e retenção/limites JetStream.
 - [x] Cobrir ordenação, `limit`, direção do score, upsert idempotente, mesmo id em escopos distintos, delete por escopo e dimensão inválida em LanceDB e Qdrant (contrato comum).
 - [x] Cobrir os limites de entrada existentes: busca `limit` 1–1000, vetor 1–65536 dimensões (upsert), escopo/coleção (≤128, charset), chave KV ≤512, identificadores ≤128 e subjects (sem segmentos vazios nem `*`/`#`, ≤512), nos dois lados de cada fronteira.
-- [ ] Definir e testar limite de tamanho de `metadata` vetorial, valores de KV e payloads de fila (hoje não há limite; requer decisão de contrato) e falhas de indexação.
+- [x] Limite de tamanho de `metadata` vetorial, valores de KV e payloads de fila: decidido não impor limite novo (decisão do mantenedor, 2026-11-12).
+- [ ] Falhas de indexação dos stores vetoriais.
 - [ ] Definir limite/semântica comum sem esconder diferenças específicas.
 
 ## Encerramento desta etapa

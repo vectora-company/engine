@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+mod backup;
+pub use backup::{BackupReport, verify_backup};
+
 const SCHEMA_VERSION: i64 = 4;
 pub const CHECKPOINT_VERSION: u16 = 1;
 const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
@@ -23,6 +26,10 @@ pub enum LedgerError {
     VersionConflict,
     #[error("ledger storage operation failed")]
     Storage,
+    #[error("ledger file is in use by another writer")]
+    Busy,
+    #[error("ledger backup is corrupt or is not a ledger")]
+    BackupInvalid,
 }
 
 impl From<rusqlite::Error> for LedgerError {

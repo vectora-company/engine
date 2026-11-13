@@ -674,6 +674,72 @@ fn sqlite_ledger_read<'py>(
 }
 
 #[pyfunction]
+fn sqlite_ledger_backup_online<'py>(
+    py: Python<'py>,
+    path: String,
+    destination: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let report = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)?
+                .backup_online(destination)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&report)
+    })
+}
+
+#[pyfunction]
+fn sqlite_ledger_backup_offline<'py>(
+    py: Python<'py>,
+    path: String,
+    destination: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let report = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::backup_offline(path, destination)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&report)
+    })
+}
+
+#[pyfunction]
+fn sqlite_ledger_verify_backup<'py>(py: Python<'py>, path: String) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let report = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::verify_backup(path)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&report)
+    })
+}
+
+#[pyfunction]
+fn sqlite_ledger_restore<'py>(
+    py: Python<'py>,
+    backup: String,
+    destination: String,
+    replace: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let report = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::restore(backup, destination, replace)
+        })
+        .await
+        .map_err(|_| py_error("ledger worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&report)
+    })
+}
+
+#[pyfunction]
 fn vector_store_upsert<'py>(
     py: Python<'py>,
     config_json: String,
@@ -1585,6 +1651,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(resilient_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_read, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_ledger_backup_online, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_ledger_backup_offline, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_ledger_verify_backup, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_ledger_restore, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_upsert, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_search, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_delete, module)?)?;
