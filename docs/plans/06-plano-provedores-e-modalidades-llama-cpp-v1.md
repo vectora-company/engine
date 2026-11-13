@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97) aberto, head `dda8b83`; etapa 2 iniciada em branch filha.
+**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97) aberto, head `616f558`; etapa 2 iniciada em branch filha.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -25,12 +25,16 @@ como dependência de build da Engine.
   Google Gemini e Cohere; fallback e requests efêmeros com mídia.
 - Embeddings: OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama.
 - Rerank: Cohere, Voyage e OpenRouter.
-- Não há cliente chat dedicado para Ollama, perfil dedicado para llama.cpp,
+- No `main` de base não havia cliente chat dedicado para Ollama, perfil dedicado para llama.cpp,
   Discovery de modalidades, adapter nativo de Decision Model, geração de
   imagem, TTS ou STT. `ContentPart` tipado não comprova suporte de rede.
 - OpenRouter, 9router, OmniRouter, OpenAI e Kimi podem compartilhar transporte
   OpenAI-compatible quando o endpoint for compatível; cada perfil ainda exige
   validação de rota, auth, headers, erros, stream e modalidades.
+
+Na branch filha do PR #97, a etapa 2 já adiciona o perfil `LlamaServerClient`
+ao core Rust; a ausência descrita acima é o estado-base de `main`, não o estado
+desta branch. O profile ainda aguarda exposição equivalente nos bindings.
 
 Evidências e fontes estão em
 [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
@@ -44,7 +48,7 @@ primeira implementação. Fixar as rotas e diferenças de `llama-server` pela ta
 v1.0.0 e caracterizar os providers nomeados como perfis de protocolo, não
 promessas indiscriminadas.
 
-**Saída:** concluída no PR documental [#97](https://github.com/vectora-company/engine/pull/97), head `dda8b83`, sobre `main`; spec 18, análise, checklist, índices e goal loop atualizados; nenhuma API de produção alterada.
+**Saída:** concluída no PR documental [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`, sobre `main`; spec 18, análise, checklist, índices e goal loop atualizados; nenhuma API de produção alterada.
 
 ### Etapa 2 — perfil llama.cpp, health e descoberta (ativa; PR filho do #97)
 
@@ -54,7 +58,16 @@ normalização de URL, auth, limits, erros e modalidades anunciadas. Expor APIs
 idênticas nos bindings.
 
 **Saída:** fixtures HTTP deterministas mais integração real opt-in contra
-`llama-server` v1.0.0; capabilities ausentes no payload reportadas como `unknown`; preservar o fallback `text` que o próprio servidor documenta para metadados de modelo ausentes.
+`llama-server` v1.0.0; valores de modalities reportados pelo servidor são
+preservados sem assumir que representam suporte efetivo do modelo, inclusive
+defaults de compatibilidade.
+
+**Estado atual:** branch `feat/llama-server-profile`, filha da documentação #97.
+O core Rust implementa settings validados, health `/health`, discovery
+`/v1/models` com arrays de modalidades e metadata preservados, e chat/stream
+pelo transporte compartilhado. Cinco testes focados e a suíte Rust lib (191
+testes), Clippy e rustdoc passaram. A exposição do profile nos bindings e a
+integração service-real ainda estão pendentes e seguem como próxima etapa.
 
 ### Etapa 3 — Decision Models
 

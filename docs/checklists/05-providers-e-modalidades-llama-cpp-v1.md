@@ -13,26 +13,30 @@
 
 ## Matriz de capacidade (estado observado)
 
-| Operação                                  | Estado atual                                                                | Evidência/cobertura desejada                                                |
-| ----------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Chat texto/stream                         | Parcial implementado                                                        | OpenAI-compatible; nativos Anthropic/Gemini/Cohere; fixtures por protocolo. |
-| OpenAI/OpenRouter/9router/OmniRouter/Kimi | Transporte genérico possível quando OpenAI-compatible; perfis não equivalem | Rota, auth/headers, erros, streaming, uso e modalidade por endpoint.        |
-| Ollama chat                               | Sem adapter dedicado                                                        | API Ollama distinta e perfil OpenAI `/v1` validado separadamente.           |
-| llama.cpp chat/discovery                  | Chat por URL genérica; discovery ausente                                    | Fixar v1.0.0, `/v1/models`, capability de cada modelo e chat multimodal.    |
-| Decision Model                            | Ausente como API LLM                                                        | Contrato tipado separado; adapter `/v1/systemone`; probs e multimodal.      |
-| Entrada de imagem/visão                   | Tipos e preparação existem; roteamento parcial                              | Casos reais por protocolo/modelo e capability desconhecida fail-closed.     |
-| Geração de imagem                         | Ausente                                                                     | Adapter próprio apenas quando endpoint estiver confirmado.                  |
-| TTS                                       | Ausente                                                                     | `/v1/audio/speech`: WAV/PCM, voz, sample rate, stream e cancelamento.       |
-| STT                                       | Ausente                                                                     | `/v1/realtime` é streaming ASR; batch transcription requer API separada.    |
-| Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                    | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.         |
-| Geração de vídeo                          | Ausente                                                                     | Não confundir com vídeo de entrada.                                         |
-| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama                           | Extensão multimodal do llama.cpp em contrato versionado.                    |
-| Rerank                                    | Cohere/Voyage/OpenRouter                                                    | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.             |
+| Operação                                  | Estado atual                                                                   | Evidência/cobertura desejada                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Chat texto/stream                         | Parcial implementado                                                           | OpenAI-compatible; nativos Anthropic/Gemini/Cohere; fixtures por protocolo. |
+| OpenAI/OpenRouter/9router/OmniRouter/Kimi | Transporte genérico possível quando OpenAI-compatible; perfis não equivalem    | Rota, auth/headers, erros, streaming, uso e modalidade por endpoint.        |
+| Ollama chat                               | Sem adapter dedicado                                                           | API Ollama distinta e perfil OpenAI `/v1` validado separadamente.           |
+| llama.cpp chat/discovery                  | Perfil Rust com health, `/v1/models`, metadata e chat/stream; binding pendente | Conformidade Python/TypeScript, capability e multimodal por modelo.         |
+| Decision Model                            | Ausente como API LLM                                                           | Contrato tipado separado; adapter `/v1/systemone`; probs e multimodal.      |
+| Entrada de imagem/visão                   | Tipos e preparação existem; roteamento parcial                                 | Casos reais por protocolo/modelo e capability desconhecida fail-closed.     |
+| Geração de imagem                         | Ausente                                                                        | Adapter próprio apenas quando endpoint estiver confirmado.                  |
+| TTS                                       | Ausente                                                                        | `/v1/audio/speech`: WAV/PCM, voz, sample rate, stream e cancelamento.       |
+| STT                                       | Ausente                                                                        | `/v1/realtime` é streaming ASR; batch transcription requer API separada.    |
+| Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                       | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.         |
+| Geração de vídeo                          | Ausente                                                                        | Não confundir com vídeo de entrada.                                         |
+| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama                              | Extensão multimodal do llama.cpp em contrato versionado.                    |
+| Rerank                                    | Cohere/Voyage/OpenRouter                                                       | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.             |
 
 ## Gates para etapas de código
 
+- [x] Core Rust: settings endpoint seguros, health `/health`, discovery `/v1/models` e chat/stream compartilhado.
+- [x] Fixtures HTTP e parsing: cinco testes focados e 191 testes da lib passam; Clippy `-D warnings` para lib e testes e rustdoc passaram.
+- [ ] Expor profile callable em Python e TypeScript, incluindo streaming e contexto de mídia.
+- [ ] Executar integração opt-in com `llama-server` v1.0.0 fixado.
 - [ ] Protocolo, operação e provider/profile são campos distintos e tipados.
-- [ ] Discovery preserva arrays/status e distingue metadados conhecidos do fallback `text` usado pelo servidor quando não consegue ler metadados; falha de rede permanece `unknown`.
+- [x] Discovery preserva os arrays brutos e metadata extra; campos ausentes ficam `None`/unknown. O `text` fallback do servidor não vem marcado e não é promovido a garantia. Falha de rede permanece erro/unknown.
 - [ ] Requisições multimodais usam bytes efêmeros e respeitam auth/autorização do host.
 - [ ] Erros de provider preservam código/status sem vazar segredo ou payload.
 - [ ] Timeouts, limites, cancelamento, backpressure e retry são definidos por operação.
