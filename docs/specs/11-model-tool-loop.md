@@ -23,10 +23,15 @@ chamar o provider, executar adapters e persistir snapshots/ledger.
   rejeitados. Resultados podem chegar fora de ordem; a continuação ao modelo
   conserva a ordem original das chamadas.
 - Negações do dispatch viram resultados `denied`/`not_applied` sem chamar o
-  adapter. O output dessas negações contém somente um código estável.
+  adapter. A parte textual contém somente um código estável.
+- `ToolResult` v2 contém `parts`, uma sequência de `text { text }` e
+  `image { media_ref }`. O helper `to_chat_message` produz a mensagem de tool
+  canônica; o host entrega o store autorizado ao contexto de mídia.
 - Limites padrão: 50 rodadas de modelo, 128 chamadas de tools totais, 1 MiB por
-  output e 4 MiB de outputs por lote. Cada limite é configurável e limitado a
-  16 MiB quando representa bytes. A engine mede bytes UTF-8.
+  resultado e 4 MiB de resultados por lote. Para o loop, contam os bytes JSON
+  serializados das partes, inclusive metadados da referência e texto. O asset
+  binário é limitado pelo `MediaExecutionContext`. Cada limite é configurável e
+  limitado a 16 MiB quando representa bytes.
 - Um efeito externo com resultado `unknown` move o loop para
   `recovery_required`; o host não deve solicitar uma nova rodada que possa
   repetir cegamente esse efeito.
@@ -48,8 +53,9 @@ chamar o provider, executar adapters e persistir snapshots/ledger.
   efeito `unknown`, o estado passa por `recovery_required`; a reconciliação
   continua obrigatória e, ao terminar, fecha como `cancelled` sem retomar o
   modelo.
-- O snapshot do loop é contrato v2. Snapshots v1 sem os estados de cancelamento
-  continuam aceitos. Resultados de tool permanecem no contrato v1.
+- O snapshot do loop é contrato v3 e `ToolResult` é contrato v2. A troca de
+  `output: String` por `parts` é breaking; snapshots de loop v1/v2 e resultados
+  v1 não são aceitos nem convertidos.
 - Se o limite de rodadas for atingido numa resposta que pede tools, o loop para
   antes de pedir sua execução. Assim, não inicia efeitos sem espaço orçado para
   consultar o modelo depois.
@@ -75,8 +81,10 @@ forjados; isto não é por si só uma fronteira de segurança ou autorização.
   `advance_tool_result`, `cancel_model_tool_loop`, `recover_model_tool_loop` e
   `reconcile_tool_result`.
 - Python: `start_model_tool_loop`, `accept_model_turn`, `submit_tool_result`,
+  `tool_result_contract_version` e `tool_result_to_chat_message`,
   `cancel_model_tool_loop`, `recover_model_tool_loop` e `reconcile_tool_result`.
 - TypeScript: `startModelToolLoop`, `acceptModelTurn`, `submitToolResult`,
+  `toolResultContractVersion` e `toolResultToChatMessage`,
   `cancelModelToolLoop`, `recoverModelToolLoop` e `reconcileToolResult`.
 
 Os dois bindings chamam o mesmo núcleo Rust e têm testes do ciclo completo.

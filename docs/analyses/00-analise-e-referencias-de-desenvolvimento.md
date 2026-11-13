@@ -139,10 +139,10 @@ como assets; conversão local de áudio/PDF/vídeo; transcrição offline e help
 Speech do macOS com CI que gera fala. Isso não significa que a Engine já tenha
 essas capacidades. A integração Rust no PR #81 e os bindings no PR #82
 ligaram o preparador ao envio real; o PR #84 adiciona overrides por
-provider/modelo/modalidade. A branch filha local do #84 implementa retry textual
-único após rejeição multimodal classificada. Permanecem pendentes catálogo
-automático confiável, limites agregados, fixtures comuns e resultados
-multimodais de tool.
+provider/modelo/modalidade. O PR #85, filho do #84, implementa retry textual único após rejeição
+multimodal classificada. O PR #86 em preparação implementa resultados de tool
+tipados. Permanecem pendentes catálogo automático confiável, limites agregados
+e fixtures comuns.
 
 A fronteira de produto deve ser preservada: STT local, permissões do macOS,
 configuração UI, geração de prévias e empacotamento SCons estão implementados no
@@ -269,12 +269,25 @@ retry não cobre tamanho, autenticação, falha de transporte nem erros SSE apó
 o stream ter sido entregue. O registro `media_decisions.reason` e o evento
 `media_routed` anotam o rebaixamento sem incluir bytes.
 
-## Decisão pendente — partes multimodais em `ToolResult`
+## Partes multimodais em `ToolResult` — decisão e implementação
 
-A [spec 17](../specs/17-midia-no-chat.md) registra três alternativas para o
-contrato público: substituir diretamente a string por partes (breaking change),
-estender `ToolResult` com conteúdo tipado aditivo e definir a fonte canônica, ou
-criar uma versão nova do contrato com migração explícita. A escolha afeta Rust,
-Python, TypeScript, serialização e persistência/replay; portanto não há
-implementação independente segura dessa alteração antes da decisão de
-`brunosrz`. Itens não dependentes dessa forma de dados seguem no plano.
+brunosrz escolheu substituir diretamente `output: String` por `parts`, sem
+manter v1 nem conversores legados. A implementação atual na branch
+`feat/chat-tool-result-parts`, filha do PR [#85](https://github.com/vectora-company/engine/pull/85),
+define partes `text` e `image` por `MediaRef`, expõe a conversão para mensagem
+de tool pelo núcleo Rust nos bindings, e mapeia imagem a Anthropic/Gemini/OpenAI
+Chat Completions. Cohere mantém forma textual porque não declara suporte para
+imagens em resultado de tool. O loop sobe para contrato v3 e `ToolResult` para
+v2; formatos antigos são rejeitados.
+
+Verificação local: 163 testes Rust da lib passaram, incluindo rejeição do
+contrato antigo e conversão para mensagem; `cargo clippy --workspace
+--all-targets --all-features --locked -- -D warnings` e `cargo check --workspace
+--all-targets --all-features --locked` passaram; build, typecheck e 37 testes Node
+passaram (10 testes de serviços foram ignorados sem endpoints); a suíte Python
+passou. Falta rodar hooks completos de pre-commit.
+
+Os limites do loop contam a representação JSON serializada (texto e metadados da
+referência); os bytes da imagem ficam no store do host e obedecem aos limites de
+reidratação do contexto de mídia. A implementação não adiciona store persistente
+à Engine.

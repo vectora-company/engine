@@ -449,6 +449,10 @@ export declare function toolDispatchContractVersion(): number;
 
 export declare function toolPolicyContractVersion(): number;
 
+export declare function toolResultContractVersion(): number;
+
+export declare function toolResultToChatMessage(resultJson: string): string;
+
 export declare function vectorStoreDelete(
   configJson: string,
   collection: string,

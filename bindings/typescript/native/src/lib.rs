@@ -23,10 +23,11 @@ use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
     MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot,
     RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
-    TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch,
-    ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
-    authorize_tool_dispatch, cancel_model_tool_loop, evaluate_verification, prepare_tool_dispatch,
-    reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
+    TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, TOOL_RESULT_CONTRACT_VERSION,
+    ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, VerificationReport,
+    advance_model_turn, advance_tool_result, authorize_tool_dispatch, cancel_model_tool_loop,
+    evaluate_verification, prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop,
+    tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -1512,6 +1513,18 @@ pub fn tool_chat_definitions_json(contracts_json: String) -> Result<String> {
 #[napi]
 pub fn model_tool_loop_contract_version() -> u32 {
     u32::from(MODEL_TOOL_LOOP_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn tool_result_contract_version() -> u32 {
+    u32::from(TOOL_RESULT_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn tool_result_to_chat_message(result_json: String) -> Result<String> {
+    let result: ToolResult = serde_json::from_str(&result_json)
+        .map_err(|_| Error::from_reason("invalid tool result"))?;
+    encode_json(&result.to_chat_message())
 }
 
 #[napi]

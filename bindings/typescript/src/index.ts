@@ -110,6 +110,14 @@ export interface MediaDecision {
   model: string;
 }
 
+export interface MediaRef {
+  asset_id: string;
+  sha256: string;
+  mime_type: string;
+  size_bytes: number;
+  name: string;
+}
+
 export interface ChatCompletion {
   contract_version: number;
   id: string | null;
@@ -419,6 +427,8 @@ export type ToolResultStatus =
   "succeeded" | "failed" | "denied" | "cancelled" | "timed_out";
 export type ToolEffectState =
   "not_applicable" | "not_applied" | "applied" | "unknown";
+export type ToolResultPart =
+  { type: "text"; text: string } | { type: "image"; media_ref: MediaRef };
 export interface ToolResult {
   contract_version: number;
   run_id: string;
@@ -428,7 +438,7 @@ export interface ToolResult {
   status: ToolResultStatus;
   effect_state: ToolEffectState;
   code?: string | null;
-  output: string;
+  parts: ToolResultPart[];
 }
 export interface PendingToolResult {
   call_id: string;
@@ -776,6 +786,8 @@ interface NativeBinding {
   ): string;
   toolChatDefinitionsJson(contractsJson: string): string;
   modelToolLoopContractVersion(): number;
+  toolResultContractVersion(): number;
+  toolResultToChatMessage(resultJson: string): string;
   modelToolLoopStart(
     runId: string,
     turnId: string,
@@ -1734,6 +1746,16 @@ export function toolChatDefinitions(
 export const modelToolLoopContractVersion = (): number =>
   native.modelToolLoopContractVersion();
 
+export const toolResultContractVersion = (): number =>
+  native.toolResultContractVersion();
+
+/** Convert a typed tool result to the canonical chat message through Rust. */
+export function toolResultToChatMessage(result: ToolResult): JsonValue {
+  return JSON.parse(
+    native.toolResultToChatMessage(JSON.stringify(result)),
+  ) as JsonValue;
+}
+
 export function startModelToolLoop(
   runId: string,
   turnId: string,
@@ -1811,7 +1833,7 @@ export const rerankContractVersion = (): number =>
  * Hosts use this snapshot to gate capabilities without guessing compatibility.
  */
 export interface EngineContractSnapshot {
-  contract_version: 1;
+  contract_version: 2;
   chat: number;
   embeddings: number;
   reranking: number;
@@ -1821,11 +1843,12 @@ export interface EngineContractSnapshot {
   tool_dispatch: number;
   tool_policy: number;
   model_tool_loop: number;
+  tool_result: number;
 }
 
 export function engineContractSnapshot(): EngineContractSnapshot {
   return {
-    contract_version: 1,
+    contract_version: 2,
     chat: chatContractVersion(),
     embeddings: embeddingContractVersion(),
     reranking: rerankContractVersion(),
@@ -1835,6 +1858,7 @@ export function engineContractSnapshot(): EngineContractSnapshot {
     tool_dispatch: toolDispatchContractVersion(),
     tool_policy: toolPolicyContractVersion(),
     model_tool_loop: modelToolLoopContractVersion(),
+    tool_result: toolResultContractVersion(),
   };
 }
 

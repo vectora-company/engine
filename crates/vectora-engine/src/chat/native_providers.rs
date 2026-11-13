@@ -516,8 +516,11 @@ fn anthropic_payload(request: &ChatRequest, streaming: bool) -> Result<Value, Ch
                     .ok_or(ChatError::InvalidConfiguration(
                         "Anthropic tool result requires tool_call_id",
                     ))?;
-                let mut result =
-                    json!({"type":"tool_result","tool_use_id":id,"content":message_text(message)});
+                let mut result = json!({
+                    "type":"tool_result",
+                    "tool_use_id":id,
+                    "content":anthropic_content(&message.content),
+                });
                 if message.is_error {
                     result["is_error"] = Value::Bool(true);
                 }
@@ -587,7 +590,22 @@ fn google_payload(request: &ChatRequest) -> Result<Value, ChatError> {
                     .ok_or(ChatError::InvalidConfiguration(
                         "Google tool result requires tool name",
                     ))?;
-                contents.push(json!({"role":"user","parts":[{"functionResponse":{"name":name,"response":{"result":message_text(message)}}}]}));
+                let mut parts = vec![json!({
+                    "functionResponse": {
+                        "name": name,
+                        "response": { "result": message_text(message) },
+                    }
+                })];
+                if let MessageContent::Parts(content_parts) = &message.content {
+                    for content_part in content_parts {
+                        if let super::ContentPart::ImageUrl { .. } = content_part {
+                            parts.extend(google_parts(&MessageContent::Parts(vec![
+                                content_part.clone(),
+                            ])));
+                        }
+                    }
+                }
+                contents.push(json!({"role":"user","parts":parts}));
             }
         }
     }
@@ -1565,7 +1583,17 @@ mod tests {
                 },
                 Message {
                     role: MessageRole::Tool,
-                    content: MessageContent::Text("failed".into()),
+                    content: MessageContent::Parts(vec![
+                        super::super::ContentPart::Text {
+                            text: "failed".into(),
+                        },
+                        super::super::ContentPart::ImageUrl {
+                            image_url: super::super::ImageUrl {
+                                url: "data:image/png;base64,tool-image".into(),
+                                detail: None,
+                            },
+                        },
+                    ]),
                     tool_calls: vec![],
                     tool_call_id: Some("call-1".into()),
                     name: Some("read".into()),
@@ -1582,6 +1610,14 @@ mod tests {
             "abc"
         );
         assert_eq!(payload["messages"][1]["content"][0]["is_error"], true);
+        assert_eq!(
+            payload["messages"][1]["content"][0]["content"][0]["text"],
+            "failed"
+        );
+        assert_eq!(
+            payload["messages"][1]["content"][0]["content"][1]["type"],
+            "image"
+        );
         assert_eq!(payload["stream"], true);
     }
 
@@ -1659,6 +1695,48 @@ mod tests {
                 .is_none()
         );
         assert_eq!(payload["safetySettings"], json!([]));
+    }
+
+    #[test]
+    fn google_maps_tool_images_after_function_response() {
+        let request = ChatRequest::new(
+            "gemini",
+            vec![Message {
+                role: MessageRole::Tool,
+                content: MessageContent::Parts(vec![
+                    super::super::ContentPart::Text {
+                        text: "captured".into(),
+                    },
+                    super::super::ContentPart::ImageUrl {
+                        image_url: super::super::ImageUrl {
+                            url: "data:image/png;base64,abc".into(),
+                            detail: None,
+                        },
+                    },
+                ]),
+                tool_calls: Vec::new(),
+                tool_call_id: Some("call-1".into()),
+                name: Some("capture".into()),
+                is_error: false,
+            }],
+        );
+        let payload = google_payload(&request).unwrap();
+        assert_eq!(
+            payload["contents"][0]["parts"][0]["functionResponse"]["name"],
+            "capture"
+        );
+        assert_eq!(
+            payload["contents"][0]["parts"][0]["functionResponse"]["response"]["result"],
+            "captured"
+        );
+        assert_eq!(
+            payload["contents"][0]["parts"][1]["inlineData"]["mimeType"],
+            "image/png"
+        );
+        assert_eq!(
+            payload["contents"][0]["parts"][1]["inlineData"]["data"],
+            "abc"
+        );
     }
 
     #[test]
