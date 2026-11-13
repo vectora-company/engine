@@ -117,7 +117,7 @@ projeto e registrada em `capabilities()` (política na
 A decisão vital sobre bytes inline foi respondida no chat: separar o tipo
 persistível do envelope efêmero. Implementação publicada no PR
 [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, na
-branch `feat/chat-ephemeral-media-request`, head
+branch `feat/chat-ephemeral-media-request`, commit de implementação
 `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb` (OPEN/CLEAN; verificações remotas
 não apareceram no momento do registro). O trabalho e seus critérios ficam em
 [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md),

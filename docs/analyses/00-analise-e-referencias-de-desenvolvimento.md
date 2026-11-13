@@ -290,7 +290,7 @@ limite, categoria e data URL. Testes das bindings verificam que a entrada normal
 recusa bytes e que a entrada efêmera exige envelope e limite. Os comandos de
 verificação e resultados finais estão registrados no plano de continuidade e no
 PR [#90](https://github.com/vectora-company/engine/pull/90), filho do
-[#89](https://github.com/vectora-company/engine/pull/89). O PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, está OPEN/CLEAN no head `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; os checks remotos ainda não apareceram.
+[#89](https://github.com/vectora-company/engine/pull/89). O PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, está OPEN/CLEAN; o commit de implementação é `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; os checks remotos ainda não apareceram.
 
 ## Reclassificação MIME na reidratação — implementação local
 
