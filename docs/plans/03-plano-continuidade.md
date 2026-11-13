@@ -251,7 +251,8 @@ ativa, da base ao topo, é #45 → #46 → #47 → #48 → #49 → #51 → #52 �
 | [#56](https://github.com/vectora-company/engine/pull/56) | Loop operacional, stack de PRs e regras de decisão/evidência.                       |
 | [#57](https://github.com/vectora-company/engine/pull/57) | Alinhamento do ranking vetorial por cosseno e normalização do score.                |
 | [#59](https://github.com/vectora-company/engine/pull/59) | Atualização das dependências e TTL nativo por chave no NATS JetStream KV.           |
-| Em andamento                                             | Limite de retenção configurável por quantidade nos adapters de filas Redis/NATS.    |
+| [#60](https://github.com/vectora-company/engine/pull/60) | Retenção finita configurável por quantidade em Redis Streams e NATS JetStream.      |
+| Em andamento                                             | Teto de tentativas, DLQ consumível e bindings Python/TypeScript para filas.         |
 
 O teste service-real combinado de storage passou 58/58 com Redis, NATS,
 Qdrant e PostgreSQL locais e os reinícios habilitados, conforme os registros
@@ -269,6 +270,7 @@ repositório do Bot e fica fora desta stack da Engine.
 
 As decisões sobre TTL, política de filas e autoridade do ledger foram recebidas
 no chat em 2026-11-12. PR #59 implementa atualização de dependências e TTL NATS.
-A branch atual implementa limite finito por quantidade para Redis/NATS (100000
-por padrão); cinco tentativas por padrão, DLQ recuperável e shutdown gracioso
-continuam como etapas seguintes aprovadas, sem depender de nova resposta.
+PR #60 implementa limite finito por quantidade para Redis/NATS (100000 por
+padrão). A branch atual implementa cinco entregas por padrão, DLQ consumível e
+APIs nos bindings. Shutdown gracioso e redrive atômico continuam como etapas
+seguintes aprovadas, sem depender de nova resposta.

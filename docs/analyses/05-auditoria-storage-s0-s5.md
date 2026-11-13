@@ -2,8 +2,8 @@
 
 **Estado revalidado:** auditoria S0–S5 em andamento; equivalência dos pares
 registrada no PR #55; score vetorial comum no PR #57; TTL nativo de NATS KV e
-atualização das dependências no PR #59; retenção finita por contagem em
-implementação na branch empilhada sobre #59. O mantenedor definiu SQLite como
+atualização das dependências no PR #59; retenção finita por contagem no PR #60.
+A branch empilhada sobre #60 implementa tentativas e DLQ. O mantenedor definiu SQLite como
 cópia local obrigatória do estado crítico, NATS 2.11+ para TTL nativo e autorizou
 escolher a política de filas.
 **Branch de origem:** `fix/storage-selection-contract`; o estado posterior está
@@ -247,14 +247,12 @@ Evidência (testes de caracterização contra Redis e NATS reais, 2026-11-12):
 
 Essa foi a caracterização inicial que levou à pergunta ao mantenedor. A resposta
 de 2026-11-12 escolheu retenção finita configurável, teto de tentativas e DLQ
-recuperável. A branch atual aplica limite exato configurável de mensagens aos
-dois brokers (padrão 100000); ao atingir o teto, as mensagens mais antigas
-podem ser descartadas, inclusive se ainda estiverem pendentes. O teste Redis
-real confirma que, com limite 1, fica a mensagem mais nova; o teste NATS real
-confirma `max_messages = 1` no stream. Retry limitado, encaminhamento/consumo da
-DLQ e shutdown gracioso continuam pendentes. ACK significa que o consumidor
-confirmou o sucesso do job; sem ACK, o adapter pode entregá-lo novamente após o
-timeout.
+recuperável. O PR #60 aplica limite exato configurável de mensagens aos dois
+brokers (padrão 100000); ao atingir o teto, as mensagens mais antigas podem ser
+descartadas, inclusive se ainda estiverem pendentes. O teste Redis real confirma
+que, com limite 1, fica a mensagem mais nova; o teste NATS real confirma
+`max_messages = 1` no stream. ACK significa que o consumidor confirmou o
+sucesso do job; sem ACK, o adapter pode entregá-lo novamente após o timeout.
 
 ## Política de equivalência por par (2026-11-12)
 
@@ -307,23 +305,29 @@ NATS 2.11 introduziu TTL por mensagem e exige `AllowMsgTTL` no stream ([release
 notes 2.11](https://github.com/nats-io/nats.docs/blob/master/release_notes/whats_new_211.md),
 [configuração do stream](https://github.com/nats-io/nats.docs/blob/master/nats-concepts/jetstream/streams.md)).
 
-## Retenção finita em andamento sobre PR #59
+## Tentativas e DLQ em andamento sobre PR #60
 
-A branch `feat/storage-queue-retention-dlq` acrescenta `QueueConfig.max_messages`
-(default retrocompatível 100000) e aplica limite exato de contagem no `XADD`
-Redis e `max_messages` no stream JetStream. O registro em `capabilities()` e a
-spec esclarecem que a retenção pode remover mensagens pendentes; essa perda
-controlada é inerente ao limite finito escolhido nesta etapa. Teto de cinco
-entregas, DLQ consumível/redrive e shutdown gracioso ainda não foram
-implementados.
+A branch `feat/storage-queue-retries-dlq` acrescenta `QueueConfig.max_attempts`
+(default retrocompatível 5), atualiza consumidores JetStream existentes com o
+teto configurado, move falhas após a última tentativa para uma DLQ com limite
+finito e expõe `receive_dead_letter` no core e nos bindings. Redis transfere a
+mensagem e confirma a origem em um script Lua atômico; NATS publica na DLQ com
+ID de deduplicação antes de confirmar a origem, então a transferência é
+at-least-once e pode duplicar se houver falha após a publicação. A aplicação
+pode republicar a mensagem da DLQ na fila original e confirmar a entrega DLQ.
 
 Verificação em 2026-11-12: `cargo test -p vectora-engine --lib --locked
-storage::messaging::tests:: -- --test-threads=1` passou 12/12 com Redis 8.10.3
-e NATS 2.15.3 reais, incluindo limites configurados em 1 para os dois brokers e
-leitura de configuração antiga com o default 100000. `cargo fmt --all --
---check`, `cargo clippy -p vectora-engine --all-targets --all-features --locked
--- -D warnings`, Prettier e `pnpm typecheck` passaram. A matrix completa do
-workspace não foi rodada nesta branch.
+storage::messaging::tests:: -- --test-threads=1` passou 14/14 com Redis 8.10.3
+e NATS 2.15.3 reais, incluindo esgotamento e consumo da DLQ em ambos; o primeiro
+run encontrou comparação de limite Redis incorreta, corrigida antes do run
+verde. `cargo check` e Clippy para todos os alvos passaram após a atualização de
+consumidores JetStream existentes. `pnpm build`, `pnpm test` (35/35),
+`pnpm typecheck`, Oxlint; `maturin develop --release`, pytest Python (50 testes),
+Ruff, Ruff format e `ty check` também passaram. A suíte Python detectou e
+corrigiu uma expectativa antiga de TTL NATS; `ty` detectou e levou à atualização
+do stub `_native.pyi`. `scons build` foi interrompido enquanto aguardava o
+subprocesso; os builds de Python e TypeScript foram executados separadamente e
+passaram. A matrix completa do workspace não foi executada nesta branch.
 
 ## Verificação da branch empilhada sobre #57
 

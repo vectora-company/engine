@@ -26,6 +26,9 @@ pub struct QueueConfig {
     /// Maximum messages retained by each queue stream.
     #[serde(default = "default_queue_max_messages")]
     pub max_messages: u64,
+    /// Maximum total deliveries before a job moves to the dead-letter stream.
+    #[serde(default = "default_queue_max_attempts")]
+    pub max_attempts: u32,
 }
 
 fn default_visibility_timeout_seconds() -> u64 {
@@ -34,6 +37,10 @@ fn default_visibility_timeout_seconds() -> u64 {
 
 fn default_queue_max_messages() -> u64 {
     100_000
+}
+
+fn default_queue_max_attempts() -> u32 {
+    5
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -487,8 +494,15 @@ impl RedisStreamQueue {
         consumer: &str,
         block: Duration,
     ) -> Result<Option<RedisQueueDelivery>, MessagingError> {
-        self.receive_with_idle(queue, group, consumer, block, Duration::from_secs(30))
-            .await
+        self.receive_with_idle(
+            queue,
+            group,
+            consumer,
+            block,
+            Duration::from_secs(30),
+            Some(default_queue_max_attempts()),
+        )
+        .await
     }
 
     async fn receive_with_idle(
@@ -498,6 +512,7 @@ impl RedisStreamQueue {
         consumer: &str,
         block: Duration,
         visibility_timeout: Duration,
+        max_attempts: Option<u32>,
     ) -> Result<Option<RedisQueueDelivery>, MessagingError> {
         use redis::streams::StreamReadReply;
         let key = self.stream_key(queue)?;
@@ -524,7 +539,39 @@ impl RedisStreamQueue {
             .await
             .map_err(|_| MessagingError::Storage)?;
         if let Some(entry) = reclaimed.claimed.into_iter().next() {
-            return redis_delivery(&self.store, key, group, entry).map(Some);
+            let pending: Vec<(String, String, usize, usize)> = redis::cmd("XPENDING")
+                .arg(&key)
+                .arg(group)
+                .arg(&entry.id)
+                .arg(&entry.id)
+                .arg(1)
+                .query_async(&mut conn)
+                .await
+                .map_err(|_| MessagingError::Storage)?;
+            let attempts = pending.first().map_or(1, |item| item.3 as u32);
+            if max_attempts.is_some_and(|maximum| attempts > maximum) {
+                let payload = redis::from_redis_value::<Vec<u8>>(
+                    entry.map.get("payload").ok_or(MessagingError::Storage)?,
+                )
+                .map_err(|_| MessagingError::Storage)?;
+                let dead_letter = format!("{key}:dead");
+                const MOVE_TO_DLQ: &str = "redis.call('XADD', KEYS[2], 'MAXLEN', ARGV[5], '*', 'payload', ARGV[1], 'source_id', ARGV[2], 'attempts', ARGV[3]); return redis.call('XACK', KEYS[1], ARGV[4], ARGV[2])";
+                redis::cmd("EVAL")
+                    .arg(MOVE_TO_DLQ)
+                    .arg(2)
+                    .arg(&key)
+                    .arg(dead_letter)
+                    .arg(payload)
+                    .arg(&entry.id)
+                    .arg(attempts)
+                    .arg(group)
+                    .arg(self.max_messages.min(usize::MAX as u64) as usize)
+                    .query_async::<u64>(&mut conn)
+                    .await
+                    .map_err(|_| MessagingError::Storage)?;
+                return Ok(None);
+            }
+            return redis_delivery(&self.store, key, group, entry, attempts).map(Some);
         }
         let block_ms = block.as_millis().clamp(1, 30_000) as usize;
         let reply: StreamReadReply = redis::cmd("XREADGROUP")
@@ -544,7 +591,7 @@ impl RedisStreamQueue {
         let Some(entry) = reply.keys.into_iter().flat_map(|stream| stream.ids).next() else {
             return Ok(None);
         };
-        redis_delivery(&self.store, key, group, entry).map(Some)
+        redis_delivery(&self.store, key, group, entry, 1).map(Some)
     }
 }
 
@@ -553,6 +600,7 @@ fn redis_delivery(
     stream: String,
     group: &str,
     entry: redis::streams::StreamId,
+    attempts: u32,
 ) -> Result<RedisQueueDelivery, MessagingError> {
     let payload = redis::from_redis_value::<Vec<u8>>(
         entry.map.get("payload").ok_or(MessagingError::Storage)?,
@@ -564,6 +612,7 @@ fn redis_delivery(
         group: group.into(),
         id: entry.id,
         payload,
+        attempts,
     })
 }
 
@@ -573,6 +622,7 @@ pub struct RedisQueueDelivery {
     group: String,
     pub id: String,
     pub payload: Vec<u8>,
+    pub attempts: u32,
 }
 
 impl RedisQueueDelivery {
@@ -599,6 +649,9 @@ pub struct NatsStreamQueue {
     subject: String,
     ack_wait: Duration,
     max_messages: u64,
+    max_attempts: u32,
+    dead_stream: String,
+    dead_subject: String,
 }
 
 impl NatsStreamQueue {
@@ -607,6 +660,7 @@ impl NatsStreamQueue {
         name: &str,
         ack_wait: Duration,
         max_messages: u64,
+        max_attempts: u32,
     ) -> Result<Self, MessagingError> {
         validate_identifier(name)?;
         let client = async_nats::connect(url)
@@ -619,6 +673,9 @@ impl NatsStreamQueue {
             subject: format!("vectora.queue.{name}"),
             ack_wait,
             max_messages,
+            max_attempts,
+            dead_stream: format!("VQ_{}_DLQ", name.to_ascii_uppercase()),
+            dead_subject: format!("vectora.queue.{name}.dead"),
         };
         Ok(queue)
     }
@@ -628,15 +685,19 @@ impl NatsStreamQueue {
     ) -> Result<async_nats::jetstream::consumer::PullConsumer, MessagingError> {
         use async_nats::jetstream::consumer::PullConsumer;
         let stream = self.ensure_stream().await?;
-        let consumer: PullConsumer = stream
-            .get_or_create_consumer(
-                durable,
-                async_nats::jetstream::consumer::pull::Config {
-                    durable_name: Some(durable.to_owned()),
-                    ack_wait: self.ack_wait,
-                    ..Default::default()
-                },
-            )
+        let config = async_nats::jetstream::consumer::pull::Config {
+            durable_name: Some(durable.to_owned()),
+            ack_wait: self.ack_wait,
+            max_deliver: i64::from(self.max_attempts.saturating_add(1)),
+            ..Default::default()
+        };
+        stream
+            .get_or_create_consumer(durable, config.clone())
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        let consumer: PullConsumer = self
+            .jetstream
+            .update_consumer_on_stream(config, &self.stream)
             .await
             .map_err(|_| MessagingError::Storage)?;
         Ok(consumer)
@@ -654,6 +715,24 @@ impl NatsStreamQueue {
             .map_err(|_| MessagingError::Storage)?;
         self.jetstream
             .get_stream(&self.stream)
+            .await
+            .map_err(|_| MessagingError::Storage)
+    }
+
+    async fn ensure_dead_stream(
+        &self,
+    ) -> Result<async_nats::jetstream::stream::Stream, MessagingError> {
+        self.jetstream
+            .create_or_update_stream(async_nats::jetstream::stream::Config {
+                name: self.dead_stream.clone(),
+                subjects: vec![self.dead_subject.clone()],
+                max_messages: self.max_messages.min(i64::MAX as u64) as i64,
+                ..Default::default()
+            })
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        self.jetstream
+            .get_stream(&self.dead_stream)
             .await
             .map_err(|_| MessagingError::Storage)
     }
@@ -681,7 +760,74 @@ impl NatsStreamQueue {
             .await
             .map_err(|_| MessagingError::Storage)?;
         match tokio::time::timeout(timeout, messages.next()).await {
-            Ok(Some(Ok(message))) => Ok(Some(NatsQueueDelivery { message })),
+            Ok(Some(Ok(message))) => {
+                let info = message.info().map_err(|_| MessagingError::Storage)?;
+                let attempts = info.delivered.max(1) as u32;
+                if attempts > self.max_attempts {
+                    let dead_stream = self.ensure_dead_stream().await?;
+                    let mut headers = async_nats::HeaderMap::new();
+                    headers.insert(
+                        async_nats::header::NATS_MESSAGE_ID,
+                        format!("{}-{}", info.stream, info.stream_sequence),
+                    );
+                    headers.insert("Vectora-Source-Stream", info.stream);
+                    headers.insert("Vectora-Source-Sequence", info.stream_sequence.to_string());
+                    headers.insert("Vectora-Delivery-Attempts", attempts.to_string());
+                    self.jetstream
+                        .publish_with_headers(
+                            self.dead_subject.clone(),
+                            headers,
+                            message.payload.clone(),
+                        )
+                        .await
+                        .map_err(|_| MessagingError::Storage)?
+                        .await
+                        .map_err(|_| MessagingError::Storage)?;
+                    message.ack().await.map_err(|_| MessagingError::Storage)?;
+                    drop(dead_stream);
+                    Ok(None)
+                } else {
+                    Ok(Some(NatsQueueDelivery { message, attempts }))
+                }
+            }
+            Ok(Some(Err(_))) => Err(MessagingError::Storage),
+            Ok(None) | Err(_) => Ok(None),
+        }
+    }
+
+    pub async fn receive_dead_letter(
+        &self,
+        group: &str,
+        timeout: Duration,
+    ) -> Result<Option<NatsQueueDelivery>, MessagingError> {
+        use async_nats::jetstream::consumer::PullConsumer;
+        use futures_util::StreamExt;
+        validate_key(group)?;
+        let stream = self.ensure_dead_stream().await?;
+        let consumer: PullConsumer = stream
+            .get_or_create_consumer(
+                group,
+                async_nats::jetstream::consumer::pull::Config {
+                    durable_name: Some(group.to_owned()),
+                    ack_wait: self.ack_wait,
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        let mut messages = consumer
+            .messages()
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        match tokio::time::timeout(timeout, messages.next()).await {
+            Ok(Some(Ok(message))) => {
+                let attempts = message
+                    .info()
+                    .map_err(|_| MessagingError::Storage)?
+                    .delivered
+                    .max(1) as u32;
+                Ok(Some(NatsQueueDelivery { message, attempts }))
+            }
             Ok(Some(Err(_))) => Err(MessagingError::Storage),
             Ok(None) | Err(_) => Ok(None),
         }
@@ -690,11 +836,15 @@ impl NatsStreamQueue {
 
 pub struct NatsQueueDelivery {
     message: async_nats::jetstream::Message,
+    attempts: u32,
 }
 
 impl NatsQueueDelivery {
     pub fn payload(&self) -> &[u8] {
         &self.message.payload
+    }
+    pub fn attempts(&self) -> u32 {
+        self.attempts
     }
     pub async fn ack(self) -> Result<(), MessagingError> {
         self.message
@@ -720,6 +870,12 @@ pub trait DurableQueue: Send + Sync {
         group: &str,
         timeout: Duration,
     ) -> Result<Option<QueueDelivery>, MessagingError>;
+    async fn receive_dead_letter(
+        &self,
+        consumer: &str,
+        group: &str,
+        timeout: Duration,
+    ) -> Result<Option<QueueDelivery>, MessagingError>;
 }
 
 impl QueueDelivery {
@@ -727,6 +883,13 @@ impl QueueDelivery {
         match self {
             Self::Redis(delivery) => &delivery.payload,
             Self::Nats(delivery) => delivery.payload(),
+        }
+    }
+
+    pub fn attempts(&self) -> u32 {
+        match self {
+            Self::Redis(delivery) => delivery.attempts,
+            Self::Nats(delivery) => delivery.attempts(),
         }
     }
 
@@ -743,6 +906,7 @@ pub enum QueueAdapter {
         queue: RedisStreamQueue,
         name: String,
         visibility_timeout: Duration,
+        max_attempts: u32,
     },
     Nats {
         queue: NatsStreamQueue,
@@ -751,7 +915,10 @@ pub enum QueueAdapter {
 
 impl QueueAdapter {
     pub async fn connect(config: QueueConfig) -> Result<Self, MessagingError> {
-        if config.visibility_timeout_seconds == 0 || config.max_messages == 0 {
+        if config.visibility_timeout_seconds == 0
+            || config.max_messages == 0
+            || config.max_attempts == 0
+        {
             return Err(MessagingError::InvalidInput);
         }
         match config.backend {
@@ -762,6 +929,7 @@ impl QueueAdapter {
                 ),
                 name: config.namespace,
                 visibility_timeout: Duration::from_secs(config.visibility_timeout_seconds),
+                max_attempts: config.max_attempts,
             }),
             super::QueueBackend::NatsJetstream => Ok(Self::Nats {
                 queue: NatsStreamQueue::connect(
@@ -769,6 +937,7 @@ impl QueueAdapter {
                     &config.namespace,
                     Duration::from_secs(config.visibility_timeout_seconds),
                     config.max_messages,
+                    config.max_attempts,
                 )
                 .await?,
             }),
@@ -796,12 +965,54 @@ impl QueueAdapter {
                 queue,
                 name,
                 visibility_timeout,
+                max_attempts,
             } => queue
-                .receive_with_idle(name, group, consumer, timeout, *visibility_timeout)
+                .receive_with_idle(
+                    name,
+                    group,
+                    consumer,
+                    timeout,
+                    *visibility_timeout,
+                    Some(*max_attempts),
+                )
                 .await
                 .map(|delivery| delivery.map(QueueDelivery::Redis)),
             Self::Nats { queue, .. } => queue
                 .receive(group, timeout)
+                .await
+                .map(|delivery| delivery.map(|delivery| QueueDelivery::Nats(Box::new(delivery)))),
+        }
+    }
+
+    /// Receives a failed delivery from the queue's recoverable dead-letter stream.
+    pub async fn receive_dead_letter(
+        &self,
+        consumer: &str,
+        group: &str,
+        timeout: Duration,
+    ) -> Result<Option<QueueDelivery>, MessagingError> {
+        match self {
+            Self::Redis {
+                queue,
+                name,
+                visibility_timeout,
+                ..
+            } => {
+                let dead_name = format!("{name}:dead");
+                queue
+                    .receive_with_idle(
+                        &dead_name,
+                        group,
+                        consumer,
+                        timeout,
+                        *visibility_timeout,
+                        None,
+                    )
+                    .await
+                    .map(|delivery| delivery.map(QueueDelivery::Redis))
+            }
+            Self::Nats { queue, .. } => queue
+                .receive_dead_letter(group, timeout)
                 .await
                 .map(|delivery| delivery.map(|delivery| QueueDelivery::Nats(Box::new(delivery)))),
         }
@@ -821,6 +1032,15 @@ impl DurableQueue for QueueAdapter {
         timeout: Duration,
     ) -> Result<Option<QueueDelivery>, MessagingError> {
         QueueAdapter::receive(self, consumer, group, timeout).await
+    }
+
+    async fn receive_dead_letter(
+        &self,
+        consumer: &str,
+        group: &str,
+        timeout: Duration,
+    ) -> Result<Option<QueueDelivery>, MessagingError> {
+        QueueAdapter::receive_dead_letter(self, consumer, group, timeout).await
     }
 }
 
@@ -932,6 +1152,7 @@ mod tests {
         .unwrap();
         assert_eq!(config.visibility_timeout_seconds, 30);
         assert_eq!(config.max_messages, 100_000);
+        assert_eq!(config.max_attempts, 5);
     }
 
     #[tokio::test]
@@ -1025,6 +1246,7 @@ mod tests {
                 namespace: format!("queue_{}", std::process::id()),
                 visibility_timeout_seconds: 1,
                 max_messages: 100_000,
+                max_attempts: 5,
             })
             .await
             .unwrap();
@@ -1062,6 +1284,7 @@ mod tests {
                 namespace: format!("jobs_{}", std::process::id()),
                 visibility_timeout_seconds: 1,
                 max_messages: 100_000,
+                max_attempts: 5,
             })
             .await
             .unwrap();
@@ -1112,6 +1335,7 @@ mod tests {
                 namespace: format!("ackq_{}", unique_suffix()),
                 visibility_timeout_seconds: 1,
                 max_messages: 100_000,
+                max_attempts: 5,
             })
             .await
             .unwrap();
@@ -1269,6 +1493,7 @@ mod tests {
             namespace,
             visibility_timeout_seconds: 1,
             max_messages: 100_000,
+            max_attempts: 5,
         })
         .await
         .unwrap();
@@ -1310,6 +1535,7 @@ mod tests {
             namespace: format!("restartq_{suffix}"),
             visibility_timeout_seconds: 1,
             max_messages: 100_000,
+            max_attempts: 5,
         })
         .await
         .unwrap();
@@ -1371,6 +1597,7 @@ mod tests {
             namespace: format!("retain_{}", unique_suffix()),
             visibility_timeout_seconds: 1,
             max_messages: 1,
+            max_attempts: 5,
         })
         .await
         .unwrap();
@@ -1408,6 +1635,7 @@ mod tests {
             namespace: format!("retain_{}", unique_suffix()),
             visibility_timeout_seconds: 1,
             max_messages: 1,
+            max_attempts: 5,
         })
         .await
         .unwrap();
@@ -1437,5 +1665,99 @@ mod tests {
         assert!(matches!(info.config.retention, RetentionPolicy::Limits));
         assert_eq!(info.config.max_messages, 1);
         assert_eq!(info.config.max_age, Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn redis_moves_exhausted_jobs_to_a_consumable_dead_letter_stream() {
+        let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let config = QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint: url,
+            namespace: format!("dlq_{}", unique_suffix()),
+            visibility_timeout_seconds: 1,
+            max_messages: 10,
+            max_attempts: 2,
+        };
+        let queue = QueueAdapter::connect(config).await.unwrap();
+        queue.enqueue(b"poison".to_vec()).await.unwrap();
+        let first = queue
+            .receive("worker", "workers", Duration::from_secs(1))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.attempts(), 1);
+        drop(first);
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        let second = queue
+            .receive("worker", "workers", Duration::from_secs(1))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.attempts(), 2);
+        drop(second);
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        assert!(
+            queue
+                .receive("worker", "workers", Duration::from_secs(1))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let dead = queue
+            .receive_dead_letter("operator", "recovery", Duration::from_secs(1))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(dead.payload(), b"poison");
+        dead.ack().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn nats_moves_exhausted_jobs_to_a_consumable_dead_letter_stream() {
+        let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let config = QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint: url,
+            namespace: format!("dlq_{}", unique_suffix()),
+            visibility_timeout_seconds: 1,
+            max_messages: 10,
+            max_attempts: 2,
+        };
+        let queue = QueueAdapter::connect(config).await.unwrap();
+        queue.enqueue(b"poison".to_vec()).await.unwrap();
+        let first = queue
+            .receive("worker", "workers", Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.attempts(), 1);
+        drop(first);
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        let second = queue
+            .receive("worker", "workers", Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.attempts(), 2);
+        drop(second);
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        assert!(
+            queue
+                .receive("worker", "workers", Duration::from_secs(2))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let dead = queue
+            .receive_dead_letter("operator", "recovery", Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(dead.payload(), b"poison");
+        dead.ack().await.unwrap();
     }
 }
