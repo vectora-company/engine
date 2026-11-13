@@ -18,6 +18,7 @@ import {
   chatStream,
   embed,
   embeddingContractVersion,
+  engineContractSnapshot,
   fallbackChatComplete,
   fallbackChatStream,
   nativeChatComplete,
@@ -240,6 +241,21 @@ test("exports the Rust chat contract version", () => {
   assert.equal(chatContractVersion(), 1);
   assert.equal(embeddingContractVersion(), 1);
   assert.equal(rerankContractVersion(), 1);
+});
+
+test("contract snapshot reports the native Rust APIs available to a host", () => {
+  assert.deepEqual(engineContractSnapshot(), {
+    contract_version: 1,
+    chat: chatContractVersion(),
+    embeddings: embeddingContractVersion(),
+    reranking: rerankContractVersion(),
+    runs: runContractVersion(),
+    verification: evidenceGateContractVersion(),
+    tools: toolContractVersion(),
+    tool_dispatch: toolDispatchContractVersion(),
+    tool_policy: toolPolicyContractVersion(),
+    model_tool_loop: modelToolLoopContractVersion(),
+  });
 });
 
 test("run lifecycle contract is exposed through the Node binding", () => {

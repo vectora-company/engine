@@ -11,6 +11,11 @@ item bloqueado ou não aplicável precisa de uma justificativa curta.
 - [ ] Confirmar repo, branch, base da stack e working tree.
 - [ ] Ler `AGENTS.md`, plano ativo, spec, análise e checklist específicos.
 - [ ] Identificar consumidores, bindings e contratos afetados.
+- [ ] Para capabilities destinadas ao GH Bot, revisar
+      `../gh-bot/docs/engine-integration.md` e validar o binding TypeScript
+      local em `../engine/bindings/typescript`; não exigir pacote npm publicado.
+- [ ] Isolar a validação experimental do GH Bot em conta GitHub nova e
+      repositórios de teste, sem credenciais ou repositórios de produção.
 - [ ] Descrever objetivo, comportamento esperado e exclusões.
 - [ ] Revalidar implementação e testes existentes; separar fatos de hipóteses.
 - [ ] Registrar dependências e decisões pendentes.
@@ -30,6 +35,9 @@ item bloqueado ou não aplicável precisa de uma justificativa curta.
 
 - [ ] Implementar o core Rust antes de expor a capability nos bindings.
 - [ ] Manter bindings Python e TypeScript coerentes com o mesmo contrato.
+- [ ] Quando a capability for consumida pelo GH Bot, exercitar a integração
+      local Engine + Bot e corrigir lacunas em ambos na mesma stack, sem criar
+      runtime paralelo em TypeScript.
 - [ ] Preservar fallback do consumidor e evitar efeitos duplicados.
 - [ ] Testar sucesso, erros, limites e compatibilidade.
 - [ ] Testar cancelamento, concorrência, persistência/restart e replay quando

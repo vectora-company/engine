@@ -1523,6 +1523,38 @@ export const embeddingContractVersion = (): number =>
 export const rerankContractVersion = (): number =>
   native.rerankContractVersion();
 
+/**
+ * Read the Rust runtime contract versions exposed by this native binding.
+ * Hosts use this snapshot to gate capabilities without guessing compatibility.
+ */
+export interface EngineContractSnapshot {
+  contract_version: 1;
+  chat: number;
+  embeddings: number;
+  reranking: number;
+  runs: number;
+  verification: number;
+  tools: number;
+  tool_dispatch: number;
+  tool_policy: number;
+  model_tool_loop: number;
+}
+
+export function engineContractSnapshot(): EngineContractSnapshot {
+  return {
+    contract_version: 1,
+    chat: chatContractVersion(),
+    embeddings: embeddingContractVersion(),
+    reranking: rerankContractVersion(),
+    runs: runContractVersion(),
+    verification: evidenceGateContractVersion(),
+    tools: toolContractVersion(),
+    tool_dispatch: toolDispatchContractVersion(),
+    tool_policy: toolPolicyContractVersion(),
+    model_tool_loop: modelToolLoopContractVersion(),
+  };
+}
+
 export async function embed(
   settings: EmbeddingSettings,
   request: EmbeddingRequest,

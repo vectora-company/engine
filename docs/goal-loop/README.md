@@ -8,6 +8,17 @@ A [sabatina da Engine e do ecossistema](../analyses/04-sabatina-engine-ecossiste
 é uma referência viva: revise as respostas afetadas a cada ciclo e reconcilie
 implementação, specs, planos, consumidores, referências e evidências.
 
+## Desenvolvimento conjunto com o GH Bot
+
+O GH Bot é o primeiro consumidor experimental da Engine e deve avançar junto
+com ela. Durante o desenvolvimento, use o checkout irmão `../gh-bot` e o guia
+[`engine-integration.md`](../../../gh-bot/docs/engine-integration.md): o
+binding TypeScript é consumido diretamente de `../engine/bindings/typescript`,
+sem depender de publicação no npm. Se o fluxo do Bot precisar de uma capability
+ausente, implemente o core Rust, os bindings e a integração do Bot na mesma
+stack de trabalho. Valide em uma conta GitHub nova e repositórios experimentais
+dedicados; mantenha credenciais e repositórios de produção isolados.
+
 ## Documentos
 
 - [Plano operacional](01-plano-operacional.md): início de sessão, seleção da
