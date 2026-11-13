@@ -2,6 +2,7 @@
 
 mod error;
 mod fallback;
+mod llama_server;
 mod media;
 mod native_providers;
 mod openai_compatible;
@@ -12,6 +13,10 @@ mod types;
 pub use error::ChatError;
 pub use fallback::{
     FallbackCandidateSettings, FallbackChatClient, FallbackChatSettings, FallbackClientSettings,
+};
+pub use llama_server::{
+    LlamaServerArchitecture, LlamaServerClient, LlamaServerHealth, LlamaServerModel,
+    LlamaServerModelList, LlamaServerSettings,
 };
 pub use media::{
     CapabilityResolver, CapabilityState, Classified, ContentSite, DEFAULT_MAX_MEDIA_BYTES,

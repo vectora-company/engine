@@ -174,6 +174,12 @@ impl OpenAiCompatibleConfig {
         self
     }
 
+    /// Set the provider identity used when preparing media for explicit per-call contexts.
+    pub fn media_provider(mut self, provider: impl Into<String>) -> Self {
+        self.media_provider = provider.into();
+        self
+    }
+
     /// Set provider identity for capability resolution and a client-default
     /// media context. A per-call context overrides this value.
     pub fn media_context(
