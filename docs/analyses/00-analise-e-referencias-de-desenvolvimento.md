@@ -137,11 +137,12 @@ UI; limites por provider; apenas o turno atual reidrata bytes; tentativa única
 em texto somente para rejeição específica de mídia; imagens de ferramentas MCP
 como assets; conversão local de áudio/PDF/vídeo; transcrição offline e helper
 Speech do macOS com CI que gera fala. Isso não significa que a Engine já tenha
-essas capacidades. Esta etapa Engine fecha somente o defeito de formato do
-payload para as modalidades mapeadas. No snapshot inicial, o preparador ainda
-não estava ligado ao envio real; esse estado foi superado pela integração Rust
-no PR #81 e pelos bindings no PR #82. Continuam pendentes limites por
-provider/modelo, retry específico e resultado multimodal de tool.
+essas capacidades. A integração Rust no PR #81 e os bindings no PR #82
+ligaram o preparador ao envio real; o PR #84 adiciona overrides por
+provider/modelo/modalidade. A branch filha local do #84 implementa retry textual
+único após rejeição multimodal classificada. Permanecem pendentes catálogo
+automático confiável, limites agregados, fixtures comuns e resultados
+multimodais de tool.
 
 A fronteira de produto deve ser preservada: STT local, permissões do macOS,
 configuração UI, geração de prévias e empacotamento SCons estão implementados no
@@ -241,3 +242,28 @@ primárias: [OpenAI Images and vision](https://developers.openai.com/api/docs/gu
 [Gemini Audio understanding](https://ai.google.dev/gemini-api/docs/audio) e
 [Gemini Video understanding](https://ai.google.dev/gemini-api/docs/video-understanding).
 A matriz concreta por modelo/endpoint e as restrições agregadas seguem pendentes.
+
+## Retry após rejeição de mídia — 2026-11-13
+
+A implementação local na branch `feat/chat-media-rejection-retry`, filha do PR
+[#84](https://github.com/vectora-company/engine/pull/84), classifica como
+`MultimodalIncompatible` apenas respostas HTTP 400 com marcadores conhecidos de
+incompatibilidade de imagem, áudio, vídeo ou PDF. HTTP 401 continua
+`Authentication`; falhas de rede, timeout, 413 e erros genéricos não entram no
+retry textual.
+
+Clientes OpenAI-compatible e nativos tentam uma vez no mesmo provider/modelo,
+preparando o request com as partes em texto/referência. Em streaming a repetição
+só ocorre ao abrir o stream, antes de retorná-lo ao host. O wrapper fallback
+recebe a mesma regra e só avança de candidato depois de falha do retry.
+Verificação local direcionada: 51 testes `chat::` passaram, incluindo
+classificação, retry complete/stream OpenAI-compatible e retry de completion no
+wrapper fallback. `cargo clippy -p vectora-engine --lib --locked -- -D warnings`,
+`cargo fmt --all -- --check` e `git diff --check` passaram. Falta executar os
+hooks completos de pre-commit antes de publicar o PR.
+
+Contrato e limite: a classificação ainda depende de frases reconhecidas em
+mensagens de providers heterogêneos; não há catálogo oficial por endpoint. O
+retry não cobre tamanho, autenticação, falha de transporte nem erros SSE após
+o stream ter sido entregue. O registro `media_decisions.reason` e o evento
+`media_routed` anotam o rebaixamento sem incluir bytes.

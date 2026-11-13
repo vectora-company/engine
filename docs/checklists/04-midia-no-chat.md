@@ -3,7 +3,7 @@
 Checklist da [spec de mídia](../specs/17-midia-no-chat.md) e do
 [plano ativo](../plans/03-plano-continuidade.md). O payload (#79), a integração
 Rust (#81) e os bindings (#82) estão implementados em PRs abertos; a stack parte
-de #73 e ainda não está integrada em `main`. A revisão documental está no PR [#83](https://github.com/vectora-company/engine/pull/83), filha do #82. A etapa de limites está no PR [#84](https://github.com/vectora-company/engine/pull/84), filha do #83.
+de #73 e ainda não está integrada em `main`. A revisão documental está no PR [#83](https://github.com/vectora-company/engine/pull/83), filha do #82. A etapa de limites está no PR [#84](https://github.com/vectora-company/engine/pull/84), filha do #83. O retry multimodal está em implementação local numa branch filha do #84.
 
 ## Contrato e implementação
 
@@ -49,7 +49,7 @@ implementação; não foram adicionados à API pública da Engine.
 
 - OpenAI Responses API não existe neste adapter; o contrato se limita aos
   formatos do Chat Completions.
-- Retry após rejeição específica, catálogo automático de capabilities/limites por modelo, limites agregados do request e `ToolResult` multimodal seguem no backlog da spec 17. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
+- Catálogo automático de capabilities/limites por modelo, limites agregados do request e `ToolResult` multimodal seguem no backlog da spec 17. O retry específico está em implementação local e ainda não foi publicado. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
 
 ## Integração — etapa atual
 
@@ -77,8 +77,11 @@ implementação; não foram adicionados à API pública da Engine.
 - [x] Cobrir limite documental em Rust, Python e TypeScript; o override não vaza para outro modelo.
 - [ ] Resolver automaticamente capabilities e limites a partir de catálogo/metadados confiáveis e ligados ao endpoint/protocolo.
 - [ ] Validar limites de requisição total, quantidade de partes e duração/resolução, além dos bytes por asset.
-- [ ] Implementar retry textual único para rejeições classificadas como
-      incompatibilidade de mídia, sem repetir erros de rede/autenticação.
+- [x] Implementar retry textual único em rejeição HTTP 400 classificada como
+      incompatibilidade multimodal, no mesmo modelo; preservar erros de
+      autenticação/rede e não repetir erros após abertura do stream. Os 51 testes
+      `chat::` incluem classificação, retry complete/stream no cliente direto e
+      retry de completion no wrapper fallback. Falta rodar hooks completos.
 - [ ] Representar resultados de tool como partes tipadas e preservar imagens
       nos protocolos compatíveis.
 - [ ] Definir se a Engine permanece consumidora de um store do host ou se ganha
@@ -92,7 +95,7 @@ implementação; não foram adicionados à API pública da Engine.
 A stack de mídia da Vectora, PRs [#479–#502](https://github.com/vectora-company/vectora/pulls),
 foi integrada em 19 PRs empilhados em 2026-11-13; isso confirma a necessidade
 funcional no consumidor, não paridade da Engine. Padrões transferíveis ainda
-pendentes: catálogo automático de modalidades/limites por modelo, retry específico e imagens em resultados de tools. A API já aceita overrides explícitos por provider/modelo/modalidade; ainda não consulta catálogo nem deriva limites automaticamente. STT local, conversão de PDF/vídeo,
+pendentes: catálogo automático de modalidades/limites por modelo e imagens em resultados de tools. O retry está implementado localmente na branch filha do #84, com cobertura do cliente direto e do wrapper fallback; aguarda hooks e publicação. A API já aceita overrides explícitos por provider/modelo/modalidade; ainda não consulta catálogo nem deriva limites automaticamente. STT local, conversão de PDF/vídeo,
 preferências UI, permissões e empacotamento SCons permanecem capacidades do
 Vectora nesta implementação.
 

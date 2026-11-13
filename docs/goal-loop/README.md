@@ -43,10 +43,11 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 
 ## Capability ativa
 
-Revisão completa dos Markdown, empilhada sobre o PR #82 da spec 17, e
-consolidação do plano para a primeira release ampla da Engine. O backlog por
-fases, os gaps de maturidade e as decisões pendentes estão no plano de
-continuidade. A mídia segue parcialmente implementada nos PRs abertos #79–#82;
+Continuação da spec 17: PR #83 revisa os Markdown, PR #84 adiciona limites
+explícitos por provider/modelo e a branch filha local implementa retry textual
+único após rejeição multimodal classificada. O backlog por fases, os gaps de
+maturidade e as decisões pendentes estão no plano de continuidade. A mídia
+segue parcialmente implementada nos PRs abertos #79–#84;
 storage e runtime não devem ser anunciados como estáveis.
 
 - Plano de continuidade (plano ativo): [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
@@ -57,8 +58,10 @@ storage e runtime não devem ser anunciados como estáveis.
 - Storage — checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
 - Storage — análise: [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
 
-Atualize plano, checklist e análise da capability em cada etapa, com o PR,
-a evidência obtida e o trabalho pendente. Ao criar um Markdown, no mesmo PR
+Atualize o plano, checklist, spec e análise da capability em cada etapa, com
+branch/PR, SHA e evidência obtida; não descreva trabalho local como publicado.
+A branch de retry é `feat/chat-media-rejection-retry`, filha de
+`feat/chat-media-provider-limits-docs83` (#84). Ao criar um Markdown, no mesmo PR
 vincule-o no índice `docs/README.md`, no prompt
 `docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
 artefatos da capability que dependem dele. Use o caminho completo a partir

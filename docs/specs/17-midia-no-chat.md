@@ -170,12 +170,16 @@ nome aparecem; o conteúdo, não.
 
 ## Recuperação
 
-Se o provider recusar a requisição por causa de mídia (erro classificado como
-`MultimodalIncompatible`, tamanho excedido ou tipo não aceito), a Engine repete a
-chamada **uma vez** para o mesmo modelo com as partes rebaixadas para a forma
-textual, e registra a repetição no run. Erros sem relação com mídia não são
-repetidos. Não há troca de modelo: fallback entre modelos é o contrato do chat
-fallback (spec 06).
+Se a resposta HTTP do provider for classificada como `MultimodalIncompatible` por
+uma mensagem reconhecida de incompatibilidade multimodal, a Engine rebaixa as
+partes para sua forma textual e repete **uma vez no mesmo provider/modelo**. A
+regra vale para chamada completa e para abertura de stream antes de o stream ser
+entregue ao host. Depois que o stream foi aberto, nenhum erro de evento pode
+provocar repetição, pois saída parcial pode já ter sido observada. Erros de
+autenticação, conexão, timeout, tamanho excedido e falhas genéricas não acionam
+essa repetição. O erro final continua tipado. O fallback entre modelos permanece
+uma decisão separada do contrato de chat fallback (spec 06). A completion ou o
+evento `media_routed` registra que houve rebaixamento e nova tentativa.
 
 ## Erros
 

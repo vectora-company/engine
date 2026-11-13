@@ -9,8 +9,9 @@ use serde_json::{Map, Value, json};
 use tokio::time::{Instant, timeout_at};
 use url::Url;
 
+use super::media::{has_native_media, mark_text_retry};
 use crate::chat::{
-    ChatError, ContentPart, MediaDecision, MediaExecutionContext, PreparedRequest,
+    ChatError, ContentPart, MediaDecision, MediaExecutionContext,
     error::classify_provider_error,
     sse::SseDecoder,
     types::{
@@ -218,20 +219,10 @@ impl OpenAiCompatibleClient {
 
     /// Return one assistant response. Dropping this future cancels the HTTP request.
     pub async fn complete(&self, request: ChatRequest) -> Result<ChatCompletion, ChatError> {
-        let prepared = match &self.config.media_context {
-            Some(context) => Some(
-                context
-                    .prepare_request(&self.config.media_provider, request.clone())
-                    .await,
-            ),
-            None => None,
-        };
-        let (request, decisions) = prepared
-            .map(|prepared| (prepared.request, prepared.decisions))
-            .unwrap_or((request, Vec::new()));
-        let mut completion = self.complete_prepared(request).await?;
-        completion.media_decisions = decisions;
-        Ok(completion)
+        match &self.config.media_context {
+            Some(context) => self.complete_with_media(request, context).await,
+            None => self.complete_prepared(request).await,
+        }
     }
 
     /// Complete with an ephemeral media context that overrides any client default.
@@ -240,10 +231,22 @@ impl OpenAiCompatibleClient {
         request: ChatRequest,
         context: &MediaExecutionContext,
     ) -> Result<ChatCompletion, ChatError> {
-        let PreparedRequest { request, decisions } = context
-            .prepare_request(&self.config.media_provider, request)
-            .await;
-        let mut completion = self.complete_prepared(request).await?;
+        let provider = &self.config.media_provider;
+        let prepared = context.prepare_request(provider, request.clone()).await;
+        let mut decisions = prepared.decisions;
+        let mut completion = match self.complete_prepared(prepared.request).await {
+            Ok(completion) => completion,
+            Err(ChatError::MultimodalIncompatible) if has_native_media(&decisions) => {
+                let fallback = context
+                    .prepare_request_text_fallback(provider, request)
+                    .await;
+                let mut fallback_decisions = fallback.decisions;
+                mark_text_retry(&mut fallback_decisions);
+                decisions = fallback_decisions;
+                self.complete_prepared(fallback.request).await?
+            }
+            Err(error) => return Err(error),
+        };
         completion.media_decisions = decisions;
         Ok(completion)
     }
@@ -270,19 +273,10 @@ impl OpenAiCompatibleClient {
 
     /// Open a backpressured SSE stream. Dropping it drops the response body and cancels I/O.
     pub async fn stream(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
-        let prepared = match &self.config.media_context {
-            Some(context) => Some(
-                context
-                    .prepare_request(&self.config.media_provider, request.clone())
-                    .await,
-            ),
-            None => None,
-        };
-        let (request, decisions) = prepared
-            .map(|prepared| (prepared.request, prepared.decisions))
-            .unwrap_or((request, Vec::new()));
-        let stream = self.stream_prepared(request).await?;
-        Ok(with_media_evidence(stream, decisions))
+        match &self.config.media_context {
+            Some(context) => self.stream_with_media(request, context).await,
+            None => self.stream_prepared(request).await,
+        }
     }
 
     /// Stream with an ephemeral media context that overrides any client default.
@@ -291,10 +285,22 @@ impl OpenAiCompatibleClient {
         request: ChatRequest,
         context: &MediaExecutionContext,
     ) -> Result<ChatStream, ChatError> {
-        let PreparedRequest { request, decisions } = context
-            .prepare_request(&self.config.media_provider, request)
-            .await;
-        let stream = self.stream_prepared(request).await?;
+        let provider = &self.config.media_provider;
+        let prepared = context.prepare_request(provider, request.clone()).await;
+        let mut decisions = prepared.decisions;
+        let stream = match self.stream_prepared(prepared.request).await {
+            Ok(stream) => stream,
+            Err(ChatError::MultimodalIncompatible) if has_native_media(&decisions) => {
+                let fallback = context
+                    .prepare_request_text_fallback(provider, request)
+                    .await;
+                let mut fallback_decisions = fallback.decisions;
+                mark_text_retry(&mut fallback_decisions);
+                decisions = fallback_decisions;
+                self.stream_prepared(fallback.request).await?
+            }
+            Err(error) => return Err(error),
+        };
         Ok(with_media_evidence(stream, decisions))
     }
 
@@ -1099,9 +1105,22 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
             let mut requests = Vec::new();
-            for _ in 0..2 {
-                let (mut socket, _) = listener.accept().unwrap();
+            for _ in 0..5 {
+                let deadline = std::time::Instant::now() + Duration::from_secs(10);
+                let (mut socket, _) = loop {
+                    match listener.accept() {
+                        Ok(connection) => break connection,
+                        Err(error)
+                            if error.kind() == std::io::ErrorKind::WouldBlock
+                                && std::time::Instant::now() < deadline =>
+                        {
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(error) => panic!("test server accept failed: {error}"),
+                    }
+                };
                 let mut received = Vec::new();
                 let mut chunk = [0; 4096];
                 let (body_start, content_length) = loop {
@@ -1128,11 +1147,21 @@ mod tests {
                 let request: Value =
                     serde_json::from_slice(&received[body_start..body_start + content_length])
                         .unwrap();
-                let response =
-                    br#"{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}"#;
+                let rejected_media = matches!(requests.len(), 1 | 3);
+                let response = if rejected_media {
+                    br#"{"error":{"message":"PDF input is not supported"}}"#.as_slice()
+                } else {
+                    br#"{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}"#
+                        .as_slice()
+                };
+                let status = if rejected_media {
+                    "400 Bad Request"
+                } else {
+                    "200 OK"
+                };
                 write!(
                 socket,
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                 response.len()
             )
             .unwrap();
@@ -1184,8 +1213,7 @@ mod tests {
             .complete_with_media(request.clone(), &explicit_context)
             .await
             .unwrap();
-        let completion = client.complete(request).await.unwrap();
-        let sent = server.join().unwrap();
+        let completion = client.complete(request.clone()).await.unwrap();
         assert_eq!(explicit.media_decisions.len(), 1);
         assert_eq!(
             explicit.media_decisions[0].mode,
@@ -1193,8 +1221,31 @@ mod tests {
         );
         assert_eq!(completion.content, "ok");
         assert_eq!(completion.media_decisions.len(), 1);
+        assert_eq!(
+            completion.media_decisions[0].mode,
+            crate::chat::MediaMode::Reference
+        );
+        assert!(
+            completion.media_decisions[0]
+                .reason
+                .contains("única nova tentativa")
+        );
+        let mut stream = client.stream(request).await.unwrap();
+        let routed = stream.next().await.unwrap().unwrap();
+        assert!(matches!(
+            routed.event,
+            ChatEventKind::MediaRouted { decisions }
+                if decisions.len() == 1
+                    && decisions[0].mode == crate::chat::MediaMode::Reference
+                    && decisions[0].reason.contains("única nova tentativa")
+        ));
+        drop(stream);
+        let sent = server.join().unwrap();
         assert_eq!(sent[0]["messages"][0]["content"][0]["type"], "text");
         assert_eq!(sent[1]["messages"][0]["content"][0]["type"], "file");
+        assert_eq!(sent[2]["messages"][0]["content"][0]["type"], "text");
+        assert_eq!(sent[3]["messages"][0]["content"][0]["type"], "file");
+        assert_eq!(sent[4]["messages"][0]["content"][0]["type"], "text");
         assert!(
             sent[1]["messages"][0]["content"][0]["file"]["file_data"]
                 .as_str()

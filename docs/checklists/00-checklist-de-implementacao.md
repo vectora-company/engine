@@ -9,7 +9,7 @@ Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 Esta revisão documental está empilhada sobre o PR #82 e alinha o plano à meta
 de uma primeira release completa. Para implementação de mídia, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
-permanece geral e não substitui critérios específicos. A etapa de limites explícitos por provider/modelo/modalidade foi publicada no PR [#84](https://github.com/vectora-company/engine/pull/84), filho do #83.
+permanece geral e não substitui critérios específicos. A etapa de limites explícitos por provider/modelo/modalidade foi publicada no PR [#84](https://github.com/vectora-company/engine/pull/84), filho do #83 (head local/remoto `58980b3`). A etapa seguinte, retry de incompatibilidade multimodal, está em implementação numa branch filha do #84.
 
 ## Revisão documental completa — `docs/revisao-completa-markdown`
 
@@ -32,6 +32,16 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [ ] Registrar limites oficiais por endpoint/protocolo/modelo com fonte e data, sem inferir um teto universal por marca de provider.
 - [ ] Avaliar limites totais do payload, contagem de partes, duração/resolução e consistência com gateways OpenAI-compatible.
 - [x] Atualizar plano, spec, análise e checklist; executar verificações; commit `d4ccd3d`, push e abrir o [PR #84](https://github.com/vectora-company/engine/pull/84) empilhado sobre o PR #83.
+
+## Retry textual para rejeição multimodal — filha do PR #84
+
+- [x] Classificar incompatibilidades multimodais HTTP 400 sem reclassificar autenticação.
+- [x] Repetir uma vez como texto no cliente OpenAI-compatible e no cliente nativo, inclusive ao abrir stream antes de devolvê-lo.
+- [x] Aplicar a mesma regra ao wrapper fallback antes de trocar de candidato.
+- [x] Testar classificação e retry complete/stream no cliente OpenAI-compatible.
+- [x] Cobrir o wrapper fallback; cliente direto cobre que o retry de stream ocorre antes da abertura e preserva o evento de evidência.
+- [ ] Rodar Clippy, format, hooks de pre-commit e revisar docs/diff.
+- [ ] Commit, push e abrir PR empilhado sobre `feat/chat-media-provider-limits-docs83` (#84).
 
 ## Preparação e escopo
 

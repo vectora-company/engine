@@ -13,9 +13,10 @@ use serde_json::{Map, Value, json};
 use tokio::time::{Instant, timeout_at};
 use url::Url;
 
+use super::media::{has_native_media, mark_text_retry};
 use super::{
     ChatError, ChatEvent, ChatEventKind, ChatRequest, FinishReason, MediaExecutionContext, Message,
-    MessageContent, MessageRole, PreparedRequest, ToolArguments, ToolCall, ToolCallDelta, Usage,
+    MessageContent, MessageRole, ToolArguments, ToolCall, ToolCallDelta, Usage,
     error::classify_provider_error,
     openai_compatible::{ChatStream, validate_request},
     sse::SseDecoder,
@@ -208,12 +209,7 @@ impl NativeChatClient {
 
     pub async fn complete(&self, request: ChatRequest) -> Result<ChatCompletion, ChatError> {
         if let Some(context) = &self.media_context {
-            let provider = self.provider_name();
-            let PreparedRequest { request, decisions } =
-                context.prepare_request(provider, request).await;
-            let mut completion = self.complete_prepared(request).await?;
-            completion.media_decisions = decisions;
-            return Ok(completion);
+            return self.complete_with_media(request, context).await;
         }
         self.complete_prepared(request).await
     }
@@ -230,9 +226,22 @@ impl NativeChatClient {
         request: ChatRequest,
         context: &MediaExecutionContext,
     ) -> Result<ChatCompletion, ChatError> {
-        let PreparedRequest { request, decisions } =
-            context.prepare_request(self.provider_name(), request).await;
-        let mut completion = self.complete_prepared(request).await?;
+        let provider = self.provider_name();
+        let prepared = context.prepare_request(provider, request.clone()).await;
+        let mut decisions = prepared.decisions;
+        let mut completion = match self.complete_prepared(prepared.request).await {
+            Ok(completion) => completion,
+            Err(ChatError::MultimodalIncompatible) if has_native_media(&decisions) => {
+                let fallback = context
+                    .prepare_request_text_fallback(provider, request)
+                    .await;
+                let mut fallback_decisions = fallback.decisions;
+                mark_text_retry(&mut fallback_decisions);
+                decisions = fallback_decisions;
+                self.complete_prepared(fallback.request).await?
+            }
+            Err(error) => return Err(error),
+        };
         completion.media_decisions = decisions;
         Ok(completion)
     }
@@ -246,21 +255,10 @@ impl NativeChatClient {
     }
 
     pub async fn stream(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
-        let prepared = match &self.media_context {
-            Some(context) => Some(
-                context
-                    .prepare_request(self.provider_name(), request.clone())
-                    .await,
-            ),
-            None => None,
-        };
-        let (request, decisions) = prepared
-            .map(|prepared| (prepared.request, prepared.decisions))
-            .unwrap_or((request, Vec::new()));
-        let stream = self.stream_prepared(request).await?;
-        Ok(super::openai_compatible::with_media_evidence(
-            stream, decisions,
-        ))
+        if let Some(context) = &self.media_context {
+            return self.stream_with_media(request, context).await;
+        }
+        self.stream_prepared(request).await
     }
 
     /// Stream with an ephemeral context overriding the client default.
@@ -269,9 +267,22 @@ impl NativeChatClient {
         request: ChatRequest,
         context: &MediaExecutionContext,
     ) -> Result<ChatStream, ChatError> {
-        let PreparedRequest { request, decisions } =
-            context.prepare_request(self.provider_name(), request).await;
-        let stream = self.stream_prepared(request).await?;
+        let provider = self.provider_name();
+        let prepared = context.prepare_request(provider, request.clone()).await;
+        let mut decisions = prepared.decisions;
+        let stream = match self.stream_prepared(prepared.request).await {
+            Ok(stream) => stream,
+            Err(ChatError::MultimodalIncompatible) if has_native_media(&decisions) => {
+                let fallback = context
+                    .prepare_request_text_fallback(provider, request)
+                    .await;
+                let mut fallback_decisions = fallback.decisions;
+                mark_text_retry(&mut fallback_decisions);
+                decisions = fallback_decisions;
+                self.stream_prepared(fallback.request).await?
+            }
+            Err(error) => return Err(error),
+        };
         Ok(super::openai_compatible::with_media_evidence(
             stream, decisions,
         ))
