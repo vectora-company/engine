@@ -1,9 +1,10 @@
 # Checklist — mídia nativa no chat
 
-Etapa da [spec de mídia](../specs/17-midia-no-chat.md) e do
-[plano ativo](../plans/03-plano-continuidade.md). A etapa de payload foi entregue
-no PR #79 sobre #77. O core Rust foi entregue no PR #81, filho do #80; a branch
-atual `feat/chat-media-bindings`, filha do #81, expõe os três modos nos bindings.
+Checklist da [spec de mídia](../specs/17-midia-no-chat.md) e do
+[plano ativo](../plans/03-plano-continuidade.md). O payload (#79), a integração
+Rust (#81) e os bindings (#82) estão implementados em PRs abertos; a stack parte
+de #73 e ainda não está integrada em `main`. A próxima branch é
+`docs/revisao-completa-markdown`, filha da branch do PR #82.
 
 ## Contrato e implementação
 
@@ -74,6 +75,16 @@ implementação; não foram adicionados à API pública da Engine.
 - [x] Expor os três modos nos bindings Python/TypeScript com mapa temporário
       `asset_id → bytes`; documentar a autorização no host.
 - [ ] Criar fixtures de conformidade comuns para conteúdo de mídia.
+- [ ] Resolver capabilities e limites por provider/modelo.
+- [ ] Implementar retry textual único para rejeições classificadas como
+      incompatibilidade de mídia, sem repetir erros de rede/autenticação.
+- [ ] Representar resultados de tool como partes tipadas e preservar imagens
+      nos protocolos compatíveis.
+- [ ] Definir se a Engine permanece consumidora de um store do host ou se ganha
+      um asset store persistente próprio; não ligar armazenamento persistente à
+      leitura de mídia antes de fechar ownership e autorização.
+- [ ] Não declarar a spec concluída até os critérios aplicáveis estarem
+      implementados e verificados nos três níveis.
 
 ## Evidência do consumidor Vectora
 

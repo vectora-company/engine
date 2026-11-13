@@ -20,9 +20,10 @@ Etapa atual de mídia: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-
       incompatibilidade registrado.
 - [ ] Ler `AGENTS.md`, plano ativo, spec, análise e checklist específicos.
 - [ ] Identificar consumidores, bindings e contratos afetados.
-- [ ] Para capabilities destinadas ao GH Bot, revisar
-      `../gh-bot/docs/engine-integration.md` e validar o binding TypeScript
-      local em `../engine/bindings/typescript`; não exigir pacote npm publicado.
+- [ ] Para capabilities destinadas ao GH Bot, revisar o
+      [guia de integração](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md)
+      e validar o binding TypeScript `bindings/typescript` do checkout ativo da
+      Engine; não exigir pacote npm publicado.
 - [ ] Isolar a validação experimental do GH Bot em conta GitHub nova e
       repositórios de teste, sem credenciais ou repositórios de produção.
 - [ ] Descrever objetivo, comportamento esperado e exclusões.

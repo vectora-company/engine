@@ -15,7 +15,9 @@ Aplique [`docs/plans/05-loop-de-desenvolvimento.md`](05-loop-de-desenvolvimento.
 [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md)
 e [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 Retome a próxima etapa aprovada do plano ativo e leia sua spec, análise e
-checklist. Implemente, verifique localmente e atualize os documentos da etapa.
+checklist. A primeira release deve ser ampla e completa, não um MVP; use os
+critérios e gaps documentados no plano para consolidar o escopo e os gates.
+Implemente, verifique localmente e atualize os documentos da etapa.
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md):
 siga a próxima etapa indicada e o backlog por fases. Consulte o
 [registro da capability ativa](../goal-loop/README.md#capability-ativa), a
@@ -28,14 +30,14 @@ como texto de link neste prompt, em `docs/README.md`, nos documentos do goal
 que o usam e nos artefatos da capability que dependem dele.
 Leia também a [sabatina do ecossistema](../analyses/04-sabatina-engine-ecossistema.md).
 Desenvolva a Engine e o GH Bot conjuntamente: consulte o [guia de integração do
-GH Bot](../../../gh-bot/docs/engine-integration.md) e exercite as capabilities no
-Bot como ambiente experimental controlado, usando uma conta GitHub nova e
-repositórios de teste. Durante o desenvolvimento, o Bot deve consumir
-`../engine/bindings/typescript` localmente; não espere nem exija publicação ou
-versionamento npm. Quando faltar uma capability, implemente-a no core Rust,
-exponha-a pelos bindings necessários, teste-a e integre-a ao Bot na mesma stack,
-sem duplicar o runtime em TypeScript. Mantenha credenciais e repositórios de
-produção fora desse ambiente.
+GH Bot](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md)
+e exercite as capabilities no Bot como ambiente experimental controlado, usando
+uma conta GitHub nova e repositórios de teste. Durante o desenvolvimento, o Bot
+deve consumir localmente `bindings/typescript` do checkout ativo da Engine; não
+espere nem exija publicação ou versionamento npm. Quando faltar uma capability,
+implemente-a no core Rust, exponha-a pelos bindings necessários, teste-a e
+integre-a ao Bot na mesma stack, sem duplicar o runtime em TypeScript. Mantenha
+credenciais e repositórios de produção fora desse ambiente.
 Mantenha suas respostas sempre atuais: após cada mudança de código, contrato,
 teste, plano, referência ou snapshot de consumidor, revise e atualize as Q&As
 afetadas, cite evidências e marque claramente implementação, parcialidade,

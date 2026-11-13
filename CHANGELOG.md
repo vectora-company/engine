@@ -13,8 +13,10 @@ e o backlog estão em `docs/plans/03-plano-continuidade.md`.
 - Fallback explícito de chat no core, sem replay após saída parcial (#7, #14).
 - Embeddings e rerank (Cohere, Voyage, OpenRouter, Ollama) com fallback por
   quota (#8).
-- Mídia no chat: tipos por referência, classificação pelos bytes, capability
-  por modalidade e decisão por parte; envio nativo só para imagem (spec 17).
+- Mídia no chat (spec 17): payloads nativos de PDF para Anthropic, Gemini e
+  OpenAI Chat Completions; áudio WAV/MP3 no OpenAI e áudio/vídeo no Gemini.
+  Preparo por `MediaStore` e os três modos de integração estão nos PRs abertos
+  #79–#82; ainda não estão integrados em `main`.
 
 ### Harness
 

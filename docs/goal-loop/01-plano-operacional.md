@@ -33,9 +33,10 @@ que permitam revisar o que foi feito e o que permanece pendente.
    recuperação e observabilidade.
 3. Implemente de forma incremental: core Rust, bindings afetados, consumidores
    apenas quando estiverem no escopo aprovado. Para capabilities destinadas ao
-   GH Bot, a integração local com `../gh-bot` é parte do desenvolvimento
-   conjunto: use `../engine/bindings/typescript`, sem aguardar uma publicação
-   npm, e siga `../gh-bot/docs/engine-integration.md`.
+   GH Bot, use o checkout listado no `AGENTS.md` e o
+   [guia de integração](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md).
+   O Bot deve consumir localmente `bindings/typescript` do checkout ativo da
+   Engine, sem aguardar publicação npm.
 4. Acrescente testes para os critérios de aceite, inclusive falhas, limites,
    restart, concorrência e efeitos externos quando aplicável.
 5. Rode verificações locais pertinentes, corrija regressões da etapa e registre

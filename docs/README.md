@@ -6,10 +6,8 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 ## Capability ativa
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
-com o estado verificado e o backlog por fases. A etapa em andamento e seus
-documentos estão no [registro da capability ativa](goal-loop/README.md#capability-ativa):
-Fase 0 e mídia no chat ([`docs/specs/17-midia-no-chat.md`](specs/17-midia-no-chat.md));
-storage segue na Fase 2.
+com o estado verificado, a direção de uma primeira release completa e o backlog
+por fases. A revisão documental corrente está empilhada sobre o PR #82 da spec 17. Storage e runtime seguem com gaps registrados no plano e nas specs.
 
 ## Operação de desenvolvimento
 

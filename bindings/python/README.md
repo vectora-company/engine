@@ -21,8 +21,8 @@ schemas de `docs/specs/03-chat-openai-compatible.md`; erros são exceções com
 mensagens redigidas do provider.
 
 O Rust da extensão fica em `native/`, e a API Python de ergonomia mínima em
-`python/vectora_engine/`. O build de wheels multi-plataforma e publicação no
-PyPI serão habilitados em um workflow de release separado.
+`python/vectora_engine/`. O build de wheels multi-plataforma e a publicação no
+PyPI ainda não estão configurados; ambos exigem um workflow de release separado.
 
 Mídia usa `MediaExecutionContext(assets={asset_id: bytes})`. O mapa é
 temporário; no Vectora, construa-o somente com bytes obtidos por

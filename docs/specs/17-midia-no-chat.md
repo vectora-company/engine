@@ -1,19 +1,19 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada. Tipos, classificação pelos bytes,
-capabilities e decisões por parte existem no core Rust. O PR #79 adicionou
-serialização nativa de PDF/áudio/vídeo; o PR #81 integra `MediaStore` async e os
-três modos nos adapters Rust. A branch filha de #81 implementa os bindings
-Python e TypeScript estão entregues no PR #82: preparo manual, contexto por
-chamada e contexto padrão no cliente. O mapa temporário usa `asset_id → bytes`;
-o host continua responsável por autorizar a leitura. O core limita assets a 20 MiB por padrão, configurável,
-reidrata apenas o turno de usuário atual e resultados posteriores de tools e
-reporta decisões sem bytes em completion/stream. Limites por provider/modelo,
-retry e resultados de tool em partes seguem pendentes. A referência é o backend Python do Vectora; a
-stack [#479–#502](https://github.com/vectora-company/vectora/pulls) foi integrada
-em 19 PRs e fechou a jornada do produto, mas não prova paridade da Engine. UI,
-STT local, prévias e empacotamento seguem específicos do Vectora. Estado e
-critérios: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+**Estado:** parcialmente implementada no código dos PRs abertos #79–#82; ainda
+não integrada em `main`. Tipos, classificação por bytes, capabilities,
+decisões por parte, payloads nativos e preparo Rust estão implementados para os
+protocolos descritos abaixo. O PR #82 expõe preparo manual, contexto por
+chamada e contexto padrão nos bindings Python e TypeScript. O mapa temporário é
+`asset_id → bytes`; autorização e persistência dos assets continuam sob
+responsabilidade do host. O limite global padrão é 20 MiB por asset e pode ser
+configurado; a preparação atual cobre o turno de usuário mais recente e os
+resultados subsequentes de tools, e devolve evidências sem bytes. Limites por
+provider/modelo, retry específico e resultados de tool em partes seguem
+pendentes. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
+do Vectora foi integrada em 19 PRs, mas não prova paridade da Engine. UI, STT
+local, prévias e empacotamento permanecem no Vectora. Veja o estado e os critérios
+em [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 
 Este documento define como o chat da Engine representa mídia (imagem, áudio,
 vídeo, documento e arquivo genérico) em mensagens e em resultados de tools, como
@@ -26,8 +26,8 @@ rollback.
 - `ContentPart` (`crates/vectora-engine/src/chat/types.rs`) inclui texto,
   imagem por URL, mídia por referência e mídia inline na cópia do request.
 - O resultado de uma tool é uma `String`; os adapters nativos achatam o resultado
-  em texto, e imagens de resultado de tool se perdem fora do caminho
-  OpenAI-compatível.
+  em texto. O contrato atual não representa imagens de tool como partes tipadas;
+  esse suporte segue pendente em todos os adapters.
 - O core tem capabilities/resolução de preparo por provider, mas ainda não um
   catálogo completo por modelo nem limites por provider/modelo.
 - `MediaStore` assíncrono e `MediaExecutionContext` existem no core. Os bindings

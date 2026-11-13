@@ -1,20 +1,47 @@
 # Plano de continuidade da Vectora Engine
 
-**Estado verificado:** 13 de novembro de 2026. O core está no PR
-[#81](https://github.com/vectora-company/engine/pull/81), e os bindings Python/TS
-no PR [#82](https://github.com/vectora-company/engine/pull/82), filho do #81.
-**`main` no GitHub:** `dc1aa5e` (PRs #45–#72 integrados por squash).
-**Stack aberta:** `main` ← [#73](https://github.com/vectora-company/engine/pull/73)
-(spec 17) ← [#76](https://github.com/vectora-company/engine/pull/76) ←
+**Estado verificado:** 13 de novembro de 2026. `main` no GitHub está em
+`dc1aa5e3e9357903d85c8bf82bfcb6b9e4cf59d1` (PRs #45–#72 integrados por
+squash). A stack aberta é `main` ← [#73](https://github.com/vectora-company/engine/pull/73)
+← [#76](https://github.com/vectora-company/engine/pull/76) ←
 [#77](https://github.com/vectora-company/engine/pull/77) ←
 [#79](https://github.com/vectora-company/engine/pull/79) ←
 [#80](https://github.com/vectora-company/engine/pull/80) ←
 [#81](https://github.com/vectora-company/engine/pull/81) ←
-[#82](https://github.com/vectora-company/engine/pull/82); branch atual da próxima
-etapa: `feat/chat-media-provider-limits`, filha do #82.
-**Objetivo:** transformar as capabilities experimentais numa engine
-distribuível e adotável com segurança, sem substituir o backend Python nem
-presumir paridade.
+[#82](https://github.com/vectora-company/engine/pull/82). O PR #82 está aberto;
+seu head é `5c36f985f71717ad5f604f8aa821bcd0a07862d3`. Este PR de documentação é
+empilhado sobre a branch `feat/chat-media-bindings` do #82.
+
+**Objetivo de produto:** a primeira release deve ser ampla e completa, não um
+MVP. A proposta de escopo e os gates ainda precisam ser consolidados neste
+plano. Isso não implica substituir o backend Python nem presumir paridade sem
+testes.
+
+## Proposta de escopo da primeira release
+
+O pedido de produto é uma primeira release completa, não um MVP. A proposta
+para o charter 1.0 é cobrir uma jornada de agente utilizável de ponta a ponta:
+
+- providers de chat e multimodalidade com fallback, streaming, erros e limites
+  conhecidos;
+- runtime com lifecycle, coordenação da execução de tools via adapters,
+  policy/aprovação, cancelamento propagado e observável, recovery e evidência
+  de verificação;
+- conversas/eventos duráveis, cursor e replay;
+- storage com equivalência de base em cada par definido, health/readiness,
+  migrations e recovery;
+- memória, contexto e RAG que integrem embeddings, vetores, busca lexical ou
+  híbrida e rerank;
+- APIs Rust, Python e TypeScript com fixtures de conformidade, distribuição
+  suportada, compatibilidade/versionamento e documentação operacional;
+- testes de falha, reinício, concorrência, segurança e adoção reversível em
+  consumidores reais.
+
+Autenticação, contas, billing, UI, workbenches e UX continuam no host. Isso é
+uma proposta de escopo para orientar a revisão; antes de congelar o contrato da
+release, o plano deve decompor cada linha em entregas, dependências e critérios
+de aceite testáveis. A lista de capacidades planejadas no README ou nas specs
+não é promessa de que todas serão incluídas automaticamente.
 
 Este é o plano ativo do [goal loop](../goal-loop/README.md). Ele substitui as
 fotografias anteriores (`a13140b`, `22c861f`), que ficam no histórico do Git.
@@ -25,21 +52,21 @@ trabalho independente.
 
 ## Estado verificado
 
-| Capability                                                                              | Estado                                                                                      | Evidência                                                                                                                                                                             |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chat OpenAI-compatible, Anthropic, Gemini, Cohere, fallback, montagem de turno          | Implementada (experimental), bindings Python e TypeScript                                   | `chat/openai_compatible.rs`, `chat/native_providers.rs`, `chat/fallback.rs`, `chat/turn.rs`; fixture `tests/fixtures/conformance-v1.json` (fallback com cancelamento nos três níveis) |
-| Embeddings e rerank com fallback por quota                                              | Implementada (experimental)                                                                 | `llm/embeddings.rs`, `llm/rerank.rs`; testes Python                                                                                                                                   |
-| Run lifecycle, dispatch, policy/aprovação, loop modelo/tool, gates de verificação       | Implementada no core e nos bindings                                                         | `harness/*.rs`, `harness/model_tool_loop.rs`, `harness/policy.rs`, `harness/verification.rs`                                                                                          |
-| Stores SQLite de lifecycle, loop e policy                                               | Implementada                                                                                | `storage/sqlite_run.rs`, `sqlite_loop.rs`, `sqlite_policy.rs`                                                                                                                         |
-| Ledger SQLite: idempotência, conflito de versão, multiprocesso, restart                 | Implementada                                                                                | `storage/sqlite.rs` (`multiprocess_child_writer`, `concurrent_appends_with_same_expected_version_commit_exactly_one`)                                                                 |
-| Backup/restore SQLite online e offline coordenado                                       | Implementada (#53)                                                                          | `storage/sqlite/backup.rs` (`backup_online`, `backup_offline`, `verify_backup`, `restore`)                                                                                            |
-| Projeção PostgreSQL com SQLite como autoridade                                          | Implementada                                                                                | `storage/resilient_ledger.rs` (`flush_outbox`); teste `projection_resumes_after_postgres_is_stopped_and_started`                                                                      |
-| Vetorial: cosseno em `[-1, 1]`, dimensões 1–65536, coleção ausente, dimensão divergente | Implementada (#57, #65, #77)                                                                | `storage/vector.rs` (`DistanceType::Cosine`, `valid_vector_dimensions`, `validate_lance_dimensions`)                                                                                  |
-| KV: TTL nativo no NATS (2.11+), CAS por revisão, incremento, prefixo, watch             | Implementada (#59, #67–#72)                                                                 | `storage/messaging.rs` (`allow_message_ttl`, `compare_and_set`, `increment`, `list_keys`, `watch`)                                                                                    |
-| Filas: retenção finita (100000), 5 tentativas, DLQ consumível                           | Implementada (#60–#64)                                                                      | `storage/messaging.rs` (`max_messages`, `max_attempts`, `receive_dead_letter`)                                                                                                        |
-| Relatório estático de capabilities por backend                                          | Implementada (#46)                                                                          | `storage/capabilities.rs`                                                                                                                                                             |
-| Snapshot de contratos para hosts TypeScript                                             | Implementada (#45)                                                                          | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                                                                                         |
-| Mídia no chat: tipos, preparação, contexto e serialização por protocolo                 | Core Rust no PR #81; bindings em andamento sobre #81; limites por provider/modelo pendentes | `chat/media.rs`, clientes OpenAI/native/fallback; bindings Python/TS; testes `chat::` (49), Python e Node; checklist `docs/checklists/04-midia-no-chat.md`                            |
+| Capability                                                                              | Estado                                                                                                       | Evidência                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat OpenAI-compatible, Anthropic, Gemini, Cohere, fallback, montagem de turno          | Implementada (experimental), bindings Python e TypeScript                                                    | `chat/openai_compatible.rs`, `chat/native_providers.rs`, `chat/fallback.rs`, `chat/turn.rs`; fixture `tests/fixtures/conformance-v1.json` (fallback com cancelamento nos três níveis) |
+| Embeddings e rerank com fallback por quota                                              | Implementada (experimental)                                                                                  | `llm/embeddings.rs`, `llm/rerank.rs`; testes Python                                                                                                                                   |
+| Run lifecycle, dispatch, policy/aprovação, loop modelo/tool, gates de verificação       | Implementada no core e nos bindings                                                                          | `harness/*.rs`, `harness/model_tool_loop.rs`, `harness/policy.rs`, `harness/verification.rs`                                                                                          |
+| Stores SQLite de lifecycle, loop e policy                                               | Implementada                                                                                                 | `storage/sqlite_run.rs`, `sqlite_loop.rs`, `sqlite_policy.rs`                                                                                                                         |
+| Ledger SQLite: idempotência, conflito de versão, multiprocesso, restart                 | Implementada                                                                                                 | `storage/sqlite.rs` (`multiprocess_child_writer`, `concurrent_appends_with_same_expected_version_commit_exactly_one`)                                                                 |
+| Backup/restore SQLite online e offline coordenado                                       | Implementada (#53)                                                                                           | `storage/sqlite/backup.rs` (`backup_online`, `backup_offline`, `verify_backup`, `restore`)                                                                                            |
+| Projeção PostgreSQL com SQLite como autoridade                                          | Implementada                                                                                                 | `storage/resilient_ledger.rs` (`flush_outbox`); teste `projection_resumes_after_postgres_is_stopped_and_started`                                                                      |
+| Vetorial: cosseno em `[-1, 1]`, dimensões 1–65536, coleção ausente, dimensão divergente | Implementada (#57, #65, #77)                                                                                 | `storage/vector.rs` (`DistanceType::Cosine`, `valid_vector_dimensions`, `validate_lance_dimensions`)                                                                                  |
+| KV: TTL nativo no NATS (2.11+), CAS por revisão, incremento, prefixo, watch             | Implementada (#59, #67–#72)                                                                                  | `storage/messaging.rs` (`allow_message_ttl`, `compare_and_set`, `increment`, `list_keys`, `watch`)                                                                                    |
+| Filas: retenção finita (100000), 5 tentativas, DLQ consumível                           | Implementada (#60–#64)                                                                                       | `storage/messaging.rs` (`max_messages`, `max_attempts`, `receive_dead_letter`)                                                                                                        |
+| Relatório estático de capabilities por backend                                          | Implementada (#46)                                                                                           | `storage/capabilities.rs`                                                                                                                                                             |
+| Snapshot de contratos para hosts TypeScript                                             | Implementada (#45)                                                                                           | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                                                                                         |
+| Mídia no chat: tipos, preparação, contexto e serialização por protocolo                 | Implementada em código nos PRs abertos #79–#82; limites por provider/modelo e demais itens da spec pendentes | `chat/media.rs`, adapters OpenAI/native/fallback; helper e contexto Python/TS; checklist `docs/checklists/04-midia-no-chat.md`                                                        |
 
 Os testes service-real (Redis, NATS, Qdrant, PostgreSQL) são condicionais às
 variáveis `VECTORA_TEST_*`; sem elas contam como não executados. Evidências e
@@ -71,14 +98,13 @@ indicada. Não as reabra sem pedido dele.
 
 ### Fase 0 — correções imediatas
 
-1. **Mídia: decisão `native` sem envio nativo — implementada nesta etapa.**
-   O PR #79, empilhado sobre #77, serializa PDF base64 na Anthropic, PDF e áudio
-   WAV/MP3 no OpenAI Chat Completions, e PDF/áudio/vídeo em `inlineData` no
-   Gemini. Testes `chat::` (44), fmt e Clippy passaram. O PR desta etapa e a
-   integração do preparador no envio ainda pendem; limites, fallback em rejeição
-   e evidência de roteamento permanecem na Fase 1. Checklist:
-   [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
-   OpenAI Responses continua fora do adapter. Origem: spec 17.
+1. **Mídia nativa e integração do preparo — implementadas nos PRs abertos #79–#82.**
+   #79 adiciona payloads nativos nos protocolos cobertos; #81 conecta `MediaStore`
+   ao envio Rust; #82 expõe preparo manual, contexto efêmero por chamada e contexto
+   padrão nos bindings. Como a stack ainda está aberta, isso não está integrado
+   em `main`. Limites por provider/modelo, retry por rejeição e resultado
+   multimodal de tool permanecem pendentes. OpenAI Responses não tem adapter.
+   Evidências e critérios: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 2. **Mídia: imagens de resultado de tool descartadas.** `message_text` em
    `chat/native_providers.rs` ignora `ImageUrl` nas mensagens de tool. Saída:
    mapeamento da tabela da spec 17 ou forma textual registrada. Origem: spec 17.
@@ -117,14 +143,17 @@ Vectora consumidor.
    de tools posteriores, e reporta decisões sem bytes na completion e no stream.
    Entregue no PR #81. Verificações: 49 testes `chat::`, testes Rust do workspace
    e docs no hook, fmt, Clippy e typecheck TS passaram.
-4. **Bindings — entregue no PR #82:** `prepare_chat_content`/`prepareChatContent`,
-   contexto efêmero e contexto padrão em Python/TypeScript. O host passa um mapa
-   temporário `asset_id → bytes` após leitura autorizada no AssetStore; bytes não
-   entram em `ChatRequest`. Rust 158 testes + 3 fixtures; Python 51; Node 37
-   passaram, com 10 testes de serviço pulados sem URLs configuradas.
-5. **Etapa atual — capabilities e limites:** resolver capacidades por modelo com
-   metadados/catálogo e limites específicos por provider/modelo; erro estável e
-   fallback textual. Validar MIME/digest e histórico (Vectora #481/#494).
+4. **Bindings — implementados no PR aberto #82:** `prepare_chat_content`/
+   `prepareChatContent`, contexto efêmero e contexto padrão em Python/TypeScript.
+   O host passa um mapa temporário `asset_id → bytes` após leitura autorizada no
+   AssetStore; bytes não entram em `ChatRequest`. Evidência local registrada
+   nesta stack: Rust 158 testes + 3 fixtures, Python 51 e Node 37 passaram; 10
+   testes Node dependentes de serviços foram ignorados sem URLs configuradas.
+   Essas contagens descrevem a execução registrada, não CI remoto nem `main`.
+5. **Etapa seguinte após esta revisão documental — capabilities e limites:**
+   resolver capacidades por modelo com metadados/catálogo e limites específicos
+   por provider/modelo; erro estável e fallback textual. Validar MIME/digest e
+   histórico (Vectora #481/#494).
 6. Retry no máximo uma vez como texto apenas em rejeição específica de mídia;
    preservar erros de rede/autenticação sem retry mascarado (Vectora #481).
 7. Resultado de tool em partes (texto e imagem por `MediaRef`) com mapeamento
@@ -229,12 +258,18 @@ Uma capability só avança de experimental quando:
 - métricas são reproduzíveis e limitadas ao workload medido;
 - consumidores e limites de compatibilidade estão identificados.
 
-Nenhuma capability passou esse gate até esta revisão.
+Nenhuma capability está declarada estável. Código em PR aberto ou testes
+isolados não satisfazem, por si só, o gate de release; consulte a matriz de
+conformidade para o estado e a cobertura de cada capability.
 
 ## Próxima etapa
 
-Fase 0, item 1: corrigir a incoerência entre a decisão `native` e o envio da
-mídia, em PR empilhado sobre o topo da stack.
+Este PR revisa e corrige a documentação Markdown da Engine, empilhado sobre o
+PR #82. Depois da revisão, consolidar uma proposta verificável de charter para a
+primeira release completa: áreas incluídas, critérios de maturidade, paridade
+Rust/Python/TypeScript, compatibilidade, suporte de plataformas, publicação e
+adoção-piloto. O plano atual contém gaps por capability, mas ainda não os
+organiza como um único gate de release 1.0.
 
 ## Desvios registrados
 
