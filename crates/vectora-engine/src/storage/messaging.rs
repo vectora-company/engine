@@ -59,6 +59,8 @@ pub enum MessagingError {
     Storage,
     #[error("operation is not supported by this adapter")]
     Unsupported,
+    #[error("concurrent KV updates exhausted the retry limit")]
+    Contention,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -99,6 +101,12 @@ pub struct QueueJob {
     pub payload: Vec<u8>,
 }
 
+enum RedisWriteCondition<'a> {
+    Always,
+    Absent,
+    Revision(&'a str),
+}
+
 pub struct RedisStore {
     client: redis::Client,
     prefix: String,
@@ -126,15 +134,18 @@ impl RedisStore {
     async fn write_value(
         &self,
         key: &str,
-        revision: Option<&str>,
+        condition: RedisWriteCondition<'_>,
         value: Vec<u8>,
         ttl: Option<Duration>,
     ) -> Result<bool, MessagingError> {
         let key = self.key(key)?;
         let mut conn = self.connection().await?;
         const WRITE: &str = r"
-            if ARGV[1] ~= '' and (redis.call('EXISTS', KEYS[1]) == 0
-                or redis.call('GET', KEYS[2]) ~= ARGV[1]) then
+            if ARGV[1] == 'absent' and redis.call('EXISTS', KEYS[1]) ~= 0 then
+                return 0
+            end
+            if ARGV[1] == 'revision' and (redis.call('EXISTS', KEYS[1]) == 0
+                or redis.call('GET', KEYS[2]) ~= ARGV[4]) then
                 return 0
             end
             redis.call('DEL', KEYS[2])
@@ -145,14 +156,20 @@ impl RedisStore {
             end
             return 1
         ";
+        let (mode, revision) = match condition {
+            RedisWriteCondition::Always => ("always", ""),
+            RedisWriteCondition::Absent => ("absent", ""),
+            RedisWriteCondition::Revision(revision) => ("revision", revision),
+        };
         redis::cmd("EVAL")
             .arg(WRITE)
             .arg(2)
             .arg(&key)
             .arg(redis_revision_key(&key))
-            .arg(revision.unwrap_or_default())
+            .arg(mode)
             .arg(value)
             .arg(ttl.map_or(0, ttl_seconds_ceil))
+            .arg(revision)
             .query_async(&mut conn)
             .await
             .map_err(|_| MessagingError::Storage)
@@ -287,7 +304,8 @@ impl KvStore for RedisStore {
         if revision.len() != 32 || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(MessagingError::InvalidInput);
         }
-        self.write_value(key, Some(revision), value, ttl).await
+        self.write_value(key, RedisWriteCondition::Revision(revision), value, ttl)
+            .await
     }
 
     async fn put(
@@ -296,7 +314,9 @@ impl KvStore for RedisStore {
         value: Vec<u8>,
         ttl: Option<Duration>,
     ) -> Result<(), MessagingError> {
-        self.write_value(key, None, value, ttl).await.map(|_| ())
+        self.write_value(key, RedisWriteCondition::Always, value, ttl)
+            .await
+            .map(|_| ())
     }
 
     async fn delete(&self, key: &str) -> Result<(), MessagingError> {
@@ -442,6 +462,69 @@ impl NatsStore {
         }
         Ok(store)
     }
+    async fn create_if_absent(
+        &self,
+        key: &str,
+        value: Vec<u8>,
+        ttl: Option<Duration>,
+    ) -> Result<bool, MessagingError> {
+        use async_nats::jetstream::kv::Operation;
+        validate_nats_kv_key(key)?;
+        let current = self
+            .kv()
+            .await?
+            .entry(key)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        let revision = match current {
+            Some(entry) if entry.operation == Operation::Put => return Ok(false),
+            Some(marker) => marker.revision,
+            None => 0,
+        };
+        // Use the same TTL headers when recreating a key after a delete marker.
+        self.publish_if_revision(key, revision, value, ttl).await
+    }
+
+    async fn publish_if_revision(
+        &self,
+        key: &str,
+        revision: u64,
+        value: Vec<u8>,
+        ttl: Option<Duration>,
+    ) -> Result<bool, MessagingError> {
+        use async_nats::jetstream::context::PublishErrorKind;
+        let mut headers = async_nats::HeaderMap::new();
+        headers.insert(
+            async_nats::header::NATS_EXPECTED_STREAM,
+            format!("KV_{}", self.bucket),
+        );
+        headers.insert(
+            async_nats::header::NATS_EXPECTED_LAST_SUBJECT_SEQUENCE,
+            async_nats::HeaderValue::from(revision),
+        );
+        if let Some(ttl) = ttl {
+            headers.insert(
+                async_nats::header::NATS_MESSAGE_TTL,
+                async_nats::HeaderValue::from(ttl_seconds_ceil(ttl)),
+            );
+        }
+        match self
+            .jetstream
+            .publish_with_headers(
+                format!("$KV.{}.{}", self.bucket, key),
+                headers,
+                value.into(),
+            )
+            .await
+            .map_err(|_| MessagingError::Storage)?
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == PublishErrorKind::WrongLastSequence => Ok(false),
+            Err(_) => Err(MessagingError::Storage),
+        }
+    }
+
     pub async fn publish(&self, subject: &str, payload: Vec<u8>) -> Result<(), MessagingError> {
         validate_subject(subject)?;
         self.client
@@ -495,7 +578,7 @@ impl KvStore for NatsStore {
         value: Vec<u8>,
         ttl: Option<Duration>,
     ) -> Result<bool, MessagingError> {
-        use async_nats::jetstream::{context::PublishErrorKind, kv::Operation};
+        use async_nats::jetstream::kv::Operation;
         validate_nats_kv_key(key)?;
         let revision: u64 = revision
             .parse()
@@ -511,36 +594,7 @@ impl KvStore for NatsStore {
         {
             return Ok(false);
         }
-        let mut headers = async_nats::HeaderMap::new();
-        headers.insert(
-            async_nats::header::NATS_EXPECTED_STREAM,
-            format!("KV_{}", self.bucket),
-        );
-        headers.insert(
-            async_nats::header::NATS_EXPECTED_LAST_SUBJECT_SEQUENCE,
-            async_nats::HeaderValue::from(revision),
-        );
-        if let Some(ttl) = ttl {
-            headers.insert(
-                async_nats::header::NATS_MESSAGE_TTL,
-                async_nats::HeaderValue::from(ttl_seconds_ceil(ttl)),
-            );
-        }
-        match self
-            .jetstream
-            .publish_with_headers(
-                format!("$KV.{}.{}", self.bucket, key),
-                headers,
-                value.into(),
-            )
-            .await
-            .map_err(|_| MessagingError::Storage)?
-            .await
-        {
-            Ok(_) => Ok(true),
-            Err(error) if error.kind() == PublishErrorKind::WrongLastSequence => Ok(false),
-            Err(_) => Err(MessagingError::Storage),
-        }
+        self.publish_if_revision(key, revision, value, ttl).await
     }
 
     async fn put(
@@ -630,6 +684,54 @@ impl KvStoreAdapter {
                 NatsStore::connect(&config.endpoint, &config.namespace).await?,
             ))),
         }
+    }
+
+    /// Adds an integer delta to a JSON integer, using zero for an absent key.
+    /// TTL replaces the prior per-key TTL. Omit it for a persistent value.
+    pub async fn increment(
+        &self,
+        key: &str,
+        delta: i64,
+        ttl: Option<Duration>,
+    ) -> Result<i64, MessagingError> {
+        const SAFE_INTEGER: std::ops::RangeInclusive<i64> =
+            -9_007_199_254_740_991..=9_007_199_254_740_991;
+        if !SAFE_INTEGER.contains(&delta) {
+            return Err(MessagingError::InvalidInput);
+        }
+        for _ in 0..32 {
+            let entry = self.get_with_revision(key).await?;
+            let current = match &entry {
+                Some(entry) => serde_json::from_slice::<i64>(&entry.value)
+                    .ok()
+                    .filter(|value| SAFE_INTEGER.contains(value))
+                    .ok_or(MessagingError::InvalidInput)?,
+                None => 0,
+            };
+            let next = current
+                .checked_add(delta)
+                .filter(|value| SAFE_INTEGER.contains(value))
+                .ok_or(MessagingError::InvalidInput)?;
+            let value = next.to_string().into_bytes();
+            let applied = match entry {
+                Some(entry) => {
+                    self.compare_and_set(key, &entry.revision, value, ttl)
+                        .await?
+                }
+                None => match self {
+                    Self::Redis(store) => {
+                        store
+                            .write_value(key, RedisWriteCondition::Absent, value, ttl)
+                            .await?
+                    }
+                    Self::Nats(store) => store.create_if_absent(key, value, ttl).await?,
+                },
+            };
+            if applied {
+                return Ok(next);
+            }
+        }
+        Err(MessagingError::Contention)
     }
 }
 

@@ -906,6 +906,27 @@ fn kv_store_compare_and_set<'py>(
 }
 
 #[pyfunction]
+fn kv_store_increment<'py>(
+    py: Python<'py>,
+    config_json: String,
+    key: String,
+    delta: i64,
+    ttl_seconds: Option<u64>,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid KV config"))?;
+        let store = vectora_engine::storage::messaging::KvStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        store
+            .increment(&key, delta, ttl_seconds.map(std::time::Duration::from_secs))
+            .await
+            .map_err(py_error)
+    })
+}
+
+#[pyfunction]
 fn kv_store_delete<'py>(
     py: Python<'py>,
     config_json: String,
@@ -1789,6 +1810,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(kv_store_get, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_get_with_revision, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_compare_and_set, module)?)?;
+    module.add_function(wrap_pyfunction!(kv_store_increment, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_list_keys, module)?)?;
     module.add_function(wrap_pyfunction!(queue_enqueue, module)?)?;

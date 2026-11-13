@@ -409,7 +409,7 @@ TTL. A suíte Rust completa não foi repetida.
 
 ## Escrita KV condicional por revisão
 
-A branch sobre #69 expõe leitura versionada e CAS em Rust, Python e
+O PR #70 expõe leitura versionada e CAS em Rust, Python e
 TypeScript. Redis conserva os bytes na chave atual e atribui uma revisão
 aleatória sob Lua quando a primeira leitura versionada encontra a chave.
 SET e DEL pelo adapter invalidam a revisão. O TTL interno acompanha o
@@ -424,6 +424,23 @@ listagem sem a chave interna. Um smoke test Redis leu e atualizou por CAS uma
 chave legada gravada por SET sem revisão. A wheel CPython 3.13 passou leitura
 versionada e corrida de CAS nos dois serviços. Typecheck e linters dos
 bindings passaram. A suíte Rust completa não foi repetida.
+
+## Incremento atômico no KV
+
+A branch sobre #70 soma inteiros JSON via leitura com revisão e escrita
+condicional. A criação concorrente usa Lua no Redis e a sequência esperada
+do subject no JetStream. No NATS, a recriação usa a revisão do marcador de
+remoção e envia o TTL no mesmo publish. A implementação evita o caminho
+`create_with_ttl` do async-nats 0.52, que usa `update` sem TTL ao recriar
+sobre um marcador. Apenas conflitos confirmados são repetidos, até 32
+tentativas. A resposta cabe em um inteiro exato do JavaScript.
+
+A suíte Node passou 42/42 com Redis 8.10.3 e NATS 2.15.3, incluindo oito
+incrementos concorrentes partindo de chave ausente, delta negativo, rejeição
+de overflow e valor incompatível, invalidação da revisão antiga e TTL
+após recriação. A wheel CPython 3.13 passou concorrência e delta negativo nos
+dois serviços. Core e addon compilaram em release. Checks dos bindings
+passaram. A suíte Rust completa não foi repetida.
 
 ## Verificação da branch empilhada sobre #57
 

@@ -84,6 +84,13 @@ async def kv_store_compare_and_set(
     )
 
 
+async def kv_store_increment(
+    config: JsonObject, key: str, delta: int, ttl_seconds: int | None = None
+) -> int:
+    """Atomically add to a JSON integer, starting at zero for an absent key."""
+    return await _native.kv_store_increment(json.dumps(config), key, delta, ttl_seconds)
+
+
 async def kv_store_delete(config: JsonObject, key: str) -> None:
     """Remove a key from the selected KV namespace."""
     await _native.kv_store_delete(json.dumps(config), key)
@@ -832,6 +839,7 @@ __all__ = [
     "kv_store_delete",
     "kv_store_get",
     "kv_store_get_with_revision",
+    "kv_store_increment",
     "kv_store_list_keys",
     "kv_store_put",
     "model_tool_loop_contract_version",

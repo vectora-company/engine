@@ -27,6 +27,7 @@ import {
   modelToolLoopContractVersion,
   rerank,
   rerankContractVersion,
+  kvStoreIncrement,
   kvStoreCompareAndSet,
   kvStoreGetWithRevision,
   kvStoreDelete,
@@ -1467,5 +1468,38 @@ for (const [backend, endpoint] of [
     await kvStorePut(config, key, 5, 60);
     assert.equal(await kvStoreCompareAndSet(config, key, fourth.revision, 6), false);
     await kvStoreDelete(config, key);
+  });
+}
+
+for (const [backend, endpoint] of [
+  ["redis", process.env.VECTORA_TEST_REDIS_URL],
+  ["nats_jetstream", process.env.VECTORA_TEST_NATS_URL],
+]) {
+  test(`KV increment is atomic and exact in ${backend}`, { skip: !endpoint }, async () => {
+    const config = { backend, endpoint, namespace: `kv_increment_${randomUUID()}` };
+    const key = "counter";
+    try {
+      const values = await Promise.all(
+        Array.from({ length: 8 }, () => kvStoreIncrement(config, key, 1, 60)),
+      );
+      assert.deepEqual(values.sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8]);
+      const old = await kvStoreGetWithRevision(config, key);
+      assert.equal(await kvStoreIncrement(config, key, -3, 60), 5);
+      assert.equal(await kvStoreCompareAndSet(config, key, old.revision, 10), false);
+      await assert.rejects(kvStoreIncrement(config, key, 1.5), /invalid messaging request/);
+      await kvStorePut(config, key, Number.MAX_SAFE_INTEGER, 60);
+      await assert.rejects(kvStoreIncrement(config, key, 1), /invalid messaging request/);
+      assert.equal(await kvStoreGet(config, key), Number.MAX_SAFE_INTEGER);
+      await kvStorePut(config, key, { value: 1 }, 60);
+      await assert.rejects(kvStoreIncrement(config, key, 1), /invalid messaging request/);
+      assert.deepEqual(await kvStoreGet(config, key), { value: 1 });
+      await kvStoreDelete(config, key);
+      assert.equal(await kvStoreIncrement(config, key, 2, 1), 2);
+      await new Promise(resolve => setTimeout(resolve, 1450));
+      assert.equal(await kvStoreGet(config, key), null);
+      assert.equal(await kvStoreIncrement(config, key, -2, 60), -2);
+    } finally {
+      await kvStoreDelete(config, key);
+    }
   });
 }
