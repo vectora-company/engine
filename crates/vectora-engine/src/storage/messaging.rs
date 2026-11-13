@@ -1248,4 +1248,29 @@ mod tests {
         delivery.ack().await.unwrap();
         store.put("after", b"ok".to_vec(), None).await.unwrap();
     }
+
+    #[test]
+    fn key_identifier_and_subject_bounds_are_enforced() {
+        assert!(validate_key(&"k".repeat(512)).is_ok());
+        for key in [String::new(), "k".repeat(513), "line\nbreak".to_owned()] {
+            assert!(
+                matches!(validate_key(&key), Err(MessagingError::InvalidInput)),
+                "key {key:?} must be rejected"
+            );
+        }
+        assert!(validate_identifier(&"a".repeat(128)).is_ok());
+        for id in ["", "has space", "dot.ted", &"a".repeat(129)] {
+            assert!(matches!(
+                validate_identifier(id),
+                Err(MessagingError::InvalidInput)
+            ));
+        }
+        assert!(validate_subject("events.created").is_ok());
+        for subject in ["", "a..b", ".a", "a.", "a.*", "a.#", &"s".repeat(513)] {
+            assert!(
+                matches!(validate_subject(subject), Err(MessagingError::InvalidInput)),
+                "subject {subject:?} must be rejected"
+            );
+        }
+    }
 }

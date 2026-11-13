@@ -148,6 +148,14 @@ automática; `podman stop` o apagou. Foi recriado (mesma imagem, porta, usuário
 e banco; senha de teste nova, sem remoção automática). O teste confere a
 configuração antes de parar o serviço.
 
+Limites de entrada (testes sem serviço, `storage::vector` e `storage::messaging`):
+os casos limite aceitos passam a validação e só falham ao alcançar um serviço
+inexistente (`Storage`), enquanto os inválidos retornam `InvalidInput`.
+Observação por leitura de código: `metadata` vetorial, valores de KV e payloads
+de fila não têm limite de tamanho, e a busca do Qdrant não limita a dimensão da
+consulta (o upsert limita a 65536). Definir limites muda o contrato público e
+depende de decisão do mantenedor; não foi implementado.
+
 Não coberto: shutdown gracioso do adapter, retenção/limites JetStream, limites
 de payload e falhas de indexação. Permanecem `não executado`.
 

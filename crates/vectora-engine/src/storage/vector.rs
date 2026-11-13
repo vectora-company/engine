@@ -786,4 +786,97 @@ mod tests {
         drop(store);
         let _ = std::fs::remove_dir_all(path);
     }
+
+    fn unreachable_qdrant() -> QdrantStore {
+        QdrantStore::new("http://127.0.0.1:1", None).unwrap()
+    }
+
+    #[tokio::test]
+    async fn search_limit_vector_scope_and_collection_bounds_are_enforced() {
+        let store = unreachable_qdrant();
+        let query = || vec![1.0_f32, 0.0];
+        for limit in [0, 1001, u32::MAX] {
+            assert!(
+                matches!(
+                    store.search("c", "s", query(), limit).await,
+                    Err(VectorError::InvalidInput)
+                ),
+                "limit {limit} must be rejected"
+            );
+        }
+        // Valid bounds pass validation and only then fail reaching the service.
+        for limit in [1, 1000] {
+            assert!(
+                matches!(
+                    store.search("c", "s", query(), limit).await,
+                    Err(VectorError::Storage)
+                ),
+                "limit {limit} must be accepted"
+            );
+        }
+        for (collection, scope, vector) in [
+            ("c", " ", query()),
+            ("c", "s", vec![]),
+            ("c", "s", vec![f32::INFINITY]),
+            ("", "s", query()),
+            ("a/b", "s", query()),
+            (&"x".repeat(129), "s", query()),
+        ] {
+            assert!(
+                matches!(
+                    store.search(collection, scope, vector, 10).await,
+                    Err(VectorError::InvalidInput)
+                ),
+                "invalid search input must be rejected"
+            );
+        }
+        assert!(matches!(
+            store.search(&"x".repeat(128), "s", query(), 10).await,
+            Err(VectorError::Storage)
+        ));
+    }
+
+    #[tokio::test]
+    async fn upsert_vector_dimension_bound_is_inclusive_at_65536() {
+        let store = unreachable_qdrant();
+        let record = |dimensions: usize| VectorRecord {
+            id: 1,
+            scope: "s".into(),
+            vector: vec![0.5; dimensions],
+            metadata: Value::Null,
+        };
+        assert!(matches!(
+            store.upsert("c", record(65537)).await,
+            Err(VectorError::InvalidInput)
+        ));
+        assert!(matches!(
+            store.upsert("c", record(0)).await,
+            Err(VectorError::InvalidInput)
+        ));
+        assert!(matches!(
+            store.upsert("c", record(65536)).await,
+            Err(VectorError::Storage)
+        ));
+    }
+
+    #[tokio::test]
+    async fn lancedb_rejects_out_of_range_limits_before_touching_storage() {
+        let path = std::env::temp_dir().join(format!(
+            "vectora-lance-bounds-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = LanceDbStore::connect(path.to_str().unwrap()).await.unwrap();
+        for limit in [0, 1001] {
+            assert!(matches!(
+                store.search("c", "s", vec![1.0], limit).await,
+                Err(VectorError::InvalidInput)
+            ));
+        }
+        drop(store);
+        let _ = std::fs::remove_dir_all(path);
+    }
 }

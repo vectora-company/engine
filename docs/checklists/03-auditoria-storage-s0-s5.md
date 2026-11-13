@@ -25,7 +25,8 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Reiniciar o Qdrant local e confirmar que coleção/ponto persistem e o adapter recupera a busca no mesmo contêiner.
 - [ ] Cobrir shutdown gracioso do adapter e retenção/limites JetStream.
 - [x] Cobrir ordenação, `limit`, direção do score, upsert idempotente, mesmo id em escopos distintos, delete por escopo e dimensão inválida em LanceDB e Qdrant (contrato comum).
-- [ ] Cobrir limites de payload e falhas de indexação dos stores vetoriais.
+- [x] Cobrir os limites de entrada existentes: busca `limit` 1–1000, vetor 1–65536 dimensões (upsert), escopo/coleção (≤128, charset), chave KV ≤512, identificadores ≤128 e subjects (sem segmentos vazios nem `*`/`#`, ≤512), nos dois lados de cada fronteira.
+- [ ] Definir e testar limite de tamanho de `metadata` vetorial, valores de KV e payloads de fila (hoje não há limite; requer decisão de contrato) e falhas de indexação.
 - [ ] Definir limite/semântica comum sem esconder diferenças específicas.
 
 ## Encerramento desta etapa
