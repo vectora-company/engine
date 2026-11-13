@@ -324,7 +324,7 @@ impl SqliteToolPolicyStore {
         };
         let checkpoint_state =
             serde_json::to_value(&state).map_err(|_| SqliteToolPolicyStoreError::InvalidState)?;
-        let saved = self.ledger.append_checkpointed_with_outbox(
+        let saved = self.ledger.append_checkpointed_projected(
             draft,
             format!("tool-policy:{operation_id}"),
             checkpoint_state.clone(),
@@ -523,6 +523,9 @@ mod tests {
     #[test]
     fn approval_request_is_checkpointed_then_grant_replays_after_reopen() {
         let path = database_path();
+        let mut ledger = super::super::sqlite::SqliteLedger::open_persistent(&path).unwrap();
+        ledger.enable_projection().unwrap();
+        drop(ledger);
         let run = active_run();
         let mut store = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();
         let policy = store

@@ -280,7 +280,7 @@ impl SqliteRunLifecycleStore {
             }
             return Err(SqliteRunStoreError::Ledger(LedgerError::VersionConflict));
         }
-        let saved = self.ledger.append_checkpointed_with_outbox(
+        let saved = self.ledger.append_checkpointed_projected(
             draft,
             format!("{aggregate}:checkpoint:{operation_id}"),
             state_value.clone(),
@@ -383,7 +383,7 @@ impl SqliteRunLifecycleStore {
             }),
             expected_version: state.ledger_sequence,
         };
-        let saved = self.ledger.append_checkpointed_with_outbox(
+        let saved = self.ledger.append_checkpointed_projected(
             draft,
             format!("{aggregate}:checkpoint:verification:{operation_id}"),
             state_value.clone(),
@@ -569,7 +569,7 @@ mod tests {
         assert_eq!(first.state.lifecycle.status, RunStatus::Planned);
         assert_eq!(first.state.ledger_sequence, 1);
         assert_eq!(first.admission_event.sequence, 1);
-        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 2);
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 0);
         assert_eq!(
             store.load_latest("run-1").unwrap(),
             Some(first.state.clone())
@@ -577,7 +577,7 @@ mod tests {
 
         let retry = store.admit(run_identity, request).unwrap();
         assert_eq!(retry, first);
-        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 2);
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 0);
 
         let second = store
             .admit(
@@ -587,7 +587,7 @@ mod tests {
             .unwrap();
         assert_eq!(second.admission_event.sequence, 2);
         assert_eq!(second.state.ledger_sequence, 1);
-        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 4);
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 0);
 
         drop(store);
         std::fs::remove_file(path).unwrap();
@@ -596,6 +596,9 @@ mod tests {
     #[test]
     fn lifecycle_transitions_survive_reopen_and_reject_stale_snapshots() {
         let path = database_path();
+        let mut ledger = super::super::sqlite::SqliteLedger::open_persistent(&path).unwrap();
+        ledger.enable_projection().unwrap();
+        drop(ledger);
         let mut store = SqliteRunLifecycleStore::open(&path, "workspace-1").unwrap();
         let admitted = store
             .admit(identity("run-1", "turn-1", "admit-1"), json!({}))

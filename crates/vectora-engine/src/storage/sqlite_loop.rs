@@ -336,11 +336,9 @@ impl SqliteModelToolLoopStore {
         };
         let state_value =
             serde_json::to_value(&state).map_err(|_| SqliteModelToolLoopError::Serialization)?;
-        let saved = self.ledger.append_checkpointed_with_outbox(
-            draft,
-            checkpoint_id,
-            state_value.clone(),
-        )?;
+        let saved =
+            self.ledger
+                .append_checkpointed_projected(draft, checkpoint_id, state_value.clone())?;
         if saved.event.sequence != state.ledger_sequence
             || saved.checkpoint.sequence != state.ledger_sequence
             || saved.checkpoint.state != state_value
@@ -499,6 +497,9 @@ mod tests {
     #[test]
     fn persists_and_loads_independent_turns_for_one_run() {
         let path = database_path();
+        let mut ledger = super::super::sqlite::SqliteLedger::open_persistent(&path).unwrap();
+        ledger.enable_projection().unwrap();
+        drop(ledger);
         let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
         store
             .start(

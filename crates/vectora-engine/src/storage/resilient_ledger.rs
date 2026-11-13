@@ -42,8 +42,12 @@ pub struct ResilientLedger {
 
 impl ResilientLedger {
     pub fn open(path: impl AsRef<Path>, postgres_url: Option<String>) -> Result<Self, LedgerError> {
+        let mut local = SqliteLedger::open_persistent(path)?;
+        if postgres_url.is_some() {
+            local.enable_projection()?;
+        }
         Ok(Self {
-            local: SqliteLedger::open_persistent(path)?,
+            local,
             postgres_url,
             postgres: None,
         })
@@ -239,9 +243,10 @@ mod tests {
             .to_string();
         let scope = format!("checkpoint-mirror-{suffix}");
         let aggregate = format!("run-{suffix}");
+        drop(ResilientLedger::open(&path, Some(url.clone())).unwrap());
         let mut local = SqliteLedger::open_persistent(&path).unwrap();
         let saved = local
-            .append_checkpointed_with_outbox(
+            .append_checkpointed_projected(
                 EventDraft {
                     scope: scope.clone(),
                     aggregate: aggregate.clone(),
