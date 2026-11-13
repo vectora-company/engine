@@ -324,7 +324,7 @@ impl SqliteToolPolicyStore {
         };
         let checkpoint_state =
             serde_json::to_value(&state).map_err(|_| SqliteToolPolicyStoreError::InvalidState)?;
-        let saved = self.ledger.append_checkpointed(
+        let saved = self.ledger.append_checkpointed_projected(
             draft,
             format!("tool-policy:{operation_id}"),
             checkpoint_state.clone(),
@@ -523,11 +523,15 @@ mod tests {
     #[test]
     fn approval_request_is_checkpointed_then_grant_replays_after_reopen() {
         let path = database_path();
+        let mut ledger = super::super::sqlite::SqliteLedger::open_persistent(&path).unwrap();
+        ledger.enable_projection().unwrap();
+        drop(ledger);
         let run = active_run();
         let mut store = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();
         let policy = store
             .save_snapshot(&run, snapshot(), "policy", 100)
             .unwrap();
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 1);
         let pending = store
             .authorize(
                 &policy,
@@ -539,6 +543,7 @@ mod tests {
                 100,
             )
             .unwrap();
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 2);
         assert_eq!(
             pending.evaluation.status,
             crate::harness::PolicyEvaluationStatus::AwaitingApproval
@@ -555,6 +560,7 @@ mod tests {
         let approved = store
             .record_approval(&pending.state, &request, grant, "approval", 101)
             .unwrap();
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 3);
         drop(store);
 
         let mut store = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();

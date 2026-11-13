@@ -309,6 +309,33 @@ disponível para os testes direcionados do ledger. Restam fixtures comuns de
 conformidade para KV/filas/vetores e as etapas posteriores de equivalência
 PostgreSQL descritas em `docs/plans/03-plano-continuidade.md`.
 
+## Checkpoints dos stores SQLite na projeção PostgreSQL — PR #92
+
+A branch `feat/postgres-lifecycle-projection`, PR
+[#92](https://github.com/vectora-company/engine/pull/92), filha do #91, inclui
+`checkpoint_json` no outbox (schema SQLite v6) e a flag persistente
+`projection_enabled`. `ResilientLedger` com URL PostgreSQL habilita a projeção e
+faz backfill do histórico; stores SQLite-only não acumulam cópias. Com a
+projeção habilitada, admission e stores lifecycle/loop/policy enfileiram evento
+
+- snapshot atomicamente. `PostgresLedger::project` grava ambos numa transação e
+  remove o item da outbox após confirmação. Testes cobrem backfill e retry; um
+  teste service-real confirma evento e checkpoint no PostgreSQL.
+
+Verificação atualizada após a correção da fixture v1: workspace Rust 175 testes
+
+- 3 fixtures + 1 teste nativo Python; `storage::` 76/76 com PostgreSQL 18.6,
+  Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0; 34 testes SQLite focados passaram.
+  Clippy `-D warnings`, rustdoc e formatação passaram. Python 53 e Node 39 (10 sem
+  endpoints ignorados) são da rodada anterior; bindings não foram alterados.
+  `VECTORA_TEST_PODMAN_RESTART` não foi habilitado para Redis/NATS/Qdrant.
+
+A projeção ainda não espelha a linha consultável de `ve_run_reservations`;
+backup/verify do PostgreSQL, APIs de leitura e concorrência entre projetores
+continuam pendentes. Ver [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md),
+[`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md) e
+[`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
+
 ## Reclassificação MIME na reidratação — implementação local
 
 A reidratação compara a assinatura dos bytes já verificados (tamanho e SHA-256)

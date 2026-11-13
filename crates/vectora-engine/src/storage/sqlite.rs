@@ -10,7 +10,7 @@ use thiserror::Error;
 mod backup;
 pub use backup::{BackupReport, verify_backup};
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 6;
 pub const CHECKPOINT_VERSION: u16 = 1;
 const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
 
@@ -103,6 +103,12 @@ pub struct CheckpointedEvent {
     pub checkpoint: Checkpoint,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct PendingProjection {
+    pub event: LedgerEvent,
+    pub checkpoint: Option<Checkpoint>,
+}
+
 pub struct SqliteLedger {
     connection: Connection,
 }
@@ -187,6 +193,20 @@ impl SqliteLedger {
                 PRIMARY KEY(scope,aggregate_id,sequence)
             ); CREATE INDEX ve_ledger_outbox_pending ON ve_ledger_outbox(delivered,scope,aggregate_id,sequence);
             UPDATE ve_ledger_meta SET version=4 WHERE id=1;")?;
+            current = 4;
+        }
+        if current < 5 {
+            tx.execute_batch(
+                "ALTER TABLE ve_ledger_outbox ADD COLUMN checkpoint_json TEXT;
+            UPDATE ve_ledger_meta SET version=5 WHERE id=1;",
+            )?;
+            current = 5;
+        }
+        if current < 6 {
+            tx.execute_batch(
+                "ALTER TABLE ve_ledger_meta ADD COLUMN projection_enabled INTEGER NOT NULL DEFAULT 0 CHECK(projection_enabled IN (0,1));
+            UPDATE ve_ledger_meta SET version=6 WHERE id=1;",
+            )?;
         }
         tx.commit()?;
         Ok(())
@@ -220,16 +240,145 @@ impl SqliteLedger {
         Ok(result)
     }
 
+    /// Appends an event and checkpoint and queues their projection atomically.
+    pub fn append_checkpointed_with_outbox(
+        &mut self,
+        draft: EventDraft,
+        checkpoint_id: String,
+        state: Value,
+    ) -> Result<CheckpointedEvent, LedgerError> {
+        if checkpoint_id.trim().is_empty() {
+            return Err(LedgerError::InvalidInput);
+        }
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let result = Self::append_checkpointed_in(&tx, draft, checkpoint_id, state)?;
+        Self::queue_projection_in(&tx, &result.event, Some(&result.checkpoint))?;
+        tx.commit()?;
+        Ok(result)
+    }
+
+    /// Appends a checkpointed event and queues it only when PostgreSQL projection is enabled.
+    pub fn append_checkpointed_projected(
+        &mut self,
+        draft: EventDraft,
+        checkpoint_id: String,
+        state: Value,
+    ) -> Result<CheckpointedEvent, LedgerError> {
+        if self.projection_enabled()? {
+            self.append_checkpointed_with_outbox(draft, checkpoint_id, state)
+        } else {
+            self.append_checkpointed(draft, checkpoint_id, state)
+        }
+    }
+
+    /// Enables projection once and backfills existing events/checkpoints into the local outbox.
+    pub fn enable_projection(&mut self) -> Result<(), LedgerError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let enabled: bool = tx.query_row(
+            "SELECT projection_enabled FROM ve_ledger_meta WHERE id=1",
+            [],
+            |row| row.get(0),
+        )?;
+        if !enabled {
+            loop {
+                let projections = {
+                    let mut statement = tx.prepare("SELECT e.scope,e.aggregate_id,e.sequence,e.event_id,e.idempotency_key,e.event_type,e.payload,c.checkpoint_id,c.contract_version,c.state FROM ve_ledger_events e LEFT JOIN ve_ledger_checkpoints c ON c.scope=e.scope AND c.aggregate_id=e.aggregate_id AND c.sequence=e.sequence LEFT JOIN ve_ledger_outbox o ON o.scope=e.scope AND o.aggregate_id=e.aggregate_id AND o.sequence=e.sequence WHERE o.scope IS NULL OR (c.checkpoint_id IS NOT NULL AND o.checkpoint_json IS NULL) ORDER BY e.rowid LIMIT 500")?;
+                    let rows = statement.query_map([], |row| {
+                        Ok((
+                            LedgerEvent {
+                                scope: row.get(0)?,
+                                aggregate: row.get(1)?,
+                                sequence: row.get::<_, i64>(2)? as u64,
+                                event_id: row.get(3)?,
+                                idempotency_key: row.get(4)?,
+                                event_type: row.get(5)?,
+                                payload: serde_json::from_str(&row.get::<_, String>(6)?)
+                                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                            },
+                            row.get::<_, Option<String>>(7)?,
+                            row.get::<_, Option<i64>>(8)?,
+                            row.get::<_, Option<String>>(9)?,
+                        ))
+                    })?;
+                    let mut projections = Vec::new();
+                    for row in rows {
+                        let (event, checkpoint_id, checkpoint_version, state) = row?;
+                        let checkpoint = match (checkpoint_id, checkpoint_version, state) {
+                            (Some(checkpoint_id), Some(contract_version), Some(state)) => {
+                                Some(Checkpoint {
+                                    contract_version: u16::try_from(contract_version)
+                                        .map_err(|_| LedgerError::Storage)?,
+                                    scope: event.scope.clone(),
+                                    aggregate: event.aggregate.clone(),
+                                    checkpoint_id,
+                                    sequence: event.sequence,
+                                    state: serde_json::from_str(&state)
+                                        .map_err(|_| LedgerError::Storage)?,
+                                })
+                            }
+                            (None, None, None) => None,
+                            _ => return Err(LedgerError::Storage),
+                        };
+                        projections.push((event, checkpoint));
+                    }
+                    projections
+                };
+                if projections.is_empty() {
+                    break;
+                }
+                for (event, checkpoint) in projections {
+                    Self::queue_projection_in(&tx, &event, checkpoint.as_ref())?;
+                }
+            }
+            tx.execute(
+                "UPDATE ve_ledger_meta SET projection_enabled=1 WHERE id=1",
+                [],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn projection_enabled(&self) -> Result<bool, LedgerError> {
+        self.connection
+            .query_row(
+                "SELECT projection_enabled FROM ve_ledger_meta WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
     /// Appends locally and queues a durable mirror record in the same transaction.
     pub fn append_with_outbox(&mut self, draft: EventDraft) -> Result<LedgerEvent, LedgerError> {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let event = Self::append_in(&tx, draft)?;
-        let serialized = serde_json::to_string(&event).map_err(|_| LedgerError::InvalidInput)?;
-        tx.execute("INSERT INTO ve_ledger_outbox(scope,aggregate_id,sequence,event_json) VALUES(?1,?2,?3,?4) ON CONFLICT(scope,aggregate_id,sequence) DO NOTHING", params![event.scope,event.aggregate,event.sequence as i64,serialized])?;
+        Self::queue_projection_in(&tx, &event, None)?;
         tx.commit()?;
         Ok(event)
+    }
+
+    fn queue_projection_in(
+        tx: &Transaction<'_>,
+        event: &LedgerEvent,
+        checkpoint: Option<&Checkpoint>,
+    ) -> Result<(), LedgerError> {
+        let event_json = serde_json::to_string(event).map_err(|_| LedgerError::InvalidInput)?;
+        let checkpoint_json = checkpoint
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|_| LedgerError::InvalidInput)?;
+        tx.execute(
+            "INSERT INTO ve_ledger_outbox(scope,aggregate_id,sequence,event_json,checkpoint_json) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(scope,aggregate_id,sequence) DO UPDATE SET checkpoint_json=COALESCE(ve_ledger_outbox.checkpoint_json,excluded.checkpoint_json),delivered=CASE WHEN excluded.checkpoint_json IS NOT NULL AND ve_ledger_outbox.checkpoint_json IS NULL THEN 0 ELSE ve_ledger_outbox.delivered END",
+            params![event.scope, event.aggregate, event.sequence as i64, event_json, checkpoint_json],
+        )?;
+        Ok(())
     }
 
     pub fn pending_outbox(&self, limit: u32) -> Result<Vec<LedgerEvent>, LedgerError> {
@@ -240,6 +389,26 @@ impl SqliteLedger {
         let rows = stmt.query_map([limit], |row| row.get::<_, String>(0))?;
         rows.map(|row| serde_json::from_str(&row?).map_err(|_| LedgerError::Storage))
             .collect()
+    }
+
+    pub fn pending_projections(&self, limit: u32) -> Result<Vec<PendingProjection>, LedgerError> {
+        if !(1..=1000).contains(&limit) {
+            return Err(LedgerError::InvalidInput);
+        }
+        let mut stmt = self.connection.prepare("SELECT event_json,checkpoint_json FROM ve_ledger_outbox WHERE delivered=0 ORDER BY scope,aggregate_id,sequence LIMIT ?1")?;
+        let rows = stmt.query_map([limit], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
+        rows.map(|row| {
+            let (event, checkpoint) = row?;
+            Ok(PendingProjection {
+                event: serde_json::from_str(&event).map_err(|_| LedgerError::Storage)?,
+                checkpoint: checkpoint
+                    .map(|json| serde_json::from_str(&json).map_err(|_| LedgerError::Storage))
+                    .transpose()?,
+            })
+        })
+        .collect()
     }
 
     pub fn pending_outbox_count(&self) -> Result<u64, LedgerError> {
@@ -261,7 +430,10 @@ impl SqliteLedger {
         if scope.trim().is_empty() || aggregate.trim().is_empty() || sequence > i64::MAX as u64 {
             return Err(LedgerError::InvalidInput);
         }
-        self.connection.execute("UPDATE ve_ledger_outbox SET delivered=1 WHERE scope=?1 AND aggregate_id=?2 AND sequence=?3", params![scope,aggregate,sequence as i64])?;
+        self.connection.execute(
+            "DELETE FROM ve_ledger_outbox WHERE scope=?1 AND aggregate_id=?2 AND sequence=?3",
+            params![scope, aggregate, sequence as i64],
+        )?;
         Ok(())
     }
 
@@ -479,6 +651,15 @@ impl SqliteLedger {
             )?;
         }
         let lifecycle = Self::append_checkpointed_in(&tx, lifecycle_event, checkpoint_id, state)?;
+        let projection_enabled: bool = tx.query_row(
+            "SELECT projection_enabled FROM ve_ledger_meta WHERE id=1",
+            [],
+            |row| row.get(0),
+        )?;
+        if projection_enabled {
+            Self::queue_projection_in(&tx, &admission_event, None)?;
+            Self::queue_projection_in(&tx, &lifecycle.event, Some(&lifecycle.checkpoint))?;
+        }
         tx.commit()?;
         Ok(CheckpointedAdmission {
             reservation,
@@ -788,7 +969,7 @@ mod tests {
                 expected_version: 0,
             })
             .unwrap();
-        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; DROP TABLE ve_run_admissions; DROP TABLE ve_ledger_outbox; UPDATE ve_ledger_meta SET version=1;").unwrap();
+        ledger.connection.execute_batch("DROP TABLE ve_run_reservations; DROP TABLE ve_ledger_checkpoints; DROP TABLE ve_run_admissions; DROP TABLE ve_ledger_outbox; ALTER TABLE ve_ledger_meta DROP COLUMN projection_enabled; UPDATE ve_ledger_meta SET version=1;").unwrap();
         ledger.migrate().unwrap();
         let version: i64 = ledger
             .connection
@@ -919,6 +1100,81 @@ mod tests {
         ledger.mark_outbox_delivered("s", "a", 1).unwrap();
         assert!(ledger.pending_outbox(10).unwrap().is_empty());
         assert_eq!(ledger.read("s", "a", 0, 10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn checkpointed_outbox_keeps_event_and_snapshot_together() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let draft = EventDraft {
+            scope: "s".into(),
+            aggregate: "run:1:x".into(),
+            event_id: "event-1".into(),
+            idempotency_key: "operation-1".into(),
+            event_type: "run_lifecycle_transition".into(),
+            payload: json!({"state":{"status":"running"}}),
+            expected_version: 0,
+        };
+        let checkpoint_state = json!({"contract_version":1,"status":"running"});
+        let saved = ledger
+            .append_checkpointed_with_outbox(
+                draft.clone(),
+                "checkpoint-1".into(),
+                checkpoint_state.clone(),
+            )
+            .unwrap();
+        let pending = ledger.pending_projections(10).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].event, saved.event);
+        assert_eq!(pending[0].checkpoint, Some(saved.checkpoint.clone()));
+        assert_eq!(
+            ledger
+                .append_checkpointed_with_outbox(draft, "checkpoint-1".into(), checkpoint_state,)
+                .unwrap(),
+            saved
+        );
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn projection_enable_backfills_history_and_queues_future_checkpoints() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        let event = EventDraft {
+            scope: "s".into(),
+            aggregate: "run".into(),
+            event_id: "event-1".into(),
+            idempotency_key: "operation-1".into(),
+            event_type: "run_started".into(),
+            payload: json!({"status":"running"}),
+            expected_version: 0,
+        };
+        let first = ledger
+            .append_checkpointed(event.clone(), "checkpoint-1".into(), json!({"n":1}))
+            .unwrap();
+        assert!(!ledger.projection_enabled().unwrap());
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 0);
+
+        ledger.enable_projection().unwrap();
+        assert!(ledger.projection_enabled().unwrap());
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 1);
+        assert_eq!(
+            ledger.pending_projections(10).unwrap()[0].checkpoint,
+            Some(first.checkpoint)
+        );
+
+        let second = EventDraft {
+            event_id: "event-2".into(),
+            idempotency_key: "operation-2".into(),
+            event_type: "run_finished".into(),
+            payload: json!({"status":"completed"}),
+            expected_version: 1,
+            ..event
+        };
+        ledger
+            .append_checkpointed_projected(second, "checkpoint-2".into(), json!({"n":2}))
+            .unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 2);
+        ledger.enable_projection().unwrap();
+        assert_eq!(ledger.pending_outbox_count().unwrap(), 2);
     }
 
     fn temp_ledger_path(label: &str) -> std::path::PathBuf {

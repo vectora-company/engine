@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 use sqlx::{
-    PgPool, Row,
+    PgPool, Postgres, Row, Transaction,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 use std::str::FromStr;
@@ -30,6 +30,57 @@ impl From<sqlx::Error> for PostgresError {
     fn from(_: sqlx::Error) -> Self {
         Self::Storage
     }
+}
+
+async fn save_checkpoint_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    checkpoint: &Checkpoint,
+) -> Result<(), PostgresError> {
+    if checkpoint.contract_version != CHECKPOINT_VERSION
+        || checkpoint.scope.trim().is_empty()
+        || checkpoint.aggregate.trim().is_empty()
+        || checkpoint.checkpoint_id.trim().is_empty()
+        || checkpoint.sequence == 0
+        || checkpoint.sequence > i64::MAX as u64
+    {
+        return Err(PostgresError::InvalidConfig);
+    }
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ve_ledger_events WHERE scope=$1 AND aggregate_id=$2 AND sequence=$3)")
+        .bind(&checkpoint.scope)
+        .bind(&checkpoint.aggregate)
+        .bind(checkpoint.sequence as i64)
+        .fetch_one(&mut **tx)
+        .await?;
+    if !exists {
+        return Err(PostgresError::VersionConflict);
+    }
+    let prior = sqlx::query("SELECT checkpoint_id,sequence,contract_version,state FROM ve_ledger_checkpoints WHERE scope=$1 AND aggregate_id=$2 AND (checkpoint_id=$3 OR sequence=$4) FOR UPDATE")
+        .bind(&checkpoint.scope)
+        .bind(&checkpoint.aggregate)
+        .bind(&checkpoint.checkpoint_id)
+        .bind(checkpoint.sequence as i64)
+        .fetch_optional(&mut **tx)
+        .await?;
+    if let Some(row) = prior {
+        if row.try_get::<String, _>("checkpoint_id")? != checkpoint.checkpoint_id
+            || row.try_get::<i64, _>("sequence")? as u64 != checkpoint.sequence
+            || row.try_get::<i32, _>("contract_version")? != i32::from(checkpoint.contract_version)
+            || row.try_get::<Value, _>("state")? != checkpoint.state
+        {
+            return Err(PostgresError::IdempotencyConflict);
+        }
+    } else {
+        sqlx::query("INSERT INTO ve_ledger_checkpoints(scope,aggregate_id,checkpoint_id,sequence,contract_version,state) VALUES($1,$2,$3,$4,$5,$6)")
+            .bind(&checkpoint.scope)
+            .bind(&checkpoint.aggregate)
+            .bind(&checkpoint.checkpoint_id)
+            .bind(checkpoint.sequence as i64)
+            .bind(i32::from(checkpoint.contract_version))
+            .bind(&checkpoint.state)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
 }
 
 pub struct PostgresLedger {
@@ -86,6 +137,39 @@ impl PostgresLedger {
         let event = append_tx(&mut tx, draft).await?;
         tx.commit().await?;
         Ok(event)
+    }
+
+    /// Projects a committed SQLite event and its checkpoint atomically.
+    pub async fn project(
+        &self,
+        event: LedgerEvent,
+        checkpoint: Option<Checkpoint>,
+    ) -> Result<(), PostgresError> {
+        if checkpoint.as_ref().is_some_and(|checkpoint| {
+            checkpoint.scope != event.scope
+                || checkpoint.aggregate != event.aggregate
+                || checkpoint.sequence != event.sequence
+        }) {
+            return Err(PostgresError::InvalidConfig);
+        }
+        let mut tx = self.pool.begin().await?;
+        let draft = EventDraft {
+            scope: event.scope.clone(),
+            aggregate: event.aggregate.clone(),
+            event_id: event.event_id.clone(),
+            idempotency_key: event.idempotency_key.clone(),
+            event_type: event.event_type.clone(),
+            payload: event.payload.clone(),
+            expected_version: event.sequence.saturating_sub(1),
+        };
+        if append_tx(&mut tx, draft).await? != event {
+            return Err(PostgresError::IdempotencyConflict);
+        }
+        if let Some(checkpoint) = checkpoint {
+            save_checkpoint_tx(&mut tx, &checkpoint).await?;
+        }
+        tx.commit().await?;
+        Ok(())
     }
 
     pub async fn read(
@@ -168,36 +252,8 @@ impl PostgresLedger {
         &self,
         checkpoint: Checkpoint,
     ) -> Result<Checkpoint, PostgresError> {
-        if checkpoint.contract_version != CHECKPOINT_VERSION
-            || checkpoint.scope.trim().is_empty()
-            || checkpoint.aggregate.trim().is_empty()
-            || checkpoint.checkpoint_id.trim().is_empty()
-            || checkpoint.sequence == 0
-            || checkpoint.sequence > i64::MAX as u64
-        {
-            return Err(PostgresError::InvalidConfig);
-        }
         let mut tx = self.pool.begin().await?;
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ve_ledger_events WHERE scope=$1 AND aggregate_id=$2 AND sequence=$3)")
-            .bind(&checkpoint.scope).bind(&checkpoint.aggregate).bind(checkpoint.sequence as i64).fetch_one(&mut *tx).await?;
-        if !exists {
-            return Err(PostgresError::VersionConflict);
-        }
-        let prior = sqlx::query("SELECT checkpoint_id,sequence,contract_version,state FROM ve_ledger_checkpoints WHERE scope=$1 AND aggregate_id=$2 AND (checkpoint_id=$3 OR sequence=$4) FOR UPDATE")
-            .bind(&checkpoint.scope).bind(&checkpoint.aggregate).bind(&checkpoint.checkpoint_id).bind(checkpoint.sequence as i64).fetch_optional(&mut *tx).await?;
-        if let Some(row) = prior {
-            if row.try_get::<String, _>("checkpoint_id")? != checkpoint.checkpoint_id
-                || row.try_get::<i64, _>("sequence")? as u64 != checkpoint.sequence
-                || row.try_get::<i32, _>("contract_version")?
-                    != i32::from(checkpoint.contract_version)
-                || row.try_get::<Value, _>("state")? != checkpoint.state
-            {
-                return Err(PostgresError::IdempotencyConflict);
-            }
-        } else {
-            sqlx::query("INSERT INTO ve_ledger_checkpoints(scope,aggregate_id,checkpoint_id,sequence,contract_version,state) VALUES($1,$2,$3,$4,$5,$6)")
-                .bind(&checkpoint.scope).bind(&checkpoint.aggregate).bind(&checkpoint.checkpoint_id).bind(checkpoint.sequence as i64).bind(i32::from(checkpoint.contract_version)).bind(&checkpoint.state).execute(&mut *tx).await?;
-        }
+        save_checkpoint_tx(&mut tx, &checkpoint).await?;
         tx.commit().await?;
         Ok(checkpoint)
     }

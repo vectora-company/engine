@@ -6,7 +6,7 @@ atualizado durante o trabalho. Não marque um item como feito sem evidência.
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
 
-O estado atual, verificado em 2026-11-13, é PR #91 aberto no topo da stack, filho do #90. O item `flush_outbox`/`pending_count` do plano de storage foi implementado e validado localmente; a etapa seguinte começa sem aguardar CI. Revisões documentais anteriores são registros históricos. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
+O estado atual, verificado em 2026-11-13, é PR #92 aberto no topo da stack, filho do #91. O PR #91 implementa diagnóstico da outbox; o #92 projeta checkpoints SQLite dos stores lifecycle/loop/policy ao PostgreSQL. Ambos têm verificação local registrada; a próxima etapa começa sem aguardar CI. Revisões documentais anteriores são registros históricos. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
 [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
 permanece geral e não substitui critérios específicos. A etapa de limites explícitos por provider/modelo/modalidade foi publicada no PR [#84](https://github.com/vectora-company/engine/pull/84), filho do #83 (head local/remoto `58980b3`). O retry de incompatibilidade multimodal foi publicado no [PR #85](https://github.com/vectora-company/engine/pull/85), filho do #84.
 
@@ -168,3 +168,13 @@ outras etapas aprovadas no plano ativo.
 - [x] Rodar workspace Rust (172 testes + 3 fixtures), Python (53), Node (39 aprovados; 10 testes service-real ignorados sem endpoints), Clippy, rustdoc e hooks completos.
 - [x] Commit `4f7e980`, push e abrir o PR [#91](https://github.com/vectora-company/engine/pull/91), filho do #90.
 - [ ] Criar fixtures comuns de KV, filas e vetores nos três níveis; trabalho continua na Fase 2 do plano.
+
+## Projeção PostgreSQL de checkpoints — PR #92
+
+- [x] Evoluir schema do outbox SQLite para armazenar checkpoint junto ao evento (schema v6; migração aditiva).
+- [x] Tornar a projeção opt-in por arquivo: `ResilientLedger` com PostgreSQL habilita-a e faz backfill histórico; stores SQLite-only não acumulam outbox. Admission e stores lifecycle/loop/policy enfileiram eventos/checkpoints na transação local quando habilitados; itens confirmados são removidos da outbox.
+- [x] Projetar evento + checkpoint atomicamente e de forma idempotente no PostgreSQL.
+- [x] Repetir workspace Rust e matriz de serviços após corrigir a fixture de migração: 175 Rust + 3 fixtures + 1 teste nativo; `storage::` 76/76; 34 testes SQLite focados; PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0 reais. Format, Clippy `-D warnings` e rustdoc passaram. Python 53 e Node 39 (10 sem endpoints ignorados) são da rodada anterior; bindings não mudaram.
+- [x] Commit `b01b20b`, push e abrir o PR [#92](https://github.com/vectora-company/engine/pull/92), filho do #91.
+- [ ] Publicar a correção da fixture de migração e a projeção opt-in no mesmo PR #92.
+- [ ] Projetar reservas/admissions como entidade consultável, criar APIs de leitura PostgreSQL e fechar backup/verify, concorrência de projetores e migrations com rollback.
