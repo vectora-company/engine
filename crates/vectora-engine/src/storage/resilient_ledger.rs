@@ -7,7 +7,9 @@ use thiserror::Error;
 
 use super::{
     postgres::{PostgresError, PostgresLedger},
-    sqlite::{EventDraft, LedgerError, LedgerEvent, PendingProjection, SqliteLedger},
+    sqlite::{
+        EventDraft, LedgerError, LedgerEvent, PendingProjection, ProjectionCounts, SqliteLedger,
+    },
 };
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -30,6 +32,17 @@ pub enum ResilientLedgerError {
     Sqlite(#[from] LedgerError),
     #[error("PostgreSQL projection rejected a committed SQLite ledger event")]
     ProjectionConflict,
+    #[error("PostgreSQL projection is unavailable during recovery")]
+    ProjectionUnavailable,
+    #[error("PostgreSQL projection counts do not match the SQLite authority")]
+    ProjectionMismatch,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ProjectionRecoveryReport {
+    pub projected: usize,
+    pub expected: ProjectionCounts,
+    pub observed: ProjectionCounts,
 }
 
 /// SQLite is the durable local authority. PostgreSQL receives an outbox-backed
@@ -147,6 +160,54 @@ impl ResilientLedger {
         Ok(delivered)
     }
 
+    /// Rebuilds the selected scopes in PostgreSQL from SQLite and verifies row counts.
+    /// Callers must pause writers during this operation for a consistent comparison.
+    pub async fn rebuild_projection(
+        &mut self,
+    ) -> Result<ProjectionRecoveryReport, ResilientLedgerError> {
+        let url = self
+            .postgres_url
+            .as_deref()
+            .ok_or(ResilientLedgerError::ProjectionUnavailable)?;
+        if self.postgres.is_none() {
+            self.postgres = Some(
+                PostgresLedger::connect(url, 4)
+                    .await
+                    .map_err(|_| ResilientLedgerError::ProjectionUnavailable)?,
+            );
+        }
+        self.local.requeue_projection()?;
+        let mut projected = 0;
+        loop {
+            let pending = self.pending_count()?;
+            if pending == 0 {
+                break;
+            }
+            let delivered = self.flush_outbox(1000).await?;
+            projected += delivered;
+            if delivered == 0 {
+                return Err(ResilientLedgerError::ProjectionUnavailable);
+            }
+        }
+        let scopes = self.local.projection_scopes()?;
+        let expected = self.local.projection_counts(&scopes)?;
+        let observed = self
+            .postgres
+            .as_ref()
+            .expect("connected before rebuild")
+            .projection_counts(&scopes)
+            .await
+            .map_err(|_| ResilientLedgerError::ProjectionUnavailable)?;
+        if expected != observed {
+            return Err(ResilientLedgerError::ProjectionMismatch);
+        }
+        Ok(ProjectionRecoveryReport {
+            projected,
+            expected,
+            observed,
+        })
+    }
+
     pub fn read_local(
         &self,
         scope: &str,
@@ -207,6 +268,126 @@ mod tests {
         let ledger = ResilientLedger::open(&path, None).unwrap();
         assert_eq!(ledger.pending_count().unwrap(), 1);
         drop(ledger);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn rebuild_restores_a_lost_postgres_projection_from_sqlite() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let scope = format!("projection-rebuild-{suffix}");
+        let path = db_path();
+        let reservation = super::super::sqlite::RunReservation {
+            scope: scope.clone(),
+            thread_id: format!("thread-{suffix}"),
+            turn_id: "turn-1".into(),
+            run_id: format!("run-{suffix}"),
+            idempotency_key: format!("request-{suffix}"),
+            request: json!({"prompt":"recover from sqlite"}),
+        };
+        let standalone = super::super::sqlite::RunReservation {
+            scope: scope.clone(),
+            thread_id: format!("standalone-thread-{suffix}"),
+            turn_id: "turn-2".into(),
+            run_id: format!("standalone-run-{suffix}"),
+            idempotency_key: format!("standalone-request-{suffix}"),
+            request: json!({"prompt":"reserved only"}),
+        };
+        let admission = {
+            let mut local = SqliteLedger::open_persistent(&path).unwrap();
+            local
+                .admit_run_checkpointed(
+                    reservation.clone(),
+                    EventDraft {
+                        scope: scope.clone(),
+                        aggregate: reservation.thread_id.clone(),
+                        event_id: format!("admission-event-{suffix}"),
+                        idempotency_key: format!("admission-{suffix}"),
+                        event_type: "run_admitted".into(),
+                        payload: json!({"run_id":reservation.run_id}),
+                        expected_version: 0,
+                    },
+                    EventDraft {
+                        scope: scope.clone(),
+                        aggregate: reservation.run_id.clone(),
+                        event_id: format!("lifecycle-event-{suffix}"),
+                        idempotency_key: format!("lifecycle-{suffix}"),
+                        event_type: "run_started".into(),
+                        payload: json!({"status":"planned"}),
+                        expected_version: 0,
+                    },
+                    format!("checkpoint-{suffix}"),
+                    json!({"status":"planned"}),
+                )
+                .unwrap()
+        };
+        {
+            let mut local = SqliteLedger::open_persistent(&path).unwrap();
+            local.reserve_run(standalone.clone()).unwrap();
+        }
+        let mut ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(ledger.flush_outbox(100).await.unwrap(), 3);
+        assert_eq!(ledger.pending_count().unwrap(), 0);
+
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        for table in [
+            "ve_run_admissions",
+            "ve_ledger_checkpoints",
+            "ve_run_reservations",
+            "ve_ledger_events",
+            "ve_ledger_versions",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table} WHERE scope=$1"))
+                .bind(&scope)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+        }
+        tx.commit().await.unwrap();
+
+        let report = ledger.rebuild_projection().await.unwrap();
+        assert_eq!(report.expected.events, 2);
+        assert_eq!(report.expected.aggregates, 2);
+        assert_eq!(report.expected.checkpoints, 1);
+        assert_eq!(report.expected.reservations, 2);
+        assert_eq!(report.expected.admissions, 1);
+        assert_eq!(report.observed, report.expected);
+        assert_eq!(report.projected, 3);
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        let admission_events = pg
+            .read(&scope, &reservation.thread_id, 0, 10)
+            .await
+            .unwrap();
+        assert_eq!(admission_events.len(), 1);
+        assert_eq!(admission_events[0], admission.admission_event);
+        let lifecycle_events = pg.read(&scope, &reservation.run_id, 0, 10).await.unwrap();
+        assert_eq!(lifecycle_events.len(), 1);
+        assert_eq!(lifecycle_events[0], admission.lifecycle.event);
+        assert_eq!(
+            pg.read_run_reservation(&scope, &standalone.thread_id, &standalone.turn_id)
+                .await
+                .unwrap(),
+            Some(standalone)
+        );
+        assert_eq!(
+            pg.read_run_admission(&scope, &reservation.run_id)
+                .await
+                .unwrap(),
+            Some(super::super::sqlite::Admission {
+                reservation,
+                event: admission.admission_event,
+            })
+        );
+        drop(pool);
+        drop(ledger);
+        drop(pg);
         std::fs::remove_file(path).unwrap();
     }
 

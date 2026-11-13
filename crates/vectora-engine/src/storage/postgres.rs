@@ -9,7 +9,8 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use super::sqlite::{
-    Admission, CHECKPOINT_VERSION, Checkpoint, EventDraft, LedgerEvent, RunReservation,
+    Admission, CHECKPOINT_VERSION, Checkpoint, EventDraft, LedgerEvent, ProjectionCounts,
+    RunReservation,
 };
 
 #[derive(Debug, Error)]
@@ -245,6 +246,33 @@ impl PostgresLedger {
                 })
             })
             .collect()
+    }
+
+    /// Counts rows in the Engine-owned projection tables for recovery verification.
+    pub async fn projection_counts(
+        &self,
+        scopes: &[String],
+    ) -> Result<ProjectionCounts, PostgresError> {
+        if scopes.is_empty() {
+            return Ok(ProjectionCounts::default());
+        }
+        let row = sqlx::query(
+            "SELECT (SELECT COUNT(*) FROM ve_ledger_versions WHERE scope=ANY($1)) AS aggregates,
+                    (SELECT COUNT(*) FROM ve_ledger_events WHERE scope=ANY($1)) AS events,
+                    (SELECT COUNT(*) FROM ve_ledger_checkpoints WHERE scope=ANY($1)) AS checkpoints,
+                    (SELECT COUNT(*) FROM ve_run_reservations WHERE scope=ANY($1)) AS reservations,
+                    (SELECT COUNT(*) FROM ve_run_admissions WHERE scope=ANY($1)) AS admissions",
+        )
+        .bind(scopes)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(ProjectionCounts {
+            aggregates: row.try_get("aggregates")?,
+            events: row.try_get("events")?,
+            checkpoints: row.try_get("checkpoints")?,
+            reservations: row.try_get("reservations")?,
+            admissions: row.try_get("admissions")?,
+        })
     }
 
     pub async fn read_run_reservation(

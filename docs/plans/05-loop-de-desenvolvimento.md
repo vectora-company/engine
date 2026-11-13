@@ -83,7 +83,7 @@ O checklist específico de mídia atual é
 
 - Cada PR novo usa como base a branch do PR anterior (não `main`), para que o
   mantenedor aprove em cascata. Exemplo (stack verificada em 2026-11-13): `main` ← #73 ← #76 ←
-  #77 ← #79 ← #80 ← #81 ← #82 ← #83 ← #84 ← #85 ← #86 ← #87 ← #88 ← próxima etapa. Quando um PR já estiver integrado, o seguinte passa a ter
+  #77 ← #79 ← #80 ← #81 ← #82 ← #83 ← #84 ← #85 ← #86 ← #87 ← #88 ← #89 ← #90 ← #91 ← #92 ← #93 ← #94. Quando um PR já estiver integrado, o seguinte passa a ter
   como base a branch seguinte da stack ou `main`.
 - Faça push para `https://github.com/vectora-company/engine.git` e crie o PR com
   `gh pr create --base <branch do PR anterior> --head <branch nova>`. Título e
@@ -114,7 +114,7 @@ projeto e registrada em `capabilities()` (política na
 
 ## Execução atual — 13 de novembro de 2026
 
-O PR [#91](https://github.com/vectora-company/engine/pull/91) expõe `flush_outbox`/`pending_count`; #92 projeta evento + checkpoint dos stores SQLite lifecycle/loop/policy para PostgreSQL. O PR aberto [#93](https://github.com/vectora-company/engine/pull/93), filho do #92, implementa reservation standalone, admission e leituras PostgreSQL. Workspace Rust: 182 testes + 3 fixtures + 1 teste nativo; `storage::` 83/83 contra PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0; os testes service-real de reservation/admission passaram. Clippy `-D warnings`, rustdoc, formatação e hooks completos passaram. CI remoto não foi aguardado. Próxima decisão vital: contrato de backup/verify PostgreSQL (dump nativo operacional ou backup lógico da Engine), registrado na análise; depois seguem concorrência dos projetores e migrations com rollback.
+O PR [#91](https://github.com/vectora-company/engine/pull/91) expõe `flush_outbox`/`pending_count`; #92 projeta evento + checkpoint dos stores SQLite lifecycle/loop/policy para PostgreSQL. O PR aberto [#93](https://github.com/vectora-company/engine/pull/93), filho do #92, implementa reservation standalone, admission e leituras PostgreSQL. Workspace Rust: 182 testes + 3 fixtures + 1 teste nativo; `storage::` 83/83 contra PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0; os testes service-real de reservation/admission passaram. Clippy `-D warnings`, rustdoc, formatação e hooks completos passaram. CI remoto não foi aguardado. A decisão vital foi respondida no chat: `pg_dump`/backup gerenciado para desastre do servidor e verify/rebuild da projeção a partir do SQLite. PR #94 implementa a recuperação por scope, replay idempotente e comparação de contagens, exigindo pausa dos writers; depois seguem concorrência dos projetores e migrations com rollback. Nesta etapa, o teste PostgreSQL real reconstruiu eventos, checkpoint, reservation/admission e reserva standalone após apagar a scope isolada; Python 53/53 e TypeScript 39/39 passaram (10 testes de serviço ignorados sem endpoints). `storage::` teve 81 aprovações e 3 falhas restritas ao contêiner NATS 2.10, incompatível com o mínimo 2.11 do TTL; PostgreSQL/Redis/Qdrant passaram.
 
 A decisão vital sobre bytes inline foi respondida no chat: separar o tipo
 persistível do envelope efêmero. Implementação publicada no PR

@@ -407,6 +407,15 @@ async def resilient_ledger_flush_outbox(
     return json.loads(encoded)
 
 
+async def resilient_ledger_rebuild_projection(
+    path: str, postgres_url: str | None = None
+) -> dict[str, Any]:
+    """Rebuild and verify the PostgreSQL projection from SQLite; pause writers first."""
+    return json.loads(
+        await _native.resilient_ledger_rebuild_projection(path, postgres_url)
+    )
+
+
 async def resilient_ledger_pending_count(path: str) -> int:
     """Count locally committed ledger events that PostgreSQL has not projected."""
     return json.loads(await _native.resilient_ledger_pending_count(path))
@@ -1112,6 +1121,7 @@ __all__ = [
     "resilient_ledger_append",
     "resilient_ledger_flush_outbox",
     "resilient_ledger_pending_count",
+    "resilient_ledger_rebuild_projection",
     "run_contract_version",
     "sqlite_admit_run",
     "sqlite_latest_checkpoint",

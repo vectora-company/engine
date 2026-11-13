@@ -43,32 +43,23 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 
 ## Capability ativa
 
-Continuação da spec 17: PR #83 revisou a documentação inicial; #84 adicionou
-limites por provider/modelo; #85 implementou retry textual único; e #86 substitui
-`ToolResult.output` por partes tipadas. Esses PRs estão abertos e empilhados em
-ordem. A mídia ainda não está integrada em `main`; catálogo automático e limites
-agregados seguem pendentes. Storage e runtime não devem ser anunciados como estáveis.
+A capability ativa voltou a ser storage/ledger. Os PRs #92 e #93 ampliam a
+projeção SQLite-first do PostgreSQL; o PR #94, filho do #93, implementa rebuild
+idempotente e verificação por contagens após perda da projeção. A decisão de
+brunosrz no chat combina backup `pg_dump`/gerenciado do PostgreSQL completo com
+reconstrução a partir do SQLite autoritativo. Consulte os artefatos da etapa:
 
-- Plano de continuidade (plano ativo): [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
-- Spec da mídia: [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md).
-- Checklist desta etapa: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
-- Storage — plano: [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
-- Storage — spec: [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md).
-- Storage — checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
-- Storage — análise: [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
+- Plano de continuidade: [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
+- Plano de storage: [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
+- Spec: [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md).
+- Checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
+- Análise: [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
+- Análise geral: [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
+- Loop: [`docs/plans/05-loop-de-desenvolvimento.md`](../plans/05-loop-de-desenvolvimento.md) e checklist geral [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md).
 
-Atualize o plano, checklist, spec e análise da capability em cada etapa, com
-branch/PR, SHA e evidência obtida; não descreva trabalho local como publicado.
-A branch `feat/chat-media-rejection-retry` está publicada no PR #85, filha de
-`feat/chat-media-provider-limits-docs83` (#84). O PR #86, `feat/chat-tool-result-parts`,
-é filho do #85 e implementa a decisão de substituir diretamente `ToolResult` sem
-manter v1; a decisão e o contrato constam em `docs/specs/17-midia-no-chat.md`.
-A revisão documental está no PR [#87](https://github.com/vectora-company/engine/pull/87),
-filho do PR #86. A reclassificação MIME na reidratação está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87; o head é `18c2eca`. A decisão sobre a fronteira de `Inline`/`data:` foi respondida no chat (opção 3) e implementada no PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89: persistível separado de envio efêmero; bytes inline só passam por APIs efêmeras com validação de tamanho e MIME. O PR [#91](https://github.com/vectora-company/engine/pull/91), filho do #90, expõe `flush_outbox`/`pending_count` em Python e TypeScript. O PR [#92](https://github.com/vectora-company/engine/pull/92), filho do #91, projeta evento e checkpoint dos stores SQLite de lifecycle/loop/policy na mesma transação PostgreSQL. O PR aberto [#93](https://github.com/vectora-company/engine/pull/93), filho do #92, projeta reservations/admissions e expõe leitura PostgreSQL. Verificações e gaps atuais estão no plano ativo e na auditoria `docs/analyses/05-auditoria-storage-s0-s5.md`. Veja `docs/specs/17-midia-no-chat.md` e `docs/checklists/04-midia-no-chat.md`. Ao criar um Markdown, no mesmo PR
-vincule-o no índice `docs/README.md`, no prompt
-`docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
-artefatos da capability que dependem dele. Use o caminho completo a partir
-da raiz do repositório no texto do link e um destino relativo válido.
+Pausar writers é requisito operacional durante verify/rebuild para a comparação
+consistir em um ponto estável. Concorrência entre projetores e migrations com
+rollback continuam no backlog; não aguardar CI remoto para avançar a stack.
 
 ## Regras operacionais do mantenedor
 

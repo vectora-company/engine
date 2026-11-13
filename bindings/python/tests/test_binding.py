@@ -41,6 +41,7 @@ from vectora_engine import (
     resilient_ledger_append,
     resilient_ledger_flush_outbox,
     resilient_ledger_pending_count,
+    resilient_ledger_rebuild_projection,
     run_contract_version,
     sqlite_admit_run,
     sqlite_latest_checkpoint,
@@ -416,6 +417,8 @@ def test_resilient_ledger_outbox_diagnostics_are_exposed(tmp_path: Any) -> None:
     assert asyncio.run(resilient_ledger_pending_count(path)) == 1
     with pytest.raises(RuntimeError):
         asyncio.run(resilient_ledger_flush_outbox(path, limit=1001))
+    with pytest.raises(RuntimeError, match="unavailable"):
+        asyncio.run(resilient_ledger_rebuild_projection(path))
 
 
 def test_sqlite_run_lifecycle_admission_and_transitions_survive_reopen(

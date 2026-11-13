@@ -719,6 +719,10 @@ interface NativeBinding {
     limit: number,
     postgresUrl?: string | undefined | null,
   ): Promise<number>;
+  resilientLedgerRebuildProjection(
+    path: string,
+    postgresUrl?: string | undefined | null,
+  ): Promise<string>;
   resilientLedgerPendingCount(path: string): Promise<string>;
   sqliteLedgerBackupOnline(path: string, destination: string): Promise<string>;
   sqliteLedgerBackupOffline(path: string, destination: string): Promise<string>;
@@ -1642,6 +1646,32 @@ export async function resilientLedgerPendingCount(
   path: string,
 ): Promise<bigint> {
   return BigInt(await native.resilientLedgerPendingCount(path));
+}
+
+/** Rebuild and verify PostgreSQL rows from SQLite; pause writers first. */
+export async function resilientLedgerRebuildProjection(
+  path: string,
+  postgresUrl?: string,
+): Promise<{
+  projected: number;
+  expected: {
+    aggregates: number;
+    events: number;
+    checkpoints: number;
+    reservations: number;
+    admissions: number;
+  };
+  observed: {
+    aggregates: number;
+    events: number;
+    checkpoints: number;
+    reservations: number;
+    admissions: number;
+  };
+}> {
+  return JSON.parse(
+    await native.resilientLedgerRebuildProjection(path, postgresUrl),
+  );
 }
 
 export async function sqliteLedgerRead(

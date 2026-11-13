@@ -110,6 +110,15 @@ pub struct PendingProjection {
     pub reservation: Option<RunReservation>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ProjectionCounts {
+    pub aggregates: i64,
+    pub events: i64,
+    pub checkpoints: i64,
+    pub reservations: i64,
+    pub admissions: i64,
+}
+
 pub struct SqliteLedger {
     connection: Connection,
 }
@@ -451,6 +460,123 @@ impl SqliteLedger {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    /// Requeues the complete local authority for an explicit PostgreSQL rebuild.
+    pub fn requeue_projection(&mut self) -> Result<(), LedgerError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let enabled: bool = tx.query_row(
+            "SELECT projection_enabled FROM ve_ledger_meta WHERE id=1",
+            [],
+            |row| row.get(0),
+        )?;
+        if !enabled {
+            return Err(LedgerError::InvalidInput);
+        }
+        tx.execute_batch(
+            "DELETE FROM ve_ledger_outbox;
+             DELETE FROM ve_run_reservation_outbox;
+             UPDATE ve_ledger_meta SET projection_enabled=0,
+                 admission_backfill_complete=0,
+                 reservation_backfill_complete=0 WHERE id=1;",
+        )?;
+        loop {
+            let projections = {
+                let mut statement = tx.prepare("SELECT e.scope,e.aggregate_id,e.sequence,e.event_id,e.idempotency_key,e.event_type,e.payload,c.checkpoint_id,c.contract_version,c.state FROM ve_ledger_events e LEFT JOIN ve_ledger_checkpoints c ON c.scope=e.scope AND c.aggregate_id=e.aggregate_id AND c.sequence=e.sequence LEFT JOIN ve_ledger_outbox o ON o.scope=e.scope AND o.aggregate_id=e.aggregate_id AND o.sequence=e.sequence WHERE o.scope IS NULL ORDER BY e.rowid LIMIT 500")?;
+                let rows = statement.query_map([], |row| {
+                    Ok((
+                        LedgerEvent {
+                            scope: row.get(0)?,
+                            aggregate: row.get(1)?,
+                            sequence: row.get::<_, i64>(2)? as u64,
+                            event_id: row.get(3)?,
+                            idempotency_key: row.get(4)?,
+                            event_type: row.get(5)?,
+                            payload: serde_json::from_str(&row.get::<_, String>(6)?)
+                                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                        },
+                        row.get::<_, Option<String>>(7)?,
+                        row.get::<_, Option<i64>>(8)?,
+                        row.get::<_, Option<String>>(9)?,
+                    ))
+                })?;
+                let mut projections = Vec::new();
+                for row in rows {
+                    let (event, checkpoint_id, checkpoint_version, state) = row?;
+                    let checkpoint = match (checkpoint_id, checkpoint_version, state) {
+                        (Some(checkpoint_id), Some(contract_version), Some(state)) => {
+                            Some(Checkpoint {
+                                contract_version: u16::try_from(contract_version)
+                                    .map_err(|_| LedgerError::Storage)?,
+                                scope: event.scope.clone(),
+                                aggregate: event.aggregate.clone(),
+                                checkpoint_id,
+                                sequence: event.sequence,
+                                state: serde_json::from_str(&state)
+                                    .map_err(|_| LedgerError::Storage)?,
+                            })
+                        }
+                        (None, None, None) => None,
+                        _ => return Err(LedgerError::Storage),
+                    };
+                    projections.push((event, checkpoint));
+                }
+                projections
+            };
+            if projections.is_empty() {
+                break;
+            }
+            for (event, checkpoint) in projections {
+                Self::queue_projection_in(&tx, &event, checkpoint.as_ref(), None)?;
+            }
+        }
+        tx.execute(
+            "UPDATE ve_ledger_meta SET projection_enabled=1 WHERE id=1",
+            [],
+        )?;
+        tx.commit()?;
+        self.enable_projection()
+    }
+
+    /// Counts authoritative rows covered by PostgreSQL projection.
+    pub fn projection_scopes(&self) -> Result<Vec<String>, LedgerError> {
+        let mut statement = self.connection.prepare(
+            "SELECT scope FROM ve_ledger_events
+             UNION SELECT scope FROM ve_run_reservations ORDER BY scope",
+        )?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn projection_counts(&self, scopes: &[String]) -> Result<ProjectionCounts, LedgerError> {
+        let mut counts = ProjectionCounts::default();
+        for scope in scopes {
+            let per_scope = self.connection.query_row(
+                "SELECT (SELECT COUNT(DISTINCT aggregate_id) FROM ve_ledger_events WHERE scope=?1),
+                        (SELECT COUNT(*) FROM ve_ledger_events WHERE scope=?1),
+                        (SELECT COUNT(*) FROM ve_ledger_checkpoints WHERE scope=?1),
+                        (SELECT COUNT(*) FROM ve_run_reservations WHERE scope=?1),
+                        (SELECT COUNT(*) FROM ve_run_admissions WHERE scope=?1)",
+                [scope],
+                |row| {
+                    Ok(ProjectionCounts {
+                        aggregates: row.get(0)?,
+                        events: row.get(1)?,
+                        checkpoints: row.get(2)?,
+                        reservations: row.get(3)?,
+                        admissions: row.get(4)?,
+                    })
+                },
+            )?;
+            counts.aggregates += per_scope.aggregates;
+            counts.events += per_scope.events;
+            counts.checkpoints += per_scope.checkpoints;
+            counts.reservations += per_scope.reservations;
+            counts.admissions += per_scope.admissions;
+        }
+        Ok(counts)
     }
 
     pub fn projection_enabled(&self) -> Result<bool, LedgerError> {
