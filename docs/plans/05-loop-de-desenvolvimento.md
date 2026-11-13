@@ -23,6 +23,9 @@ do loop e os critérios sucintos de encerramento.
 - `docs/analyses/`: investigação, fontes, evidências e decisões.
 - `docs/templates/`: modelos para criar esses artefatos por capability sem
   deixar escopo, evidência ou critérios de saída implícitos.
+- `../issues/`, `../vectora/` e `../gh-bot/`: caminhos relativos ao layout de
+  `/media/brunosrz/externo/vectora-repos/`; em outro checkout, use esse caminho
+  absoluto.
 - `../issues/`: requisitos originais locais quando disponíveis; não substituem
   as specs da Engine.
 - Código e testes atuais: evidência do comportamento implementado, nunca
@@ -76,8 +79,8 @@ da raiz do repositório no texto do link e um destino relativo válido.
 ## Stack de PRs
 
 - Cada PR novo usa como base a branch do PR anterior (não `main`), para que o
-  mantenedor aprove em cascata. Exemplo: #45 ← #46 ← #47 ← próximo PR com base
-  na branch do #47. Quando um PR já estiver integrado, o seguinte passa a ter
+  mantenedor aprove em cascata. Exemplo (stack atual): `main` ← #73 ← #76 ←
+  #77 ← próximo PR com base na branch do #77. Quando um PR já estiver integrado, o seguinte passa a ter
   como base a branch seguinte da stack ou `main`.
 - Faça push para `https://github.com/vectora-company/engine.git` e crie o PR com
   `gh pr create --base <branch do PR anterior> --head <branch nova>`. Título e

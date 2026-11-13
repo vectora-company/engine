@@ -1,15 +1,18 @@
 # Auditoria de storage e ledger S0–S5
 
-**Estado revalidado:** auditoria S0–S5 em andamento; equivalência dos pares
-registrada no PR #55; score vetorial comum no PR #57; TTL nativo de NATS KV e
-atualização das dependências no PR #59; retenção finita por contagem no PR #60.
-A branch empilhada sobre #60 implementa tentativas e DLQ. O mantenedor definiu SQLite como
-cópia local obrigatória do estado crítico, NATS 2.11+ para TTL nativo e autorizou
-escolher a política de filas.
-**Branch de origem:** `fix/storage-selection-contract`; o estado posterior está
-separado por PRs na fotografia ao fim desta análise.
-**Escopo:** alinhar o contrato público de seleção às implementações e registrar
-a cobertura que ainda precisa ser demonstrada.
+**Estado atual (verificado em 2026-11-13):** os PRs #45–#72 estão integrados
+em `main` (`dc1aa5e`); o #77 está no topo da stack aberta. Entregue: seleção
+com seis backends, `capabilities()`, ledger com concorrência entre processos e
+backup online/offline, projeção PostgreSQL com retomada, score vetorial por
+cosseno, limites e dimensão divergente, KV com TTL NATS, CAS, incremento,
+prefixo e watch, filas com retenção, tentativas e DLQ. O que falta está na
+[matriz de equivalência](../plans/04-plano-storage-ledger.md) e no
+[plano ativo](../plans/03-plano-continuidade.md).
+**Como ler:** as seções abaixo são registros cronológicos de cada etapa. Quando
+uma seção antiga diz "pendente", "a decidir" ou descreve LanceDB com distância
+L2 e JetStream KV sem TTL, ela foi superada pelas seções posteriores e pelos
+PRs indicados em cada marca "superado".
+**Escopo:** registrar evidências, decisões do mantenedor e cobertura de storage.
 
 ## Decisão desta etapa
 
@@ -64,7 +67,7 @@ Critérios locais para a etapa:
 - Hook `Rust tests` do `pre-commit` — interrompido; não foi contado como
   aprovado. `git diff --check` deve ser repetido após a inclusão final.
 
-### Pendentes nesta máquina
+### Pendentes nesta máquina (histórico; superado pelas execuções posteriores)
 
 - O teste `cargo test -p vectora-engine storage::tests:: --locked` começou a
   compilar, mas foi interrompido após mais de dez minutos sob pressão alta de
@@ -88,7 +91,8 @@ estático e versionado (`STORAGE_CONTRACT_VERSION`, aditivo) com, por backend
 selecionado, o que o adapter implementa, o que não implementa, suporte a TTL,
 direção do score vetorial e durabilidade. Os fatos vêm do código dos adapters
 (`messaging.rs`: TTL do JetStream KV retorna `Unsupported`; `vector.rs`:
-LanceDB devolve distância e Qdrant similaridade cosseno; `storage/postgres.rs`:
+LanceDB devolve distância e Qdrant similaridade cosseno, estado superado pelos
+PRs #57 e #59; `storage/postgres.rs`:
 somente projeção de ledger). O relatório não contata serviços, não é health
 check e não prova garantias operacionais. Alternativa descartada: probe ativo
 de serviço, por exigir credenciais/rede e misturar readiness com configuração.
@@ -131,8 +135,9 @@ Qdrant. Testes adicionados nas etapas anteriores:
 - namespaces de KV são isolados e `delete` remove só a chave do namespace;
 - contrato vetorial comum a LanceDB e Qdrant: ordenação, `limit`, upsert
   substitui, mesmo id em escopos distintos, delete por escopo, dimensão
-  inválida falha, e direção do score (LanceDB distância/menor é mais próximo;
-  Qdrant similaridade/maior é mais próximo), coerente com `capabilities()`.
+  inválida falha, e direção do score (na época, LanceDB distância/menor é mais
+  próximo e Qdrant similaridade/maior é mais próximo; superado pelo #57, que
+  usa cosseno normalizado nos dois), coerente com `capabilities()`.
 
 Reinício de serviços (`VECTORA_TEST_PODMAN_RESTART=1`): Redis e NATS — KV/jobs
 sobreviveram a `podman restart`, os adapters voltaram a operar e o ACK
@@ -159,11 +164,13 @@ os casos limite aceitos passam a validação e só falham ao alcançar um servi�
 inexistente (`Storage`), enquanto os inválidos retornam `InvalidInput`.
 Observação por leitura de código: `metadata` vetorial, valores de KV e payloads
 de fila não têm limite de tamanho, e a busca do Qdrant não limita a dimensão da
-consulta (o upsert limita a 65536). Definir limites muda o contrato público e
-depende de decisão do mantenedor; não foi implementado.
+consulta (o upsert limita a 65536). Superado: o mantenedor decidiu não impor
+limite novo de payload, e o #65 aplicou o limite de dimensão também à busca.
 
-Não coberto: shutdown gracioso do adapter, retenção/limites JetStream, limites
-de payload e falhas de indexação. Permanecem `não executado`.
+Não coberto na época: shutdown gracioso do adapter, retenção/limites JetStream,
+limites de payload e falhas de indexação. A retenção foi entregue no #60 e o
+limite de payload foi decidido; shutdown gracioso e falhas de indexação seguem
+pendentes.
 
 ## Estado do ledger multiprocesso (PR #49)
 
@@ -172,7 +179,7 @@ de payload e falhas de indexação. Permanecem `não executado`.
 independentes do próprio binário de teste contra o mesmo arquivo: um append
 com `expected_version=0` confirma, dois recebem `VersionConflict`, e uma
 reabertura lê um único evento. Isso fecha a cobertura de concorrência entre
-processos, ainda sujeito à revisão/integração do PR #49.
+processos; o PR #49 está integrado em `main`.
 
 ## Estado vetorial (PR #51)
 
@@ -299,13 +306,14 @@ como projeção/replicação retomável.
   novo depois do timeout. O conteúdo retido e falhas terminais devem ser
   observáveis e recuperáveis, não descartados silenciosamente. A escolha local
   é cinco tentativas por padrão; a branch atual inicia pela retenção limitada a
-  100000 mensagens nos dois brokers. DLQ e tentativas continuam pendentes.
+  100000 mensagens nos dois brokers. Tentativas e DLQ foram entregues depois,
+  no #61.
 
 NATS 2.11 introduziu TTL por mensagem e exige `AllowMsgTTL` no stream ([release
 notes 2.11](https://github.com/nats-io/nats.docs/blob/master/release_notes/whats_new_211.md),
 [configuração do stream](https://github.com/nats-io/nats.docs/blob/master/nats-concepts/jetstream/streams.md)).
 
-## Tentativas e DLQ em andamento sobre PR #60
+## Tentativas e DLQ (PR #61, integrado)
 
 A branch `feat/storage-queue-retries-dlq` acrescenta `QueueConfig.max_attempts`
 (default retrocompatível 5), atualiza consumidores JetStream existentes com o
@@ -473,7 +481,7 @@ O build Node em release e a suíte Node passaram (46/46), com LanceDB 0.22.3
 local e Qdrant 1.18.0 real, além de Redis e NATS nos casos de mensageria.
 A suíte Rust completa e a wheel Python não foram repetidas nesta etapa.
 
-## Verificação da branch empilhada sobre #57
+## Verificação das dependências e da matriz após o #57 (2026-11-12)
 
 Em 2026-11-12, `scons update` passou após incluir também `pnpm update --latest`:
 Cargo atualizou dependências lockadas compatíveis com MSRV 1.89; `uv.lock` foi

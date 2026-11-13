@@ -46,6 +46,21 @@ specs locais.
    mudanças ligadas a uma spec, inclua uma única linha `Refs: #N` ou
    `Closes: #N` quando houver issue pública correspondente.
 
+## Fluxo de trabalho do mantenedor
+
+- Commit, push e PR são obrigatórios em toda etapa, sem esperar pedido. Aprovar
+  PR e criar issue só quando `brunosrz` pedir.
+- PRs são sempre empilhados: cada PR novo tem como base a branch do PR anterior
+  aberto. A próxima etapa começa sem esperar CI nem aprovação. Um PR aberto é o
+  trabalho ativo: liste os PRs antes de escolher o escopo.
+- Decisão vital (contrato, dados, segurança, compatibilidade, escopo) é
+  perguntada a `brunosrz` no chat, depois de concluído o trabalho independente;
+  não use issues nem comentários de PR para isso.
+- Storage: SQLite é a cópia local obrigatória e a autoridade de recuperação; o
+  PostgreSQL recebe projeção. TTL por chave no NATS exige NATS Server 2.11+.
+- O plano ativo e o backlog estão em `docs/plans/03-plano-continuidade.md`; o
+  processo completo está em `docs/goal-loop/README.md`.
+
 ## Checks
 
 ```bash
@@ -54,6 +69,8 @@ scons lint
 scons tests
 ```
 
-O CI executa os checks Rust e os testes do tooling compartilhado. Não baixe
-browsers Playwright para a engine; o Chromium do app pertence ao Electron no
-repositório consumidor.
+O CI executa formatação, `check`, Clippy, testes e documentação Rust; build,
+lint, type check, Bandit e testes do binding Python e do tooling; e build,
+lint, typecheck e testes do binding TypeScript. Resultado de CI remoto não
+substitui a verificação local registrada. Não baixe browsers Playwright para a
+engine; o Chromium do app pertence ao Electron no repositório consumidor.

@@ -11,7 +11,9 @@ implementação, specs, planos, consumidores, referências e evidências.
 ## Desenvolvimento conjunto com o GH Bot
 
 O GH Bot é o primeiro consumidor experimental da Engine e deve avançar junto
-com ela. Durante o desenvolvimento, use o checkout irmão `../gh-bot` e o guia
+com ela (os caminhos `../gh-bot` e `../vectora` pressupõem o layout de
+`/media/brunosrz/externo/vectora-repos/`; em outro checkout, use esse caminho
+absoluto). Durante o desenvolvimento, use o checkout irmão `../gh-bot` e o guia
 [`engine-integration.md`](../../../gh-bot/docs/engine-integration.md): o
 binding TypeScript é consumido diretamente de `../engine/bindings/typescript`,
 sem depender de publicação no npm. Se o fluxo do Bot precisar de uma capability
@@ -41,14 +43,16 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 
 ## Capability ativa
 
-Storage, ledger e mensageria. O estado publicado da stack, as evidências e os
-itens pendentes são mantidos nos documentos abaixo.
+Fase 0 e Fase 1 do plano ativo: correções imediatas e mídia no chat (spec 17).
+O backlog completo, por fases, com origem, critério de saída e decisões
+pendentes, está no plano de continuidade. Storage segue como Fase 2.
 
-- Plano de continuidade: [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
-- Plano da capability: [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
-- Spec: [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md).
-- Checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
-- Análise: [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
+- Plano de continuidade (plano ativo): [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
+- Spec da mídia: [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md).
+- Storage — plano: [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
+- Storage — spec: [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md).
+- Storage — checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
+- Storage — análise: [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
 
 Atualize plano, checklist e análise da capability em cada etapa, com o PR,
 a evidência obtida e o trabalho pendente. Ao criar um Markdown, no mesmo PR

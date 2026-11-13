@@ -21,7 +21,7 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Cobrir concorrência entre processos independentes no ledger SQLite (3 processos, mesma versão esperada: 1 commit e 2 `VersionConflict`; PR #49).
 - [x] Implementar e cobrir backup/restore do ledger SQLite nos dois modos decididos (online e offline coordenado pelo host), com verificação, restore e `.replaced`, em Rust, Python e TypeScript.
 - [ ] Documentar o procedimento operacional de recovery (ordem: parar escritores, `restore`, reabrir) no guia de operação do consumidor.
-- [x] Rodar testes service-real de ACK/redelivery, TTL, pub/sub sem assinante, isolamento KV, projeção PostgreSQL e vetores contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 58 testes passam na execução combinada mais recente.
+- [x] Rodar testes service-real de ACK/redelivery, TTL, pub/sub sem assinante, isolamento KV, projeção PostgreSQL e vetores contra Redis, NATS JetStream, Qdrant e PostgreSQL locais (Podman): 58 testes na execução combinada com reinícios; a execução mais recente com as imagens atualizadas passou 69/69 (sem reinícios).
 - [x] Reinício de Redis e NATS JetStream: KV/jobs sobrevivem e os adapters voltam a operar. PostgreSQL parado/religado: o teste isolado passou; a execução combinada registrou uma falha ao parar um container com `AutoRemove=true`, que o Podman removeu. O teste agora confere `AutoRemove=false` antes de parar o serviço. Habilitado por `VECTORA_TEST_PODMAN_RESTART`.
 - [x] Reiniciar o Qdrant local e confirmar que coleção/ponto persistem e o adapter recupera a busca no mesmo contêiner.
 - [x] Caracterizar a retenção inicial sem limite das filas duráveis em Redis Streams e NATS JetStream.
@@ -35,7 +35,10 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Cobrir os limites de entrada existentes: busca `limit` 1–1000, vetor 1–65536 dimensões (upsert), escopo/coleção (≤128, charset), chave KV ≤512, identificadores ≤128 e subjects (sem segmentos vazios nem `*`/`#`, ≤512), nos dois lados de cada fronteira.
 - [x] Limite de tamanho de `metadata` vetorial, valores de KV e payloads de fila: decidido não impor limite novo (decisão do mantenedor, 2026-11-12).
 - [ ] Falhas de indexação dos stores vetoriais.
-- [ ] Definir limite/semântica comum sem esconder diferenças específicas.
+- [ ] Declarar em `capabilities()` o backup do SQLite, a dependência de `notify-keyspace-events` no watch do Redis e as ausências reais das filas e do vetorial (filtros, índice, quantização).
+- [ ] Testes Rust e Python de CAS, incremento, prefixo, watch e remoção de KV (hoje só Node).
+- [ ] Expor `flush_outbox` e `pending_count` do ledger resiliente nos bindings.
+- [ ] Health/readiness dos backends com os estados da spec 02.
 
 ## Encerramento desta etapa
 
@@ -44,7 +47,7 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Executar testes Rust de storage e runtime Python/Node com addons nativos atualizados (resultados e SHAs na análise; reinício PostgreSQL apenas isolado).
 - [x] Revisar diff, staged list e ausência de arquivos ignorados/artefatos nos PRs #46–#49.
 - [x] Registrar resultados dos checks concluídos e testes pendentes na auditoria.
-- [x] Commitar e publicar os PRs empilhados #46–#49; #49 está no topo da stack.
+- [x] Commitar e publicar os PRs empilhados #46–#49 (integrados em `main` com a stack #45–#72).
 
 Os testes/limites restantes estão descritos na análise vinculada. A antiga nota
 de interrupção de testes e addons desatualizados pertencia à etapa inicial e foi
@@ -52,11 +55,11 @@ substituída pelos resultados locais registrados em 2026-11-12.
 
 ## Equivalência por par (política de 2026-11-12)
 
-Os itens marcados concluídos foram verificados na branch indicada; os demais
+Os itens marcados concluídos foram verificados no PR indicado; os demais
 são lacunas a fechar nos dois lados do par. Veja a matriz em
 [`04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
 
-- [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local (branch do PR #57; não integrado em `main`).
+- [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local (PR #57, integrado em `main`).
 - [x] Vetorial: verificar os extremos de 1 a 65536 dimensões na busca e gravação em LanceDB local e Qdrant 1.18.0, incluindo coleção ausente e dimensão incompatível. Suíte Node 46/46.
 - [x] Verificar listagem KV em Redis e NATS reais: prefixo literal, ordenação, limite, exclusão de chaves expiradas e isolamento do namespace, via addon Node.
 - [x] Expor remoção em Python e TypeScript. Verificar leitura e listagem após remoção explícita e repetida em Redis e NATS reais, com Node e wheel CPython 3.13.
@@ -66,7 +69,10 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [x] Verificar watch KV em Redis e NATS reais: mudanças futuras, filtro de prefixo, isolamento, remoção, expiração e cancelamento da leitura.
 - [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
 - [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens novas.
-- [ ] Filas: `max_deliver`/contagem de entregas, DLQ, NACK/atraso e deduplicação equivalentes nas duas.
-- [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL, com a mesma suíte do SQLite.
+- [x] Filas: teto de tentativas e DLQ consumível nos dois brokers (#61–#64).
+- [ ] Filas: NACK e reentrega com atraso, deduplicação na publicação, replay e ordenação com contrato, shutdown gracioso e redrive atômico nas duas.
+- [ ] Pub/sub: reconexão observável e assinatura por padrão/curinga nos dois.
+- [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL como projeção, com a mesma suíte do SQLite; testes concorrentes com serviço real.
+- [ ] SQL: interface transacional genérica tipada e limitada nos dois (decisão do mantenedor pendente).
 - [x] Decisão do mantenedor: SQLite permanece cópia local obrigatória e autoridade de recovery para ledger e estado crítico interno; PostgreSQL recebe projeções/replicação retomável. Credenciais e autenticação/RBAC do produto ficam no host.
 - [ ] Especializações: registrar cada uma em `capabilities()` com o motivo de incompatibilidade verificado na documentação.

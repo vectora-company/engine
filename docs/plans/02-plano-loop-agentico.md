@@ -18,8 +18,9 @@ etapa troca automaticamente o runtime de qualquer consumidor.
 1. **Contrato de ciclo de vida** — identidade de execução versionada e estados
    válidos. Implementado experimentalmente com `SqliteRunLifecycleStore`: a
    admissão, evento inicial e checkpoint são persistidos atomicamente; as
-   transições verificam sequência esperada. Não generaliza esse lifecycle para
-   PostgreSQL nem torna efeitos externos atômicos.
+   transições verificam sequência esperada. Não torna efeitos externos
+   atômicos; a projeção desse estado em PostgreSQL (com SQLite como autoridade)
+   está pendente no [plano de storage](04-plano-storage-ledger.md).
 2. **Montagem de turno** — acumular texto, tool calls fragmentadas, usage e
    término em resposta canônica; validar ordem e impor limites. API incremental
    no Rust e API equivalente de conformidade nos dois bindings. Não executar
@@ -46,8 +47,9 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    do store está em `docs/specs/16-sqlite-durable-tool-policy.md`. O host segue
    responsável por autenticar aprovadores e validar recibos; o adapter não
    executa nem cancela tools.
-5. **Persistência e recovery** — integrar com os contratos de storage planejados
-   em `docs/plans/01-plano-portabilidade-llm-rust.md`: reserva atômica por
+5. **Persistência e recovery** — integrar com os contratos de storage do
+   [plano de storage](04-plano-storage-ledger.md) e da
+   [spec 02](../specs/02-storage-memoria-contexto-rag.md): reserva atômica por
    thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. O adapter
    experimental `SqliteModelToolLoopStore` agora persiste o par
    evento/checkpoint em uma transação antes de devolver cada ação ao host; os
@@ -58,7 +60,8 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    transições usam sequência esperada e checkpoints duráveis. O contrato está
    em `docs/specs/14-sqlite-durable-run-lifecycle.md`. Esses adapters não
    tornam efeitos externos atômicos, não fornecem exactly-once e não autenticam
-   o host. Integração genérica com PostgreSQL, coordenação dos
+   o host. Projeção em PostgreSQL desses stores (SQLite continua a autoridade
+   local, por decisão do mantenedor), coordenação dos
    providers/adapters, autenticação de recibos pelo host e recuperação
    operacional ainda precisam ser concluídas. O cancellation request é
    durável e o host recebe os IDs pendentes para interromper e reconciliar; isso

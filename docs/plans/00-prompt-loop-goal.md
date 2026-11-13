@@ -16,7 +16,12 @@ Aplique [`docs/plans/05-loop-de-desenvolvimento.md`](05-loop-de-desenvolvimento.
 e [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 Retome a próxima etapa aprovada do plano ativo e leia sua spec, análise e
 checklist. Implemente, verifique localmente e atualize os documentos da etapa.
-Consulte o [registro da capability ativa](../goal-loop/README.md#capability-ativa).
+O plano ativo é [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md):
+siga a próxima etapa indicada e o backlog por fases. Consulte o
+[registro da capability ativa](../goal-loop/README.md#capability-ativa), a
+[`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md) e, para
+storage, [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md)
+e [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
 Ao criar um Markdown, inclua no mesmo PR seu caminho completo a partir da raiz
 como texto de link neste prompt, em `docs/README.md`, nos documentos do goal
 que o usam e nos artefatos da capability que dependem dele.

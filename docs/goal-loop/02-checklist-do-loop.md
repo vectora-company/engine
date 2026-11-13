@@ -68,8 +68,6 @@ item bloqueado ou não aplicável precisa de uma justificativa curta.
 - [ ] Commitar e fazer push para a URL do GitHub (o `origin` local pode apontar
       para um clone).
 - [ ] Abrir o PR com base na branch do PR anterior da stack (não `main`).
-- [ ] Iniciar a próxima etapa em nova branch empilhada sem esperar CI nem
-      aprovação.
 - [ ] Antes de parar um contêiner de teste, conferir que não tem `AutoRemove`.
 - [ ] Confirmar que o próximo passo está no plano ativo aprovado; abrir sua
       branch empilhada imediatamente, sem esperar CI ou aprovação do PR anterior.

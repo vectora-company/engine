@@ -67,8 +67,12 @@ propaga falha depois de emitir qualquer evento e mantém a resposta parcial sem
 replay.
 
 Python e TypeScript têm testes locais com servidores HTTP de fixture para troca
-antes da saída e ausência de replay após saída parcial. Rust testa diretamente
-a classificação e elegibilidade, mas ainda não testa o fluxo completo com
-servidores locais. Os três bindings ainda não consomem uma fixture comum para
-fallback, e falta um caso explícito de cancelamento no fallback de streaming.
-Esses limites impedem afirmar conformidade completa da capability.
+antes da saída e ausência de replay após saída parcial. A fixture comum
+`tests/fixtures/conformance-v1.json` (chave `fallback_chat`) é exercitada pelos
+três níveis, inclusive em Rust com servidores TCP locais
+(`crates/vectora-engine/tests/conformance_fixtures.rs`,
+`shared_fallback_fixture_conforms_to_completion_and_streaming`), e cobre o
+cancelamento da iteração do stream (`cancel_after_event_type`). Ainda falta na
+fixture um caso de erro não elegível, e interromper a leitura não comprova o
+tempo de fechamento do socket upstream. Esses limites impedem afirmar
+conformidade completa da capability.
