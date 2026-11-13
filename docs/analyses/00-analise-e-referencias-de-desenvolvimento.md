@@ -176,7 +176,9 @@ síncrono) ou precisa ser async para stores de arquivo/rede e bindings não
 bloqueantes. Não incluí bytes no `ChatRequest`: isso mistura dados efêmeros com
 histórico persistível. Trabalho bloqueado: integrar preparação, limite, retry e
 evento de roteamento aos clientes. Permanecem independentes e já concluídos: o
-mapeamento de payload do PR #79 e a documentação da evidência Vectora.
+mapeamento de payload do PR #79 e a documentação da evidência Vectora. As
+opções e a pergunta estão registradas no PR #80, sem menção ao mantenedor no
+GitHub; a resposta é aguardada aqui no chat.
 
 ## Decisões que exigem o mantenedor
 

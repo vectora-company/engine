@@ -30,7 +30,8 @@ no envio.
 - [x] Commit e push do código da etapa de payload.
 - [x] Abrir o PR #79 sobre a branch do PR #77.
 - [x] Iniciar a próxima etapa em `feat/chat-media-routing-evidence`, filha do PR #79.
-- [ ] Commit, push e PR desta decisão vital empilhado sobre #79; não implementar a API dependente sem resposta no chat.
+- [x] Commit, push e abrir o PR #80 empilhado sobre #79, sem marcar brunosrz no GitHub.
+- [ ] Aguardar a resposta no chat; manter bloqueadas as mudanças de API que dependem da decisão.
 
 ## Evidência do consumidor Vectora
 

@@ -4,7 +4,8 @@
 da stack (`fix/storage-vector-collection-dimensions`, PR
 [#77](https://github.com/vectora-company/engine/pull/77) ←
 [#79](https://github.com/vectora-company/engine/pull/79); a branch local
-`feat/chat-media-routing-evidence` está empilhada sobre #79.
+[#80](https://github.com/vectora-company/engine/pull/80) registra a decisão
+vital sobre integração, aguardando resposta no chat.
 **`main` no GitHub:** `dc1aa5e` (PRs #45–#72 integrados por squash).
 **Stack aberta:** `main` ← [#73](https://github.com/vectora-company/engine/pull/73)
 (spec 17) ← [#76](https://github.com/vectora-company/engine/pull/76) (tipos de
