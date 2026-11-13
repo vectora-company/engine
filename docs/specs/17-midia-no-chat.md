@@ -3,15 +3,17 @@
 **Estado:** parcialmente implementada no código dos PRs abertos #79–#82; ainda
 não integrada em `main`. Tipos, classificação por bytes, capabilities,
 decisões por parte, payloads nativos e preparo Rust estão implementados para os
-protocolos descritos abaixo. O PR #82 expõe preparo manual, contexto por
+protocolos descritos abaixo. Retry textual único em incompatibilidade multimodal
+está implementado no PR aberto [#85](https://github.com/vectora-company/engine/pull/85),
+filho do #84. O PR #82 expõe preparo manual, contexto por
 chamada e contexto padrão nos bindings Python e TypeScript. O mapa temporário é
 `asset_id → bytes`; autorização e persistência dos assets continuam sob
 responsabilidade do host. O limite global padrão é 20 MiB por asset e pode ser
 configurado; a preparação atual cobre o turno de usuário mais recente e os
 resultados subsequentes de tools, e devolve evidências sem bytes. Overrides de limites por provider/modelo/modalidade já são aceitos no contexto
 de execução e limitados pelo teto global por asset; descoberta automática dos
-limites, limites agregados de request, retry específico e resultados de tool em
-partes seguem pendentes. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
+limites, limites agregados de request e resultados de tool em partes seguem
+pendentes. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
 do Vectora foi integrada em 19 PRs, mas não prova paridade da Engine. UI, STT
 local, prévias e empacotamento permanecem no Vectora. Veja o estado e os critérios
 em [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
@@ -113,9 +115,28 @@ indisponível: nome]`) e a decisão registra o motivo.
 
 ## Resultado de tool com partes
 
-`ToolResult.output` deixa de ser só `String`: passa a ser uma lista de partes
-(texto e imagem; os demais tipos de mídia de tool entram como forma textual).
-O texto continua sendo o que o loop e o ledger leem; a imagem é uma `MediaRef`.
+`ToolResult.output` é atualmente uma `String`; a extensão multimodal está
+planejada, mas sua forma pública ainda depende de decisão de compatibilidade.
+A proposta funcional é representar texto e imagem (`MediaRef`) como partes e
+manter uma forma textual legível pelo loop e pelo ledger.
+
+### Decisão pendente — compatibilidade de `ToolResult`
+
+Antes de alterar o contrato Rust/ Python/TypeScript, escolha uma estratégia:
+
+1. **Mudança direta:** substituir `output: String` por `parts: Vec<ToolResultPart>`.
+   Modelo mais simples, mas quebra consumidores Rust e formatos serializados
+   existentes.
+2. **Extensão aditiva:** manter `output: String` e acrescentar `content` opcional
+   com partes tipadas. Mantém compatibilidade de leitura, mas exige definir qual
+   campo é canônico e como texto e partes permanecem consistentes.
+3. **Contrato versionado novo:** manter `ToolResult` v1 e criar v2 com partes;
+   migração explícita e sem ambiguidade, ao custo de duas APIs e conversores
+   durante a transição.
+
+A escolha afeta API pública, serialização, persistência/replay e os dois bindings;
+por isso a implementação fica parada até a decisão. Nenhuma alternativa está
+selecionada.
 
 Mapeamento por provider:
 

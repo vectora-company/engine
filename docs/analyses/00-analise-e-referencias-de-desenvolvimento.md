@@ -245,8 +245,8 @@ A matriz concreta por modelo/endpoint e as restrições agregadas seguem pendent
 
 ## Retry após rejeição de mídia — 2026-11-13
 
-A implementação local na branch `feat/chat-media-rejection-retry`, filha do PR
-[#84](https://github.com/vectora-company/engine/pull/84), classifica como
+O PR [#85](https://github.com/vectora-company/engine/pull/85), filho do #84,
+implementa na branch `feat/chat-media-rejection-retry` e classifica como
 `MultimodalIncompatible` apenas respostas HTTP 400 com marcadores conhecidos de
 incompatibilidade de imagem, áudio, vídeo ou PDF. HTTP 401 continua
 `Authentication`; falhas de rede, timeout, 413 e erros genéricos não entram no
@@ -259,11 +259,22 @@ recebe a mesma regra e só avança de candidato depois de falha do retry.
 Verificação local direcionada: 51 testes `chat::` passaram, incluindo
 classificação, retry complete/stream OpenAI-compatible e retry de completion no
 wrapper fallback. `cargo clippy -p vectora-engine --lib --locked -- -D warnings`,
-`cargo fmt --all -- --check` e `git diff --check` passaram. Falta executar os
-hooks completos de pre-commit antes de publicar o PR.
+`cargo fmt --all -- --check`, `git diff --check` e os hooks completos de
+pre-commit (incluindo Clippy, suíte Rust workspace e rustdoc) passaram no SHA
+`0767636ee88567b19ddce93f1e8d0b15cace396f`.
 
 Contrato e limite: a classificação ainda depende de frases reconhecidas em
 mensagens de providers heterogêneos; não há catálogo oficial por endpoint. O
 retry não cobre tamanho, autenticação, falha de transporte nem erros SSE após
 o stream ter sido entregue. O registro `media_decisions.reason` e o evento
 `media_routed` anotam o rebaixamento sem incluir bytes.
+
+## Decisão pendente — partes multimodais em `ToolResult`
+
+A [spec 17](../specs/17-midia-no-chat.md) registra três alternativas para o
+contrato público: substituir diretamente a string por partes (breaking change),
+estender `ToolResult` com conteúdo tipado aditivo e definir a fonte canônica, ou
+criar uma versão nova do contrato com migração explícita. A escolha afeta Rust,
+Python, TypeScript, serialização e persistência/replay; portanto não há
+implementação independente segura dessa alteração antes da decisão de
+`brunosrz`. Itens não dependentes dessa forma de dados seguem no plano.

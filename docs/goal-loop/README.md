@@ -44,8 +44,8 @@ o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 ## Capability ativa
 
 Continuação da spec 17: PR #83 revisa os Markdown, PR #84 adiciona limites
-explícitos por provider/modelo e a branch filha local implementa retry textual
-único após rejeição multimodal classificada. O backlog por fases, os gaps de
+explícitos por provider/modelo e o PR #85, filho do #84, implementa retry textual único
+após rejeição multimodal classificada. O backlog por fases, os gaps de
 maturidade e as decisões pendentes estão no plano de continuidade. A mídia
 segue parcialmente implementada nos PRs abertos #79–#84;
 storage e runtime não devem ser anunciados como estáveis.
@@ -60,8 +60,9 @@ storage e runtime não devem ser anunciados como estáveis.
 
 Atualize o plano, checklist, spec e análise da capability em cada etapa, com
 branch/PR, SHA e evidência obtida; não descreva trabalho local como publicado.
-A branch de retry é `feat/chat-media-rejection-retry`, filha de
-`feat/chat-media-provider-limits-docs83` (#84). Ao criar um Markdown, no mesmo PR
+A branch `feat/chat-media-rejection-retry` está publicada no PR #85, filha de
+`feat/chat-media-provider-limits-docs83` (#84). A próxima decisão pendente é a
+compatibilidade de `ToolResult`, detalhada em `docs/specs/17-midia-no-chat.md`. Ao criar um Markdown, no mesmo PR
 vincule-o no índice `docs/README.md`, no prompt
 `docs/plans/00-prompt-loop-goal.md`, nos documentos do goal que o usam e nos
 artefatos da capability que dependem dele. Use o caminho completo a partir
