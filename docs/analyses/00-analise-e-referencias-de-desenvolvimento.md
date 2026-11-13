@@ -147,38 +147,26 @@ reavaliados individualmente se outro consumidor demonstrar necessidade e houver
 um contrato comum. O plano de continuidade foi atualizado para as próximas
 etapas sem copiar essa implementação Python para a Engine.
 
-### Decisão vital pendente — integração do `MediaStore` no envio
+### Decisão resolvida — oferecer os três modos de integração
 
-A análise do fluxo atual confirma que `prepare_content` existe como função
-pura síncrona, mas `OpenAiCompatibleClient` e `NativeChatClient` recebem apenas
-`ChatRequest`; nenhum deles recebe `MediaStore` nem `CapabilityResolver`. Portanto,
-os adapters não conseguem reidratar `MediaRef` no envio. A stack do Vectora
-confirma que a decisão deve acontecer por modelo/turno e que payload, evidência
-e UI precisam refletir a mesma rota.
+brunosrz decidiu oferecer as três formas de usar o preparo de mídia. A
+implementação deve compartilhar o mesmo pipeline Rust e manter `ChatRequest`
+sem bytes:
 
-**Pergunta para brunosrz:** qual fronteira pública deve fornecer o `MediaStore`
-e a política/capabilities ao envio real?
+1. **Preparo manual pelo consumidor:** chamar `prepare_content` e enviar as
+   partes resultantes pelo método atual. Expor o mesmo helper nos bindings.
+2. **Contexto efêmero por chamada:** métodos `complete/stream` aceitam um
+   `MediaExecutionContext` para store e resolver, sem persistir essa dependência.
+3. **Contexto padrão no cliente:** builder/config do cliente mantém contexto
+   padrão; contexto explícito por chamada tem precedência. Dados já preparados
+   (`Inline`/imagem resolvida) não são preparados duas vezes.
 
-- **A — contexto efêmero por chamada (recomendação):** adicionar um contexto de
-  execução separado de `ChatRequest`, entregue a `complete`/`stream`. Mantém
-  referências serializáveis no histórico e evita compartilhar store mutável entre
-  chamadas; exige desenhar callbacks/trait assíncrono compatível com Rust, Python
-  e TypeScript.
-- **B — dependência no cliente:** configurar `MediaStore` e resolver no cliente.
-  Simplifica chamadas, mas fixa ownership/lifecycle no cliente e dificulta
-  chamadas concorrentes com stores ou permissões diferentes.
-- **C — consumidor prepara antes do adapter:** não muda a API de envio, porém
-  deixa a reidratação, escolha por turno e evidência fora do core, contrariando a
-  meta de decisão e payload coerentes da Engine.
-
-A resposta também determina se a leitura do store pode bloquear (o trait atual é
-síncrono) ou precisa ser async para stores de arquivo/rede e bindings não
-bloqueantes. Não incluí bytes no `ChatRequest`: isso mistura dados efêmeros com
-histórico persistível. Trabalho bloqueado: integrar preparação, limite, retry e
-evento de roteamento aos clientes. Permanecem independentes e já concluídos: o
-mapeamento de payload do PR #79 e a documentação da evidência Vectora. As
-opções e a pergunta estão registradas no PR #80, sem menção ao mantenedor no
-GitHub; a resposta é aguardada aqui no chat.
+A leitura do `MediaStore` será assíncrona: o chat e seus transportes já são
+async, e o store pode fazer I/O; não bloquear executor com leitura de arquivo ou
+serviço. O contrato deve limitar tamanho antes de codificar base64 e registrar
+somente metadados/digest/modo/motivo, nunca bytes. A decisão está implementada
+no plano e será entregue em etapas Rust e bindings. Não há decisão vital
+pendente nesta integração neste momento.
 
 ## Decisões que exigem o mantenedor
 

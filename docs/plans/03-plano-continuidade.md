@@ -109,14 +109,12 @@ compartilháveis e mantém sua própria implementação Rust.
 1. **Etapa atual:** serialização de PDF/áudio/vídeo em formatos nativos nos
    adapters Anthropic, Gemini e OpenAI Chat Completions. Código e testes locais
    passaram; PR #79 foi aberto sobre #77. A próxima etapa registra a decisão vital em branch filha.
-2. **[DECISÃO VITAL]** Definir como `MediaStore` e capabilities chegam ao envio
-   real: contexto efêmero por chamada, dependência no cliente ou preparação pelo
-   consumidor. A pergunta, opções e recomendação estão em
-   [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
-   Também decidir se a leitura do store é async. Não alterar API pública antes da
-   resposta. Após decidir, integrar `prepare_content` ao envio, resolver
-   capability por modelo com metadados/catálogo e produzir payload mais
-   evidência/evento de roteamento provider-neutral sem bytes/segredos.
+2. **Decisão resolvida:** oferecer preparo manual, contexto efêmero por chamada
+   e contexto padrão por cliente; chamada explícita prevalece sobre padrão e
+   mídia preparada não é processada duas vezes. Leitura do store é async para
+   não bloquear o runtime. Implementar a integração em Rust, depois expor os três
+   caminhos nos bindings. Resolver capability por modelo com metadados/catálogo
+   e produzir payload mais evidência/evento provider-neutral sem bytes/segredos.
 3. Limitar bytes por provider/modelo e reidratar apenas mídia do turno atual;
    expor erro estável e fallback textual sem persistir bytes. Validação precisa
    cobrir limites, MIME/digest e histórico (Vectora #481/#494).

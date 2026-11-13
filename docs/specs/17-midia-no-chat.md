@@ -39,15 +39,17 @@ rollback.
 - Não existe store de mídia; o único ponteiro de artefato é
   `VerificationEvidence.artifact_ref`.
 
-## Integração com o envio — decisão pendente
+## Integração com o envio
 
-A função `prepare_content` e o trait `MediaStore` existem no core, mas os
-clients de chat ainda recebem somente `ChatRequest` e não conseguem reidratar
-`MediaRef`. A forma pública de passar store e capabilities ao envio, inclusive
-se a leitura do store é síncrona ou assíncrona, aguarda decisão registrada em
+O consumidor terá três modos: chamar `prepare_content` manualmente antes do
+adapter; passar `MediaExecutionContext` por chamada; ou configurar contexto
+padrão no cliente. O contexto por chamada prevalece sobre o padrão do cliente.
+Partes já preparadas não são processadas de novo. `ChatRequest` continua sem
+bytes persistidos. A leitura de `MediaStore` é assíncrona para não bloquear o
+runtime. Estado da implementação e precedência estão em
 [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
-Até essa decisão, consumidores não devem inferir que anexos por referência são
-reidratados automaticamente pelos adapters.
+Até o pipeline ficar integrado, anexos por referência não são reidratados
+automaticamente pelos adapters.
 
 ## Responsabilidades
 
