@@ -160,3 +160,5 @@ Não encerre por conveniência, falta de contexto, PR anterior aguardando
 aprovação ou checks de CI em execução ou falhando: reconstrua o contexto pelos
 arquivos acima e siga a stack. Não continue após um critério de encerramento até receber nova
 orientação ou a decisão necessária.
+
+O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, head `df23e43cda2d24e4a4e169f4da399a1bda4bb795` (OPEN), adiciona testes service-real que confirmam `ProjectionMismatch` para linha extra em `ve_ledger_versions` e `ProjectionConflict` para payload divergente. Ambos passaram no PostgreSQL local; Clippy passou. Próxima etapa: concorrência entre projetores.
