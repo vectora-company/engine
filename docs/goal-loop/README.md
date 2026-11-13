@@ -49,6 +49,7 @@ pendentes, está no plano de continuidade. Storage segue como Fase 2.
 
 - Plano de continuidade (plano ativo): [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
 - Spec da mídia: [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md).
+- Checklist desta etapa: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 - Storage — plano: [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
 - Storage — spec: [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md).
 - Storage — checklist: [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).

@@ -6,6 +6,8 @@ acrescentar requisitos, mas não deve remover verificações aplicáveis daqui.
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Todo
 item bloqueado ou não aplicável precisa de uma justificativa curta.
 
+Etapa atual de mídia: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+
 ## Preparação
 
 - [ ] Confirmar repo, branch, base da stack e working tree; listar os PRs

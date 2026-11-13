@@ -588,6 +588,43 @@ fn content_payload(content: &MessageContent) -> Value {
                         }
                         json!({ "type": "image_url", "image_url": value })
                     }
+                    ContentPart::Inline(item)
+                        if item.kind == super::media::MediaKind::Document
+                            && item.mime_type == "application/pdf" =>
+                    {
+                        json!({
+                            "type": "file",
+                            "file": {
+                                "filename": item.name,
+                                "file_data": item.data_url(),
+                            }
+                        })
+                    }
+                    ContentPart::Inline(item) if item.kind == super::media::MediaKind::Audio => {
+                        let format = match item.mime_type.as_str() {
+                            "audio/wav" => Some("wav"),
+                            "audio/mpeg" => Some("mp3"),
+                            _ => None,
+                        };
+                        match format {
+                            Some(format) => json!({
+                                "type": "input_audio",
+                                "input_audio": {
+                                    "data": item.data_base64,
+                                    "format": format,
+                                }
+                            }),
+                            None => json!({
+                                "type": "text",
+                                "text": format!(
+                                    "[{}: {} — {}]",
+                                    item.kind.label(),
+                                    item.name,
+                                    item.mime_type
+                                ),
+                            }),
+                        }
+                    }
                     other => json!({
                         "type": "text",
                         "text": other.fallback_text().unwrap_or_default(),
@@ -1017,6 +1054,123 @@ mod tests {
             validate_request(&request),
             Err(ChatError::InvalidConfiguration(_))
         ));
+    }
+
+    #[test]
+    fn serializes_native_decisions_as_pdf_and_audio_chat_parts() {
+        use std::collections::HashMap;
+
+        use crate::chat::media::{
+            CapabilityState, ContentSite, MediaError, MediaPart, MediaRef, MediaStore,
+            ModalityCapabilities, prepare_content, sha256_hex,
+        };
+
+        #[derive(Default)]
+        struct Store(HashMap<String, Vec<u8>>);
+
+        impl MediaStore for Store {
+            fn read(&self, media_ref: &MediaRef) -> Result<Vec<u8>, MediaError> {
+                self.0
+                    .get(&media_ref.asset_id)
+                    .cloned()
+                    .ok_or(MediaError::Unavailable)
+            }
+        }
+
+        fn media_ref(id: &str, name: &str, mime: &str, data: &[u8]) -> MediaRef {
+            MediaRef {
+                asset_id: id.into(),
+                sha256: sha256_hex(data),
+                mime_type: mime.into(),
+                size_bytes: data.len() as u64,
+                name: name.into(),
+            }
+        }
+
+        let pdf_bytes = b"%PDF-1.4\n";
+        let audio_bytes = b"ID3-audio";
+        const BASE64_PDF: &str = "JVBERi0xLjQK";
+        const STANDARD_AUDIO: &str = "SUQzLWF1ZGlv";
+        let mut store = Store::default();
+        store.0.insert("pdf".into(), pdf_bytes.to_vec());
+        store.0.insert("audio".into(), audio_bytes.to_vec());
+        let prepared = prepare_content(
+            vec![
+                ContentPart::Document(MediaPart {
+                    media_ref: media_ref("pdf", "report.pdf", "application/pdf", pdf_bytes),
+                    text: None,
+                    previews: Vec::new(),
+                }),
+                ContentPart::Audio(MediaPart {
+                    media_ref: media_ref("audio", "voice.mp3", "audio/mpeg", audio_bytes),
+                    text: None,
+                    previews: Vec::new(),
+                }),
+            ],
+            &ModalityCapabilities {
+                vision: CapabilityState::Supported,
+                pdf: CapabilityState::Supported,
+                audio_input: CapabilityState::Supported,
+                video_input: CapabilityState::Unsupported,
+                tool_result_images: CapabilityState::Unsupported,
+            },
+            &store,
+            "model",
+            ContentSite::UserMessage,
+        );
+        assert!(
+            prepared
+                .decisions
+                .iter()
+                .all(|decision| decision.mode == crate::chat::media::MediaMode::Native)
+        );
+
+        let request = ChatRequest::new(
+            "model",
+            vec![Message {
+                role: MessageRole::User,
+                content: MessageContent::Parts(prepared.parts),
+                tool_calls: Vec::new(),
+                tool_call_id: None,
+                name: None,
+                is_error: false,
+            }],
+        );
+        let payload = request_payload(&request, false);
+        assert_eq!(
+            payload["messages"][0]["content"][0],
+            json!({
+                "type":"file",
+                "file": {
+                    "filename":"report.pdf",
+                    "file_data":format!("data:application/pdf;base64,{}", BASE64_PDF)
+                }
+            })
+        );
+        assert_eq!(
+            payload["messages"][0]["content"][1],
+            json!({
+                "type":"input_audio",
+                "input_audio":{"data":STANDARD_AUDIO,"format":"mp3"}
+            })
+        );
+    }
+
+    #[test]
+    fn unsupported_openai_audio_format_does_not_send_inline_bytes() {
+        let payload = content_payload(&MessageContent::Parts(vec![ContentPart::Inline(
+            crate::chat::media::InlineMedia {
+                kind: crate::chat::media::MediaKind::Audio,
+                mime_type: "audio/flac".into(),
+                name: "voice.flac".into(),
+                data_base64: "PRIVATE_BYTES".into(),
+            },
+        )]));
+        assert_eq!(
+            payload[0],
+            json!({"type":"text","text":"[áudio: voice.flac — audio/flac]"})
+        );
+        assert!(!payload.to_string().contains("PRIVATE_BYTES"));
     }
 
     #[test]

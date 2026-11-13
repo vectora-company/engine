@@ -101,10 +101,10 @@ confundidos com capacidades utilizáveis.
 73. **Como medir custo?** Registrar provider, modelo, tokens/units, retries, estimativa/preço e correlação com run, preservando privacidade. Preços mudam; estimativas devem guardar origem e instante.
 74. **Embeddings significam RAG pronto?** Não. Embeddings geram vetores; RAG inclui ingestão, chunking, metadata, indexação, query, filtros, ranking, contexto e avaliação.
 75. **Reranker substitui recuperação?** Não. Ele reordena candidatos recuperados; depende de retrieval e pode aumentar custo/latência. Avaliar ganho de relevância em conjunto.
-76. **Vision está disponível como plataforma completa?** Não. A Engine envia imagens nativamente a Anthropic, Gemini e OpenAI-compatible, e o módulo `chat/media.rs` (#76) classifica mídia pelos bytes e decide o modo por parte, mas faltam envio nativo de outros tipos, `ToolResult` com imagens, limites, recuperação, bindings e fixtures ([spec 17](../specs/17-midia-no-chat.md)).
-77. **Áudio, fala e vídeo fazem parte do core atual?** Como anexos de chat, parcialmente: `chat/media.rs` classifica áudio e vídeo e decide o modo, mas o envio nativo ainda não existe (os adapters mandam a forma textual). STT, TTS e geração de mídia estão fora da spec 17 e seguem como ports futuros do plano de portabilidade.
+76. **Vision está disponível como plataforma completa?** Não. A Engine envia imagens nativamente a Anthropic, Gemini e OpenAI-compatible. A etapa sobre #77 implementa PDF por protocolo (Anthropic `document`, Gemini `inlineData`, OpenAI Chat Completions `file.file_data`); payloads estão verificados nos testes locais, mas o PR ainda não foi aberto e o preparador não está integrado ao envio. `ToolResult` com imagens, limites, recuperação, evidência de roteamento, bindings e fixtures seguem pendentes ([spec 17](../specs/17-midia-no-chat.md), [checklist](../checklists/04-midia-no-chat.md)).
+77. **Áudio, fala e vídeo fazem parte do core atual?** Como anexos, parcialmente: esta etapa mapeia WAV/MP3 para `input_audio` no OpenAI Chat Completions e áudio/vídeo para `inlineData` no Gemini. Outros formatos ou modelos precisam cair para forma compatível; STT, TTS e geração de mídia ficam fora da spec 17 e seguem no plano de portabilidade.
 78. **Como suportar saída estruturada?** Schema versionado, validação determinística, erros de parse distintos de erro do provider e política de reparo com limite. Não confiar em JSON apenas porque o prompt pediu.
-79. **Como lidar com conteúdo multimodal?** Como a [spec 17](../specs/17-midia-no-chat.md) define: partes tipadas com `MediaRef` (asset, sha256, MIME detectado pelos bytes, tamanho, nome), sem binário no histórico, reidratação com conferência de digest e decisão auditável por parte (`native`, `image`, `text`, `reference`). Os tipos e a decisão existem em `chat/media.rs`; o restante está na Fase 1 do plano ativo.
+79. **Como lidar com conteúdo multimodal?** Como a [spec 17](../specs/17-midia-no-chat.md) define: partes tipadas com `MediaRef`, bytes ausentes do histórico, verificação de digest e decisão por parte. A stack consumidora [Vectora #479–#502](https://github.com/vectora-company/vectora/pulls) foi integrada e resolveu a jornada do app; a Engine ainda está na serialização por protocolo e precisa integrar reidratação/envio, limites, retry de recusa específica e evidência de roteamento no core. STT local, UI e empacotamento permanecem específicos do Vectora.
 80. **Como comparar providers?** Mesmo conjunto de tarefas, prompts, ferramentas, contexto, parâmetros e orçamento; medir qualidade, taxa de conclusão, falha, latência e custo. Resultados valem para dataset e SHA indicados.
 
 ## E. Contexto, memória e conhecimento (81–100)
@@ -152,6 +152,18 @@ confundidos com capacidades utilizáveis.
 118. **Como fazer versionamento de tool?** Nome estável mais versão de contrato, digest/implementation version e estratégia de compatibilidade. Replay não deve invocar silenciosamente uma implementação incompatível.
 119. **Como testar tools externas?** Testes determinísticos de contrato, simuladores e integração com serviço real em ambiente isolado; incluir timeout, erros, redelivery, idempotência e cancelamento.
 120. **Qual é a meta do framework extensível?** Permitir que consumers componham capacidades sem reimplementar governança, contexto e lifecycle; não forçar cada extensão a usar um modelo único ou executar dentro do core.
+
+## Mídia multimodal — referência Vectora (2026-11-13)
+
+A stack #479–#502 da Vectora foi integrada em 19 PRs. Ela confirma o valor
+funcional de anexos multimodais, mas não torna a Engine equivalente: o produto
+resolve UI, assets, conversão local, STT e empacotamento. Para o core Rust, os
+itens transferíveis são capacidade por modelo, payload real por protocolo,
+limites, reidratação apenas no turno atual, retry restrito a rejeição de mídia e
+evidência de roteamento usada pelo consumer. A Engine não deve copiar a lógica
+Python do app nem anunciar suporte até cobrir o payload real. Estado e links:
+[`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md) e
+[`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
 
 ## G. Storage, ledger e messaging (121–140)
 

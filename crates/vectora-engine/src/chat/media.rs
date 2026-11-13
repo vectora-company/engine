@@ -875,6 +875,12 @@ mod tests {
     }
 
     #[test]
+    fn openai_chat_completions_declara_pdf_nativo() {
+        let capabilities = CapabilityResolver::new().resolve("openai", "model-x");
+        assert_eq!(capabilities.pdf, CapabilityState::Supported);
+    }
+
+    #[test]
     fn imagem_nativa_vira_data_url_e_registra_a_decisao() {
         let mut store = MemoryStore::default();
         let media = part(store.put("a", PNG), None, vec![]);
