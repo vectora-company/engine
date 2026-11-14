@@ -13,12 +13,12 @@ use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
-    CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ContentPart,
-    ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
-    FallbackChatSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore,
-    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
-    PersistableChatRequest, ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn,
-    prepare_content_with_limits,
+    CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
+    ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
+    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
+    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
+    OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest, ProviderMediaLimits,
+    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -195,6 +195,29 @@ fn parse_inputs(
     }
     let client = OpenAiCompatibleClient::new(config).map_err(|error| error.to_string())?;
     Ok((client, request))
+}
+
+fn parse_llama_server_inputs(
+    settings_json: &str,
+    request_json: Option<&str>,
+    ephemeral: bool,
+) -> Result<
+    (
+        LlamaServerClient,
+        Option<ChatRequest>,
+        Option<MediaExecutionContext>,
+    ),
+    String,
+> {
+    let max_bytes = request_media_limit(settings_json)?;
+    let (settings_json, media_context) = split_media_context(settings_json)?;
+    let settings: LlamaServerSettings = serde_json::from_value(settings_json)
+        .map_err(|_| "invalid llama-server settings".to_owned())?;
+    let client = LlamaServerClient::new(settings).map_err(|error| error.to_string())?;
+    let request = request_json
+        .map(|json| parse_chat_request(json, ephemeral, max_bytes))
+        .transpose()?;
+    Ok((client, request, media_context))
 }
 
 fn parse_native_inputs(
@@ -1856,6 +1879,132 @@ fn chat_complete<'py>(
 }
 
 #[pyfunction]
+fn llama_server_health<'py>(py: Python<'py>, settings_json: String) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let health = client.health().await.map_err(py_error)?;
+        serde_json::to_string(&health).map_err(|_| py_error("could not encode llama-server health"))
+    })
+}
+
+#[pyfunction]
+fn llama_server_models<'py>(py: Python<'py>, settings_json: String) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let models = client.models().await.map_err(py_error)?;
+        serde_json::to_string(&models).map_err(|_| py_error("could not encode llama-server models"))
+    })
+}
+
+#[pyfunction]
+fn llama_server_chat_complete<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request, media) =
+            parse_llama_server_inputs(&settings_json, Some(&request_json), false)
+                .map_err(py_error)?;
+        let request = request.ok_or_else(|| py_error("missing chat request"))?;
+        let completion = match media {
+            Some(context) => client.complete_with_media(request, &context).await,
+            None => client.complete(request).await,
+        }
+        .map_err(py_error)?;
+        serde_json::to_string(&completion).map_err(|_| py_error("could not encode chat response"))
+    })
+}
+
+#[pyfunction]
+fn llama_server_chat_complete_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request, media) =
+            parse_llama_server_inputs(&settings_json, Some(&request_json), true)
+                .map_err(py_error)?;
+        let request = request.ok_or_else(|| py_error("missing chat request"))?;
+        let completion = match media {
+            Some(context) => client.complete_with_media(request, &context).await,
+            None => client.complete(request).await,
+        }
+        .map_err(py_error)?;
+        serde_json::to_string(&completion).map_err(|_| py_error("could not encode chat response"))
+    })
+}
+
+fn register_llama_server_stream(stream: ChatStream) -> Result<String, String> {
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        let mut stream = stream;
+        while let Some(item) = stream.next().await {
+            let serialized = item.map_err(|error| error.to_string()).and_then(|event| {
+                serde_json::to_string(&event)
+                    .map_err(|_| "could not encode stream event".to_owned())
+            });
+            if sender.send(serialized).await.is_err() {
+                break;
+            }
+        }
+    });
+    let state = StreamState {
+        receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+        abort: task.abort_handle(),
+    };
+    streams()
+        .lock()
+        .map_err(|_| "stream registry unavailable".to_owned())?
+        .insert(id.clone(), state);
+    Ok(id)
+}
+
+#[pyfunction]
+fn llama_server_chat_stream_start<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request, media) =
+            parse_llama_server_inputs(&settings_json, Some(&request_json), false)
+                .map_err(py_error)?;
+        let request = request.ok_or_else(|| py_error("missing chat request"))?;
+        let stream = match media {
+            Some(context) => client.stream_with_media(request, &context).await,
+            None => client.stream(request).await,
+        }
+        .map_err(py_error)?;
+        register_llama_server_stream(stream).map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn llama_server_chat_stream_start_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, request, media) =
+            parse_llama_server_inputs(&settings_json, Some(&request_json), true)
+                .map_err(py_error)?;
+        let request = request.ok_or_else(|| py_error("missing chat request"))?;
+        let stream = match media {
+            Some(context) => client.stream_with_media(request, &context).await,
+            None => client.stream(request).await,
+        }
+        .map_err(py_error)?;
+        register_llama_server_stream(stream).map_err(py_error)
+    })
+}
+
+#[pyfunction]
 fn chat_complete_ephemeral<'py>(
     py: Python<'py>,
     settings_json: String,
@@ -2323,6 +2472,18 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(chat_assemble_turn, module)?)?;
     module.add_function(wrap_pyfunction!(chat_complete, module)?)?;
     module.add_function(wrap_pyfunction!(chat_complete_ephemeral, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_health, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_models, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_chat_complete, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        llama_server_chat_complete_ephemeral,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(llama_server_chat_stream_start, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        llama_server_chat_stream_start_ephemeral,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(chat_prepare_content, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_start, module)?)?;
     module.add_function(wrap_pyfunction!(chat_stream_start_ephemeral, module)?)?;

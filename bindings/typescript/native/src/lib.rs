@@ -13,12 +13,12 @@ use napi::{Error, Result};
 use napi_derive::napi;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
-    CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ContentPart,
-    ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
-    FallbackChatSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore,
-    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings,
-    PersistableChatRequest, ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn,
-    prepare_content_with_limits,
+    CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
+    ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
+    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
+    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
+    OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest, ProviderMediaLimits,
+    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -224,6 +224,27 @@ fn parse_inputs(
     let client = OpenAiCompatibleClient::new(config)
         .map_err(|error| Error::from_reason(error.to_string()))?;
     Ok((client, request))
+}
+
+fn parse_llama_server_inputs(
+    settings_json: &str,
+    request_json: Option<&str>,
+    ephemeral: bool,
+) -> Result<(
+    LlamaServerClient,
+    Option<ChatRequest>,
+    Option<MediaExecutionContext>,
+)> {
+    let max_bytes = request_media_limit(settings_json)?;
+    let (settings_json, media_context) = split_media_context(settings_json)?;
+    let settings: LlamaServerSettings = serde_json::from_value(settings_json)
+        .map_err(|_| Error::from_reason("invalid llama-server settings"))?;
+    let client =
+        LlamaServerClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    let request = request_json
+        .map(|json| parse_chat_request(json, ephemeral, max_bytes))
+        .transpose()?;
+    Ok((client, request, media_context))
 }
 
 fn parse_native_inputs(
@@ -1725,6 +1746,118 @@ pub async fn chat_complete(settings_json: String, request_json: String) -> Resul
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     serde_json::to_string(&completion).map_err(|_| Error::from_reason("could not encode response"))
+}
+
+#[napi]
+pub async fn llama_server_health(settings_json: String) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let health = client
+        .health()
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&health)
+}
+
+#[napi]
+pub async fn llama_server_models(settings_json: String) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let models = client
+        .models()
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&models)
+}
+
+#[napi]
+pub async fn llama_server_chat_complete(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request, media) =
+        parse_llama_server_inputs(&settings_json, Some(&request_json), false)?;
+    let request = request.ok_or_else(|| Error::from_reason("missing chat request"))?;
+    let completion = match media {
+        Some(context) => client.complete_with_media(request, &context).await,
+        None => client.complete(request).await,
+    }
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&completion)
+}
+
+#[napi]
+pub async fn llama_server_chat_complete_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, request, media) =
+        parse_llama_server_inputs(&settings_json, Some(&request_json), true)?;
+    let request = request.ok_or_else(|| Error::from_reason("missing chat request"))?;
+    let completion = match media {
+        Some(context) => client.complete_with_media(request, &context).await,
+        None => client.complete(request).await,
+    }
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&completion)
+}
+
+fn register_llama_server_stream(stream: ChatStream) -> Result<String> {
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        let mut stream = stream;
+        while let Some(item) = stream.next().await {
+            let serialized = item
+                .map_err(|error| Error::from_reason(error.to_string()))
+                .and_then(|event| {
+                    serde_json::to_string(&event)
+                        .map_err(|_| Error::from_reason("could not encode stream event"))
+                });
+            if sender.send(serialized).await.is_err() {
+                break;
+            }
+        }
+    });
+    let state = StreamState {
+        receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+        abort: task.abort_handle(),
+    };
+    streams()
+        .lock()
+        .map_err(|_| Error::from_reason("stream registry unavailable"))?
+        .insert(id.clone(), state);
+    Ok(id)
+}
+
+#[napi]
+pub async fn llama_server_chat_stream_start(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    llama_server_stream_start_impl(settings_json, request_json, false).await
+}
+
+#[napi]
+pub async fn llama_server_chat_stream_start_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    llama_server_stream_start_impl(settings_json, request_json, true).await
+}
+
+async fn llama_server_stream_start_impl(
+    settings_json: String,
+    request_json: String,
+    ephemeral: bool,
+) -> Result<String> {
+    let (client, request, media) =
+        parse_llama_server_inputs(&settings_json, Some(&request_json), ephemeral)?;
+    let request = request.ok_or_else(|| Error::from_reason("missing chat request"))?;
+    let stream = match media {
+        Some(context) => client.stream_with_media(request, &context).await,
+        None => client.stream(request).await,
+    }
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    register_llama_server_stream(stream)
 }
 
 #[napi]

@@ -22,10 +22,12 @@ Esta auditoria é inventário documental; não altera o código de produção. O
 | Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                                                                              | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.                                     |
 | TTS/STT        | Não há cliente LLM para TTS/STT                                                                                                                                 | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                                                   |
 
-O estado em `main` permanece o snapshot anterior ao adapter. A branch filha do
-PR #97 implementa `LlamaServerClient` em Rust com health, discovery, metadata
-de modelo preservada e chat/stream compartilhado; os bindings ainda estão
-pendentes.
+O estado em `main` permanece o snapshot anterior ao adapter. O PR #98
+implementa `LlamaServerClient` em Rust com health, discovery, metadata de modelo
+preservada e chat/stream compartilhado. O PR filho #99 expõe health, models,
+completion e stream pelos bindings Python/TypeScript, incluindo requests
+efêmeros; fixtures locais cobrem SSE nos dois. Isso não prova integração com
+servidor llama-server real nem suporte de cada modalidade/modelo.
 
 ## Providers nomeados: documentos primários e gaps no core
 
