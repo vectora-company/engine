@@ -30,6 +30,10 @@ from vectora_engine import (
     fallback_chat_stream,
     fallback_embed,
     fallback_rerank,
+    llama_server_chat_complete,
+    llama_server_chat_stream,
+    llama_server_health,
+    llama_server_models,
     model_tool_loop_contract_version,
     native_chat_complete,
     native_chat_stream,
@@ -661,6 +665,83 @@ def endpoint(server: ThreadingHTTPServer) -> str:
 
 def test_contract_version_matches_rust_core() -> None:
     assert chat_contract_version() == 1
+
+
+def test_llama_server_profile_exposes_health_models_and_chat() -> None:
+    captured: list[str] = []
+    responses = {
+        "/health": b'{"status":"ok"}',
+        "/v1/models": b'{"object":"list","data":[{"id":"fixture","architecture":{"input_modalities":["text","image"],"output_modalities":["text"]}}]}',
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            captured.append(self.path)
+            body = responses[self.path]
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self) -> None:
+            captured.append(self.path)
+            length = int(self.headers.get("content-length", "0"))
+            request_body = json.loads(self.rfile.read(length))
+            if request_body.get("stream"):
+                body = (
+                    b'data: {"choices":[{"delta":{"content":"streamed"}}]}\n\n'
+                    b"data: [DONE]\n\n"
+                )
+                self.send_response(200)
+                self.send_header("content-type", "text/event-stream")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            body = (
+                b'{"choices":[{"message":{"content":"hello"},"finish_reason":"stop"}]}'
+            )
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    settings = {"base_url": f"http://127.0.0.1:{server.server_port}/v1"}
+    try:
+        assert asyncio.run(llama_server_health(settings)) == {"status": "ok"}
+        models = asyncio.run(llama_server_models(settings))
+        assert models["data"][0]["architecture"]["input_modalities"] == [
+            "text",
+            "image",
+        ]
+        result = asyncio.run(llama_server_chat_complete(settings, REQUEST))
+        assert result["content"] == "hello"
+        events = asyncio.run(collect_llama_server_stream(settings, REQUEST))
+        assert any(
+            event["type"] == "text_delta" and event["text"] == "streamed"
+            for event in events
+        )
+        assert captured == [
+            "/health",
+            "/v1/models",
+            "/v1/chat/completions",
+            "/v1/chat/completions",
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+async def collect_llama_server_stream(
+    settings: dict[str, Any], request: dict[str, Any]
+) -> list[dict[str, Any]]:
+    return [event async for event in llama_server_chat_stream(settings, request)]
 
 
 def test_embedding_and_rerank_contract_versions_match_rust_core() -> None:

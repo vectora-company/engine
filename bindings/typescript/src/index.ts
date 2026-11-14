@@ -16,6 +16,34 @@ export interface OpenAiCompatibleSettings {
   media_context?: MediaExecutionContext;
 }
 
+/** Settings for the llama.cpp v1.0.0 `llama-server` HTTP profile. */
+export interface LlamaServerSettings extends OpenAiCompatibleSettings {}
+
+export interface LlamaServerArchitecture {
+  input_modalities?: string[];
+  output_modalities?: string[];
+  [key: string]: JsonValue | undefined;
+}
+
+export interface LlamaServerModel {
+  id: string;
+  architecture?: LlamaServerArchitecture;
+  created?: number;
+  owned_by?: string;
+  meta?: JsonValue;
+  [key: string]: JsonValue | LlamaServerArchitecture | undefined;
+}
+
+export interface LlamaServerModelList {
+  object?: string;
+  data: LlamaServerModel[];
+  [key: string]: JsonValue | LlamaServerModel[] | undefined;
+}
+
+export interface LlamaServerHealth {
+  status: string;
+}
+
 export interface NativeChatSettings {
   provider: "anthropic" | "google" | "cohere";
   base_url?: string;
@@ -840,6 +868,24 @@ interface NativeBinding {
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
+  llamaServerHealth(settingsJson: string): Promise<string>;
+  llamaServerModels(settingsJson: string): Promise<string>;
+  llamaServerChatComplete(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerChatCompleteEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerChatStreamStart(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerChatStreamStartEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   chatStreamStart(settingsJson: string, requestJson: string): Promise<string>;
   chatStreamStartEphemeral(
     settingsJson: string,
@@ -881,7 +927,7 @@ interface NativeBinding {
   ): Promise<string>;
 }
 
-const native = (await import("../native/index.js")) as NativeBinding;
+const native = (await import("../native/index.js")) as unknown as NativeBinding;
 
 export interface StorageSelection {
   contract_version: number;
@@ -2119,6 +2165,49 @@ export async function chatCompleteEphemeral(
   return JSON.parse(result) as ChatCompletion;
 }
 
+/** Probe the llama-server `/health` endpoint using the canonical Rust profile. */
+export async function llamaServerHealth(
+  settings: LlamaServerSettings,
+): Promise<LlamaServerHealth> {
+  return JSON.parse(
+    await native.llamaServerHealth(JSON.stringify(settings)),
+  ) as LlamaServerHealth;
+}
+
+/** Read model metadata from `/v1/models`; returned modalities are raw server metadata. */
+export async function llamaServerModels(
+  settings: LlamaServerSettings,
+): Promise<LlamaServerModelList> {
+  return JSON.parse(
+    await native.llamaServerModels(JSON.stringify(settings)),
+  ) as LlamaServerModelList;
+}
+
+/** Complete through llama-server, sharing media handling with the Rust core. */
+export async function llamaServerChatComplete(
+  settings: LlamaServerSettings,
+  request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
+): Promise<ChatCompletion> {
+  const result = await native.llamaServerChatComplete(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  return JSON.parse(result) as ChatCompletion;
+}
+
+export async function llamaServerChatCompleteEphemeral(
+  settings: LlamaServerSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): Promise<ChatCompletion> {
+  const result = await native.llamaServerChatCompleteEphemeral(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  return JSON.parse(result) as ChatCompletion;
+}
+
 /**
  * Pull a backpressured stream from Rust. Returning early or aborting iteration
  * cancels the native task and drops its HTTP response body.
@@ -2149,6 +2238,47 @@ export async function* chatStreamEphemeral(
   mediaContext?: MediaExecutionContext,
 ): AsyncGenerator<ChatEvent> {
   const id = await native.chatStreamStartEphemeral(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  try {
+    for (;;) {
+      const event = await native.chatStreamNext(id);
+      if (event === null) return;
+      yield JSON.parse(event) as ChatEvent;
+    }
+  } finally {
+    native.chatStreamCancel(id);
+  }
+}
+
+/** Stream llama-server events; returning early cancels the underlying HTTP request. */
+export async function* llamaServerChatStream(
+  settings: LlamaServerSettings,
+  request: ChatRequest,
+  mediaContext?: MediaExecutionContext,
+): AsyncGenerator<ChatEvent> {
+  const id = await native.llamaServerChatStreamStart(
+    encodeMediaSettings(settings, mediaContext),
+    JSON.stringify(request),
+  );
+  try {
+    for (;;) {
+      const event = await native.chatStreamNext(id);
+      if (event === null) return;
+      yield JSON.parse(event) as ChatEvent;
+    }
+  } finally {
+    native.chatStreamCancel(id);
+  }
+}
+
+export async function* llamaServerChatStreamEphemeral(
+  settings: LlamaServerSettings,
+  request: EphemeralChatRequest,
+  mediaContext?: MediaExecutionContext,
+): AsyncGenerator<ChatEvent> {
+  const id = await native.llamaServerChatStreamStartEphemeral(
     encodeMediaSettings(settings, mediaContext),
     JSON.stringify(request),
   );
