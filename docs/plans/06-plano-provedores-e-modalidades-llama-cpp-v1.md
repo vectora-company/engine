@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97), perfil Rust [#98](https://github.com/vectora-company/engine/pull/98) e bindings [#99](https://github.com/vectora-company/engine/pull/99) em stack. PR #99 cobre Python/TypeScript; próxima etapa é Decision Model `/v1/systemone`, filha do #99.
+**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97), perfil Rust [#98](https://github.com/vectora-company/engine/pull/98) e bindings [#100](https://github.com/vectora-company/engine/pull/100) em stack. PR #100 cobre Python/TypeScript; próxima etapa é Decision Model `/v1/systemone`, filha do #100.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -50,7 +50,7 @@ promessas indiscriminadas.
 
 **Saída:** concluída no PR documental [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`, sobre `main`; spec 18, análise, checklist, índices e goal loop atualizados; nenhuma API de produção alterada.
 
-### Etapa 2 — perfil llama.cpp, health, descoberta e bindings (PRs #98 e #99)
+### Etapa 2 — perfil llama.cpp, health, descoberta e bindings (PRs #98 e #100)
 
 Adicionar settings e adapter Rust sobre HTTP, com model discovery em
 `/v1/models`, estado/capabilities por modelo e chat/text/stream. Testar rotas,
@@ -64,9 +64,9 @@ defaults de compatibilidade.
 
 **Estado do core:** implementado na branch `feat/llama-server-profile`, PR [#98](https://github.com/vectora-company/engine/pull/98). O core Rust implementa settings validados, health `/health`, discovery `/v1/models` com arrays de modalidades e metadata preservados, e chat/stream pelo transporte compartilhado. Cinco testes focados e a suíte Rust lib (191 testes), Clippy e rustdoc passaram.
 
-**Estado dos bindings:** implementado na branch filha `feat/llama-server-bindings`, PR #99 em preparação sobre #98. Python e TypeScript expõem health, models, completion, completion efêmera, streaming e streaming efêmero sobre o mesmo cliente Rust. Fixtures HTTP exercitam health/discovery/completion/stream nos dois bindings. Python (54 testes), Node (40 passaram, 10 ignorados por exigirem serviços), Ruff, `ty`, TypeScript, `cargo fmt`, Clippy do core e testes unitários dos crates Python/Node passaram. Integração contra `llama-server` real v1.0.0 continua pendente.
+**Estado dos bindings:** implementado na branch filha `feat/llama-server-bindings`, PR [#100](https://github.com/vectora-company/engine/pull/100) aberto sobre #98. Python e TypeScript expõem health, models, completion, completion efêmera, streaming e streaming efêmero sobre o mesmo cliente Rust. Fixtures HTTP exercitam health/discovery/completion/stream nos dois bindings. Python (54 testes), Node (40 passaram, 10 ignorados por exigirem serviços), Ruff, `ty`, TypeScript, `cargo fmt`, Clippy do core e testes unitários dos crates Python/Node passaram. Integração contra `llama-server` real v1.0.0 continua pendente.
 
-### Etapa 3 — Decision Models (próxima; filha do #99)
+### Etapa 3 — Decision Models (próxima; filha do #100)
 
 Criar operação `DecisionModel` independente de chat e implementar primeiro
 `/v1/systemone`. Manter perguntas tipadas, contexto multimodal, opções e

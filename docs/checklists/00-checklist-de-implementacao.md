@@ -210,5 +210,5 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Revisar e sincronizar spec, plano, análise, checklist, índices e goal loop.
 - [x] Abrir o PR documental [#97](https://github.com/vectora-company/engine/pull/97) sobre `main`; head `616f558`.
 - [x] Implementar adapter Rust llama-server, health/discovery e chat/stream com fixtures no PR [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`.
-- [x] Expor profile llama-server por Python/TypeScript, com fixtures de health, models, completion e SSE, no PR filho [#99](https://github.com/vectora-company/engine/pull/99).
+- [x] Expor profile llama-server por Python/TypeScript, com fixtures de health, models, completion e SSE, no PR filho [#100](https://github.com/vectora-company/engine/pull/100).
 - [ ] Expandir os perfis/providers e modalidades previstos no plano, sem declarar suporte por compatibilidade presumida.

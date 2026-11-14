@@ -135,7 +135,7 @@ não transforma geração de imagem em endpoint suportado.
 2. **Perfil llama.cpp e discovery:** configuração REST, `/health`, `/v1/models`,
    validação de modalidades e chat multimodal compatível; fixtures com servidor
    fake e integração opcional contra v1.0.0. Implementado em Rust no PR #98 e
-   exposto por wrappers Python/TypeScript no PR #99, ambos usando o mesmo
+   exposto por wrappers Python/TypeScript no PR #100, ambos usando o mesmo
    cliente Rust; fixtures cobrem SSE, sem substituir integração real.
 3. **Decision Models:** contrato independente e adapter `/v1/systemone`, com
    testes de estado/questions/files, multimodal e saída probabilística.

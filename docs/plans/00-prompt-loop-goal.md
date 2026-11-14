@@ -19,7 +19,7 @@ A capability atual de providers/modalidades está especificada em
 [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), planejada em
 [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md), auditada em
 [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md) e acompanhada por
-[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md). A primeira release deve ser ampla e completa, não um MVP; use os
+[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md). A etapa atual está no PR [#100](https://github.com/vectora-company/engine/pull/100), empilhado sobre o #98; bindings Python/TypeScript e fixtures passaram nos hooks locais. Aguarde a aprovação deste PR antes de iniciar Decision Model `/v1/systemone`. A primeira release deve ser ampla e completa, não um MVP; use os
 critérios e gaps documentados no plano para consolidar o escopo e os gates.
 Implemente, verifique localmente e atualize os documentos da etapa.
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md):

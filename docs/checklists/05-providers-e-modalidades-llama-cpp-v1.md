@@ -34,7 +34,7 @@
 - [x] Core Rust: settings endpoint seguros, health `/health`, discovery `/v1/models` e chat/stream compartilhado.
 - [x] Fixtures HTTP e parsing: cinco testes focados e 191 testes da lib passam; Clippy `-D warnings` para lib e testes e rustdoc passaram.
 - [x] Publicar o adapter Rust no PR empilhado [#98](https://github.com/vectora-company/engine/pull/98), base `docs/llama-cpp-v1-provider-review`, head `5a463bc`.
-- [x] Expor health, discovery, completion, stream e variantes efêmeras Python/TypeScript no PR filho [#99](https://github.com/vectora-company/engine/pull/99); fixtures passam nos dois bindings.
+- [x] Expor health, discovery, completion, stream e variantes efêmeras Python/TypeScript no PR filho [#100](https://github.com/vectora-company/engine/pull/100); fixtures passam nos dois bindings.
 - [x] Atualizar stubs `_native.pyi`; Ruff e `ty check bindings/python utils` passam.
 - [ ] Executar integração opt-in com `llama-server` v1.0.0 fixado.
 - [ ] Cobrir modalidades multimodais no adapter llama-server além das rotas-base.

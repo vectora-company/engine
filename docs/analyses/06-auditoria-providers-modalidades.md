@@ -24,7 +24,7 @@ Esta auditoria é inventário documental; não altera o código de produção. O
 
 O estado em `main` permanece o snapshot anterior ao adapter. O PR #98
 implementa `LlamaServerClient` em Rust com health, discovery, metadata de modelo
-preservada e chat/stream compartilhado. O PR filho #99 expõe health, models,
+preservada e chat/stream compartilhado. O PR filho #100 expõe health, models,
 completion e stream pelos bindings Python/TypeScript, incluindo requests
 efêmeros; fixtures locais cobrem SSE nos dois. Isso não prova integração com
 servidor llama-server real nem suporte de cada modalidade/modelo.
