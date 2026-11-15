@@ -569,6 +569,10 @@ export interface FallbackRerankSettings {
 interface NativeBinding {
   storageValidateSelection(selectionJson: string): string;
   storageCapabilities(selectionJson: string): string;
+  graphStoreOperation(
+    configJson: string,
+    operationJson: string,
+  ): Promise<string>;
   vectorStoreUpsert(
     configJson: string,
     collection: string,
@@ -936,6 +940,7 @@ export interface StorageSelection {
   kv?: "redis" | "nats_jetstream" | null;
   queue?: "redis_streams" | "nats_jetstream" | null;
   pubsub?: "redis" | "nats_core" | null;
+  graph?: "falkordb" | null;
 }
 
 export interface VectorStoreConfig {
@@ -962,6 +967,10 @@ export interface PubSubConfig {
   backend: "redis" | "nats_core";
   endpoint: string;
   namespace: string;
+}
+export interface GraphStoreConfig {
+  endpoint: string;
+  graph_name: string;
 }
 export interface VectorRecord {
   id: number;
@@ -1233,7 +1242,7 @@ export function validateStorageSelection(
 export type ScoreDirection = "lower_is_closer" | "higher_is_closer";
 
 export interface BackendCapabilities {
-  kind: "sql" | "vector" | "kv" | "queue" | "pubsub";
+  kind: "sql" | "vector" | "kv" | "queue" | "pubsub" | "graph";
   backend: string;
   implemented: string[];
   not_implemented: string[];
@@ -1255,6 +1264,19 @@ export function storageCapabilities(
   return JSON.parse(
     native.storageCapabilities(JSON.stringify(selection)),
   ) as StorageCapabilities;
+}
+
+/** Execute one portable graph operation or a parameterized FalkorDB Cypher query. */
+export async function graphStoreOperation(
+  config: GraphStoreConfig,
+  operation: Record<string, JsonValue>,
+): Promise<JsonValue> {
+  return JSON.parse(
+    await native.graphStoreOperation(
+      JSON.stringify(config),
+      JSON.stringify(operation),
+    ),
+  ) as JsonValue;
 }
 
 export interface LedgerDraft {

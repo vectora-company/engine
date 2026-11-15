@@ -2,9 +2,7 @@
 
 ## Evidência local
 
-Verificação em 2026-11-14 no checkout
-`/home/brunosrz/Área de trabalho/engine`, branch
-`feat/llama-server-bindings`:
+Verificação inicial em 2026-11-14 no checkout `/home/brunosrz/Área de trabalho/engine`, então em `feat/llama-server-bindings`. A implementação está em `feat/falkordb-graph-storage`, filha do PR #101 (`docs/falkordb-graph-contract`); o stack atual é #97 → #98 → #100 → #101 → #102.
 
 - `crates/vectora-engine/src/storage.rs`: enumera `SqlBackend`, `VectorBackend`,
   `KvBackend`, `QueueBackend` e `PubSubBackend`; não existe backend graph.
@@ -13,9 +11,7 @@ Verificação em 2026-11-14 no checkout
 - bindings têm validação e reporte de seleção encaminhados ao Rust, mas não
   expõem graph.
 - Spec 02 define cinco pares de equivalência; FalkorDB não é membro de nenhum.
-- PRs abertos no momento: #97 em `main`, #98 filho do #97, #100 filho do #98.
-  #100 é o topo; a etapa FalkorDB deve nascer como filho dele após resolver o
-  contrato.
+- Na verificação inicial, #100 era o topo da stack. O contrato FalkorDB foi registrado no #101 e a implementação está no #102, filho do #101.
 - Working tree contém mudança anterior do usuário em
   `bindings/typescript/native/index.d.ts`; não deve ser incorporada.
 
@@ -37,19 +33,14 @@ Verificação em 2026-11-14 no checkout
   upstream de restart não prova durabilidade para qualquer configuração.
   [Guia de persistência](https://falkordb.github.io/docs-staging/operations/persistence/).
 
-## Decisão de API respondida e decisão de MSRV pendente
+## Decisão de API e MSRV respondidas
 
 Em 2026-11-14, `brunosrz` escolheu as duas camadas: API portátil de property
-graph mais extensão Cypher específica de FalkorDB. A decisão sobre client e MSRV
-ainda altera compatibilidade: o client oficial 0.11.2 requer Rust 1.95, enquanto
-a Engine declara 1.89; 0.10.4 não declara MSRV e usa Redis client 1.2.2. O
-toolchain 1.89 não foi instalado: o download iniciado ficou sem progresso e foi
-interrompido. Decisão registrada em
-[`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md);
-perguntar no chat se elevar MSRV, validar 0.10.4 no 1.89, ou implementar o
-protocolo com redis já presente (desviando da recomendação upstream). Até a
-resposta, não adicionar dependência nem alterar MSRV.
-
+graph mais extensão Cypher específica de FalkorDB. Também aprovou o cliente
+oficial stable `falkordb` 0.11.2 e elevar o MSRV da Engine para Rust 1.95. O
+ambiente local usa Rust 1.99.1. A implementação ativa está no PR
+[#102](https://github.com/vectora-company/engine/pull/102), filho do #101; usa
+Tokio, Serde e TLS Rustls sem habilitar embedded/SSPL.
 ## Riscos e controles propostos
 
 - Queries arbitrárias podem ser caras: exigir timeout e limite de resposta;
@@ -147,16 +138,34 @@ Referências primárias: [índice vetorial FalkorDB](https://docs.falkordb.com/c
 ### Conclusão sobre implementação
 
 No Vectora, FalkorDB está implementado como destino opcional de exportação do
-Context Graph, com controles relevantes de destino, credenciais e confirmação.
-O PR não comprova sincronização completa nem operação resiliente contra um
-serviço real. Na Engine, FalkorDB ainda não está implementado: a seleção, o
-adapter, os bindings e os testes de conformidade não existem em `main`. A
-capability graph deve ser avaliada separadamente das stores SQLite, LanceDB e
-NATS e não deve herdar suas garantias por analogia.
-
+Context Graph, com os controles e limites descritos acima. O exporter é uma
+integração de produto, não uma store selecionável nem prova de sincronização
+completa. A Engine agora tem uma capability graph independente no PR #102:
+core Rust, seleção/capabilities, API portátil de property graph, extensão Cypher
+parametrizada e bindings Python/TypeScript. Não se declara paridade com os
+adapters SQL, vector, KV, queue ou pubsub, nem suporte GraphRAG completo. O
+FalkorDB vector index continua fora desse contrato devido às diferenças de
+dimensão e ordenação de score descritas acima.
 ## Estado
 
-Pesquisa factual, comparação do exporter do Vectora e proposta documental
-registradas. Na Engine, nenhuma dependência foi adicionada, nenhum serviço foi
-iniciado e nenhum teste de integração foi executado. A etapa de código continua
-dependente da decisão vital descrita na spec; este documento não a decide.
+O PR de implementação [#102](https://github.com/vectora-company/engine/pull/102)
+foi atualizado sobre o head mais recente do #101 para resolver conflito neste
+arquivo, preservando a análise do exporter do Vectora e incorporando o estado
+da Engine. A implementação FalkorDB 6.0.3 foi testada antes da última atualização
+de dependências: autenticação, Cypher parametrizado, Unicode, propriedades,
+traversal, limites, timeout e restart/AOF síncrono. Na rodada posterior ao
+update, `scons tests` passou com 196 testes Rust + 3 fixtures, 87 testes Python
+(1 ignorado) e 40 testes Node (11 ignorados sem endpoints, incluindo FalkorDB).
+`scons lint` também passou.
+
+Em 2026-11-15, `scons update` atualizou 51 pacotes Cargo compatíveis com Rust
+1.95 e atualizou Ruff 0.17.4→0.17.5 e ty 0.0.101→0.0.104; pnpm v11.5.0 já
+estava atualizado. A simulação pós-update não encontrou atualizações aplicáveis;
+15 versões mais novas permanecem fora da seleção compatível com o MSRV 1.95.
+O checkout TypeScript foi reinstalado no store local
+`/home/brunosrz/.local/share/pnpm/store/v11`; o store externo não é mais usado
+por este checkout.
+
+TLS e cancelamento da query no servidor continuam sem teste. A mudança
+preexistente do usuário em `bindings/typescript/native/index.d.ts` foi mantida
+fora do PR.

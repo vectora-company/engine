@@ -180,8 +180,7 @@ mantém a autoridade local em SQLite (lacunas na matriz do plano de storage).
 As seleções públicas de storage atualmente aceitam apenas os seis backends
 definidos nesta spec; implementações em memória são doubles internos de teste
 e não fazem parte da configuração de produto. A proposta de property graph
-FalkorDB é uma capability adicional e ainda não implementada; seu contrato está
-em [`docs/specs/19-storage-de-grafos-falkordb.md`](19-storage-de-grafos-falkordb.md).
+FalkorDB é uma capability graph adicional, implementada em branch de PR empilhado a partir do contrato em [`docs/specs/19-storage-de-grafos-falkordb.md`](19-storage-de-grafos-falkordb.md); não integra os cinco pares de equivalência desta spec.
 Ela não integra os cinco pares de equivalência desta spec. Não inferir equivalência
 com Redis KV pelo protocolo compartilhado. Não há ainda APIs de Memory, Context Planner,
 compactação/context engineering, indexação documental ou RAG. Os bindings de

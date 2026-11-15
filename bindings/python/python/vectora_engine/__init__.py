@@ -88,6 +88,13 @@ def storage_capabilities(selection: JsonObject) -> dict[str, Any]:
     return json.loads(_native.storage_capabilities(json.dumps(selection)))
 
 
+async def graph_store_operation(config: JsonObject, operation: JsonObject) -> Any:
+    """Run a portable graph operation or parameterized FalkorDB Cypher query."""
+    return json.loads(
+        await _native.graph_store_operation(json.dumps(config), json.dumps(operation))
+    )
+
+
 async def vector_store_upsert(
     config: JsonObject, collection: str, record: JsonObject
 ) -> None:

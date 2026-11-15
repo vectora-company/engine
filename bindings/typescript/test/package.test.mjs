@@ -52,6 +52,7 @@ import {
   submitToolResult,
   validateStorageSelection,
   storageCapabilities,
+  graphStoreOperation,
   resilientLedgerAppend,
   resilientLedgerFlushOutbox,
   resilientLedgerRebuildProjection,
@@ -292,6 +293,9 @@ test("storage capabilities state backend differences from Rust", () => {
   });
   assert.equal(report.backends[0].score_direction, "higher_is_closer");
   assert.equal(report.backends[1].ttl, true);
+  const graph = storageCapabilities({ contract_version: 1, graph: "falkordb" }).backends[0];
+  assert.equal(graph.kind, "graph");
+  assert.ok(graph.implemented.includes("property_graph"));
   assert.deepEqual(storageCapabilities({ contract_version: 1 }).backends, []);
   assert.throws(() => storageCapabilities({ contract_version: 99 }));
 });
@@ -304,6 +308,34 @@ test("storage selection validates independent backends in Rust", () => {
   for (const field of ["kv", "queue", "pubsub"]) {
     assert.throws(() => validateStorageSelection({ contract_version: 1, [field]: "memory" }));
   }
+});
+
+test("graph store binding roundtrips through FalkorDB when configured", {
+  skip: !process.env.VECTORA_TEST_FALKORDB_URL,
+}, async () => {
+  const id = `node-${randomUUID()}`;
+  const config = {
+    endpoint: process.env.VECTORA_TEST_FALKORDB_URL,
+    graph_name: `node_${randomUUID().replaceAll("-", "")}`,
+  };
+  const node = { id, labels: ["Person"], properties: { name: "Ana 東京" } };
+  await graphStoreOperation(config, { operation: "upsert_node", node });
+  assert.deepEqual(
+    await graphStoreOperation(config, { operation: "get_node", id }),
+    node,
+  );
+  await graphStoreOperation(config, {
+    operation: "upsert_node",
+    node: { id, labels: node.labels, properties: { city: "São Paulo" } },
+  });
+  assert.deepEqual(
+    await graphStoreOperation(config, {
+      operation: "cypher",
+      query: "MATCH (n:__VectoraNode {id: $id}) RETURN n.name AS name, n.city AS city",
+      params: { id },
+    }),
+    { columns: ["name", "city"], rows: [[null, "São Paulo"]] },
+  );
 });
 
 test("queue dead-letter receive is exposed through the Node binding", async () => {

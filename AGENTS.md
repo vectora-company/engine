@@ -27,7 +27,9 @@ specs locais.
    dual-write nem duplique efeitos externos em shadow mode.
 3. APIs públicas pequenas, dependências justificadas, `unsafe` proibido sem
    revisão explícita, erros tipados e comportamento determinístico onde o
-   contrato permitir.
+   contrato permitir. Prefira a versão stable mais recente das dependências;
+   confira MSRV, compatibilidade e changelog antes de fixar no lockfile. Não
+   adote prereleases salvo necessidade documentada.
 4. Não afirme paridade nem ganho de performance sem casos de conformidade e
    medições reproduzíveis por SHA, ambiente e configuração.
 5. Storage tem duas camadas, nesta ordem. Base: tudo que existe nos dois lados
