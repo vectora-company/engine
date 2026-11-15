@@ -14,8 +14,12 @@ Leia o [plano operacional](../goal-loop/01-plano-operacional.md), o
 Aplique [`docs/plans/05-loop-de-desenvolvimento.md`](05-loop-de-desenvolvimento.md),
 [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md)
 e [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
-Retome a próxima etapa aprovada do plano ativo e leia sua spec, análise e
-checklist. A primeira release deve ser ampla e completa, não um MVP; use os
+Retome a próxima etapa do plano ativo e leia sua spec, análise e checklist.
+A capability atual de providers/modalidades está especificada em
+[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), planejada em
+[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md), auditada em
+[`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md) e acompanhada por
+[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md). A primeira release deve ser ampla e completa, não um MVP; use os
 critérios e gaps documentados no plano para consolidar o escopo e os gates.
 Implemente, verifique localmente e atualize os documentos da etapa.
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md):

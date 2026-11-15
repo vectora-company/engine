@@ -6,8 +6,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 ## Capability ativa
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
-com o estado verificado, a direção de uma primeira release completa e o backlog
-por fases. A stack #73–#95 foi integrada em `main` (`d9497080efee29b816e78fff0c0d6ff2ab6f7147`); não havia PR aberto quando começou a etapa atual. A branch local `test/postgres-concurrent-projectors` cobre uma verificação adicional de concorrência dos projetores PostgreSQL; PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`, head `fb1977a`. Storage e runtime ainda têm gaps registrados no plano e nas specs.
+com o charter de primeira release completa e o backlog por fases. O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado; `main` está em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `dda8b83`; o adapter começa no PR filho. Os artefatos estão em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
 
 ## Operação de desenvolvimento
 
@@ -51,6 +50,9 @@ por fases. A stack #73–#95 foi integrada em `main` (`d9497080efee29b816e78fff0
   evidências, execuções service-real e decisões do mantenedor sobre storage.
 - [Checklist da auditoria de storage](checklists/03-auditoria-storage-s0-s5.md):
   itens feitos e pendentes da capability de storage.
+- [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md):
+  matriz de capacidade e gates para providers/modalidades.
+- [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md): evidências do inventário e leitura da API `llama-server` v1.0.0.
 - [`docs/checklists/04-midia-no-chat.md`](checklists/04-midia-no-chat.md): contrato,
   payloads nativos e verificações da etapa de mídia.
 
@@ -61,6 +63,7 @@ por fases. A stack #73–#95 foi integrada em `main` (`d9497080efee29b816e78fff0
 - [Continuidade](plans/03-plano-continuidade.md)
 - [Storage e ledger](plans/04-plano-storage-ledger.md)
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
+- [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md): plano ativo de providers e modalidades com referência llama.cpp v1.0.0.
 
 ## Documentação pública
 
