@@ -13,14 +13,14 @@ Esta auditoria é inventário documental; não altera o código de produção. O
 
 ## O que o código realmente oferece
 
-| Área           | Implementado                                                                                                 | Não inferir                                                                                              |
-| -------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Chat           | OpenAI-compatible; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; fallback; `LlamaServerClient` | OpenAI, OpenRouter, 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação. |
-| Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                       | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade.   |
-| Rerank         | Cohere, Voyage e OpenRouter                                                                                  | llama.cpp ou equivalência de campos/scores em todos os adapters.                                         |
-| Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                        |
-| Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                           | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.   |
-| TTS/STT        | Não há cliente LLM para TTS/STT                                                                              | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                 |
+| Área           | Implementado                                                                                                                            | Não inferir                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Chat           | OpenAI-compatible; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; perfil de chat OpenRouter; fallback; `LlamaServerClient` | OpenAI, 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação.           |
+| Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                                                  | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade. |
+| Rerank         | Cohere, Voyage e OpenRouter                                                                                                             | llama.cpp ou equivalência de campos/scores em todos os adapters.                                       |
+| Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                                           | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                      |
+| Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                                                      | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos. |
+| TTS/STT        | Não há cliente LLM para TTS/STT                                                                                                         | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.               |
 
 ### Ollama nativo — PR #107, filho do PR #106
 
@@ -169,3 +169,17 @@ foi executada. Consulte
 [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
 
 A documentação fixa duas superfícies upstream para gerar áudio incrementalmente: `/v1/audio/speech` aceita `stream_format: "audio"` e rejeita `sse`; `/tts` aceita `stream: true`. WAV streamed tem header com tamanho desconhecido (0xFFFFFFFF), portanto a Engine deve preservar os bytes e sinalizar Content-Type/sample rate sem acumular ou reescrever o arquivo. O contrato do PR #104 só retorna áudio bufferizado; o trabalho seguinte será um iterador de chunks com backpressure e cancelamento em Rust/Python/TypeScript, empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105). Fonte normativa: [llama.cpp v1.0.0 HTTP server README](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md), seções `/tts` e `/v1/audio/speech`.
+
+## Atualização — perfil de chat OpenRouter (15/11/2026)
+
+O PR [#108](https://github.com/vectora-company/engine/pull/108), filho do #107 e `OPEN`/`MERGEABLE`, implementa perfil na branch `feat/openrouter-chat-profile`: o gateway mantém o
+transporte OpenAI-compatible e recebe perfil nomeado com URL padrão ou proxy
+customizado, chave obrigatória e atribuição opcional nos headers oficiais. Os
+campos `provider`, `models`, `route`, `user` e `plugins` seguem por request via
+`extensions`; defaults globais desses campos poderiam afetar custo, fallback ou
+política de dados. Testes Rust e fixtures HTTP Python/Node passaram: workspace 212 + 3 fixtures + 1 binding Python nativo, pytest 58/1 skip, Node 44/11 skips, typecheck e Clippy. Hooks completos passaram. A API Responses e endpoints de geração de áudio/imagem/vídeo seguem sem ser
+declarados cobertos. O daemon/endpoint OpenRouter real não foi usado. Referências:
+[API chat/headers](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
+e [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).
+
+Consulte o plano da etapa em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), spec em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e checklist em [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).

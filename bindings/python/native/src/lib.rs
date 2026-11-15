@@ -195,10 +195,11 @@ fn parse_inputs(
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: OpenAiCompatibleSettings =
         serde_json::from_value(settings_json).map_err(|_| "invalid client settings".to_owned())?;
+    let media_provider = settings.media_provider();
     let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
     let mut config = settings.into_config();
     if let Some(context) = media_context {
-        config = config.media_context("openai", context);
+        config = config.media_context(media_provider, context);
     }
     let client = OpenAiCompatibleClient::new(config).map_err(|error| error.to_string())?;
     Ok((client, request))

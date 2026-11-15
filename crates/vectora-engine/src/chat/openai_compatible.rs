@@ -23,13 +23,29 @@ use crate::chat::{
 const CHAT_PATH: &str = "chat/completions";
 const MAX_ERROR_BODY_BYTES: usize = 8 * 1024;
 
+/// Named OpenAI-compatible protocol profiles with verified provider-specific
+/// defaults. Generic endpoints remain available by omitting this field.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+pub enum OpenAiCompatibleProfile {
+    /// OpenRouter Chat Completions API.
+    #[serde(rename = "openrouter")]
+    OpenRouter,
+}
+
 /// Serde-friendly options accepted by the Python and Node bindings.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OpenAiCompatibleSettings {
-    base_url: String,
+    #[serde(default)]
+    base_url: Option<String>,
+    #[serde(default)]
+    profile: Option<OpenAiCompatibleProfile>,
     #[serde(default)]
     api_key: Option<String>,
+    #[serde(default)]
+    app_url: Option<String>,
+    #[serde(default)]
+    app_title: Option<String>,
     #[serde(default)]
     headers: std::collections::BTreeMap<String, String>,
     #[serde(default = "default_connect_timeout_ms")]
@@ -47,9 +63,22 @@ pub struct OpenAiCompatibleSettings {
 }
 
 impl OpenAiCompatibleSettings {
+    /// Provider identity used for media capability resolution.
+    pub fn media_provider(&self) -> &'static str {
+        match self.profile {
+            Some(OpenAiCompatibleProfile::OpenRouter) => "openrouter",
+            None => "openai",
+        }
+    }
+
     /// Convert binding settings to the validated client configuration.
     pub fn into_config(self) -> OpenAiCompatibleConfig {
-        let mut config = OpenAiCompatibleConfig::new(self.base_url)
+        let profile = self.profile;
+        let base_url = self.base_url.unwrap_or_else(|| match profile {
+            Some(OpenAiCompatibleProfile::OpenRouter) => "https://openrouter.ai/api/v1".to_owned(),
+            None => String::new(),
+        });
+        let mut config = OpenAiCompatibleConfig::new(base_url)
             .timeouts(
                 Duration::from_millis(self.connect_timeout_ms),
                 Duration::from_millis(self.read_timeout_ms),
@@ -57,11 +86,20 @@ impl OpenAiCompatibleSettings {
             )
             .retry_connect_attempts(self.retry_connect_attempts)
             .response_limits(self.max_response_bytes, self.max_event_bytes);
+        if let Some(profile) = profile {
+            config = config.profile(profile);
+        }
         if let Some(api_key) = self.api_key {
             config = config.api_key(api_key);
         }
+        if let Some(app_url) = self.app_url {
+            config = config.set_header("HTTP-Referer", app_url);
+        }
+        if let Some(app_title) = self.app_title {
+            config = config.set_header("X-OpenRouter-Title", app_title);
+        }
         for (name, value) in self.headers {
-            config = config.header(name, value);
+            config = config.set_header(name, value);
         }
         config
     }
@@ -105,6 +143,7 @@ pub struct OpenAiCompatibleConfig {
     max_response_bytes: usize,
     max_event_bytes: usize,
     media_provider: String,
+    profile: Option<OpenAiCompatibleProfile>,
     media_context: Option<MediaExecutionContext>,
 }
 
@@ -124,6 +163,7 @@ impl fmt::Debug for OpenAiCompatibleConfig {
             .field("max_response_bytes", &self.max_response_bytes)
             .field("max_event_bytes", &self.max_event_bytes)
             .field("media_provider", &self.media_provider)
+            .field("profile", &self.profile)
             .field("media_context", &self.media_context)
             .finish()
     }
@@ -142,8 +182,27 @@ impl OpenAiCompatibleConfig {
             max_response_bytes: 16 * 1024 * 1024,
             max_event_bytes: 1024 * 1024,
             media_provider: "openai".to_owned(),
+            profile: None,
             media_context: None,
         }
+    }
+
+    /// Create an OpenRouter Chat Completions client with its official default
+    /// endpoint. Use [`Self::openrouter_attribution`] to identify the caller.
+    pub fn openrouter(api_key: impl Into<String>) -> Self {
+        Self::new("https://openrouter.ai/api/v1")
+            .api_key(api_key)
+            .profile(OpenAiCompatibleProfile::OpenRouter)
+    }
+
+    /// Add the optional OpenRouter application attribution headers.
+    pub fn openrouter_attribution(
+        mut self,
+        app_url: impl Into<String>,
+        app_title: impl Into<String>,
+    ) -> Self {
+        self = self.set_header("HTTP-Referer", app_url);
+        self.set_header("X-OpenRouter-Title", app_title)
     }
 
     pub fn api_key(mut self, value: impl Into<String>) -> Self {
@@ -153,6 +212,22 @@ impl OpenAiCompatibleConfig {
 
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
+        self
+    }
+
+    fn set_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        let name = name.into();
+        self.headers
+            .retain(|(existing, _)| !existing.eq_ignore_ascii_case(&name));
+        self.headers.push((name, value.into()));
+        self
+    }
+
+    fn profile(mut self, profile: OpenAiCompatibleProfile) -> Self {
+        self.profile = Some(profile);
+        self.media_provider = match profile {
+            OpenAiCompatibleProfile::OpenRouter => "openrouter".to_owned(),
+        };
         self
     }
 
@@ -211,6 +286,18 @@ impl fmt::Debug for OpenAiCompatibleClient {
 impl OpenAiCompatibleClient {
     pub fn new(config: OpenAiCompatibleConfig) -> Result<Self, ChatError> {
         let endpoint = validate_config(&config)?;
+        if config.profile == Some(OpenAiCompatibleProfile::OpenRouter)
+            && config
+                .api_key
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        {
+            return Err(ChatError::InvalidConfiguration(
+                "OpenRouter profile requires api_key",
+            ));
+        }
         let client = Client::builder()
             .connect_timeout(config.connect_timeout)
             .redirect(reqwest::redirect::Policy::none())
@@ -1075,6 +1162,60 @@ fn safe_endpoint(raw: &str) -> String {
 mod tests {
     use super::*;
     use crate::chat::{ContentPart, ImageUrl, MediaDecision, MediaMode, ToolDefinition};
+
+    #[test]
+    fn openrouter_profile_defaults_endpoint_and_app_attribution_headers() {
+        let settings: OpenAiCompatibleSettings = serde_json::from_value(json!({
+            "profile": "openrouter",
+            "api_key": "fixture-token",
+            "app_url": "https://vectora.company",
+            "app_title": "Vectora",
+            "headers": {"x-openrouter-title": "Custom title"}
+        }))
+        .unwrap();
+        assert_eq!(settings.media_provider(), "openrouter");
+        let config = settings.into_config();
+        assert_eq!(config.base_url, "https://openrouter.ai/api/v1");
+        assert_eq!(config.media_provider, "openrouter");
+        assert_eq!(config.headers.len(), 2);
+        assert!(config.headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("http-referer") && value == "https://vectora.company"
+        }));
+        assert!(config.headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("x-openrouter-title") && value == "Custom title"
+        }));
+
+        let client = OpenAiCompatibleClient::new(
+            OpenAiCompatibleConfig::openrouter("fixture-token")
+                .openrouter_attribution("https://vectora.company", "Vectora Engine"),
+        )
+        .unwrap();
+        assert_eq!(
+            client.endpoint.as_str(),
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+        assert_eq!(client.config.media_provider, "openrouter");
+    }
+
+    #[test]
+    fn openrouter_profile_requires_an_api_key_but_allows_a_custom_endpoint() {
+        let settings: OpenAiCompatibleSettings = serde_json::from_value(json!({
+            "profile": "openrouter",
+            "base_url": "http://127.0.0.1:4444/api/v1"
+        }))
+        .unwrap();
+        let error = OpenAiCompatibleClient::new(settings.into_config()).unwrap_err();
+        assert!(matches!(error, ChatError::InvalidConfiguration(_)));
+
+        let settings: OpenAiCompatibleSettings = serde_json::from_value(json!({
+            "profile": "openrouter",
+            "base_url": "http://127.0.0.1:4444/api/v1",
+            "api_key": "fixture-token"
+        }))
+        .unwrap();
+        let client = OpenAiCompatibleClient::new(settings.into_config()).unwrap();
+        assert_eq!(client.endpoint.path(), "/api/v1/chat/completions");
+    }
 
     #[test]
     fn null_optional_usage_and_tool_calls_are_absent_in_completion_and_stream() {

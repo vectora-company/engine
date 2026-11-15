@@ -444,9 +444,18 @@ A branch `feat/llama-server-realtime-audio` implementa `/v1/realtime` como filha
 
 Permanecem sem comprovação interoperabilidade com modelos reais e batch STT. O streaming TTS foi implementado e publicado no PR #106, filho do #105; os gaps de integração real não bloqueiam iniciar a etapa de providers/gateways. Estado da capability e links completos nos documentos relacionados: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
-## Etapa ativa empilhada — Ollama chat nativo (15/11/2026)
+## Etapa ativa empilhada — perfil OpenRouter Chat Completions (15/11/2026)
 
-O PR [#107](https://github.com/vectora-company/engine/pull/107), filho do [#106](https://github.com/vectora-company/engine/pull/106) e `OPEN`/`MERGEABLE`, acrescenta o protocolo nativo `/api/chat` ao profile OpenAI-compatible existente. O adapter traduz mensagens e opções canônicas, encaminha `think`, `format`, `keep_alive` e extensões `options`, converte imagens inline para `images` base64, e preserva tools, thinking/reasoning, finish reason e usage. Streaming NDJSON emite eventos por registro e exige o registro final `done: true`; EOF prematuro é erro em vez de conclusão fabricada. `api_key` é opcional e não é enviada ao servidor local; se configurada é Bearer. Workspace Rust (210 testes + 3 fixtures + teste nativo Python), pytest (57/1 skip), Node (43/11 skips), NAPI/typecheck, Clippy, Ruff, `ty` e formatação passaram. O servidor local Ollama não está ativo (`127.0.0.1:11434` recusou conexão), então interoperabilidade real não foi validada. Fontes oficiais: [Ollama chat](https://docs.ollama.com/api/chat) e [OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility). Consulte [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
+O PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106,
+implementa Ollama nativo `/api/chat`. O PR [#108](https://github.com/vectora-company/engine/pull/108),
+filho do #107 e `OPEN`/`MERGEABLE`, implementa um perfil nomeado
+sobre Chat Completions: endpoint oficial padrão ou proxy configurável, API key
+obrigatória, attribution headers opcionais e campos nativos de routing passados
+por request. Fixtures verificam rota, auth, attribution e serialização sem
+chamada externa. O OpenRouter não está configurado neste host; a integração real
+não foi executada. Fontes: [Chat Completions/attribution](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
+e [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).
+Detalhes e evidências em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
 ## Etapa ativa empilhada — streaming TTS (15/11/2026)
 
