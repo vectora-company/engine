@@ -8,9 +8,11 @@ use serde::{Deserialize, Serialize};
 use tokio::time::{Instant, timeout_at};
 use url::Url;
 
+use super::decision_model::answer_matches;
 use super::{
-    ChatCompletion, ChatError, ChatRequest, ChatStream, MediaExecutionContext,
-    OpenAiCompatibleClient, OpenAiCompatibleConfig,
+    ChatCompletion, ChatError, ChatRequest, ChatStream, DecisionRequest, DecisionResponse,
+    EphemeralDecisionRequest, MediaExecutionContext, OpenAiCompatibleClient,
+    OpenAiCompatibleConfig,
 };
 
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 10_000;
@@ -37,6 +39,8 @@ pub struct LlamaServerSettings {
     pub retry_connect_attempts: u8,
     #[serde(default = "default_max_response_bytes")]
     pub max_response_bytes: usize,
+    #[serde(default = "default_max_media_bytes")]
+    pub max_media_bytes: u64,
     #[serde(default = "default_max_event_bytes")]
     pub max_event_bytes: usize,
 }
@@ -52,6 +56,9 @@ const fn default_total_timeout_ms() -> u64 {
 }
 const fn default_max_response_bytes() -> usize {
     DEFAULT_MAX_RESPONSE_BYTES
+}
+const fn default_max_media_bytes() -> u64 {
+    16 * 1024 * 1024
 }
 const fn default_max_event_bytes() -> usize {
     1024 * 1024
@@ -131,6 +138,7 @@ pub struct LlamaServerClient {
     total_timeout: Duration,
     read_timeout: Duration,
     max_response_bytes: usize,
+    max_media_bytes: u64,
     chat: OpenAiCompatibleClient,
 }
 
@@ -153,6 +161,7 @@ impl LlamaServerClient {
             || settings.read_timeout_ms == 0
             || settings.total_timeout_ms == 0
             || settings.max_response_bytes == 0
+            || settings.max_media_bytes == 0
             || settings.max_event_bytes == 0
             || settings.max_event_bytes > settings.max_response_bytes
             || settings.retry_connect_attempts > 5
@@ -239,6 +248,7 @@ impl LlamaServerClient {
             total_timeout: Duration::from_millis(settings.total_timeout_ms),
             read_timeout: Duration::from_millis(settings.read_timeout_ms),
             max_response_bytes: settings.max_response_bytes,
+            max_media_bytes: settings.max_media_bytes,
             chat,
         })
     }
@@ -249,6 +259,109 @@ impl LlamaServerClient {
 
     pub async fn stream(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
         self.chat.stream(request).await
+    }
+
+    /// Answers typed questions via llama-server v1.0.0 `/v1/systemone`.
+    /// The request is deliberately non-streaming, matching the upstream API.
+    pub async fn decide(&self, request: DecisionRequest) -> Result<DecisionResponse, ChatError> {
+        self.decide_ephemeral(EphemeralDecisionRequest {
+            request,
+            files: Vec::new(),
+        })
+        .await
+    }
+
+    /// Sends a transient decision request with in-memory media data URLs.
+    pub async fn decide_ephemeral(
+        &self,
+        request: EphemeralDecisionRequest,
+    ) -> Result<DecisionResponse, ChatError> {
+        request
+            .validate(self.max_media_bytes)
+            .map_err(ChatError::InvalidRequest)?;
+        let models = self.models().await?;
+        let selected = models
+            .data
+            .iter()
+            .find(|model| model.id == request.request.model)
+            .ok_or(ChatError::ModelCapabilityUnsupported)?;
+        if !selected
+            .architecture
+            .as_ref()
+            .and_then(|architecture| architecture.output_modalities.as_ref())
+            .is_some_and(|modalities| modalities.iter().any(|value| value == "decisions"))
+        {
+            return Err(ChatError::ModelCapabilityUnsupported);
+        }
+        let input_modalities = selected
+            .architecture
+            .as_ref()
+            .and_then(|architecture| architecture.input_modalities.as_ref());
+        for file in &request.files {
+            let modality = if file.starts_with("data:image/") {
+                "image"
+            } else {
+                "audio"
+            };
+            if !input_modalities.is_some_and(|values| values.iter().any(|value| value == modality))
+            {
+                return Err(ChatError::ModelCapabilityUnsupported);
+            }
+        }
+        let mut endpoint = self.v1_url.clone();
+        endpoint.set_path(&format!(
+            "{}/systemone",
+            endpoint.path().trim_end_matches('/')
+        ));
+        let body = serde_json::to_vec(&serde_json::json!({
+            "state": request.request.state,
+            "files": request.files,
+            "questions": request.request.questions,
+        }))
+        .map_err(|_| ChatError::InvalidRequest("decision request could not be encoded"))?;
+        if body.len() > self.max_response_bytes {
+            return Err(ChatError::ResponseTooLarge);
+        }
+        let deadline = Instant::now() + self.total_timeout;
+        let mut http = self
+            .client
+            .post(endpoint)
+            .timeout(self.read_timeout)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(body);
+        if let Some(key) = &self.api_key {
+            http = http.header(header::AUTHORIZATION, key.clone());
+        }
+        for (name, value) in &self.headers {
+            http = http.header(name, value);
+        }
+        let response = timeout_at(deadline, http.send())
+            .await
+            .map_err(|_| ChatError::Timeout)?
+            .map_err(|error| {
+                if error.is_timeout() {
+                    ChatError::Timeout
+                } else {
+                    ChatError::Connection
+                }
+            })?;
+        if !response.status().is_success() {
+            return Err(classify_status(response.status().as_u16()));
+        }
+        let bytes = read_limited(response, self.max_response_bytes, deadline).await?;
+        let response: DecisionResponse =
+            serde_json::from_slice(&bytes).map_err(|_| ChatError::InvalidResponse)?;
+        if response.answers.len() != request.request.questions.len()
+            || request.request.questions.iter().any(|(id, question)| {
+                response
+                    .answers
+                    .get(id)
+                    .is_none_or(|answer| !answer_matches(question, answer))
+            })
+        {
+            return Err(ChatError::InvalidResponse);
+        }
+        Ok(response)
     }
 
     pub async fn complete_with_media(
@@ -383,6 +496,7 @@ mod tests {
             total_timeout_ms: 4_000,
             retry_connect_attempts: 1,
             max_response_bytes: 16 * 1024,
+            max_media_bytes: 16 * 1024,
             max_event_bytes: 8 * 1024,
         }
     }
@@ -491,6 +605,59 @@ mod tests {
             body
         );
         stream.write_all(response.as_bytes()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn decision_uses_systemone_and_preserves_probabilities() {
+        use super::super::{DecisionQuestion, DecisionQuestionKind};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 8192];
+                let n = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..n]);
+                let body = if request.starts_with("GET /v1/models ") {
+                    r#"{"data":[{"id":"decision-model","architecture":{"output_modalities":["decisions"]}}]}"#
+                } else {
+                    assert!(request.starts_with("POST /v1/systemone "));
+                    assert!(
+                        request
+                            .to_ascii_lowercase()
+                            .contains("authorization: bearer test-key")
+                    );
+                    assert!(request.contains("\"questions\""));
+                    assert!(!request.contains("\"model\""));
+                    r#"{"answers":{"route":{"choice":"billing","probabilities":{"billing":0.8,"shipping":0.2},"confidence":0.6}},"usage":{"input_tokens":12,"output_tokens":0}}"#
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let request = DecisionRequest {
+            model: "decision-model".into(),
+            state: serde_json::json!({"ticket":"charged twice"}),
+            questions: BTreeMap::from([(
+                "route".into(),
+                DecisionQuestion {
+                    kind: DecisionQuestionKind::Choice,
+                    instructions: Some(serde_json::json!("Which team?")),
+                    criteria: Some(serde_json::json!({"billing": null, "shipping": null})),
+                },
+            )]),
+        };
+        let response = client.decide(request).await.unwrap();
+        assert_eq!(response.answers["route"]["choice"], "billing");
+        assert_eq!(response.answers["route"]["probabilities"]["billing"], 0.8);
+        assert_eq!(response.usage.unwrap().input_tokens, Some(12));
+        server.await.unwrap();
     }
 
     #[tokio::test]

@@ -17,7 +17,31 @@ export interface OpenAiCompatibleSettings {
 }
 
 /** Settings for the llama.cpp v1.0.0 `llama-server` HTTP profile. */
-export interface LlamaServerSettings extends OpenAiCompatibleSettings {}
+export interface LlamaServerSettings extends OpenAiCompatibleSettings {
+  max_media_bytes?: number;
+}
+
+export type DecisionQuestionKind = "choice" | "score" | "noul";
+export interface DecisionQuestion {
+  type: DecisionQuestionKind;
+  instructions?: JsonValue;
+  criteria?: JsonValue;
+}
+export interface DecisionRequest {
+  model: string;
+  state: JsonValue;
+  questions: Record<string, DecisionQuestion>;
+}
+/** Ephemeral media is isolated from the serializable decision request. */
+export interface EphemeralDecisionRequest {
+  request: DecisionRequest;
+  files?: string[];
+  images?: string[];
+}
+export interface DecisionResponse {
+  answers: Record<string, JsonValue>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}
 
 export interface LlamaServerArchitecture {
   input_modalities?: string[];
@@ -874,6 +898,11 @@ interface NativeBinding {
   ): Promise<string>;
   llamaServerHealth(settingsJson: string): Promise<string>;
   llamaServerModels(settingsJson: string): Promise<string>;
+  llamaServerDecide(settingsJson: string, requestJson: string): Promise<string>;
+  llamaServerDecideEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   llamaServerChatComplete(
     settingsJson: string,
     requestJson: string,
@@ -2203,6 +2232,32 @@ export async function llamaServerModels(
   return JSON.parse(
     await native.llamaServerModels(JSON.stringify(settings)),
   ) as LlamaServerModelList;
+}
+
+/** Answer typed questions through llama-server's non-streaming `/v1/systemone`. */
+export async function llamaServerDecide(
+  settings: LlamaServerSettings,
+  request: DecisionRequest,
+): Promise<DecisionResponse> {
+  return JSON.parse(
+    await native.llamaServerDecide(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  ) as DecisionResponse;
+}
+
+/** Send a decision request with transient media assets. */
+export async function llamaServerDecideEphemeral(
+  settings: LlamaServerSettings,
+  request: EphemeralDecisionRequest,
+): Promise<DecisionResponse> {
+  return JSON.parse(
+    await native.llamaServerDecideEphemeral(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  ) as DecisionResponse;
 }
 
 /** Complete through llama-server, sharing media handling with the Rust core. */

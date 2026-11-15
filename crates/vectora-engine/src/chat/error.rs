@@ -34,6 +34,10 @@ pub enum ChatError {
     ResponseTooLarge,
     #[error("provider returned an invalid response")]
     InvalidResponse,
+    #[error("invalid provider request: {0}")]
+    InvalidRequest(&'static str),
+    #[error("selected provider model does not declare the required capability")]
+    ModelCapabilityUnsupported,
     #[error("provider response violated the chat protocol: {0}")]
     Protocol(&'static str),
     #[error("chat request was cancelled")]

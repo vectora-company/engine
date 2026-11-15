@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo; PR documental [#97](https://github.com/vectora-company/engine/pull/97), perfil Rust [#98](https://github.com/vectora-company/engine/pull/98) e bindings [#100](https://github.com/vectora-company/engine/pull/100) em stack. PR #100 cobre Python/TypeScript; próxima etapa é Decision Model `/v1/systemone`, filha do #100.
+**Estado:** ativo; PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) são a stack base. FalkorDB graph foi empilhado nos PRs [#101](https://github.com/vectora-company/engine/pull/101) e [#102](https://github.com/vectora-company/engine/pull/102). A etapa Decision Model `/v1/systemone` está em implementação na branch filha do #102.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -66,11 +66,18 @@ defaults de compatibilidade.
 
 **Estado dos bindings:** implementado na branch filha `feat/llama-server-bindings`, PR [#100](https://github.com/vectora-company/engine/pull/100) aberto sobre #98. Python e TypeScript expõem health, models, completion, completion efêmera, streaming e streaming efêmero sobre o mesmo cliente Rust. Fixtures HTTP exercitam health/discovery/completion/stream nos dois bindings. Python (54 testes), Node (40 passaram, 10 ignorados por exigirem serviços), Ruff, `ty`, TypeScript, `cargo fmt`, Clippy do core e testes unitários dos crates Python/Node passaram. Integração contra `llama-server` real v1.0.0 continua pendente.
 
-### Etapa 3 — Decision Models (próxima; filha do #100)
+### Etapa 3 — Decision Models (em implementação; filha do #102)
 
-Criar operação `DecisionModel` independente de chat e implementar primeiro
-`/v1/systemone`. Manter perguntas tipadas, contexto multimodal, opções e
-probabilidades; sem inventar streaming onde o servidor não oferece.
+A branch `feat/llama-server-decision-model` implementa a operação independente
+de chat para `/v1/systemone`: perguntas `choice`, `score` e `noul`; validação de critérios e da capability
+`decisions` anunciada por discovery; request persistível separado do envelope
+efêmero com data URLs de imagem/áudio e limite configurável; respostas e
+probabilidades validadas/preservadas, timeout/auth/limite de resposta. Não há streaming
+neste endpoint. Core Rust e wrappers Python/TypeScript estão implementados; fixtures HTTP
+passaram nos três runtimes. Rust: teste de rota/probabilidades e quatro testes
+de contrato; pytest focado passou; Node: 40 passaram e 11 foram ignorados por
+serviços não configurados. `scons build`, Clippy da lib, Ruff/ty e TypeScript
+typecheck passaram. Integração real llama-server continua pendente.
 
 **Saída:** conformidade Rust/Python/TypeScript e testes reais com modelo
 decision compatível quando disponível.

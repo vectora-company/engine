@@ -13,21 +13,21 @@
 
 ## Matriz de capacidade (estado observado)
 
-| Operação                                  | Estado atual                                                                | Evidência/cobertura desejada                                                  |
-| ----------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Chat texto/stream                         | Parcial implementado                                                        | OpenAI-compatible; nativos Anthropic/Gemini/Cohere; fixtures por protocolo.   |
-| OpenAI/OpenRouter/9router/OmniRouter/Kimi | Transporte genérico possível quando OpenAI-compatible; perfis não equivalem | Rota, auth/headers, erros, streaming, uso e modalidade por endpoint.          |
-| Ollama chat                               | Sem adapter dedicado                                                        | API Ollama distinta e perfil OpenAI `/v1` validado separadamente.             |
-| llama.cpp chat/discovery                  | Perfil Rust mais APIs health/models/chat/stream nos bindings                | Conformidade por fixture; integração real e modalidades por modelo pendentes. |
-| Decision Model                            | Ausente como API LLM                                                        | Contrato tipado separado; adapter `/v1/systemone`; probs e multimodal.        |
-| Entrada de imagem/visão                   | Tipos e preparação existem; roteamento parcial                              | Casos reais por protocolo/modelo e capability desconhecida fail-closed.       |
-| Geração de imagem                         | Ausente                                                                     | Adapter próprio apenas quando endpoint estiver confirmado.                    |
-| TTS                                       | Ausente                                                                     | `/v1/audio/speech`: WAV/PCM, voz, sample rate, stream e cancelamento.         |
-| STT                                       | Ausente                                                                     | `/v1/realtime` é streaming ASR; batch transcription requer API separada.      |
-| Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                    | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.           |
-| Geração de vídeo                          | Ausente                                                                     | Não confundir com vídeo de entrada.                                           |
-| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama                           | Extensão multimodal do llama.cpp em contrato versionado.                      |
-| Rerank                                    | Cohere/Voyage/OpenRouter                                                    | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.               |
+| Operação                                  | Estado atual                                                                | Evidência/cobertura desejada                                                                                                                                 |
+| ----------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat texto/stream                         | Parcial implementado                                                        | OpenAI-compatible; nativos Anthropic/Gemini/Cohere; fixtures por protocolo.                                                                                  |
+| OpenAI/OpenRouter/9router/OmniRouter/Kimi | Transporte genérico possível quando OpenAI-compatible; perfis não equivalem | Rota, auth/headers, erros, streaming, uso e modalidade por endpoint.                                                                                         |
+| Ollama chat                               | Sem adapter dedicado                                                        | API Ollama distinta e perfil OpenAI `/v1` validado separadamente.                                                                                            |
+| llama.cpp chat/discovery                  | Perfil Rust mais APIs health/models/chat/stream nos bindings                | Conformidade por fixture; integração real e modalidades por modelo pendentes.                                                                                |
+| Decision Model                            | `/v1/systemone` em implementação no core e bindings                         | Perguntas choice/score/noul, capability decisions, request persistível e envelope efêmero multimodal, probabilidades validadas e fixtures nos três runtimes. |
+| Entrada de imagem/visão                   | Tipos e preparação existem; roteamento parcial                              | Casos reais por protocolo/modelo e capability desconhecida fail-closed.                                                                                      |
+| Geração de imagem                         | Ausente                                                                     | Adapter próprio apenas quando endpoint estiver confirmado.                                                                                                   |
+| TTS                                       | Ausente                                                                     | `/v1/audio/speech`: WAV/PCM, voz, sample rate, stream e cancelamento.                                                                                        |
+| STT                                       | Ausente                                                                     | `/v1/realtime` é streaming ASR; batch transcription requer API separada.                                                                                     |
+| Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                    | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.                                                                                          |
+| Geração de vídeo                          | Ausente                                                                     | Não confundir com vídeo de entrada.                                                                                                                          |
+| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama                           | Extensão multimodal do llama.cpp em contrato versionado.                                                                                                     |
+| Rerank                                    | Cohere/Voyage/OpenRouter                                                    | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.                                                                                              |
 
 ## Gates para etapas de código
 
@@ -44,9 +44,11 @@
 - [ ] Erros de provider preservam código/status sem vazar segredo ou payload.
 - [ ] Timeouts, limites, cancelamento, backpressure e retry são definidos por operação.
 - [ ] Fallback só pode ocorrer antes da primeira saída observável.
-- [ ] Fixtures comuns exercitam Rust e bindings Python/TypeScript.
+- [x] Fixtures HTTP exercitam Rust e bindings Python/TypeScript com metadata de capability, auth, perguntas, resposta probabilística e envelope efêmero.
 - [ ] Integração real fixa tag de servidor/modelo e é opt-in, sem baixar modelo grande no CI por padrão.
-- [ ] APIs `systemone`, TTS, realtime ASR, geração de imagem e vídeo têm contratos separados.
+- [x] `systemone` tem contrato separado e fixture de rota/probabilidades no core Rust.
+- [x] `systemone` é exposto e verificado nos bindings Python e TypeScript (fixture local).
+- [ ] TTS, realtime ASR, geração de imagem e vídeo têm contratos separados.
 - [ ] Documentação anuncia suporte por modalidade/provider/modelo com evidência.
 
 ## Gate do charter de primeira release

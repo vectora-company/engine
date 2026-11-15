@@ -34,6 +34,8 @@ from vectora_engine import (
     graph_store_operation,
     llama_server_chat_complete,
     llama_server_chat_stream,
+    llama_server_decide,
+    llama_server_decide_ephemeral,
     llama_server_health,
     llama_server_models,
     model_tool_loop_contract_version,
@@ -719,7 +721,7 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
     captured: list[str] = []
     responses = {
         "/health": b'{"status":"ok"}',
-        "/v1/models": b'{"object":"list","data":[{"id":"fixture","architecture":{"input_modalities":["text","image"],"output_modalities":["text"]}}]}',
+        "/v1/models": b'{"object":"list","data":[{"id":"fixture","architecture":{"input_modalities":["text","image"],"output_modalities":["text","decisions"]}}]}',
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -736,6 +738,19 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
             captured.append(self.path)
             length = int(self.headers.get("content-length", "0"))
             request_body = json.loads(self.rfile.read(length))
+            if self.path == "/v1/systemone":
+                if request_body.get("files"):
+                    assert request_body["questions"].keys() == {"route"}
+                    assert request_body["files"] == ["data:image/png;base64,aGVsbG8="]
+                else:
+                    assert set(request_body["questions"]) == {"route"}
+                body = b'{"answers":{"route":{"choice":"billing","probabilities":{"billing":0.8,"shipping":0.2},"confidence":0.6}},"usage":{"input_tokens":12,"output_tokens":0}}'
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if request_body.get("stream"):
                 body = (
                     b'data: {"choices":[{"delta":{"content":"streamed"}}]}\n\n'
@@ -767,6 +782,43 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
             "text",
             "image",
         ]
+        decision = asyncio.run(
+            llama_server_decide(
+                settings,
+                {
+                    "model": "fixture",
+                    "state": {"ticket": "charged twice"},
+                    "questions": {
+                        "route": {
+                            "type": "choice",
+                            "instructions": "Which team?",
+                            "criteria": {"billing": None, "shipping": None},
+                        }
+                    },
+                },
+            )
+        )
+        assert decision["answers"]["route"]["probabilities"]["billing"] == 0.8
+        ephemeral = asyncio.run(
+            llama_server_decide_ephemeral(
+                settings,
+                {
+                    "request": {
+                        "model": "fixture",
+                        "state": {"ticket": "charged twice"},
+                        "questions": {
+                            "route": {
+                                "type": "choice",
+                                "instructions": "Which team?",
+                                "criteria": {"billing": None, "shipping": None},
+                            }
+                        },
+                    },
+                    "files": ["data:image/png;base64,aGVsbG8="],
+                },
+            )
+        )
+        assert ephemeral["answers"]["route"]["choice"] == "billing"
         result = asyncio.run(llama_server_chat_complete(settings, REQUEST))
         assert result["content"] == "hello"
         events = asyncio.run(collect_llama_server_stream(settings, REQUEST))
@@ -777,6 +829,10 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
         assert captured == [
             "/health",
             "/v1/models",
+            "/v1/models",
+            "/v1/systemone",
+            "/v1/models",
+            "/v1/systemone",
             "/v1/chat/completions",
             "/v1/chat/completions",
         ]
