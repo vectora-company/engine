@@ -22,7 +22,7 @@ Esta auditoria é inventário documental; não altera o código de produção. O
 | Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                           | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.   |
 | TTS/STT        | Não há cliente LLM para TTS/STT                                                                              | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                 |
 
-### Ollama nativo — etapa ativa filha do PR #106
+### Ollama nativo — PR #107, filho do PR #106
 
 A Engine agora mapeia `/api/chat` para o contrato comum, incluindo chat
 bufferizado e stream NDJSON; suporta tools, mensagens multimodais com imagens
@@ -32,7 +32,7 @@ nativas. O campo `api_key` é opcional para endpoints locais; se informado,
 segue como Bearer para endpoints remotos. A API OpenAI-compatible segue como
 forma portátil separada. Fixtures unitárias Rust e HTTP Python/Node passaram; workspace Rust (210 testes + 3 fixtures), pytest (57/1 skip), Node (43/11 skips), NAPI, TypeScript typecheck, Clippy, Ruff e `ty` passaram.
 Não declarar APIs Responses, TTS/STT ou capabilities de nuvem como suportadas
-por esse adapter. Fontes oficiais: [API chat](https://docs.ollama.com/api/chat)
+por esse adapter. O PR [#107](https://github.com/vectora-company/engine/pull/107) está `OPEN`/`MERGEABLE`, empilhado sobre #106. Fontes oficiais: [API chat](https://docs.ollama.com/api/chat)
 e [compatibilidade OpenAI](https://docs.ollama.com/api/openai-compatibility).
 
 O estado em `main` permanece o snapshot anterior ao adapter. O PR #98

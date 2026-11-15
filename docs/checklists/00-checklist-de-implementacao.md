@@ -258,10 +258,12 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Build NAPI/TypeScript, suíte Node (42 pass/11 skips) e pytest (56 pass/1 skip). Publicar PR [#106](https://github.com/vectora-company/engine/pull/106), filho do #105; `OPEN`/`MERGEABLE`.
 - [ ] Integração opt-in com `llama-server` v1.0.0/modelo TTS real.
 
-## Ollama chat nativo — etapa ativa filha do PR #106
+## Ollama chat nativo — PR #107, filho do PR #106
 
 - [x] Confirmar contrato oficial `/api/chat` JSON/NDJSON e diferenças em relação ao subconjunto OpenAI-compatible.
 - [x] Implementar tradução do contrato de chat, `options`, extensões nativas, imagens inline, tools, reasoning e usage no core Rust.
 - [x] Suportar api_key opcional no endpoint nativo local e Bearer quando configurada.
-- [x] Testes de payload/resposta no Rust e fixtures HTTP Python/TypeScript; suites completas em validação.
-- [ ] Concluir suites completas, hooks, atualizar docs e publicar PR empilhado sobre #106.
+- [x] Testes de payload/resposta no Rust e fixtures HTTP Python/TypeScript.
+- [x] Suites completas e hooks: Rust 210 + 3 fixtures + teste nativo Python; pytest 57 pass/1 skip; Node 43 pass/11 skips; NAPI/typecheck, Clippy, Ruff/format/ty.
+- [x] Atualizar docs e publicar o PR [#107](https://github.com/vectora-company/engine/pull/107), empilhado sobre #106; `OPEN`/`MERGEABLE`.
+- [ ] Verificar com daemon/modelo Ollama real quando serviço estiver disponível; não bloqueia a implementação fixture-based.

@@ -132,6 +132,13 @@ Caracterizar OpenAI, OpenRouter, 9router, OmniRouter, Kimi, Ollama, Anthropic,
 Gemini e Cohere por operação suportada. Criar perfis nomeados onde defaults ou
 diferenças forem úteis; compartilhar codec/transporte quando conformes.
 
+**Subetapa 5b — perfil de chat OpenRouter:** caracterizar o endpoint de chat,
+headers `HTTP-Referer`/`X-Title`, opções de roteamento e erros gateway sobre o
+transporte compatível existente. Tornar metadados do gateway opcionais e
+explícitos, mantendo o caminho OpenAI-compatible genérico disponível para
+9router, OmniRouter e endpoints compatíveis; fixtures devem provar rota,
+auth, headers e serialização sem afirmar suporte a modalidades por nome.
+
 **Subetapa 5a — Ollama chat nativo (branch `feat/ollama-chat-profile`, filha
 do PR #106):** integrar `/api/chat` ao contrato comum além do transporte
 OpenAI-compatible já disponível. Preservar `think`, `format`, `keep_alive`,
@@ -146,7 +153,7 @@ emite deltas, usage e conclusão apenas após `done: true`, e falha EOF prematur
 Fixtures passaram em Rust/Python/Node; workspace passou (210 + 3 fixtures +
 teste nativo Python), pytest 57/1 skip, Node 43/11 skips, NAPI/typecheck,
 Clippy, Ruff/ty/format. O servidor local não está ativo, sem verificação real.
-Publicação do PR empilhado sobre #106 é o próximo passo.
+Publicado como PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106; GitHub confirma `OPEN`/`MERGEABLE`. O daemon Ollama não está ativo neste host; integração real fica como verificação complementar, sem bloquear a próxima especialização.
 
 **Saída:** fixtures por endpoint/protocolo; nenhuma modalidade ou API atribuída
 ao provider sem prova.
