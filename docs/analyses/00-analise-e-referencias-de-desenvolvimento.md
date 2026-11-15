@@ -444,6 +444,27 @@ A branch `feat/llama-server-realtime-audio` implementa `/v1/realtime` como filha
 
 Permanecem sem comprovação apenas interoperabilidade com llama-server/modelo realtime real, batch STT e streaming TTS; esses itens não bloqueiam publicar o PR #105 como filho do #104 e avançar a stack. Estado da capability e links completos nos documentos relacionados: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
-## Próxima etapa empilhada — streaming TTS
+## Etapa ativa empilhada — streaming TTS (15/11/2026)
+
+A branch local `feat/llama-server-streaming-tts`, filha do PR #105, implementa
+streaming binário para `/v1/audio/speech` (`stream_format: audio`) e `/tts`
+(`stream: true`). O core Rust limita cada chunk a 64 KiB e o total ao limite
+configurado, preserva Content-Type/sample rate, aplica timeout de leitura e
+total, e retorna erro de conexão se o body falhar após áudio parcial. Python e
+TypeScript oferecem iteradores assíncronos canceláveis; os bindings encaminham
+ao mesmo stream Rust usando filas limitadas. Fixtures testam ambas as rotas,
+consumo incremental, metadados e desconexão. Workspace Rust (208 testes, 3
+fixtures, binding nativo Python), Clippy, pytest (56 pass/1 skip), build NAPI,
+TypeScript typecheck e Node (42 pass/11 skips) passaram. O endpoint upstream
+evidenciado é binário, então o contrato não tenta interpretar ou reescrever o
+header WAV de tamanho desconhecido.
+
+Limites: não foi executado um modelo TTS real; isso não impede publicar fixtures
+deterministas e prosseguir a stack. Status do PR #105 deve ser lido por seu SHA,
+sem bloquear trabalho local. Plano, spec, checklist e análise detalhada:
+[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
+[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
+[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e
+[`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
 O PR [#105](https://github.com/vectora-company/engine/pull/105) foi publicado e verificado `OPEN`/`MERGEABLE` sobre o PR #104. A revisão da API oficial llama.cpp v1.0.0 confirmou que `/v1/audio/speech` envia stream binário com `stream_format: "audio"`, enquanto `/tts` usa `stream: true`; o modo SSE é rejeitado e WAV pode chegar com tamanho desconhecido no header. O trabalho seguinte já está especificado em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md): iterador assíncrono de bytes nos dois bindings, backpressure, cancelamento, limites, headers e fixture de falha/truncamento.

@@ -138,6 +138,20 @@ Verificação local concluída: workspace Rust com 205 testes da lib, 3 fixtures
 
 O PR #102 agora retorna `MERGEABLE` no GitHub, então o conflito mostrado na captura não está presente no estado remoto consultado. O PR #105 está pronto para publicação como filho do #104; o trabalho prossegue sem aguardar CI. Limites mantidos: teste de interoperabilidade com modelo real, batch STT e streaming TTS não fazem parte do endpoint realtime implementado. Estado operacional e próximos passos em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), checklist em [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e spec em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
-## Próxima etapa: streaming TTS
+## Etapa ativa: streaming TTS (15/11/2026)
+
+A branch `feat/llama-server-streaming-tts`, filha do PR #105, já implementa
+stream binário nas duas APIs do llama-server v1.0.0. As chamadas são
+incrementais, com chunks limitados, timeout e limite total; metadados de
+content type/sample rate são mantidos, e falhas após bytes parciais são
+reportadas ao consumidor. Wrappers Python e TypeScript expõem iteradores
+assíncronos com backpressure/cancelamento através de canal limitado. Testes
+Rust cobrem resposta incremental, erro após áudio parcial e limites. Workspace
+Rust e Clippy passaram; pytest passou (56/1 skip), Node passou (42/11 skips) e
+build NAPI/typecheck passaram. A criação do PR ainda está pendente; integração
+com modelo TTS real não foi executada. Consulte
+[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
+[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e
+[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
 
 A documentação fixa duas superfícies upstream para gerar áudio incrementalmente: `/v1/audio/speech` aceita `stream_format: "audio"` e rejeita `sse`; `/tts` aceita `stream: true`. WAV streamed tem header com tamanho desconhecido (0xFFFFFFFF), portanto a Engine deve preservar os bytes e sinalizar Content-Type/sample rate sem acumular ou reescrever o arquivo. O contrato do PR #104 só retorna áudio bufferizado; o trabalho seguinte será um iterador de chunks com backpressure e cancelamento em Rust/Python/TypeScript, empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105). Fonte normativa: [llama.cpp v1.0.0 HTTP server README](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md), seções `/tts` e `/v1/audio/speech`.

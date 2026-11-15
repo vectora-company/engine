@@ -1,5 +1,9 @@
 # Goal loop da Engine
 
+## Estado atual — streaming TTS (15/11/2026)
+
+Branch `feat/llama-server-streaming-tts`, filha do PR [#105](https://github.com/vectora-company/engine/pull/105): streaming incremental de `/v1/audio/speech` e `/tts` implementado em Rust/Python/TypeScript. Workspace Rust (208 testes, 3 fixtures e binding nativo Python), Clippy, pytest (56 pass/1 skip), build NAPI/TypeScript e Node (42 pass/11 skips) passaram. Ainda não há PR desta etapa nem teste com modelo TTS real. O plano, spec, checklist e análise atuais estão em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md). O checkout autorizado é `/home/brunosrz/Área de trabalho/engine`; preservar a mudança local em `bindings/typescript/native/index.d.ts` fora do stage.
+
 Este conjunto define os documentos que orientam um goal contínuo de
 implementação. O [prompt curto](../plans/00-prompt-loop-goal.md) é o ponto de
 entrada; os documentos abaixo contêm o processo completo.

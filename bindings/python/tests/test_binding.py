@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import os
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -40,6 +41,8 @@ from vectora_engine import (
     llama_server_models,
     llama_server_synthesize,
     llama_server_synthesize_native_ephemeral,
+    llama_server_synthesize_native_stream_ephemeral,
+    llama_server_synthesize_stream,
     model_tool_loop_contract_version,
     native_chat_complete,
     native_chat_stream,
@@ -925,6 +928,87 @@ def test_llama_server_speech_routes_return_python_bytes() -> None:
             "/v1/models",
             "/tts",
         ]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_llama_server_speech_streams_are_incremental_and_preserve_metadata() -> None:
+    captured: list[tuple[str, dict[str, Any]]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self) -> None:
+            body = b'{"data":[{"id":"speech","architecture":{"output_modalities":["audio"]}}]}'
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("content-length", "0"))
+            body = json.loads(self.rfile.read(length))
+            captured.append((self.path, body))
+            self.send_response(200)
+            self.send_header("content-type", "audio/pcm; rate=24000")
+            self.send_header("transfer-encoding", "chunked")
+            self.end_headers()
+            for chunk in (b"abc", b"def"):
+                self.wfile.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
+                self.wfile.flush()
+                time.sleep(0.03)
+            self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    settings = {"base_url": f"http://127.0.0.1:{server.server_port}"}
+    try:
+
+        async def exercise() -> tuple[bytes, bytes, Any]:
+            compatible = await llama_server_synthesize_stream(
+                settings,
+                {"model": "speech", "input": "hello", "format": "pcm16"},
+            )
+            info = {
+                "content_type": compatible.content_type,
+                "sample_rate_hz": compatible.sample_rate_hz,
+            }
+            first = await compatible.receive()
+            assert first == b"abc"
+            rest = b"".join([chunk async for chunk in compatible])
+
+            native = await llama_server_synthesize_native_stream_ephemeral(
+                settings,
+                {
+                    "request": {
+                        "request": {
+                            "model": "speech",
+                            "input": "hello",
+                            "format": "pcm_f32",
+                        }
+                    },
+                    "speaker_ref_b64": "aGVsbG8=",
+                },
+            )
+            native_bytes = b"".join([chunk async for chunk in native])
+            return first + rest, native_bytes, info
+
+        compatible, native, info = asyncio.run(exercise())
+        assert compatible == b"abcdef"
+        assert native == b"abcdef"
+        assert info == {
+            "content_type": "audio/pcm; rate=24000",
+            "sample_rate_hz": 24000,
+        }
+        assert captured[0][1]["stream_format"] == "audio"
+        assert captured[1][0] == "/tts"
+        assert captured[1][1]["stream"] is True
+        assert captured[1][1]["speaker_ref_b64"] == "aGVsbG8="
     finally:
         server.shutdown()
         server.server_close()

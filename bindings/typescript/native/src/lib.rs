@@ -19,7 +19,7 @@ use vectora_engine::chat::{
     FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
     MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest,
+    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
     TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
@@ -2043,6 +2043,88 @@ fn register_realtime_session(session: RealtimeSession) -> Result<String> {
         .map_err(|_| Error::from_reason("realtime registry unavailable"))?
         .insert(id.clone(), command_tx);
     Ok(id)
+}
+
+fn register_speech_stream(mut speech: SpeechStream) -> Result<String> {
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let info = speech.info().clone();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        loop {
+            let item = match speech.next_chunk().await {
+                Ok(Some(bytes)) => serde_json::to_string(&serde_json::json!({
+                    "audio_base64": STANDARD.encode(bytes),
+                }))
+                .map_err(|_| Error::from_reason("could not encode speech chunk")),
+                Ok(None) => break,
+                Err(error) => Err(Error::from_reason(error.to_string())),
+            };
+            let failed = item.is_err();
+            if sender.send(item).await.is_err() {
+                break;
+            }
+            if failed {
+                break;
+            }
+        }
+    });
+    streams()
+        .lock()
+        .map_err(|_| Error::from_reason("stream registry unavailable"))?
+        .insert(
+            id.clone(),
+            StreamState {
+                receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+                abort: task.abort_handle(),
+            },
+        );
+    serde_json::to_string(&serde_json::json!({ "id": id, "info": info }))
+        .map_err(|_| Error::from_reason("could not encode speech stream metadata"))
+}
+
+#[napi]
+pub async fn llama_server_synthesize_stream(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: SpeechRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid speech request"))?;
+    let stream = client
+        .synthesize_stream(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    register_speech_stream(stream)
+}
+
+#[napi]
+pub async fn llama_server_synthesize_native_stream(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: NativeSpeechRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid native speech request"))?;
+    let stream = client
+        .synthesize_native_stream(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    register_speech_stream(stream)
+}
+
+#[napi]
+pub async fn llama_server_synthesize_native_stream_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: EphemeralNativeSpeechRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid ephemeral native speech request"))?;
+    let stream = client
+        .synthesize_native_stream_ephemeral(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    register_speech_stream(stream)
 }
 
 #[napi]

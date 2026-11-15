@@ -1,9 +1,15 @@
 //! HTTP profile for the llama.cpp `llama-server` API.
 
-use std::{collections::BTreeMap, fmt, time::Duration};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    fmt,
+    pin::Pin,
+    time::Duration,
+};
 
 use base64::Engine as _;
-use futures_util::StreamExt;
+use bytes::Bytes;
+use futures_util::{Stream, StreamExt};
 use reqwest::{Client, Response, header};
 use serde::{Deserialize, Serialize};
 use tokio::time::{Instant, timeout_at};
@@ -16,12 +22,81 @@ use super::{
     EphemeralDecisionRequest, EphemeralNativeSpeechRequest, MediaExecutionContext,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleConfig, RealtimeIntent,
     RealtimeSession, RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse,
+    SpeechStreamInfo,
 };
 
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 10_000;
 const DEFAULT_READ_TIMEOUT_MS: u64 = 60_000;
 const DEFAULT_TOTAL_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
+const SPEECH_STREAM_CHUNK_BYTES: usize = 64 * 1024;
+
+/// Incremental binary TTS response. Dropping the value cancels the HTTP body.
+pub struct SpeechStream {
+    body: Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
+    pending: VecDeque<u8>,
+    info: SpeechStreamInfo,
+    deadline: Instant,
+    read_timeout: Duration,
+    max_bytes: usize,
+    total_bytes: usize,
+    received_any: bool,
+    finished: bool,
+}
+
+impl SpeechStream {
+    pub fn info(&self) -> &SpeechStreamInfo {
+        &self.info
+    }
+
+    /// Returns the next bounded audio chunk, or `None` after a non-empty stream.
+    pub async fn next_chunk(&mut self) -> Result<Option<Vec<u8>>, ChatError> {
+        if !self.pending.is_empty() {
+            return Ok(Some(take_audio_chunk(&mut self.pending)));
+        }
+        if self.finished {
+            return Ok(None);
+        }
+        loop {
+            let read_deadline = (Instant::now() + self.read_timeout).min(self.deadline);
+            let next = timeout_at(read_deadline, self.body.next())
+                .await
+                .map_err(|_| ChatError::Timeout)?;
+            match next {
+                Some(Ok(bytes)) if bytes.is_empty() => continue,
+                Some(Ok(bytes)) => {
+                    self.total_bytes = self
+                        .total_bytes
+                        .checked_add(bytes.len())
+                        .filter(|total| *total <= self.max_bytes)
+                        .ok_or(ChatError::ResponseTooLarge)?;
+                    self.received_any = true;
+                    self.pending.extend(bytes);
+                    return Ok(Some(take_audio_chunk(&mut self.pending)));
+                }
+                Some(Err(error)) => {
+                    return Err(if error.is_timeout() {
+                        ChatError::Timeout
+                    } else {
+                        ChatError::Connection
+                    });
+                }
+                None => {
+                    self.finished = true;
+                    if !self.received_any {
+                        return Err(ChatError::InvalidResponse);
+                    }
+                    return Ok(None);
+                }
+            }
+        }
+    }
+}
+
+fn take_audio_chunk(pending: &mut VecDeque<u8>) -> Vec<u8> {
+    let count = pending.len().min(SPEECH_STREAM_CHUNK_BYTES);
+    pending.drain(..count).collect()
+}
 
 /// Settings for a `llama-server` endpoint. `base_url` may end in `/v1`.
 #[derive(Deserialize)]
@@ -520,6 +595,36 @@ impl LlamaServerClient {
             .await
     }
 
+    /// OpenAI-compatible TTS streamed as bounded binary chunks.
+    pub async fn synthesize_stream(
+        &self,
+        request: SpeechRequest,
+    ) -> Result<SpeechStream, ChatError> {
+        request.validate().map_err(ChatError::InvalidRequest)?;
+        if request.format == SpeechFormat::PcmF32 {
+            return Err(ChatError::InvalidRequest(
+                "the OpenAI-compatible speech route only supports wav or pcm16",
+            ));
+        }
+        self.ensure_audio_model(&request.model).await?;
+        self.ensure_voice(request.voice.as_deref()).await?;
+        let mut endpoint = self.v1_url.clone();
+        endpoint.set_path(&format!(
+            "{}/audio/speech",
+            endpoint.path().trim_end_matches('/')
+        ));
+        let body = serde_json::json!({
+            "model": request.model,
+            "input": request.input,
+            "voice": request.voice,
+            "response_format": match request.format { SpeechFormat::Wav => "wav", _ => "pcm" },
+            "speed": request.speed,
+            "stream_format": "audio",
+        });
+        self.post_speech_stream(endpoint, omit_null_fields(body), request.format)
+            .await
+    }
+
     /// Native `/tts` exposes model-specific language, sampling and PCM options.
     pub async fn synthesize_native(
         &self,
@@ -530,6 +635,77 @@ impl LlamaServerClient {
             speaker_ref_b64: None,
         })
         .await
+    }
+
+    /// Native `/tts` stream with text and model-specific controls.
+    pub async fn synthesize_native_stream(
+        &self,
+        request: NativeSpeechRequest,
+    ) -> Result<SpeechStream, ChatError> {
+        self.synthesize_native_stream_ephemeral(EphemeralNativeSpeechRequest {
+            request,
+            speaker_ref_b64: None,
+        })
+        .await
+    }
+
+    /// Native `/tts` stream with request-only speaker reference audio.
+    pub async fn synthesize_native_stream_ephemeral(
+        &self,
+        request: EphemeralNativeSpeechRequest,
+    ) -> Result<SpeechStream, ChatError> {
+        request
+            .request
+            .request
+            .validate()
+            .map_err(ChatError::InvalidRequest)?;
+        if let Some(reference) = &request.speaker_ref_b64 {
+            if request.request.request.voice.is_some() {
+                return Err(ChatError::InvalidRequest(
+                    "predefined voice and speaker reference cannot be combined",
+                ));
+            }
+            if reference.len() as u64 > self.max_media_bytes.saturating_add(2) / 3 * 4 + 4 {
+                return Err(ChatError::InvalidRequest(
+                    "speaker reference exceeds the configured media limit",
+                ));
+            }
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(reference)
+                .map_err(|_| ChatError::InvalidRequest("speaker reference must be valid base64"))?;
+            if decoded.is_empty() || decoded.len() as u64 > self.max_media_bytes {
+                return Err(ChatError::InvalidRequest(
+                    "speaker reference is empty or exceeds the configured media limit",
+                ));
+            }
+        }
+        self.ensure_audio_model(&request.request.request.model)
+            .await?;
+        self.ensure_voice(request.request.request.voice.as_deref())
+            .await?;
+        let mut endpoint = self.root_url.clone();
+        endpoint.set_path(&format!("{}/tts", endpoint.path().trim_end_matches('/')));
+        let speech = &request.request.request;
+        let body = serde_json::json!({
+            "input": speech.input,
+            "lang": request.request.lang,
+            "voice": speech.voice,
+            "speaker_ref_b64": request.speaker_ref_b64,
+            "top_k": request.request.top_k,
+            "top_p": request.request.top_p,
+            "temperature": request.request.temperature,
+            "repeat_penalty": request.request.repeat_penalty,
+            "seed": request.request.seed,
+            "n_predict": request.request.n_predict,
+            "response_format": match speech.format {
+                SpeechFormat::Wav => "wav",
+                SpeechFormat::Pcm16 => "pcm16",
+                SpeechFormat::PcmF32 => "pcm",
+            },
+            "stream": true,
+        });
+        self.post_speech_stream(endpoint, omit_null_fields(body), speech.format)
+            .await
     }
 
     /// Native `/tts` with transient audio used for supported voice cloning.
@@ -688,6 +864,74 @@ impl LlamaServerClient {
         })
     }
 
+    async fn post_speech_stream(
+        &self,
+        endpoint: Url,
+        body: serde_json::Value,
+        format: SpeechFormat,
+    ) -> Result<SpeechStream, ChatError> {
+        let body = serde_json::to_vec(&body)
+            .map_err(|_| ChatError::InvalidRequest("speech request could not be encoded"))?;
+        if body.len() > self.max_response_bytes {
+            return Err(ChatError::ResponseTooLarge);
+        }
+        let deadline = Instant::now() + self.total_timeout;
+        let mut http = self
+            .client
+            .post(endpoint)
+            .timeout(self.total_timeout)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(body);
+        if let Some(key) = &self.api_key {
+            http = http.header(header::AUTHORIZATION, key.clone());
+        }
+        for (name, value) in &self.headers {
+            http = http.header(name, value);
+        }
+        let response = timeout_at(deadline, http.send())
+            .await
+            .map_err(|_| ChatError::Timeout)?
+            .map_err(|error| {
+                if error.is_timeout() {
+                    ChatError::Timeout
+                } else {
+                    ChatError::Connection
+                }
+            })?;
+        if !response.status().is_success() {
+            return Err(classify_status(response.status().as_u16()));
+        }
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .ok_or(ChatError::InvalidResponse)?
+            .to_owned();
+        if !content_type
+            .split(';')
+            .next()
+            .is_some_and(|media_type| media_type.trim().to_ascii_lowercase().starts_with("audio/"))
+        {
+            return Err(ChatError::InvalidResponse);
+        }
+        let sample_rate_hz = sample_rate(&content_type);
+        Ok(SpeechStream {
+            body: Box::pin(response.bytes_stream()),
+            pending: VecDeque::new(),
+            info: SpeechStreamInfo {
+                content_type,
+                format,
+                sample_rate_hz,
+            },
+            deadline,
+            read_timeout: self.read_timeout,
+            max_bytes: self.max_response_bytes,
+            total_bytes: 0,
+            received_any: false,
+            finished: false,
+        })
+    }
+
     async fn get(&self, endpoint: Url) -> Result<Vec<u8>, ChatError> {
         let deadline = Instant::now() + self.total_timeout;
         let mut request = self.client.get(endpoint).timeout(self.read_timeout);
@@ -820,6 +1064,17 @@ mod tests {
         wav[24..28].copy_from_slice(&24_000u32.to_le_bytes());
         assert_eq!(wav_sample_rate(&wav), Some(24_000));
         assert_eq!(wav_sample_rate(b"not wave"), None);
+    }
+
+    #[test]
+    fn speech_stream_chunks_are_bounded() {
+        let mut bytes = VecDeque::from(vec![7; SPEECH_STREAM_CHUNK_BYTES + 3]);
+        assert_eq!(
+            take_audio_chunk(&mut bytes).len(),
+            SPEECH_STREAM_CHUNK_BYTES
+        );
+        assert_eq!(bytes.len(), 3);
+        assert_eq!(take_audio_chunk(&mut bytes), vec![7; 3]);
     }
 
     fn settings(base_url: String) -> LlamaServerSettings {
@@ -1078,6 +1333,146 @@ mod tests {
         assert_eq!(native.format, SpeechFormat::PcmF32);
         assert_eq!(native.sample_rate_hz, Some(24_000));
         assert_eq!(native.audio, [1, 2, 3, 4]);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn speech_streams_are_incremental_bounded_and_use_both_wire_contracts() {
+        use super::super::{NativeSpeechRequest, SpeechFormat, SpeechRequest};
+        use tokio::sync::oneshot;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (first_sent_tx, first_sent_rx) = oneshot::channel();
+        let (continue_tx, continue_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut first_sent_tx = Some(first_sent_tx);
+            let mut continue_rx = Some(continue_rx);
+            for index in 0..4 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 4096];
+                let read = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..read]);
+                if request.starts_with("GET /v1/models ") {
+                    let models = r#"{"data":[{"id":"speech-model","architecture":{"output_modalities":["audio"]}}]}"#;
+                    let header = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{models}",
+                        models.len()
+                    );
+                    stream.write_all(header.as_bytes()).await.unwrap();
+                    continue;
+                }
+                if request.starts_with("POST /v1/audio/speech ") {
+                    assert!(request.contains(r#""stream_format":"audio""#));
+                } else {
+                    assert!(request.starts_with("POST /tts "));
+                    assert!(request.contains(r#""stream":true"#));
+                }
+                stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: audio/pcm; rate=24000\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\nabc\r\n")
+                    .await
+                    .unwrap();
+                if index == 1 {
+                    if let Some(sender) = first_sent_tx.take() {
+                        let _ = sender.send(());
+                    }
+                    if let Some(receiver) = continue_rx.take() {
+                        let _ = receiver.await;
+                    }
+                }
+                stream.write_all(b"3\r\ndef\r\n0\r\n\r\n").await.unwrap();
+            }
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let mut stream = client
+            .synthesize_stream(SpeechRequest {
+                model: "speech-model".into(),
+                input: "hello".into(),
+                voice: None,
+                format: SpeechFormat::Pcm16,
+                instructions: None,
+                speed: 1.0,
+            })
+            .await
+            .unwrap();
+        assert_eq!(stream.info().sample_rate_hz, Some(24_000));
+        first_sent_rx.await.unwrap();
+        assert_eq!(stream.next_chunk().await.unwrap().unwrap(), b"abc");
+        continue_tx.send(()).unwrap();
+        assert_eq!(stream.next_chunk().await.unwrap().unwrap(), b"def");
+        assert_eq!(stream.next_chunk().await.unwrap(), None);
+
+        let mut native = client
+            .synthesize_native_stream(NativeSpeechRequest {
+                request: SpeechRequest {
+                    model: "speech-model".into(),
+                    input: "hello".into(),
+                    voice: None,
+                    format: SpeechFormat::Wav,
+                    instructions: None,
+                    speed: 1.0,
+                },
+                lang: Some("en".into()),
+                seed: None,
+                top_k: None,
+                top_p: None,
+                temperature: None,
+                repeat_penalty: None,
+                n_predict: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(native.next_chunk().await.unwrap().unwrap(), b"abc");
+        assert_eq!(native.next_chunk().await.unwrap().unwrap(), b"def");
+        assert_eq!(native.next_chunk().await.unwrap(), None);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn speech_stream_reports_connection_loss_after_partial_audio() {
+        use super::super::{SpeechFormat, SpeechRequest};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 2048];
+                let read = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..read]);
+                if request.starts_with("GET /v1/models ") {
+                    let models = r#"{"data":[{"id":"speech-model","architecture":{"output_modalities":["audio"]}}]}"#;
+                    let header = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{models}",
+                        models.len()
+                    );
+                    stream.write_all(header.as_bytes()).await.unwrap();
+                } else {
+                    assert!(request.starts_with("POST /v1/audio/speech "));
+                    stream
+                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: audio/pcm; rate=24000\r\nContent-Length: 6\r\nConnection: close\r\n\r\nabc")
+                        .await
+                        .unwrap();
+                }
+            }
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let mut stream = client
+            .synthesize_stream(SpeechRequest {
+                model: "speech-model".into(),
+                input: "hello".into(),
+                voice: None,
+                format: SpeechFormat::Pcm16,
+                instructions: None,
+                speed: 1.0,
+            })
+            .await
+            .unwrap();
+        assert_eq!(stream.next_chunk().await.unwrap().unwrap(), b"abc");
+        assert!(matches!(
+            stream.next_chunk().await,
+            Err(ChatError::Connection)
+        ));
         server.await.unwrap();
     }
 

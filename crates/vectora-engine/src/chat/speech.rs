@@ -89,6 +89,16 @@ pub struct SpeechResponse {
     pub sample_rate_hz: Option<u32>,
 }
 
+/// Metadata for an incremental speech response.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SpeechStreamInfo {
+    pub content_type: String,
+    pub format: SpeechFormat,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_rate_hz: Option<u32>,
+}
+
 impl SpeechRequest {
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
         if self.model.trim().is_empty() || self.input.trim().is_empty() {
