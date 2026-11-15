@@ -98,3 +98,15 @@
 - [x] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
 - [x] Workspace Rust 208 testes + 3 fixtures; Clippy `-D warnings`; pytest Python 56 pass/1 skip; NAPI build + TypeScript typecheck; Node 42 pass/11 skips; Ruff/format/ty.
 - [x] Atualizar docs, publicar o PR [#106](https://github.com/vectora-company/engine/pull/106) como filho do #105; GitHub confirma `OPEN`/`MERGEABLE`.
+
+## Ollama chat nativo — PR #107, filho do PR #106
+
+- [x] Confirmar contrato oficial `/api/chat` JSON/NDJSON e diferenças em relação ao subconjunto OpenAI-compatible.
+- [x] Implementar tradução do contrato de chat, `options`, extensões nativas, imagens inline, tools, reasoning e usage no core Rust.
+- [x] Adicionar suporte a api_key opcional no endpoint nativo local; manter auth Bearer quando configurada.
+- [x] Adicionar testes unitários de payload e resposta/stream no core.
+- [x] Adicionar fixtures de integração nos bindings Python e TypeScript.
+- [x] Rodar workspace Rust (210 testes + 3 fixtures), Clippy, pytest (57/1 skip), NAPI/typecheck, Node (43/11 skips), Ruff/format/ty; todos passaram. Ollama real não está ativo localmente.
+- [x] Atualizar plano, spec, análise e checklists; hooks pre-commit completos passaram.
+- [x] Publicar o PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106; GitHub confirma `OPEN`/`MERGEABLE`.
+- [ ] Testar com daemon/modelo Ollama real quando o serviço estiver disponível; fixtures HTTP cobrem o protocolo sem depender do daemon.

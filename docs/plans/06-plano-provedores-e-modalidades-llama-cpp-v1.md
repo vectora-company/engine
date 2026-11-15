@@ -132,6 +132,29 @@ Caracterizar OpenAI, OpenRouter, 9router, OmniRouter, Kimi, Ollama, Anthropic,
 Gemini e Cohere por operação suportada. Criar perfis nomeados onde defaults ou
 diferenças forem úteis; compartilhar codec/transporte quando conformes.
 
+**Subetapa 5b — perfil de chat OpenRouter:** caracterizar o endpoint de chat,
+headers `HTTP-Referer`/`X-Title`, opções de roteamento e erros gateway sobre o
+transporte compatível existente. Tornar metadados do gateway opcionais e
+explícitos, mantendo o caminho OpenAI-compatible genérico disponível para
+9router, OmniRouter e endpoints compatíveis; fixtures devem provar rota,
+auth, headers e serialização sem afirmar suporte a modalidades por nome.
+
+**Subetapa 5a — Ollama chat nativo (branch `feat/ollama-chat-profile`, filha
+do PR #106):** integrar `/api/chat` ao contrato comum além do transporte
+OpenAI-compatible já disponível. Preservar `think`, `format`, `keep_alive`,
+`options`, imagens inline base64, ferramentas, reasoning e usage; aceitar
+endpoint local sem API key e autenticação opcional remota. Cobrir resposta JSON
+e NDJSON com fixtures em Rust/Python/TypeScript, e documentar limites por
+operação. A API Responses não é declarada como suportada por esta subetapa.
+
+Estado da implementação (15/11/2026): core Rust e bindings usam a mesma
+`NativeChatClient`; a API key opcional só gera Bearer quando configurada. NDJSON
+emite deltas, usage e conclusão apenas após `done: true`, e falha EOF prematura.
+Fixtures passaram em Rust/Python/Node; workspace passou (210 + 3 fixtures +
+teste nativo Python), pytest 57/1 skip, Node 43/11 skips, NAPI/typecheck,
+Clippy, Ruff/ty/format. O servidor local não está ativo, sem verificação real.
+Publicado como PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106; GitHub confirma `OPEN`/`MERGEABLE`. O daemon Ollama não está ativo neste host; integração real fica como verificação complementar, sem bloquear a próxima especialização.
+
 **Saída:** fixtures por endpoint/protocolo; nenhuma modalidade ou API atribuída
 ao provider sem prova.
 

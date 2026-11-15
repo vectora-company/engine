@@ -15,8 +15,9 @@ use url::Url;
 
 use super::media::{has_native_media, mark_text_retry};
 use super::{
-    ChatError, ChatEvent, ChatEventKind, ChatRequest, FinishReason, MediaExecutionContext, Message,
-    MessageContent, MessageRole, ToolArguments, ToolCall, ToolCallDelta, Usage,
+    ChatError, ChatEvent, ChatEventKind, ChatRequest, ContentPart, FinishReason,
+    MediaExecutionContext, Message, MessageContent, MessageRole, ToolArguments, ToolCall,
+    ToolCallDelta, Usage,
     error::classify_provider_error,
     openai_compatible::{ChatStream, validate_request},
     sse::SseDecoder,
@@ -26,6 +27,7 @@ use super::{
 const DEFAULT_ANTHROPIC_URL: &str = "https://api.anthropic.com/v1";
 const DEFAULT_GOOGLE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_COHERE_URL: &str = "https://api.cohere.com/v2";
+const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434/api";
 const MAX_ERROR_BODY_BYTES: usize = 8 * 1024;
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_EVENT_BYTES: usize = 1024 * 1024;
@@ -36,17 +38,19 @@ pub enum NativeProvider {
     Anthropic,
     Google,
     Cohere,
+    Ollama,
 }
 
 /// Settings for a native protocol provider. Credentials are supplied by the
-/// consumer for each client instance and are never included in Debug output.
+/// consumer when required by the endpoint and are redacted from Debug output.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeChatSettings {
     pub provider: NativeProvider,
     #[serde(default)]
     pub base_url: Option<String>,
-    pub api_key: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
     #[serde(default)]
     pub headers: BTreeMap<String, String>,
     #[serde(default = "default_connect_timeout_ms")]
@@ -72,7 +76,7 @@ impl fmt::Debug for NativeChatSettings {
         f.debug_struct("NativeChatSettings")
             .field("provider", &self.provider)
             .field("base_url", &self.base_url.as_deref().map(safe_endpoint))
-            .field("api_key", &"[REDACTED]")
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
             .field(
                 "headers",
                 &format!("{} redacted header(s)", self.headers.len()),
@@ -88,6 +92,7 @@ enum NativeProtocolClient {
     Anthropic(ProtocolClient),
     Google(ProtocolClient),
     Cohere(ProtocolClient),
+    Ollama(ProtocolClient),
 }
 
 /// Unified native-protocol facade used by both language bindings.
@@ -105,6 +110,7 @@ impl fmt::Debug for NativeChatClient {
                     NativeProtocolClient::Anthropic(_) => NativeProvider::Anthropic,
                     NativeProtocolClient::Google(_) => NativeProvider::Google,
                     NativeProtocolClient::Cohere(_) => NativeProvider::Cohere,
+                    NativeProtocolClient::Ollama(_) => NativeProvider::Ollama,
                 },
             )
             .finish_non_exhaustive()
@@ -127,9 +133,17 @@ impl NativeChatClient {
             NativeProvider::Anthropic => DEFAULT_ANTHROPIC_URL,
             NativeProvider::Google => DEFAULT_GOOGLE_URL,
             NativeProvider::Cohere => DEFAULT_COHERE_URL,
+            NativeProvider::Ollama => DEFAULT_OLLAMA_URL,
         };
         let base_url = settings.base_url.as_deref().unwrap_or(base);
-        if settings.api_key.trim().is_empty() {
+        if settings.provider != NativeProvider::Ollama
+            && settings
+                .api_key
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        {
             return Err(ChatError::InvalidConfiguration("API key must not be empty"));
         }
         let connect_timeout = Duration::from_millis(settings.connect_timeout_ms);
@@ -176,6 +190,9 @@ impl NativeChatClient {
                 NativeProvider::Cohere => {
                     matches!(canonical, "authorization" | "content-type" | "host")
                 }
+                NativeProvider::Ollama => {
+                    matches!(canonical, "authorization" | "content-type" | "host")
+                }
             };
             if reserved || !seen.insert(canonical.to_owned()) {
                 return Err(ChatError::InvalidConfiguration(
@@ -190,7 +207,7 @@ impl NativeChatClient {
             .map_err(|_| ChatError::InvalidConfiguration("HTTP client could not be created"))?;
         let protocol = ProtocolClient {
             provider: settings.provider,
-            api_key: settings.api_key,
+            api_key: settings.api_key.unwrap_or_default(),
             headers,
             endpoint,
             client,
@@ -202,6 +219,7 @@ impl NativeChatClient {
                 NativeProvider::Anthropic => NativeProtocolClient::Anthropic(protocol),
                 NativeProvider::Google => NativeProtocolClient::Google(protocol),
                 NativeProvider::Cohere => NativeProtocolClient::Cohere(protocol),
+                NativeProvider::Ollama => NativeProtocolClient::Ollama(protocol),
             },
             media_context: None,
         })
@@ -252,6 +270,7 @@ impl NativeChatClient {
             NativeProtocolClient::Anthropic(client) => client.complete(request).await,
             NativeProtocolClient::Google(client) => client.complete(request).await,
             NativeProtocolClient::Cohere(client) => client.complete(request).await,
+            NativeProtocolClient::Ollama(client) => client.complete(request).await,
         }
     }
 
@@ -294,6 +313,7 @@ impl NativeChatClient {
             NativeProtocolClient::Anthropic(_) => "anthropic",
             NativeProtocolClient::Google(_) => "google",
             NativeProtocolClient::Cohere(_) => "cohere",
+            NativeProtocolClient::Ollama(_) => "ollama",
         }
     }
 
@@ -302,12 +322,19 @@ impl NativeChatClient {
             NativeProtocolClient::Anthropic(client) => client.stream(request).await,
             NativeProtocolClient::Google(client) => client.stream(request).await,
             NativeProtocolClient::Cohere(client) => client.stream(request).await,
+            NativeProtocolClient::Ollama(client) => client.stream(request).await,
         }
     }
 }
 
 impl ProtocolClient {
     fn endpoint_for(&self, model: &str, streaming: bool) -> Result<Url, ChatError> {
+        if self.provider == NativeProvider::Ollama {
+            let mut url = self.endpoint.clone();
+            let path = url.path().trim_end_matches('/');
+            url.set_path(&format!("{path}/chat"));
+            return Ok(url);
+        }
         if self.provider == NativeProvider::Anthropic {
             return Ok(self.endpoint.clone());
         }
@@ -351,11 +378,18 @@ impl ProtocolClient {
             NativeProvider::Cohere => {
                 builder = builder.header(header::AUTHORIZATION, format!("Bearer {}", self.api_key));
             }
+            NativeProvider::Ollama => {
+                if !self.api_key.is_empty() {
+                    builder = builder.bearer_auth(&self.api_key);
+                }
+            }
         }
         for (name, value) in &self.headers {
             builder = builder.header(name, value);
         }
-        if streaming {
+        if streaming && self.provider == NativeProvider::Ollama {
+            builder = builder.header(header::ACCEPT, "application/x-ndjson");
+        } else if streaming {
             builder = builder.header(header::ACCEPT, "text/event-stream");
         }
         builder
@@ -393,11 +427,15 @@ impl ProtocolClient {
             NativeProvider::Anthropic => parse_anthropic_completion(value),
             NativeProvider::Google => parse_google_completion(value),
             NativeProvider::Cohere => parse_cohere_completion(value),
+            NativeProvider::Ollama => parse_ollama_completion(value),
         }
     }
 
     async fn stream(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
         validate_request(&request)?;
+        if self.provider == NativeProvider::Ollama {
+            return self.stream_ollama(request).await;
+        }
         let url = self.endpoint_for(&request.model, true)?;
         let body = native_payload(self.provider, &request, true)?;
         let deadline = Instant::now() + self.total_timeout;
@@ -430,6 +468,7 @@ impl ProtocolClient {
                         NativeProvider::Anthropic => parse_anthropic_event(&value, &mut anthropic_blocks, &mut emitted_tool_names, &mut usage, &mut finish_reason)?,
                         NativeProvider::Google => parse_google_event(&value, &mut usage, &mut finish_reason, &mut next_google_tool_index)?,
                         NativeProvider::Cohere => parse_cohere_event(&value, &mut usage, &mut finish_reason, &mut cohere_tool_indexes, &mut next_cohere_tool_index)?,
+                        NativeProvider::Ollama => Err(ChatError::Protocol("Ollama stream parser dispatch failed"))?,
                     };
                     for event in events {
                         if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
@@ -447,6 +486,7 @@ impl ProtocolClient {
                         NativeProvider::Anthropic => parse_anthropic_event(&value, &mut anthropic_blocks, &mut emitted_tool_names, &mut usage, &mut finish_reason)?,
                         NativeProvider::Google => parse_google_event(&value, &mut usage, &mut finish_reason, &mut next_google_tool_index)?,
                         NativeProvider::Cohere => parse_cohere_event(&value, &mut usage, &mut finish_reason, &mut cohere_tool_indexes, &mut next_cohere_tool_index)?,
+                        NativeProvider::Ollama => Err(ChatError::Protocol("Ollama stream parser dispatch failed"))?,
                     };
                     for event in events {
                         if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
@@ -463,6 +503,54 @@ impl ProtocolClient {
         };
         Ok(Box::pin(stream))
     }
+
+    async fn stream_ollama(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
+        let url = self.endpoint_for(&request.model, true)?;
+        let body = ollama_payload(&request, true)?;
+        let deadline = Instant::now() + self.total_timeout;
+        let response = self.send(url, true, &body, deadline).await?;
+        if !response.status().is_success() {
+            return Err(http_error(response, deadline, self.provider).await);
+        }
+        let read_timeout = self.read_timeout;
+        let stream = try_stream! {
+            let mut body = response.bytes_stream();
+            let mut line = Vec::new();
+            let mut received = 0usize;
+            let mut tool_index = 0u32;
+            let mut completed = false;
+            loop {
+                let Some(chunk) = next_chunk(&mut body, deadline, read_timeout).await? else { break; };
+                received = received.saturating_add(chunk.len());
+                if received > MAX_RESPONSE_BYTES { Err(ChatError::ResponseTooLarge)?; }
+                for byte in chunk {
+                    if byte == b'\n' {
+                        if line.is_empty() { continue; }
+                        let value: Value = serde_json::from_slice(&line).map_err(|_| ChatError::Protocol("invalid Ollama NDJSON"))?;
+                        line.clear();
+                        for event in parse_ollama_event(&value, &mut tool_index)? {
+                            if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
+                            yield event;
+                        }
+                        if completed { break; }
+                    } else {
+                        line.push(byte);
+                        if line.len() > MAX_EVENT_BYTES { Err(ChatError::ResponseTooLarge)?; }
+                    }
+                }
+                if completed { break; }
+            }
+            if !completed && !line.is_empty() {
+                let value: Value = serde_json::from_slice(&line).map_err(|_| ChatError::Protocol("invalid Ollama NDJSON"))?;
+                for event in parse_ollama_event(&value, &mut tool_index)? {
+                    if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
+                    yield event;
+                }
+            }
+            if !completed { Err(ChatError::Protocol("Ollama stream ended before its done message"))?; }
+        };
+        Ok(Box::pin(stream))
+    }
 }
 
 fn native_payload(
@@ -474,7 +562,239 @@ fn native_payload(
         NativeProvider::Anthropic => anthropic_payload(request, streaming),
         NativeProvider::Google => google_payload(request),
         NativeProvider::Cohere => cohere_payload(request, streaming),
+        NativeProvider::Ollama => ollama_payload(request, streaming),
     }
+}
+
+fn ollama_payload(request: &ChatRequest, streaming: bool) -> Result<Value, ChatError> {
+    let messages = request
+        .messages
+        .iter()
+        .map(ollama_message)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut body = json!({"model": request.model, "messages": messages, "stream": streaming});
+    let mut options = Map::new();
+    if let Some(temperature) = request.options.temperature {
+        options.insert("temperature".into(), json!(temperature));
+    }
+    if let Some(max_tokens) = request.options.max_tokens {
+        options.insert("num_predict".into(), json!(max_tokens));
+    }
+    if !options.is_empty() {
+        body["options"] = Value::Object(options);
+    }
+    if !request.tools.is_empty() {
+        body["tools"] = Value::Array(request.tools.iter().map(|tool| json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.parameters}})).collect());
+    }
+    let mut extensions = request.extensions.clone();
+    if let Some(extra_options) = extensions.remove("options") {
+        let extra_options = extra_options
+            .as_object()
+            .ok_or(ChatError::InvalidConfiguration(
+                "Ollama options extension must be an object",
+            ))?;
+        let options = body["options"].as_object_mut();
+        if let Some(options) = options {
+            options.extend(extra_options.clone());
+        } else {
+            body["options"] = Value::Object(extra_options.clone());
+        }
+    }
+    merge_extensions(
+        &mut body,
+        &extensions,
+        &["model", "messages", "stream", "tools"],
+    )?;
+    Ok(body)
+}
+
+fn ollama_message(message: &Message) -> Result<Value, ChatError> {
+    let role = match message.role {
+        MessageRole::System => "system",
+        MessageRole::User => "user",
+        MessageRole::Assistant => "assistant",
+        MessageRole::Tool => "tool",
+    };
+    let mut text = String::new();
+    let mut images = Vec::new();
+    match &message.content {
+        MessageContent::Text(content) => text.push_str(content),
+        MessageContent::Parts(parts) => {
+            for part in parts {
+                match part {
+                    ContentPart::Text { text: content } => text.push_str(content),
+                    ContentPart::ImageUrl { image_url } => {
+                        let data = image_url
+                            .url
+                            .strip_prefix("data:image/")
+                            .and_then(|value| value.split_once(";base64,"))
+                            .map(|(_, data)| data)
+                            .ok_or(ChatError::MultimodalIncompatible)?;
+                        images.push(data.to_owned());
+                    }
+                    ContentPart::Inline(media) if media.kind == super::media::MediaKind::Image => {
+                        images.push(media.data_base64.clone())
+                    }
+                    other => {
+                        if let Some(fallback) = other.fallback_text() {
+                            if !text.is_empty() {
+                                text.push('\n');
+                            }
+                            text.push_str(&fallback);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut value = json!({"role": role, "content": text});
+    if !images.is_empty() {
+        value["images"] = json!(images);
+    }
+    if message.role == MessageRole::Tool
+        && let Some(name) = &message.name
+    {
+        value["tool_name"] = json!(name);
+    }
+    if message.role == MessageRole::Assistant && !message.tool_calls.is_empty() {
+        value["tool_calls"] = Value::Array(message.tool_calls.iter().map(|call| json!({"function":{"name":call.name,"arguments":arguments_value(&call.arguments)}})).collect());
+    }
+    Ok(value)
+}
+
+fn parse_ollama_completion(value: Value) -> Result<ChatCompletion, ChatError> {
+    if value.get("done").and_then(Value::as_bool) != Some(true) {
+        return Err(ChatError::InvalidResponse);
+    }
+    let message = value.get("message").ok_or(ChatError::InvalidResponse)?;
+    let content = message
+        .get("content")
+        .and_then(Value::as_str)
+        .ok_or(ChatError::InvalidResponse)?
+        .to_owned();
+    let reasoning = message
+        .get("thinking")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let calls = parse_ollama_tool_calls(message.get("tool_calls"))?;
+    let finish_reason = value
+        .get("done_reason")
+        .and_then(Value::as_str)
+        .map(FinishReason::from_provider)
+        .or_else(|| (!calls.is_empty()).then_some(FinishReason::ToolCalls));
+    Ok(ChatCompletion {
+        contract_version: CHAT_CONTRACT_VERSION,
+        id: None,
+        selected_model_id: None,
+        content,
+        reasoning,
+        tool_calls: calls,
+        finish_reason,
+        usage: ollama_usage(&value),
+        media_decisions: Vec::new(),
+    })
+}
+
+fn parse_ollama_tool_calls(value: Option<&Value>) -> Result<Vec<ToolCall>, ChatError> {
+    let Some(calls) = value else {
+        return Ok(Vec::new());
+    };
+    calls
+        .as_array()
+        .ok_or(ChatError::InvalidResponse)?
+        .iter()
+        .enumerate()
+        .map(|(index, call)| {
+            let function = call.get("function").ok_or(ChatError::InvalidResponse)?;
+            let name = function
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|name| !name.is_empty())
+                .ok_or(ChatError::InvalidResponse)?;
+            let arguments = function
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            let raw = if let Some(text) = arguments.as_str() {
+                text.to_owned()
+            } else {
+                arguments.to_string()
+            };
+            Ok(ToolCall {
+                id: call
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| format!("ollama_call_{index}")),
+                name: name.to_owned(),
+                arguments: ToolArguments::from_json(&raw),
+            })
+        })
+        .collect()
+}
+
+fn ollama_usage(value: &Value) -> Option<Usage> {
+    let input = value.get("prompt_eval_count")?.as_u64()?;
+    let output = value.get("eval_count").and_then(Value::as_u64).unwrap_or(0);
+    Some(Usage {
+        input_tokens: input,
+        output_tokens: output,
+        total_tokens: input.saturating_add(output),
+        cost: None,
+    })
+}
+
+fn parse_ollama_event(
+    value: &Value,
+    next_tool_index: &mut u32,
+) -> Result<Vec<ChatEvent>, ChatError> {
+    let mut events = Vec::new();
+    let message = value.get("message").ok_or(ChatError::InvalidResponse)?;
+    if let Some(text) = message
+        .get("content")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    {
+        events.push(ChatEvent::new(ChatEventKind::TextDelta {
+            text: text.to_owned(),
+        }));
+    }
+    if let Some(text) = message
+        .get("thinking")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty())
+    {
+        events.push(ChatEvent::new(ChatEventKind::ReasoningDelta {
+            text: text.to_owned(),
+        }));
+    }
+    for call in parse_ollama_tool_calls(message.get("tool_calls"))? {
+        let index = *next_tool_index;
+        *next_tool_index = next_tool_index.saturating_add(1);
+        events.push(ChatEvent::new(ChatEventKind::ToolCallDelta {
+            call: ToolCallDelta {
+                index,
+                id: Some(call.id),
+                name: Some(call.name),
+                arguments_fragment: call.arguments.wire_value(),
+            },
+        }));
+    }
+    if value.get("done").and_then(Value::as_bool) == Some(true) {
+        if let Some(usage) = ollama_usage(value) {
+            events.push(ChatEvent::new(ChatEventKind::Usage { usage }));
+        }
+        let reason = value
+            .get("done_reason")
+            .and_then(Value::as_str)
+            .map(FinishReason::from_provider)
+            .or_else(|| (*next_tool_index > 0).then_some(FinishReason::ToolCalls));
+        events.push(ChatEvent::new(ChatEventKind::Completed {
+            finish_reason: reason,
+        }));
+    }
+    Ok(events)
 }
 
 fn anthropic_payload(request: &ChatRequest, streaming: bool) -> Result<Value, ChatError> {
@@ -1560,6 +1880,80 @@ mod tests {
     }
 
     #[test]
+    fn ollama_native_api_preserves_model_controls_images_and_tools() {
+        let mut request = req();
+        request.messages[0].content = MessageContent::Parts(vec![
+            ContentPart::Text {
+                text: "describe".into(),
+            },
+            ContentPart::ImageUrl {
+                image_url: super::super::ImageUrl {
+                    url: "data:image/png;base64,aW1hZ2U=".into(),
+                    detail: None,
+                },
+            },
+        ]);
+        request.tools.push(super::super::ToolDefinition {
+            name: "lookup".into(),
+            description: Some("find a thing".into()),
+            parameters: json!({"type":"object","properties":{}}),
+        });
+        request.extensions.insert("think".into(), json!(true));
+        request.extensions.insert("keep_alive".into(), json!("5m"));
+        request.extensions.insert("format".into(), json!("json"));
+        request
+            .extensions
+            .insert("options".into(), json!({"top_k":40}));
+        let payload = ollama_payload(&request, true).unwrap();
+        assert_eq!(payload["stream"], true);
+        assert_eq!(payload["messages"][0]["role"], "user");
+        assert_eq!(payload["messages"][0]["content"], "describe");
+        assert_eq!(payload["messages"][0]["images"][0], "aW1hZ2U=");
+        assert_eq!(payload["tools"][0]["function"]["name"], "lookup");
+        assert_eq!(payload["think"], true);
+        assert_eq!(payload["keep_alive"], "5m");
+        assert_eq!(payload["format"], "json");
+        assert_eq!(payload["options"]["top_k"], 40);
+    }
+
+    #[test]
+    fn ollama_response_and_ndjson_events_keep_reasoning_tools_and_usage() {
+        let response = json!({
+            "message":{"role":"assistant","content":"answer","thinking":"reason",
+                "tool_calls":[{"function":{"name":"lookup","arguments":{"q":"x"}}}]},
+            "done":true,"done_reason":"stop","prompt_eval_count":7,"eval_count":3
+        });
+        let parsed = parse_ollama_completion(response.clone()).unwrap();
+        assert_eq!(parsed.content, "answer");
+        assert_eq!(parsed.reasoning.as_deref(), Some("reason"));
+        assert_eq!(parsed.tool_calls[0].id, "ollama_call_0");
+        assert_eq!(parsed.usage.unwrap().total_tokens, 10);
+        let mut next_tool = 0;
+        let events = parse_ollama_event(&response, &mut next_tool).unwrap();
+        assert!(matches!(events[0].event, ChatEventKind::TextDelta { .. }));
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event.event, ChatEventKind::ReasoningDelta { .. }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event.event, ChatEventKind::ToolCallDelta { .. }))
+        );
+        assert!(matches!(
+            events.last().unwrap().event,
+            ChatEventKind::Completed { .. }
+        ));
+        assert!(
+            parse_ollama_completion(json!({
+                "message":{"role":"assistant","content":"incomplete"},"done":false
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn anthropic_maps_system_images_and_tool_results() {
         let mut request = ChatRequest::new(
             "claude",
@@ -1825,7 +2219,7 @@ mod tests {
         let settings = NativeChatSettings {
             provider: NativeProvider::Google,
             base_url: Some("https://example.test/v1beta?token=not-allowed".into()),
-            api_key: "sensitive-key".into(),
+            api_key: Some("sensitive-key".into()),
             headers: BTreeMap::new(),
             connect_timeout_ms: 10_000,
             read_timeout_ms: 60_000,
@@ -1837,7 +2231,7 @@ mod tests {
         let settings = NativeChatSettings {
             provider: NativeProvider::Anthropic,
             base_url: None,
-            api_key: "sensitive-key".into(),
+            api_key: Some("sensitive-key".into()),
             headers: BTreeMap::new(),
             connect_timeout_ms: 10_000,
             read_timeout_ms: 60_000,

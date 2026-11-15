@@ -113,9 +113,9 @@ export interface LlamaServerHealth {
 }
 
 export interface NativeChatSettings {
-  provider: "anthropic" | "google" | "cohere";
+  provider: "anthropic" | "google" | "cohere" | "ollama";
   base_url?: string;
-  api_key: string;
+  api_key?: string;
   headers?: Record<string, string>;
   connect_timeout_ms?: number;
   read_timeout_ms?: number;

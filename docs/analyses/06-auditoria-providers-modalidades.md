@@ -13,14 +13,27 @@ Esta auditoria é inventário documental; não altera o código de produção. O
 
 ## O que o código realmente oferece
 
-| Área           | Implementado                                                                                                                                                    | Não inferir                                                                                                                                |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat           | OpenAI-compatible completo no escopo atual; adapters nativos Anthropic, Google Gemini e Cohere; fallback; `LlamaServerClient` implementado em Rust nesta branch | Adapter dedicado OpenAI, OpenRouter chat, 9router, OmniRouter, Kimi ou Ollama. URL customizada apenas permite tentar protocolo compatível. |
-| Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                                                                          | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade.                                     |
-| Rerank         | Cohere, Voyage e OpenRouter                                                                                                                                     | llama.cpp ou equivalência de campos/scores em todos os adapters.                                                                           |
-| Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                                                                   | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                                                          |
-| Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                                                                              | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.                                     |
-| TTS/STT        | Não há cliente LLM para TTS/STT                                                                                                                                 | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                                                   |
+| Área           | Implementado                                                                                                 | Não inferir                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Chat           | OpenAI-compatible; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; fallback; `LlamaServerClient` | OpenAI, OpenRouter, 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação. |
+| Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                       | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade.   |
+| Rerank         | Cohere, Voyage e OpenRouter                                                                                  | llama.cpp ou equivalência de campos/scores em todos os adapters.                                         |
+| Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                        |
+| Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                           | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.   |
+| TTS/STT        | Não há cliente LLM para TTS/STT                                                                              | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                 |
+
+### Ollama nativo — PR #107, filho do PR #106
+
+A Engine agora mapeia `/api/chat` para o contrato comum, incluindo chat
+bufferizado e stream NDJSON; suporta tools, mensagens multimodais com imagens
+base64, thinking/reasoning, usage e extensões `think`, `format`, `keep_alive`
+e `options`. `temperature` e `max_tokens` são traduzidos para as options
+nativas. O campo `api_key` é opcional para endpoints locais; se informado,
+segue como Bearer para endpoints remotos. A API OpenAI-compatible segue como
+forma portátil separada. Fixtures unitárias Rust e HTTP Python/Node passaram; workspace Rust (210 testes + 3 fixtures), pytest (57/1 skip), Node (43/11 skips), NAPI, TypeScript typecheck, Clippy, Ruff e `ty` passaram.
+Não declarar APIs Responses, TTS/STT ou capabilities de nuvem como suportadas
+por esse adapter. O PR [#107](https://github.com/vectora-company/engine/pull/107) está `OPEN`/`MERGEABLE`, empilhado sobre #106. Fontes oficiais: [API chat](https://docs.ollama.com/api/chat)
+e [compatibilidade OpenAI](https://docs.ollama.com/api/openai-compatibility).
 
 O estado em `main` permanece o snapshot anterior ao adapter. O PR #98
 implementa `LlamaServerClient` em Rust com health, discovery, metadata de modelo

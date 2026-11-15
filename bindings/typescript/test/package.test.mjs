@@ -1369,6 +1369,58 @@ test("Cohere native chat uses v2 path, bearer auth, usage and SSE events", async
   assert.equal(events[1].usage.total_tokens, 5);
 });
 
+test("Ollama native chat streams NDJSON and accepts unauthenticated model controls", async () => {
+  const response = JSON.stringify({
+    message: { role: "assistant", content: "native Ollama" },
+    done: true, done_reason: "stop", prompt_eval_count: 5, eval_count: 2,
+  });
+  const completion = await withFixtureServer(response, "application/json", async (baseUrl, captured) => {
+    const result = await nativeChatComplete(
+      { provider: "ollama", base_url: `${baseUrl}/api` },
+      { ...request, extensions: { think: true, keep_alive: "5m" } },
+    );
+    assert.equal(captured.path, "/engines/v1/api/chat");
+    assert.equal(captured.headers.authorization, undefined);
+    assert.equal(captured.body.stream, false);
+    assert.equal(captured.body.think, true);
+    assert.equal(captured.body.keep_alive, "5m");
+    return result;
+  });
+  assert.equal(completion.content, "native Ollama");
+  assert.equal(completion.usage.total_tokens, 7);
+
+  const events = await withFixtureServer(
+    '{"message":{"role":"assistant","content":"hello "},"done":false}\n' +
+      '{"message":{"role":"assistant","content":"world"},"done":true,"done_reason":"stop","prompt_eval_count":3,"eval_count":2}\n',
+    "application/x-ndjson",
+    async (baseUrl, captured) => {
+      const collected = [];
+      for await (const event of nativeChatStream(
+        { provider: "ollama", base_url: `${baseUrl}/api` }, request,
+      )) collected.push(event);
+      assert.equal(captured.headers.accept, "application/x-ndjson");
+      assert.equal(captured.body.stream, true);
+      return collected;
+    },
+  );
+  assert.deepEqual(events.map((event) => event.type), ["text_delta", "text_delta", "usage", "completed"]);
+  assert.equal(events[2].usage.total_tokens, 5);
+
+  await assert.rejects(async () => {
+    await withFixtureServer(
+      '{"message":{"role":"assistant","content":"partial"},"done":false}\n',
+      "application/x-ndjson",
+      async (baseUrl) => {
+        for await (const _event of nativeChatStream(
+          { provider: "ollama", base_url: `${baseUrl}/api` }, request,
+        )) {
+          // The stream must not claim completion without Ollama's done record.
+        }
+      },
+    );
+  }, /Ollama stream ended before its done message/);
+});
+
 test("fallback follows explicit order through Rust and identifies the selected model", async () => {
   const first = await startFixtureServer(
     JSON.stringify({ error: { message: "rate limited" } }), "application/json", 429,
