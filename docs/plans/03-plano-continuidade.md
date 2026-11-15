@@ -208,6 +208,14 @@ documento, chunk e proveniência; Context Planner determinístico; compactação
 que preserva unidades; indexação com falha visível e RAG opt-in (lexical,
 híbrido, rerank). **[D]** dados e segurança. Depende das fases 2 e 3.
 
+### Etapa proposta — storage de grafos FalkorDB (filha do PR #100)
+
+Adicionar graph storage à Engine, mantendo fora do escopo a ingestão/extração de
+GraphRAG e sem alterar os pares SQL, vector, KV, queue ou pubsub. O estado
+verificado e as lacunas constam em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
+
+`brunosrz` escolheu no chat as duas camadas: contrato property graph portátil e extensão Cypher específica de FalkorDB. O client oficial atual requer Rust 1.95, acima do MSRV 1.89 da Engine; a escolha de dependência/MSRV aguarda resposta no chat. Depois: implementar Rust + bindings, testar contra FalkorDB real e abrir PR filho do #101.
+
 ### Fase 6 — adoção, distribuição e medição
 
 1. Integração do host de policy (recompilar, autenticar recibo, revalidar antes

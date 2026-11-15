@@ -177,9 +177,13 @@ para APIs, bindings, testes e limites por adapter.
 Isso ainda não é equivalência entre SQLite e PostgreSQL: PostgreSQL não tem
 os stores de lifecycle/loop/policy nem backup/restore, e o append resiliente
 mantém a autoridade local em SQLite (lacunas na matriz do plano de storage).
-As seleções públicas aceitam apenas os seis backends definidos nesta spec;
-implementações em memória são doubles internos de teste e não fazem parte da
-configuração de produto. Não há ainda APIs de Memory, Context Planner,
+As seleções públicas de storage atualmente aceitam apenas os seis backends
+definidos nesta spec; implementações em memória são doubles internos de teste
+e não fazem parte da configuração de produto. A proposta de property graph
+FalkorDB é uma capability adicional e ainda não implementada; seu contrato está
+em [`docs/specs/19-storage-de-grafos-falkordb.md`](19-storage-de-grafos-falkordb.md).
+Ela não integra os cinco pares de equivalência desta spec. Não inferir equivalência
+com Redis KV pelo protocolo compartilhado. Não há ainda APIs de Memory, Context Planner,
 compactação/context engineering, indexação documental ou RAG. Os bindings de
 ledger exigem arquivo SQLite persistente. A presença de adapters não prova
 equivalência operacional: há testes service-real de restart, retenção e DLQ,
@@ -230,7 +234,7 @@ Cada operação deve permitir registrar adapter/capability escolhida, versão/co
 
 ## Fases de implementação
 
-1. **Contrato Rust:** criar tipos, capabilities, matriz semântica e suite comum; seleções públicas devem corresponder apenas aos seis backends concretos desta spec. Doubles em memória ficam restritos aos testes.
+1. **Contrato Rust:** criar tipos, capabilities, matriz semântica e suite comum; seleções públicas devem corresponder apenas aos seis backends concretos desta spec, além de capabilities adicionais especificadas separadamente. Doubles em memória ficam restritos aos testes.
 2. **SQL:** implementar SQLite e PostgreSQL com a mesma base funcional; especializações só depois e com motivo de incompatibilidade.
 3. **Vetorial:** implementar LanceDB e Qdrant com a mesma base funcional (métrica e score alinhados, filtros, índices, quantização, busca híbrida); especializações só depois e com motivo de incompatibilidade.
 4. **KV/mensageria:** implementar Redis e NATS JetStream com a mesma base funcional (TTL, revisão, ACK, redelivery, retenção, DLQ); semânticas distintas só quando a incompatibilidade for confirmada e registrada.

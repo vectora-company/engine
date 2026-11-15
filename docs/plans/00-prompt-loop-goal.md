@@ -15,23 +15,9 @@ Aplique [`docs/plans/05-loop-de-desenvolvimento.md`](05-loop-de-desenvolvimento.
 [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md)
 e [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 Retome a próxima etapa do plano ativo e leia sua spec, análise e checklist.
-A capability atual de providers/modalidades está especificada em
-[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), planejada em
-[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md), auditada em
-[`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md) e acompanhada por
-[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md). A etapa atual está no PR [#100](https://github.com/vectora-company/engine/pull/100), empilhado sobre o #98; bindings Python/TypeScript e fixtures passaram nos hooks locais. Aguarde a aprovação deste PR antes de iniciar Decision Model `/v1/systemone`. A primeira release deve ser ampla e completa, não um MVP; use os
-critérios e gaps documentados no plano para consolidar o escopo e os gates.
-Implemente, verifique localmente e atualize os documentos da etapa.
-O plano ativo é [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md):
-siga a próxima etapa indicada e o backlog por fases. Consulte o
-[registro da capability ativa](../goal-loop/README.md#capability-ativa), a
-[`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md) e, para
-esta etapa, [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md); para
-storage, [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md)
-e [`docs/checklists/03-auditoria-storage-s0-s5.md`](../checklists/03-auditoria-storage-s0-s5.md).
-Ao criar um Markdown, inclua no mesmo PR seu caminho completo a partir da raiz
-como texto de link neste prompt, em `docs/README.md`, nos documentos do goal
-que o usam e nos artefatos da capability que dependem dele.
+A etapa ativa de execução continua no PR [#100](https://github.com/vectora-company/engine/pull/100), topo da stack de providers. A próxima etapa solicitada por `brunosrz` é adicionar storage de grafos FalkorDB como PR filho da stack documental [#101](https://github.com/vectora-company/engine/pull/101), no checkout `/home/brunosrz/Área de trabalho/engine/`. Leia [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md). `brunosrz` escolheu as duas camadas: contrato portátil de property graph e extensão Cypher específica de FalkorDB. A decisão vital pendente é a dependência/MSRV: o client oficial 0.11.2 requer Rust 1.95, acima do MSRV 1.89 declarado pela Engine. Conclua investigação independente, peça essa decisão aqui no chat sem marcar brunosrz no GitHub e não adicione dependência nem altere MSRV até a resposta. Não confunda FalkorDB graph com Redis KV, vetores ou os cinco pares de equivalência da spec 02. Preserve a alteração preexistente em `bindings/typescript/native/index.d.ts` e exclua-a do commit.
+
+A primeira release deve ser ampla e completa, não um MVP; mantenha os gaps do charter em [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md) explícitos. Implemente, verifique localmente e atualize os documentos da etapa.
 Leia também a [sabatina do ecossistema](../analyses/04-sabatina-engine-ecossistema.md).
 Desenvolva a Engine e o GH Bot conjuntamente: consulte o [guia de integração do
 GH Bot](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md)
