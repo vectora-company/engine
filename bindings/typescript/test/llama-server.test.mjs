@@ -9,8 +9,66 @@ import {
   llamaServerHealth,
   llamaServerModels,
   llamaServerSynthesize,
+  llamaServerSynthesizeNativeStreamEphemeral,
+  llamaServerSynthesizeStream,
   llamaServerSynthesizeNativeEphemeral,
 } from "../dist/index.js";
+
+test("llama-server TTS streams binary chunks through both routes", async () => {
+  const bodies = [];
+  const server = createServer(async (request, response) => {
+    const parts = [];
+    for await (const part of request) parts.push(part);
+    if (request.method === "GET") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          data: [{ id: "speech", architecture: { output_modalities: ["audio"] } }],
+        }),
+      );
+      return;
+    }
+    const body = JSON.parse(Buffer.concat(parts).toString("utf8"));
+    bodies.push([request.url, body]);
+    response.writeHead(200, { "content-type": "audio/pcm; rate=24000" });
+    response.write(Buffer.from("abc"));
+    setTimeout(() => {
+      response.end(Buffer.from("def"));
+    }, 30);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const settings = { base_url: `http://127.0.0.1:${server.address().port}` };
+  try {
+    const compatible = await llamaServerSynthesizeStream(settings, {
+      model: "speech",
+      input: "hello",
+      format: "pcm16",
+    });
+    assert.equal(compatible.info.content_type, "audio/pcm; rate=24000");
+    assert.equal(compatible.info.sample_rate_hz, 24000);
+    const compatibleBytes = [];
+    for await (const chunk of compatible) compatibleBytes.push(...chunk);
+    assert.equal(Buffer.from(compatibleBytes).toString(), "abcdef");
+
+    const native = await llamaServerSynthesizeNativeStreamEphemeral(settings, {
+      request: {
+        request: { model: "speech", input: "hello", format: "pcm_f32" },
+      },
+      speaker_ref_b64: "aGVsbG8=",
+    });
+    const nativeBytes = [];
+    for await (const chunk of native) nativeBytes.push(...chunk);
+    assert.equal(Buffer.from(nativeBytes).toString(), "abcdef");
+    assert.equal(bodies[0][1].stream_format, "audio");
+    assert.equal(bodies[1][0], "/tts");
+    assert.equal(bodies[1][1].stream, true);
+    assert.equal(bodies[1][1].speaker_ref_b64, "aGVsbG8=");
+  } finally {
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
 
 test("llama-server speech supports compatible and native binary TTS routes", async () => {
   const paths = [];

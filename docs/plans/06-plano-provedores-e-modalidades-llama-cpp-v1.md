@@ -104,14 +104,27 @@ confirmada.
 **Saída da etapa:** streaming/backpressure/cancelamento, formatos PCM/WAV e
 metadados, limites e testes de desconexão para cada operação implementada.
 
-**Subetapa 4c — streaming TTS (próxima branch filha do #105):** implementar o
+**Subetapa 4c — streaming TTS (branch `feat/llama-server-streaming-tts`, filha do #105):**
 stream binário conforme `stream_format: audio` de `/v1/audio/speech` e `stream: true`
 de `/tts`, com metadata de Content-Type/sample rate, consumo incremental com
 backpressure, cancelamento e limites em Rust/Python/TypeScript. Resposta TTS em
 buffer permanece compatível com a API já entregue no #104. A referência v1.0.0
-descreve WAV streaming com tamanho desconhecido no header; a API deve preservar
-os bytes sem tentar reescrever o header. Este é o próximo trabalho iniciado sem
-aguardar CI do #105.
+descreve WAV streaming com tamanho desconhecido no header; a API preserva os
+bytes sem tentar reescrever o header. O trabalho foi iniciado sem aguardar CI do
+#105.
+
+**Estado local da subetapa 4c (15/11/2026):** core Rust e APIs de streaming
+Python/TypeScript estão implementados. O cliente entrega chunks binários
+limitados a 64 KiB, aplica limites de resposta e timeouts, preserva Content-Type
+e sample rate, detecta resposta vazia e falha de conexão após áudio parcial; o
+drop/close cancela o consumo. Fixtures cobrem ambas as rotas e entrega
+incremental. Workspace Rust (208 testes, 3 fixtures e teste nativo Python),
+Clippy, pytest Python (56 passaram, 1 FalkorDB opt-in pulado), build NAPI,
+TypeScript typecheck e Node (42 passaram, 11 serviços opcionais pulados)
+passaram. O PR [#106](https://github.com/vectora-company/engine/pull/106), head
+`3b28190`, foi publicado como filho do #105 e está `OPEN`/`MERGEABLE`. Integração
+com modelo real continua pendente; a próxima etapa é caracterizar e ampliar os
+providers/gateways da Etapa 5 sobre o #106, sem aguardar CI remoto.
 
 ### Etapa 5 — providers e gateways
 

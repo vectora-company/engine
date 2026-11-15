@@ -23,7 +23,7 @@ pub use fallback::{
 };
 pub use llama_server::{
     LlamaServerArchitecture, LlamaServerClient, LlamaServerHealth, LlamaServerModel,
-    LlamaServerModelList, LlamaServerProperties, LlamaServerSettings,
+    LlamaServerModelList, LlamaServerProperties, LlamaServerSettings, SpeechStream,
 };
 pub use media::{
     CapabilityResolver, CapabilityState, Classified, ContentSite, DEFAULT_MAX_MEDIA_BYTES,
@@ -39,6 +39,7 @@ pub use openai_compatible::{
 pub use realtime::{RealtimeEvent, RealtimeIntent, RealtimeSession, RealtimeSessionRequest};
 pub use speech::{
     EphemeralNativeSpeechRequest, NativeSpeechRequest, SpeechFormat, SpeechRequest, SpeechResponse,
+    SpeechStreamInfo,
 };
 pub use turn::{TurnAccumulator, TurnAccumulatorSettings, TurnError, assemble_turn};
 pub use types::{

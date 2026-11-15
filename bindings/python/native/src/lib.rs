@@ -19,7 +19,7 @@ use vectora_engine::chat::{
     FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
     MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest,
+    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
     TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
@@ -2168,6 +2168,95 @@ fn register_realtime_session(session: RealtimeSession) -> Result<String, String>
     Ok(id)
 }
 
+fn register_speech_stream(mut speech: SpeechStream) -> Result<String, String> {
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let info = speech.info().clone();
+    let (sender, receiver) = mpsc::channel(8);
+    let task = tokio::spawn(async move {
+        loop {
+            let item = match speech.next_chunk().await {
+                Ok(Some(bytes)) => serde_json::to_string(&serde_json::json!({
+                    "audio_base64": STANDARD.encode(bytes),
+                }))
+                .map_err(|_| "could not encode speech chunk".to_owned()),
+                Ok(None) => break,
+                Err(error) => Err(error.to_string()),
+            };
+            let failed = item.is_err();
+            if sender.send(item).await.is_err() {
+                break;
+            }
+            if failed {
+                break;
+            }
+        }
+    });
+    let state = StreamState {
+        receiver: Arc::new(tokio::sync::Mutex::new(receiver)),
+        abort: task.abort_handle(),
+    };
+    streams()
+        .lock()
+        .map_err(|_| "stream registry unavailable".to_owned())?
+        .insert(id.clone(), state);
+    serde_json::to_string(&serde_json::json!({ "id": id, "info": info }))
+        .map_err(|_| "could not encode speech stream metadata".to_owned())
+}
+
+#[pyfunction]
+fn llama_server_synthesize_stream<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: SpeechRequest =
+            serde_json::from_str(&request_json).map_err(|_| py_error("invalid speech request"))?;
+        let stream = client.synthesize_stream(request).await.map_err(py_error)?;
+        register_speech_stream(stream).map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn llama_server_synthesize_native_stream<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: NativeSpeechRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid native speech request"))?;
+        let stream = client
+            .synthesize_native_stream(request)
+            .await
+            .map_err(py_error)?;
+        register_speech_stream(stream).map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn llama_server_synthesize_native_stream_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: EphemeralNativeSpeechRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid ephemeral native speech request"))?;
+        let stream = client
+            .synthesize_native_stream_ephemeral(request)
+            .await
+            .map_err(py_error)?;
+        register_speech_stream(stream).map_err(py_error)
+    })
+}
+
 #[pyfunction]
 fn llama_server_realtime_start<'py>(
     py: Python<'py>,
@@ -2787,6 +2876,15 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(llama_server_synthesize_native, module)?)?;
     module.add_function(wrap_pyfunction!(
         llama_server_synthesize_native_ephemeral,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(llama_server_synthesize_stream, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        llama_server_synthesize_native_stream,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        llama_server_synthesize_native_stream_ephemeral,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(llama_server_realtime_start, module)?)?;

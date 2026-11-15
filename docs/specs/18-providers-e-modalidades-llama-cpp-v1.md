@@ -187,8 +187,14 @@ ser gravados em estado persistível. `instructions` é ignorado pelo upstream e
 `speed` aceita apenas `1.0`. Streaming tem contrato separado e usa `stream_format: "audio"` em
 `/v1/audio/speech` ou `stream: true` em `/tts`; WAV pode começar com tamanho
 desconhecido no header, então os bytes devem ser preservados. A implementação
-está planejada como etapa filha do PR #105. Não declarar STT batch, geração de
-áudio ou modalidade real sem teste do modelo. Veja fixtures e estado em
+está implementada localmente na branch filha `feat/llama-server-streaming-tts`:
+chunks limitados, iteradores assíncronos em ambos os bindings, metadados,
+limites, timeout, cancelamento e detecção de falha após áudio parcial. Fixtures
+locais cobrem consumo incremental. Workspace Rust, pytest Python (56 pass/1
+skip), build NAPI/TypeScript e Node (42 pass/11 skips) passaram. O PR
+[#106](https://github.com/vectora-company/engine/pull/106) está `OPEN`/`MERGEABLE`
+como filho do #105. Não declarar STT batch, geração de áudio ou modalidade real sem
+teste do modelo. Veja fixtures e estado em
 [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
 
 ## Sessão realtime de áudio

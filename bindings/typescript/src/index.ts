@@ -50,6 +50,11 @@ export interface SpeechResponse {
   format: SpeechFormat;
   sample_rate_hz?: number;
 }
+export interface SpeechStreamInfo {
+  content_type: string;
+  format: SpeechFormat;
+  sample_rate_hz?: number;
+}
 export interface RealtimeSessionRequest {
   model: string;
   intent?: "transcription" | "conversation";
@@ -951,6 +956,18 @@ interface NativeBinding {
     requestJson: string,
   ): Promise<string>;
   llamaServerSynthesizeNativeEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerSynthesizeStream(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerSynthesizeNativeStream(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerSynthesizeNativeStreamEphemeral(
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
@@ -2367,6 +2384,96 @@ export async function llamaServerSynthesizeNativeEphemeral(
       JSON.stringify(request),
     ),
   );
+}
+
+function createSpeechStream(value: string): LlamaServerSpeechStream {
+  const result = JSON.parse(value) as {
+    id: string;
+    info: SpeechStreamInfo;
+  };
+  return new LlamaServerSpeechStream(result.id, result.info);
+}
+
+/** Stream OpenAI-compatible TTS as bounded binary chunks. */
+export async function llamaServerSynthesizeStream(
+  settings: LlamaServerSettings,
+  request: SpeechRequest,
+): Promise<LlamaServerSpeechStream> {
+  return createSpeechStream(
+    await native.llamaServerSynthesizeStream(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  );
+}
+
+/** Stream native `/tts` output without buffering the complete audio. */
+export async function llamaServerSynthesizeNativeStream(
+  settings: LlamaServerSettings,
+  request: NativeSpeechRequest,
+): Promise<LlamaServerSpeechStream> {
+  return createSpeechStream(
+    await native.llamaServerSynthesizeNativeStream(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  );
+}
+
+/** Native `/tts` stream with request-only speaker-reference audio. */
+export async function llamaServerSynthesizeNativeStreamEphemeral(
+  settings: LlamaServerSettings,
+  request: EphemeralNativeSpeechRequest,
+): Promise<LlamaServerSpeechStream> {
+  return createSpeechStream(
+    await native.llamaServerSynthesizeNativeStreamEphemeral(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  );
+}
+
+export class LlamaServerSpeechStream implements AsyncIterable<Uint8Array> {
+  constructor(
+    private readonly id: string,
+    readonly info: SpeechStreamInfo,
+  ) {}
+
+  private finished = false;
+
+  async nextChunk(): Promise<Uint8Array | undefined> {
+    if (this.finished) return undefined;
+    const item = await native.chatStreamNext(this.id);
+    if (item === null) {
+      this.finished = true;
+      return undefined;
+    }
+    const chunk = JSON.parse(item) as { audio_base64: string };
+    return Uint8Array.from(Buffer.from(chunk.audio_base64, "base64"));
+  }
+
+  async cancel(): Promise<void> {
+    if (!this.finished) {
+      native.chatStreamCancel(this.id);
+      this.finished = true;
+    }
+  }
+
+  close(): Promise<void> {
+    return this.cancel();
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
+    try {
+      while (true) {
+        const chunk = await this.nextChunk();
+        if (chunk === undefined) return;
+        yield chunk;
+      }
+    } finally {
+      await this.cancel();
+    }
+  }
 }
 
 /** Opens a live PCM16 session for ASR or realtime conversation. */

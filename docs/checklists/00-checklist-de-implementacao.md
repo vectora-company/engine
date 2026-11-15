@@ -249,7 +249,14 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Publicar [PR #105](https://github.com/vectora-company/engine/pull/105) filho do #104; head `e97925b`, `OPEN`/`MERGEABLE`.
 - [ ] Testar com llama-server v1.0.0 e modelo real; batch STT segue endpoint separado.
 
-## Streaming TTS — próxima branch filha do PR #105
+## Streaming TTS — branch ativa filha do PR #105
+
+- [x] Implementar rotas `/v1/audio/speech` e `/tts` com iteração binária incremental no core Rust.
+- [x] Expor iteradores async equivalentes nos bindings Python e TypeScript, incluindo cancelamento.
+- [x] Cobrir metadados, limites, chunks limitados, resposta incremental e desconexão parcial.
+- [x] Workspace Rust: 208 testes, 3 fixtures e teste nativo Python passaram; Clippy `-D warnings` passou.
+- [x] Build NAPI/TypeScript, suíte Node (42 pass/11 skips) e pytest (56 pass/1 skip). Publicar PR [#106](https://github.com/vectora-company/engine/pull/106), filho do #105; `OPEN`/`MERGEABLE`.
+- [ ] Integração opt-in com `llama-server` v1.0.0/modelo TTS real.
 
 - [ ] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
 - [ ] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.

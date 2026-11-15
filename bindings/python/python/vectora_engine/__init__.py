@@ -6,7 +6,7 @@ import base64
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 
 from . import _native
 
@@ -969,6 +969,84 @@ async def llama_server_synthesize_native_ephemeral(
     )
 
 
+class LlamaServerSpeechStream:
+    """Incremental TTS response; iteration yields bounded audio byte chunks."""
+
+    def __init__(self, session_id: str, info: dict[str, Any]) -> None:
+        self._id = session_id
+        self.content_type = info["content_type"]
+        self.format = info["format"]
+        self.sample_rate_hz = info.get("sample_rate_hz")
+        self._closed = False
+
+    async def receive(self) -> bytes | None:
+        if self._closed:
+            return None
+        item = await _native.chat_stream_next(self._id)
+        if item is None:
+            self._closed = True
+            return None
+        return base64.b64decode(json.loads(item)["audio_base64"], validate=True)
+
+    async def __anext__(self) -> bytes:
+        chunk = await self.receive()
+        if chunk is None:
+            raise StopAsyncIteration
+        return chunk
+
+    def __aiter__(self) -> LlamaServerSpeechStream:
+        return self
+
+    async def close(self) -> None:
+        if not self._closed:
+            _native.chat_stream_cancel(self._id)
+            self._closed = True
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.close()
+
+
+def _speech_stream(value: str) -> LlamaServerSpeechStream:
+    result = json.loads(value)
+    return LlamaServerSpeechStream(result["id"], result["info"])
+
+
+async def llama_server_synthesize_stream(
+    settings: JsonObject, request: JsonObject
+) -> LlamaServerSpeechStream:
+    """Stream `/v1/audio/speech` as bounded `bytes` chunks."""
+    return _speech_stream(
+        await _native.llama_server_synthesize_stream(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
+async def llama_server_synthesize_native_stream(
+    settings: JsonObject, request: JsonObject
+) -> LlamaServerSpeechStream:
+    """Stream native `/tts` output without accumulating the response."""
+    return _speech_stream(
+        await _native.llama_server_synthesize_native_stream(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
+async def llama_server_synthesize_native_stream_ephemeral(
+    settings: JsonObject, request: JsonObject
+) -> LlamaServerSpeechStream:
+    """Stream `/tts` with transient speaker-reference audio."""
+    return _speech_stream(
+        await _native.llama_server_synthesize_native_stream_ephemeral(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
 class LlamaServerRealtimeSession:
     """Live llama-server audio session; send mono PCM16 and consume JSON events."""
 
@@ -1269,6 +1347,7 @@ async def fallback_chat_stream_ephemeral(
 __all__ = [
     "EphemeralChatRequest",
     "LlamaServerRealtimeSession",
+    "LlamaServerSpeechStream",
     "MediaExecutionContext",
     "accept_model_turn",
     "assemble_turn",
@@ -1312,6 +1391,9 @@ __all__ = [
     "llama_server_synthesize",
     "llama_server_synthesize_native",
     "llama_server_synthesize_native_ephemeral",
+    "llama_server_synthesize_native_stream",
+    "llama_server_synthesize_native_stream_ephemeral",
+    "llama_server_synthesize_stream",
     "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_complete_ephemeral",

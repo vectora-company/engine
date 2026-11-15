@@ -89,11 +89,12 @@
 - [ ] Integração opt-in com llama-server v1.0.0 e modelo realtime compatível.
 - [ ] Publicar PR #105 como filho do PR [#104](https://github.com/vectora-company/engine/pull/104); continuar etapas seguintes sem aguardar CI.
 
-## Streaming TTS — próxima branch filha do PR #105
+## Streaming TTS — branch filha do PR #105
 
-- [ ] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
-- [ ] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.
-- [ ] Expor iterador assíncrono de chunks de áudio em Rust/Python/TypeScript com backpressure e cancelamento.
-- [ ] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
-- [ ] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
-- [ ] Abrir PR empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105), sem aguardar CI remoto.
+- [x] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
+- [x] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.
+- [x] Expor iterador assíncrono de chunks de áudio em Rust/Python/TypeScript com backpressure e cancelamento.
+- [x] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
+- [x] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
+- [x] Workspace Rust 208 testes + 3 fixtures; Clippy `-D warnings`; pytest Python 56 pass/1 skip; NAPI build + TypeScript typecheck; Node 42 pass/11 skips; Ruff/format/ty.
+- [x] Atualizar docs, publicar o PR [#106](https://github.com/vectora-company/engine/pull/106) como filho do #105; GitHub confirma `OPEN`/`MERGEABLE`.
