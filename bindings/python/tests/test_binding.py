@@ -2139,6 +2139,53 @@ def test_completion_uses_profile_prefix_headers_extensions_and_reasoning() -> No
     assert result["usage"]["cost"] == 0.0004
 
 
+def test_openrouter_chat_profile_sets_endpoint_attribution_and_routing() -> None:
+    body = json.dumps(
+        {
+            "choices": [{"message": {"content": "routed"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {
+        "profile": "openrouter",
+        "base_url": endpoint(server),
+        "api_key": "router-token",
+        "app_url": "https://vectora.company",
+        "app_title": "Vectora Engine",
+    }
+    request = {
+        **REQUEST,
+        "extensions": {
+            "provider": {"only": ["openai"], "require_parameters": True},
+            "models": ["openai/gpt-4.1-mini", "anthropic/claude-sonnet-4"],
+            "route": "fallback",
+        },
+    }
+
+    try:
+        result = asyncio.run(chat_complete(settings, request))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert captured["path"] == "/engines/v1/chat/completions"
+    assert captured["headers"]["authorization"] == "Bearer router-token"
+    assert captured["headers"]["http-referer"] == "https://vectora.company"
+    assert captured["headers"]["x-openrouter-title"] == "Vectora Engine"
+    assert captured["body"]["provider"] == {
+        "only": ["openai"],
+        "require_parameters": True,
+    }
+    assert captured["body"]["models"] == [
+        "openai/gpt-4.1-mini",
+        "anthropic/claude-sonnet-4",
+    ]
+    assert captured["body"]["route"] == "fallback"
+    assert result["content"] == "routed"
+
+
 def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
     pdf = b"%PDF-1.4\n"
     media_ref = {

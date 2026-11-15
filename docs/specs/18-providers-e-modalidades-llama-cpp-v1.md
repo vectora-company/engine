@@ -24,7 +24,7 @@ compilar o runtime do llama.cpp como dependência.
 | Anthropic                       | Chat nativo e stream; conteúdo multimodal dentro do contrato de chat                                                | Não implica Messages API inteira, visão para qualquer modelo nem áudio/TTS/STT.                                                                                                                          |
 | Google Gemini                   | Chat nativo e stream                                                                                                | Não há adapters independentes de imagem, áudio, vídeo, TTS ou STT nesta API.                                                                                                                             |
 | Cohere                          | Chat nativo; embeddings e rerank                                                                                    | Cada operação tem cobertura própria; não presumir paridade multimodal.                                                                                                                                   |
-| OpenRouter                      | Embeddings e rerank específicos; chat pode usar OpenAI-compatible com URL customizada                               | Perfil de chat, metadados de gateway, capacidades por modelo e streaming multimodal não estão caracterizados em contrato dedicado.                                                                       |
+| OpenRouter                      | Perfil de chat sobre OpenAI-compatible, endpoint padrão, Bearer, atribuição opcional e extensions de roteamento     | Não implica Responses, geração de mídia nem capacidades garantidas por modelo; preferencias de provider/data policy são decisão explícita por request.                                                   |
 | 9router e OmniRouter            | Sem enum/adapters próprios; podem ser configurados como endpoint OpenAI-compatible                                  | Compatibilidade, cabeçalhos, rotas, erros, metadados e modalidades precisam de fixtures por perfil antes de declarar suporte específico.                                                                 |
 | Ollama                          | Embeddings, chat OpenAI-compatible e adapter nativo `/api/chat` nesta etapa                                         | `/api/chat` e `/v1/chat/completions` são superfícies distintas: o nativo acrescenta `think`, `keep_alive`, `format`, `options` e saída de reasoning; Responses segue subconjunto, não paridade integral. |
 | llama.cpp `llama-server`        | Perfil Rust implementado nesta etapa: health, discovery `/v1/models` e chat/stream via transporte OpenAI-compatible | Bindings ainda não expõem o perfil; `systemone`, TTS e realtime seguem sem operações Engine. A arquitetura reportada pelo server é preservada como metadata, não como garantia inferida do modelo.       |
@@ -32,7 +32,27 @@ compilar o runtime do llama.cpp como dependência.
 | Kimi                            | Sem adapter/profiling dedicado                                                                                      | Se usar endpoint compatível, deve entrar pela matriz OpenAI-compatible depois de validar diferenças; não inferir suporte pelo nome do modelo.                                                            |
 | Cohere/Voyage/OpenRouter em RAG | Embeddings/rerank conforme enums atuais                                                                             | Ollama embeddings existe; não há garantia de matriz cruzada equivalente em todos os providers.                                                                                                           |
 
-### Operações declaradas pelas APIs dos providers
+#### Perfil de chat OpenRouter
+
+O perfil `openrouter` usa por padrão `https://openrouter.ai/api/v1`, exige
+`api_key`, aceita `base_url` customizada para proxy/região e envia Bearer.
+`app_url` e `app_title` mapeiam para `HTTP-Referer` e
+`X-OpenRouter-Title`; os headers genéricos podem substituir os valores gerados.
+Na API Rust, `OpenAiCompatibleConfig::openrouter` e
+`openrouter_attribution` oferecem o mesmo caminho.
+
+A rota Chat Completions continua no contrato OpenAI-compatible. Campos nativos
+do gateway como `provider`, `models`, `route`, `user` e `plugins` passam por
+`ChatRequest.extensions` por request; não são defaults globais porque ordenação,
+fallback, região e política de dados têm custo e impacto de privacidade. A
+Engine não converte esses campos em garantias de disponibilidade, privacidade,
+modalidade ou preço. Não se declara a Responses API coberta por este perfil.
+
+Fonte oficial conferida em 15/11/2026: [API Chat Completions e headers de
+atribuição](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion),
+[campos de roteamento](https://openrouter.ai/docs/guides/routing/provider-selection).
+
+## Operações declaradas pelas APIs dos providers
 
 Isto é o que a documentação oficial declara, não o que a Engine já suporta. A
 capacidade permanece por operação e modelo, mesmo quando várias APIs usam a

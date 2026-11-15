@@ -132,12 +132,7 @@ Caracterizar OpenAI, OpenRouter, 9router, OmniRouter, Kimi, Ollama, Anthropic,
 Gemini e Cohere por operação suportada. Criar perfis nomeados onde defaults ou
 diferenças forem úteis; compartilhar codec/transporte quando conformes.
 
-**Subetapa 5b — perfil de chat OpenRouter:** caracterizar o endpoint de chat,
-headers `HTTP-Referer`/`X-Title`, opções de roteamento e erros gateway sobre o
-transporte compatível existente. Tornar metadados do gateway opcionais e
-explícitos, mantendo o caminho OpenAI-compatible genérico disponível para
-9router, OmniRouter e endpoints compatíveis; fixtures devem provar rota,
-auth, headers e serialização sem afirmar suporte a modalidades por nome.
+**Subetapa 5b — perfil de chat OpenRouter (branch `feat/openrouter-chat-profile`, filha do PR #107):** adicionar configuração nomeada sobre o transporte OpenAI-compatible existente. O perfil deve usar endpoint padrão ou `base_url` customizada, exigir chave, suportar headers de atribuição opcionais e encaminhar campos nativos de roteamento por request. O client genérico continua disponível para 9router, OmniRouter e endpoints compatíveis. Fixtures provam endpoint, auth, attribution e body sem inferir suporte a modalidades por nome.
 
 **Subetapa 5a — Ollama chat nativo (branch `feat/ollama-chat-profile`, filha
 do PR #106):** integrar `/api/chat` ao contrato comum além do transporte
@@ -204,3 +199,5 @@ esta trilha não as declara concluídas.
 - Fixtures locais verificam `/health`, `/v1/models`, `/v1/chat/completions` e SSE com `text_delta` nos dois bindings.
 - Verificações observadas: Python 54/54; Node 40 passaram, 10 skipped por dependência de serviços; Ruff, `ty`, TypeScript, `cargo fmt`, Clippy do core e testes unitários dos crates Python/Node passaram.
 - `bindings/typescript/native/index.d.ts` contém alteração local preexistente e fica fora do stage; artefatos temporários NAPI também não fazem parte do produto.
+
+Estado atual da subetapa 5b (15/11/2026): adicionado o perfil OpenRouter ao `OpenAiCompatibleConfig` e settings dos bindings. A rota padrão é `/api/v1/chat/completions`; `app_url`/`app_title` produzem `HTTP-Referer`/`X-OpenRouter-Title`; headers explícitos prevalecem. `provider`, `models` e `route` permanecem extensions do request, evitando política de preço/privacidade global. Fixtures Rust, Python e Node passaram: workspace 212 + 3 fixtures + 1 binding Python nativo; pytest 58/1 skip; Node 44/11 skips; typecheck, Clippy, Ruff/format/ty e Prettier passaram. Hooks completos e abertura do PR filho de #107 ainda pendentes. O daemon/endpoint real exige credencial e não foi chamado. Docs oficiais: [Chat Completions/attribution](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion) e [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).

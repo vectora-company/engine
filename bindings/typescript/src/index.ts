@@ -3,8 +3,7 @@ import { Buffer } from "node:buffer";
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
-export interface OpenAiCompatibleSettings {
-  base_url: string;
+interface OpenAiCompatibleCommonSettings {
   api_key?: string;
   headers?: Record<string, string>;
   connect_timeout_ms?: number;
@@ -16,10 +15,25 @@ export interface OpenAiCompatibleSettings {
   media_context?: MediaExecutionContext;
 }
 
+export type OpenAiCompatibleSettings = OpenAiCompatibleCommonSettings &
+  (
+    | {
+        profile: "openrouter";
+        /** Defaults to OpenRouter's endpoint when omitted. */
+        base_url?: string;
+        api_key: string;
+        /** Optional OpenRouter attribution metadata. */
+        app_url?: string;
+        app_title?: string;
+      }
+    | { profile?: never; base_url: string }
+  );
+
 /** Settings for the llama.cpp v1.0.0 `llama-server` HTTP profile. */
-export interface LlamaServerSettings extends OpenAiCompatibleSettings {
+export type LlamaServerSettings = OpenAiCompatibleCommonSettings & {
+  base_url: string;
   max_media_bytes?: number;
-}
+};
 
 export type SpeechFormat = "wav" | "pcm16" | "pcm_f32";
 export interface SpeechRequest {

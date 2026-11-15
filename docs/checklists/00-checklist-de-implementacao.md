@@ -267,3 +267,12 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Suites completas e hooks: Rust 210 + 3 fixtures + teste nativo Python; pytest 57 pass/1 skip; Node 43 pass/11 skips; NAPI/typecheck, Clippy, Ruff/format/ty.
 - [x] Atualizar docs e publicar o PR [#107](https://github.com/vectora-company/engine/pull/107), empilhado sobre #106; `OPEN`/`MERGEABLE`.
 - [ ] Verificar com daemon/modelo Ollama real quando serviço estiver disponível; não bloqueia a implementação fixture-based.
+
+## Perfil OpenRouter Chat Completions — branch ativa filha do PR #107
+
+- [x] Confirmar contrato oficial de Chat Completions, attribution headers e provider routing.
+- [x] Criar perfil OpenRouter com URL padrão/customizada, API key obrigatória e attribution headers opcionais.
+- [x] Preservar as opções `provider`, `models`, `route`, `user` e `plugins` como extensions por request.
+- [x] Adicionar cobertura Rust e fixtures de HTTP Python/TypeScript.
+- [x] Suites completas: workspace Rust 212 + 3 fixtures + 1 binding Python nativo; pytest 58/1 skip; Node 44/11 skips; typecheck, Clippy, Ruff/format/ty e Prettier passaram.
+- [ ] Executar hooks completos e publicar PR empilhado sobre #107.
