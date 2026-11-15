@@ -77,7 +77,7 @@ vincule-o no índice `docs/README.md`, no prompt
 artefatos da capability que dependem dele. Use o caminho completo a partir
 da raiz do repositório no texto do link e um destino relativo válido.
 
-Para a etapa FalkorDB solicitada em 2026-11-14, consulte [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md). As decisões de API, client 0.11.2 e MSRV 1.95 foram respondidas no chat; implementação e verificações locais concluídas na branch filha do PR #101. O PR de implementação será aberto após commit e push.
+Para a etapa FalkorDB solicitada em 2026-11-14, consulte [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md). As decisões de API, client 0.11.2 e MSRV 1.95 foram respondidas no chat; implementação e verificações locais concluídas na branch filha do PR #101. O PR [#102](https://github.com/vectora-company/engine/pull/102) foi aberto após commit e push, como filho do #101.
 O checklist específico de mídia atual é
 [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 

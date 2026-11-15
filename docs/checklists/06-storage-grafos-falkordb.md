@@ -33,5 +33,5 @@ Estados: `feito`, `pendente`, `bloqueado`, `não aplicável`.
 
 - [x] Atualizar spec, plano, análise, checklists, índices e Q&As afetadas.
 - [x] Formatação Rust, Clippy (`-D warnings`), testes Rust de storage (92), testes Python (55), build/typecheck/testes Node (41 aprovados; 10 ignorados), simulação SCons e `git diff --check`.
-- [ ] Revisar staging para excluir mudanças preexistentes do usuário.
-- [ ] Commit, push e PR empilhado sobre a branch anterior da stack.
+- [x] Revisar staging; a mudança preexistente em `bindings/typescript/native/index.d.ts` ficou fora do PR.
+- [x] Commit `b14dee7`, push e PR [#102](https://github.com/vectora-company/engine/pull/102) aberto sobre a branch anterior #101.

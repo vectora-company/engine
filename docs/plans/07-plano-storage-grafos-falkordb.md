@@ -41,9 +41,7 @@ operacional, com o contrato público aprovado por brunosrz.
 4. **Conformidade operacional — concluída para o escopo local.** Testar FalkorDB local via Podman/Docker:
    conexão/TLS conforme suportado, query parametrizada, isolamento, falhas,
    timeout, cancelamento, restart e persistência sob a configuração registrada.
-5. **Entrega empilhada — documentação/testes concluídos; publicação pendente.**
-   Atualizar checklist/análise/plano, verificar diff, commit, push e abrir PR
-   filho do topo atual da stack (#101).
+5. **Entrega empilhada — concluída.** O PR [#102](https://github.com/vectora-company/engine/pull/102) foi aberto como filho do #101; documentação, revisão do staging, commit e push estão concluídos.
 
 ## Critérios de aceite
 
@@ -66,4 +64,4 @@ conformidade próprios.
 
 ## Estado e limitações
 
-Contrato, implementação e testes locais estão concluídos para o escopo descrito. FalkorDB 6.0.3 foi exercitado via Podman. O teste Rust real cobriu auth por URL, parâmetros, Unicode, substituição de propriedades, traversal, limites, timeout e restart/AOF; os bindings Python e Node também exercitam operações contra o serviço. Verificações finais: 92 testes Rust `storage::`, 55 Python, build/typecheck Node e 41 testes Node passaram; 10 testes Node de outros serviços foram ignorados por ausência de endpoints. `scons update --simulate` não alterou manifests/lockfiles e apontou 50 candidatos Rust, Ruff 0.17.5 e ty 0.0.104, sem pacotes pnpm desatualizados. TLS e cancelamento remoto permanecem limitações registradas. Resta revisar o staging, criar commit, publicar o branch e abrir o PR filho do #101.
+Contrato, implementação e testes locais estão concluídos para o escopo descrito. FalkorDB 6.0.3 foi exercitado via Podman. O teste Rust real cobriu auth por URL, parâmetros, Unicode, substituição de propriedades, traversal, limites, timeout e restart/AOF; os bindings Python e Node também exercitam operações contra o serviço. Verificações finais: 92 testes Rust `storage::`, 55 Python, build/typecheck Node e 41 testes Node passaram; 10 testes Node de outros serviços foram ignorados por ausência de endpoints. `scons update --simulate` não alterou manifests/lockfiles e apontou 50 candidatos Rust, Ruff 0.17.5 e ty 0.0.104, sem pacotes pnpm desatualizados. TLS e cancelamento remoto permanecem limitações registradas. Concluído nesta etapa: commit `b14dee7` publicado no PR #102, filho do #101. A alteração do usuário em `bindings/typescript/native/index.d.ts` permaneceu fora do PR. Próxima ação do mantenedor: revisão/aprovação da stack.
