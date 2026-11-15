@@ -93,8 +93,7 @@ Python/TypeScript têm fixtures. Streaming de áudio continua pendente.
 **Subetapa 4b — áudio ao vivo e transcrição:** implementar `/v1/realtime` com
 WebSocket, fluxo de entrada/saída de áudio, eventos tipados, backpressure e
 cancelamento; modelar batch transcription separadamente, apenas se houver rota
-upstream ou provider cuja API esteja confirmada. Começa como PR filho do #104
-sem aguardar CI remoto.
+upstream ou provider cuja API esteja confirmada. Começa na branch filha do #104, sem aguardar CI remoto.
 
 **Saída da etapa:** streaming/backpressure/cancelamento, formatos PCM/WAV e
 metadados, limites e testes de desconexão para cada operação implementada.

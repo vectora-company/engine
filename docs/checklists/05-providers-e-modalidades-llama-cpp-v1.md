@@ -72,4 +72,4 @@
       TypeScript typecheck passaram.
 - [x] Build maturin e fixture pytest focado passaram; pytest do binding Python: 55 passaram, 1 skipped.
 - [ ] Integração opt-in contra llama-server v1.0.0/modelo TTS real.
-- [ ] Stream TTS/realtime ASR, desconexão e cancelamento serão etapa filha do #104.
+- [ ] Implementar stream TTS/realtime ASR, desconexão e cancelamento na etapa filha do [PR #104](https://github.com/vectora-company/engine/pull/104).

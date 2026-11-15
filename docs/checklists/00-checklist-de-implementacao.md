@@ -231,6 +231,6 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Separar speaker-reference transient de request persistível e redigir seu Debug.
 - [x] Fixture Rust 8/8; typecheck TypeScript e `cargo check` para core/Python/Node; Node: 41 passed, 11 skipped.
 - [x] Build maturin e pytest Python: 55 passaram, 1 skipped.
-- [ ] Publicar PR #104 sobre a branch do PR #103; após push, iniciar a etapa WebSocket/realtime ASR como PR filho sem aguardar CI.
+- [x] Publicar o PR [#104](https://github.com/vectora-company/engine/pull/104) sobre a branch do PR #103; head `8763968`, `MERGEABLE`. Próxima etapa iniciada como filha do #104, sem aguardar CI.
 - [ ] Testar contra llama-server v1.0.0 e modelo compatível quando houver serviço/modelo disponível; não inferir do mock.
 - [ ] Streaming TTS, sessão realtime/ASR, cancelamento e batch STT seguem fora da subetapa bufferizada.
