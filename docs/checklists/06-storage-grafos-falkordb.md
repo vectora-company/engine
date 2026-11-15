@@ -32,6 +32,7 @@ Estados: `feito`, `pendente`, `bloqueado`, `não aplicável`.
 ## Entrega
 
 - [x] Atualizar spec, plano, análise, checklists, índices e Q&As afetadas.
-- [x] Formatação Rust, Clippy (`-D warnings`), testes Rust de storage (92), testes Python (55), build/typecheck/testes Node (41 aprovados; 10 ignorados), simulação SCons e `git diff --check`.
+- [x] Antes da atualização: FalkorDB real via Podman, auth, parâmetros, timeout/limites e restart/AOF; 92 testes Rust de storage passaram.
+- [x] Após atualização real: `scons lint` passou; `scons tests` passou com Rust 196 + 3 fixtures, pytest 87/1 skipped e Node 40/11 skipped (sem endpoints de serviços). O teste FalkorDB foi ignorado nesta rodada; integração real aprovada antes da atualização.
 - [x] Revisar staging; a mudança preexistente em `bindings/typescript/native/index.d.ts` ficou fora do PR.
-- [x] Commit `b14dee7`, push e PR [#102](https://github.com/vectora-company/engine/pull/102) aberto sobre a branch anterior #101.
+- [x] PR [#102](https://github.com/vectora-company/engine/pull/102) aberto como filho do #101; lockfiles atualizados e SCons ajustado para reutilizar a store do `node_modules`.

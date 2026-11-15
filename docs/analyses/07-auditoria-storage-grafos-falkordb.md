@@ -162,9 +162,9 @@ Em 2026-11-15, `scons update` atualizou 51 pacotes Cargo compatíveis com Rust
 1.95 e atualizou Ruff 0.17.4→0.17.5 e ty 0.0.101→0.0.104; pnpm v11.5.0 já
 estava atualizado. A simulação pós-update não encontrou atualizações aplicáveis;
 15 versões mais novas permanecem fora da seleção compatível com o MSRV 1.95.
-O checkout TypeScript foi reinstalado no store local
-`/home/brunosrz/.local/share/pnpm/store/v11`; o store externo não é mais usado
-por este checkout.
+A instalação local de `bindings/typescript/node_modules` foi recriada para usar
+o store interno `/home/brunosrz/.local/share/pnpm/store/v11`; o caminho do store
+externo não é mais referenciado pelo checkout ou pelo SCons.
 
 TLS e cancelamento da query no servidor continuam sem teste. A mudança
 preexistente do usuário em `bindings/typescript/native/index.d.ts` foi mantida
