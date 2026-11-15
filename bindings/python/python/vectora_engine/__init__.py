@@ -887,6 +887,84 @@ async def chat_complete_ephemeral(
     )
 
 
+async def llama_server_health(settings: JsonObject) -> dict[str, Any]:
+    """Probe the llama.cpp server `/health` endpoint."""
+    return json.loads(
+        await _native.llama_server_health(_media_settings(settings, None))
+    )
+
+
+async def llama_server_models(settings: JsonObject) -> dict[str, Any]:
+    """Return raw model metadata from the llama-server `/v1/models` endpoint."""
+    return json.loads(
+        await _native.llama_server_models(_media_settings(settings, None))
+    )
+
+
+async def llama_server_chat_complete(
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> dict[str, Any]:
+    """Complete a persistable chat request with the llama-server profile."""
+    return json.loads(
+        await _native.llama_server_chat_complete(
+            _media_settings(settings, media_context),
+            json.dumps(request, separators=(",", ":")),
+        )
+    )
+
+
+async def llama_server_chat_complete_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> dict[str, Any]:
+    """Complete a transient request that may contain inline media bytes."""
+    return json.loads(
+        await _native.llama_server_chat_complete_ephemeral(
+            _media_settings(settings, media_context), _ephemeral_request_json(request)
+        )
+    )
+
+
+async def llama_server_chat_stream(
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield llama-server chat events; closing the iterator cancels the request."""
+    stream_id = await _native.llama_server_chat_stream_start(
+        _media_settings(settings, media_context),
+        json.dumps(request, separators=(",", ":")),
+    )
+    try:
+        while event := await _native.chat_stream_next(stream_id):
+            yield json.loads(event)
+    finally:
+        _native.chat_stream_cancel(stream_id)
+
+
+async def llama_server_chat_stream_ephemeral(
+    settings: JsonObject,
+    request: EphemeralChatRequest | JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream transient llama-server requests, including in-memory assets."""
+    stream_id = await _native.llama_server_chat_stream_start_ephemeral(
+        _media_settings(settings, media_context), _ephemeral_request_json(request)
+    )
+    try:
+        while event := await _native.chat_stream_next(stream_id):
+            yield json.loads(event)
+    finally:
+        _native.chat_stream_cancel(stream_id)
+
+
 async def prepare_chat_content(
     provider: str,
     model: str,
@@ -1098,6 +1176,12 @@ __all__ = [
     "kv_watch_close",
     "kv_watch_open",
     "kv_watch_receive",
+    "llama_server_chat_complete",
+    "llama_server_chat_complete_ephemeral",
+    "llama_server_chat_stream",
+    "llama_server_chat_stream_ephemeral",
+    "llama_server_health",
+    "llama_server_models",
     "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_complete_ephemeral",
