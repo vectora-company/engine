@@ -50,6 +50,15 @@ export interface SpeechResponse {
   format: SpeechFormat;
   sample_rate_hz?: number;
 }
+export interface RealtimeSessionRequest {
+  model: string;
+  intent?: "transcription" | "conversation";
+  input_sample_rate_hz?: number;
+}
+export interface RealtimeEvent {
+  type: string;
+  [key: string]: JsonValue | undefined;
+}
 
 export type DecisionQuestionKind = "choice" | "score" | "noul";
 export interface DecisionQuestion {
@@ -945,6 +954,11 @@ interface NativeBinding {
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
+  llamaServerRealtimeStart(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerRealtimeSend(id: string, commandJson: string): Promise<void>;
   llamaServerChatComplete(
     settingsJson: string,
     requestJson: string,
@@ -2353,6 +2367,69 @@ export async function llamaServerSynthesizeNativeEphemeral(
       JSON.stringify(request),
     ),
   );
+}
+
+/** Opens a live PCM16 session for ASR or realtime conversation. */
+export async function llamaServerRealtimeStart(
+  settings: LlamaServerSettings,
+  request: RealtimeSessionRequest,
+): Promise<LlamaServerRealtimeSession> {
+  const id = await native.llamaServerRealtimeStart(
+    JSON.stringify(settings),
+    JSON.stringify(request),
+  );
+  return new LlamaServerRealtimeSession(id);
+}
+
+export class LlamaServerRealtimeSession {
+  constructor(private readonly id: string) {}
+
+  async sendAudio(pcm16Mono: Uint8Array): Promise<void> {
+    await native.llamaServerRealtimeSend(
+      this.id,
+      JSON.stringify({
+        op: "audio",
+        audio_base64: Buffer.from(pcm16Mono).toString("base64"),
+      }),
+    );
+  }
+
+  async commitAudio(final = false): Promise<void> {
+    await native.llamaServerRealtimeSend(
+      this.id,
+      JSON.stringify({ op: "commit", final }),
+    );
+  }
+
+  async sendEvent(event: RealtimeEvent): Promise<void> {
+    await native.llamaServerRealtimeSend(
+      this.id,
+      JSON.stringify({ op: "event", event }),
+    );
+  }
+
+  async receive(): Promise<RealtimeEvent | undefined> {
+    const event = await native.chatStreamNext(this.id);
+    return event === null ? undefined : (JSON.parse(event) as RealtimeEvent);
+  }
+
+  async *events(): AsyncGenerator<RealtimeEvent> {
+    while (true) {
+      const event = await this.receive();
+      if (event === undefined) return;
+      yield event;
+    }
+  }
+
+  async close(): Promise<void> {
+    await native.llamaServerRealtimeSend(
+      this.id,
+      JSON.stringify({ op: "close" }),
+    );
+    while ((await native.chatStreamNext(this.id)) !== null) {
+      /* drain queued events */
+    }
+  }
 }
 
 /** Complete through llama-server, sharing media handling with the Rust core. */

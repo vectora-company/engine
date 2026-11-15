@@ -184,7 +184,13 @@ original e sample rate quando informado pelo servidor ou WAV. Formatos OpenAI
 são WAV e PCM16; `/tts` também suporta PCM float32. Vozes nomeadas são validadas
 com `/props`. Bytes `speaker_ref_b64` só entram pelo request efêmero e não devem
 ser gravados em estado persistível. `instructions` é ignorado pelo upstream e
-`speed` aceita apenas `1.0`. Streaming TTS e sessão WebSocket realtime ficam
-fora desta subetapa; não declarar STT batch, geração de áudio ou modalidade
-real sem teste do modelo. Veja fixtures e estado em
+`speed` aceita apenas `1.0`. Streaming tem contrato separado e usa `stream_format: "audio"` em
+`/v1/audio/speech` ou `stream: true` em `/tts`; WAV pode começar com tamanho
+desconhecido no header, então os bytes devem ser preservados. A implementação
+está planejada como etapa filha do PR #105. Não declarar STT batch, geração de
+áudio ou modalidade real sem teste do modelo. Veja fixtures e estado em
 [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
+
+## Sessão realtime de áudio
+
+`/v1/realtime` é WebSocket e tem contrato de ciclo de vida próprio. O cliente da Engine suporta `intent=transcription` e a sessão default de conversa, PCM16 mono em chunks base64, `input_audio_buffer.commit` final/não final, `session.update` para sample rate entre 8–192 kHz, eventos JSON preservados e fechamento/cancelamento pelo host. Sem override, a taxa é model-native e precisa ser lida de `session.created`; a Engine não presume 24 kHz. O host pode enviar eventos nativos de conversa, como mensagens, `response.create` e `response.cancel`. Eventos desconhecidos, inclusive `error`, preservam campos para o consumidor. Requests de controle são efêmeros; batch STT não é inferido dessa API. A cobertura está implementada no PR [#105](https://github.com/vectora-company/engine/pull/105), filho do #104, e registrada no plano e checklist.

@@ -32,6 +32,10 @@ tokio.workspace = true
 url.workspace = true
 sha2 = "0.10"
 base64 = "0.22"
+tokio-websockets = { version = "0.13.3", features = ["client", "rustls-webpki-roots", "sha1_smol"] }
+
+[dev-dependencies]
+tokio-websockets = { version = "=0.13.3", features = ["server"] }
 
 [lib]
 path = "src/lib.rs"

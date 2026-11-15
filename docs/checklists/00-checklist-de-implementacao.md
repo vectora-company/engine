@@ -221,7 +221,7 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Fixtures Rust/Python/TypeScript e verificação local do Decision Model concluídas.
 - [x] Publicar o PR filho [#103](https://github.com/vectora-company/engine/pull/103), filha do #102, e atualizar [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
 
-- [ ] Iniciar TTS `/v1/audio/speech` como PR filho do [#103](https://github.com/vectora-company/engine/pull/103), mantendo áudio binário, codec/sample rate/voz reais e contrato não confundido com STT/realtime.
+- [x] Implementar TTS `/v1/audio/speech` e `/tts` no PR [#104](https://github.com/vectora-company/engine/pull/104), filho do #103, mantendo áudio binário e request efêmero para referência de voz.
 
 ## Providers llama.cpp v1.0.0 — atualização do goal loop (2026-11-15)
 
@@ -233,4 +233,27 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Build maturin e pytest Python: 55 passaram, 1 skipped.
 - [x] Publicar o PR [#104](https://github.com/vectora-company/engine/pull/104) sobre a branch do PR #103; head `8763968`, `MERGEABLE`. Próxima etapa iniciada como filha do #104, sem aguardar CI.
 - [ ] Testar contra llama-server v1.0.0 e modelo compatível quando houver serviço/modelo disponível; não inferir do mock.
-- [ ] Streaming TTS, sessão realtime/ASR, cancelamento e batch STT seguem fora da subetapa bufferizada.
+- [x] Sessão realtime/ASR implementada no PR #105; streaming TTS tem APIs upstream documentadas e é a próxima etapa filha de #105. Batch STT segue fora até confirmar endpoint próprio.
+
+## Realtime audio — próxima stack filha do PR #104
+
+- [x] Criar branch filha do #104 e fixar a API upstream em llama.cpp v1.0.0.
+- [x] Implementar cliente Rust WebSocket, autenticação/headers, intents transcription/conversation e validação de input audio.
+- [x] Limitar mensagens e fila; enviar chunks PCM16 e commits; preservar eventos e fechar/cancelar a sessão.
+- [x] Fixture Rust para handshake, auth, rate override, PCM16, commit e transcrição.
+- [x] Expor envio/recepção em bindings Python e TypeScript; `cargo check` passou.
+- [x] Build NAPI release, TypeScript typecheck e Node: 41 passaram, 11 skips de serviços opcionais.
+- [x] Maturin develop e pytest Python: 55 passaram, 1 skip.
+- [x] Workspace Rust: 205 testes lib + 3 fixtures + teste do binding Python passaram; Clippy `-D warnings` passou após correção.
+- [x] Hooks executados; SVGO/Prettier alteraram arquivos preexistentes fora do escopo e foram restaurados. Clippy corrigido e validado separadamente.
+- [x] Publicar [PR #105](https://github.com/vectora-company/engine/pull/105) filho do #104; head `e97925b`, `OPEN`/`MERGEABLE`.
+- [ ] Testar com llama-server v1.0.0 e modelo real; batch STT segue endpoint separado.
+
+## Streaming TTS — próxima branch filha do PR #105
+
+- [ ] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
+- [ ] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.
+- [ ] Expor iterador assíncrono de chunks de áudio em Rust/Python/TypeScript com backpressure e cancelamento.
+- [ ] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
+- [ ] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
+- [ ] Abrir PR empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105), sem aguardar CI remoto.

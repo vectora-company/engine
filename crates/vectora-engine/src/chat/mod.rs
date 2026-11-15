@@ -7,6 +7,7 @@ mod llama_server;
 mod media;
 mod native_providers;
 mod openai_compatible;
+mod realtime;
 mod speech;
 mod sse;
 mod turn;
@@ -35,6 +36,7 @@ pub use native_providers::{NativeChatClient, NativeChatSettings, NativeProvider}
 pub use openai_compatible::{
     ChatStream, OpenAiCompatibleClient, OpenAiCompatibleConfig, OpenAiCompatibleSettings,
 };
+pub use realtime::{RealtimeEvent, RealtimeIntent, RealtimeSession, RealtimeSessionRequest};
 pub use speech::{
     EphemeralNativeSpeechRequest, NativeSpeechRequest, SpeechFormat, SpeechRequest, SpeechResponse,
 };
