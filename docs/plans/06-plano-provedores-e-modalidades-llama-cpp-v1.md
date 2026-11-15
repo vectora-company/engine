@@ -132,8 +132,6 @@ Caracterizar OpenAI, OpenRouter, 9router, OmniRouter, Kimi, Ollama, Anthropic,
 Gemini e Cohere por operação suportada. Criar perfis nomeados onde defaults ou
 diferenças forem úteis; compartilhar codec/transporte quando conformes.
 
-**Subetapa 5b — perfil de chat OpenRouter (branch `feat/openrouter-chat-profile`, filha do PR #107):** adicionar configuração nomeada sobre o transporte OpenAI-compatible existente. O perfil deve usar endpoint padrão ou `base_url` customizada, exigir chave, suportar headers de atribuição opcionais e encaminhar campos nativos de roteamento por request. O client genérico continua disponível para 9router, OmniRouter e endpoints compatíveis. Fixtures provam endpoint, auth, attribution e body sem inferir suporte a modalidades por nome.
-
 **Subetapa 5a — Ollama chat nativo (branch `feat/ollama-chat-profile`, filha
 do PR #106):** integrar `/api/chat` ao contrato comum além do transporte
 OpenAI-compatible já disponível. Preservar `think`, `format`, `keep_alive`,
@@ -149,6 +147,12 @@ Fixtures passaram em Rust/Python/Node; workspace passou (210 + 3 fixtures +
 teste nativo Python), pytest 57/1 skip, Node 43/11 skips, NAPI/typecheck,
 Clippy, Ruff/ty/format. O servidor local não está ativo, sem verificação real.
 Publicado como PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106; GitHub confirma `OPEN`/`MERGEABLE`. O daemon Ollama não está ativo neste host; integração real fica como verificação complementar, sem bloquear a próxima especialização.
+
+**Subetapa 5b — perfil de chat OpenRouter (branch `feat/openrouter-chat-profile`, filha do PR #107):** adicionar configuração nomeada sobre o transporte OpenAI-compatible existente. O perfil deve usar endpoint padrão ou `base_url` customizada, exigir chave, suportar headers de atribuição opcionais e encaminhar campos nativos de roteamento por request. O client genérico continua disponível para 9router, OmniRouter e endpoints compatíveis. Fixtures provam endpoint, auth, attribution e body sem inferir suporte a modalidades por nome. Publicado no PR [#108](https://github.com/vectora-company/engine/pull/108), `OPEN`/`MERGEABLE`; suites completas e hooks passaram.
+
+**Subetapa 5c — OpenAI Responses API (branch `feat/openai-responses-profile`, filha do PR #108):** adicionar protocolo Responses como alternativa ao Chat Completions. Mapear histórico completo, tools e resultados, input de imagem, formatos estruturados por extensions, reasoning/usage e eventos SSE semânticos. Usar `store: false` por padrão e permitir override explícito. Rejeitar estados/outputs que o contrato comum não consiga preservar; não declarar built-in tools, áudio/vídeo ou geração de imagem nesta etapa. Fixtures cobrem request, tools, output, falha/incomplete e término semântico. Fontes oficiais: [Responses overview](https://developers.openai.com/api/reference/responses/overview), [create](https://developers.openai.com/api/reference/resources/responses/methods/create), [stream events](https://developers.openai.com/api/reference/resources/responses/streaming-events), [function calling](https://developers.openai.com/api/docs/guides/function-calling), [image input](https://developers.openai.com/api/docs/guides/images-vision).
+
+**Estado em 15/11/2026:** core Rust implementa requests Responses com input de texto/imagem, histórico completo, function calls/results, opções, extensões, `store: false` e override explícito. Parser interpreta texto/refusal, reasoning summary, tools e usage; SSE mapeia texto/reasoning, argumentos, usage e terminal lifecycle e falha sem evento terminal. Rust workspace: 215 testes passaram; Clippy workspace com `-D warnings` passou. Fixtures HTTP nos bindings Python e TypeScript foram adicionadas; Python focado passou e Node suite passou (45 pass, 11 skips). Build NAPI release e TypeScript passaram. A suite Python completa foi executada sem falhas; Ruff format foi aplicado ao novo teste e está em revalidação. Falta verificar `ty`, Prettier/hooks e revisão final antes de commit/PR. Integração real OpenAI não foi executada por ausência de credencial.
 
 **Saída:** fixtures por endpoint/protocolo; nenhuma modalidade ou API atribuída
 ao provider sem prova.

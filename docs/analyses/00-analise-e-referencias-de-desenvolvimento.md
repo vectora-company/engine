@@ -444,18 +444,11 @@ A branch `feat/llama-server-realtime-audio` implementa `/v1/realtime` como filha
 
 Permanecem sem comprovação interoperabilidade com modelos reais e batch STT. O streaming TTS foi implementado e publicado no PR #106, filho do #105; os gaps de integração real não bloqueiam iniciar a etapa de providers/gateways. Estado da capability e links completos nos documentos relacionados: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
-## Etapa ativa empilhada — perfil OpenRouter Chat Completions (15/11/2026)
+## Etapa ativa empilhada — OpenAI Responses API (15/11/2026)
 
-O PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106,
-implementa Ollama nativo `/api/chat`. O PR [#108](https://github.com/vectora-company/engine/pull/108),
-filho do #107 e `OPEN`/`MERGEABLE`, implementa um perfil nomeado
-sobre Chat Completions: endpoint oficial padrão ou proxy configurável, API key
-obrigatória, attribution headers opcionais e campos nativos de routing passados
-por request. Fixtures verificam rota, auth, attribution e serialização sem
-chamada externa. O OpenRouter não está configurado neste host; a integração real
-não foi executada. Fontes: [Chat Completions/attribution](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
-e [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).
-Detalhes e evidências em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
+O PR [#108](https://github.com/vectora-company/engine/pull/108), filho do #107, implementa perfil OpenRouter Chat Completions e permanece `OPEN`/`MERGEABLE`. Branch ativa `feat/openai-responses-profile`, filha do #108, prepara o adapter OpenAI Responses em separado do transporte Chat Completions. O contrato e a sequência estão em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md). Fontes oficiais: [Responses overview](https://developers.openai.com/api/reference/responses/overview), [Create](https://developers.openai.com/api/reference/resources/responses/methods/create), [streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events), [function calling](https://developers.openai.com/api/docs/guides/function-calling) e [image inputs](https://developers.openai.com/api/docs/guides/images-vision). A implementação de código ainda não começou.
+
+Atualização de implementação: o core e as fixtures nos bindings já foram acrescentados. Rust workspace (215 testes), Clippy workspace, maturin, pytest e TypeScript/Node passaram; integração real OpenAI não foi feita por ausência de credencial. Ainda faltam Ruff/ty, Prettier/hooks, revisão do diff e publicação do PR empilhado. O estado detalhado está em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
 ## Etapa ativa empilhada — streaming TTS (15/11/2026)
 

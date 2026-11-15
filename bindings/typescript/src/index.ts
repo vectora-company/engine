@@ -127,7 +127,7 @@ export interface LlamaServerHealth {
 }
 
 export interface NativeChatSettings {
-  provider: "anthropic" | "google" | "cohere" | "ollama";
+  provider: "anthropic" | "google" | "cohere" | "ollama" | "openai_responses";
   base_url?: string;
   api_key?: string;
   headers?: Record<string, string>;

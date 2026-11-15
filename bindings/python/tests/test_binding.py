@@ -2617,6 +2617,70 @@ def test_ollama_native_chat_streams_ndjson_without_required_api_key() -> None:
     assert events[2]["usage"]["total_tokens"] == 5
 
 
+def test_openai_responses_profile_maps_chat_and_semantic_sse() -> None:
+    response_body = json.dumps(
+        {
+            "id": "resp_fixture",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": "Responses answer"}],
+                }
+            ],
+            "usage": {"input_tokens": 4, "output_tokens": 3, "total_tokens": 7},
+        }
+    ).encode()
+    server, thread, captured = serve(response_body, "application/json")
+    settings = {
+        "provider": "openai_responses",
+        "base_url": endpoint(server),
+        "api_key": "fixture-secret",
+    }
+    request = {
+        **REQUEST,
+        "options": {"temperature": 0.2, "max_tokens": 64},
+        "extensions": {},
+    }
+    try:
+        result = asyncio.run(native_chat_complete(settings, request))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["path"] == "/engines/v1/responses"
+    assert captured["headers"]["authorization"] == "Bearer fixture-secret"
+    assert captured["body"]["input"][0]["role"] == "user"
+    assert captured["body"]["input"][0]["content"][0]["type"] == "input_text"
+    assert captured["body"]["max_output_tokens"] == 64
+    assert captured["body"]["store"] is False
+    assert result["content"] == "Responses answer"
+    assert result["usage"]["total_tokens"] == 7
+
+    stream_body = (
+        b'data: {"type":"response.output_text.delta","delta":"hello"}\n\n'
+        b'data: {"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}\n\n'
+    )
+    server, thread, captured = serve(stream_body, "text/event-stream")
+
+    async def collect() -> list[dict[str, Any]]:
+        return [
+            event
+            async for event in native_chat_stream(
+                settings | {"base_url": endpoint(server)}, REQUEST
+            )
+        ]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["body"]["stream"] is True
+    assert [event["type"] for event in events] == ["text_delta", "usage", "completed"]
+
+
 def test_fallback_uses_explicit_order_and_returns_selected_model() -> None:
     rejected, rejected_thread, first = serve(
         b'{"error":{"message":"rate limited"}}', "application/json", status=429
