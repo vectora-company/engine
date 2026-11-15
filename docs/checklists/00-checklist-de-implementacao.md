@@ -222,3 +222,15 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Publicar o PR filho [#103](https://github.com/vectora-company/engine/pull/103), filha do #102, e atualizar [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
 
 - [ ] Iniciar TTS `/v1/audio/speech` como PR filho do [#103](https://github.com/vectora-company/engine/pull/103), mantendo áudio binário, codec/sample rate/voz reais e contrato não confundido com STT/realtime.
+
+## Providers llama.cpp v1.0.0 — atualização do goal loop (2026-11-15)
+
+- [x] PR #102: resolver conflito preservando conteúdo documental; atualizar a dependência pnpm ao store local, mantendo `node_modules` no checkout.
+- [x] PR #103 filho de #102: Decision Model `/v1/systemone`, core Rust e bindings com fixtures.
+- [x] Implementar TTS bufferizado `/v1/audio/speech` e `/tts` na branch filha do #103, com áudio binário e metadados de formato/sample rate.
+- [x] Separar speaker-reference transient de request persistível e redigir seu Debug.
+- [x] Fixture Rust 8/8; typecheck TypeScript e `cargo check` para core/Python/Node; Node: 41 passed, 11 skipped.
+- [x] Build maturin e pytest Python: 55 passaram, 1 skipped.
+- [x] Publicar o PR [#104](https://github.com/vectora-company/engine/pull/104) sobre a branch do PR #103; head `8763968`, `MERGEABLE`. Próxima etapa iniciada como filha do #104, sem aguardar CI.
+- [ ] Testar contra llama-server v1.0.0 e modelo compatível quando houver serviço/modelo disponível; não inferir do mock.
+- [ ] Streaming TTS, sessão realtime/ASR, cancelamento e batch STT seguem fora da subetapa bufferizada.

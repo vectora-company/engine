@@ -21,6 +21,36 @@ export interface LlamaServerSettings extends OpenAiCompatibleSettings {
   max_media_bytes?: number;
 }
 
+export type SpeechFormat = "wav" | "pcm16" | "pcm_f32";
+export interface SpeechRequest {
+  model: string;
+  input: string;
+  voice?: string;
+  format?: SpeechFormat;
+  instructions?: string;
+  speed?: number;
+}
+export interface NativeSpeechRequest {
+  request: SpeechRequest;
+  lang?: string;
+  seed?: number;
+  top_k?: number;
+  top_p?: number;
+  temperature?: number;
+  repeat_penalty?: number;
+  n_predict?: number;
+}
+export interface EphemeralNativeSpeechRequest {
+  request: NativeSpeechRequest;
+  speaker_ref_b64?: string;
+}
+export interface SpeechResponse {
+  audio: Uint8Array;
+  content_type: string;
+  format: SpeechFormat;
+  sample_rate_hz?: number;
+}
+
 export type DecisionQuestionKind = "choice" | "score" | "noul";
 export interface DecisionQuestion {
   type: DecisionQuestionKind;
@@ -900,6 +930,18 @@ interface NativeBinding {
   llamaServerModels(settingsJson: string): Promise<string>;
   llamaServerDecide(settingsJson: string, requestJson: string): Promise<string>;
   llamaServerDecideEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerSynthesize(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerSynthesizeNative(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
+  llamaServerSynthesizeNativeEphemeral(
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
@@ -2258,6 +2300,59 @@ export async function llamaServerDecideEphemeral(
       JSON.stringify(request),
     ),
   ) as DecisionResponse;
+}
+
+function decodeSpeechResponse(value: string): SpeechResponse {
+  const response = JSON.parse(value) as Omit<SpeechResponse, "audio"> & {
+    audio_base64: string;
+  };
+  return {
+    audio: Uint8Array.from(Buffer.from(response.audio_base64, "base64")),
+    content_type: response.content_type,
+    format: response.format,
+    ...(response.sample_rate_hz === undefined
+      ? {}
+      : { sample_rate_hz: response.sample_rate_hz }),
+  };
+}
+
+/** Buffered synthesis through llama-server v1.0.0 `/v1/audio/speech`. */
+export async function llamaServerSynthesize(
+  settings: LlamaServerSettings,
+  request: SpeechRequest,
+): Promise<SpeechResponse> {
+  return decodeSpeechResponse(
+    await native.llamaServerSynthesize(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  );
+}
+
+/** Buffered synthesis through the llama.cpp-specific `/tts` controls. */
+export async function llamaServerSynthesizeNative(
+  settings: LlamaServerSettings,
+  request: NativeSpeechRequest,
+): Promise<SpeechResponse> {
+  return decodeSpeechResponse(
+    await native.llamaServerSynthesizeNative(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  );
+}
+
+/** Native `/tts` with transient speaker-reference audio. */
+export async function llamaServerSynthesizeNativeEphemeral(
+  settings: LlamaServerSettings,
+  request: EphemeralNativeSpeechRequest,
+): Promise<SpeechResponse> {
+  return decodeSpeechResponse(
+    await native.llamaServerSynthesizeNativeEphemeral(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  );
 }
 
 /** Complete through llama-server, sharing media handling with the Rust core. */

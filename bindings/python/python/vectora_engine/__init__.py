@@ -930,6 +930,45 @@ async def llama_server_decide_ephemeral(
     )
 
 
+def _speech_response(value: str) -> dict[str, Any]:
+    result = json.loads(value)
+    result["audio"] = base64.b64decode(result.pop("audio_base64"), validate=True)
+    return result
+
+
+async def llama_server_synthesize(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Synthesize buffered audio with the llama-server OpenAI-compatible route."""
+    return _speech_response(
+        await _native.llama_server_synthesize(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
+async def llama_server_synthesize_native(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Use native `/tts` controls; binary output is returned as Python bytes."""
+    return _speech_response(
+        await _native.llama_server_synthesize_native(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
+async def llama_server_synthesize_native_ephemeral(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Use `/tts` with transient base64 speaker-reference audio."""
+    return _speech_response(
+        await _native.llama_server_synthesize_native_ephemeral(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
 async def llama_server_chat_complete(
     settings: JsonObject,
     request: JsonObject,
@@ -1213,6 +1252,9 @@ __all__ = [
     "llama_server_decide_ephemeral",
     "llama_server_health",
     "llama_server_models",
+    "llama_server_synthesize",
+    "llama_server_synthesize_native",
+    "llama_server_synthesize_native_ephemeral",
     "model_tool_loop_contract_version",
     "native_chat_complete",
     "native_chat_complete_ephemeral",

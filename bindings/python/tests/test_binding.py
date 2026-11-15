@@ -38,6 +38,8 @@ from vectora_engine import (
     llama_server_decide_ephemeral,
     llama_server_health,
     llama_server_models,
+    llama_server_synthesize,
+    llama_server_synthesize_native_ephemeral,
     model_tool_loop_contract_version,
     native_chat_complete,
     native_chat_stream,
@@ -846,6 +848,87 @@ async def collect_llama_server_stream(
     settings: dict[str, Any], request: dict[str, Any]
 ) -> list[dict[str, Any]]:
     return [event async for event in llama_server_chat_stream(settings, request)]
+
+
+def test_llama_server_speech_routes_return_python_bytes() -> None:
+    captured: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            captured.append(self.path)
+            body = (
+                b'{"data":[{"id":"speech","architecture":{"output_modalities":["audio"]}}]}'
+                if self.path == "/v1/models"
+                else b'{"voices":["fixture"]}'
+            )
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self) -> None:
+            captured.append(self.path)
+            length = int(self.headers.get("content-length", "0"))
+            body = json.loads(self.rfile.read(length))
+            if self.path == "/v1/audio/speech":
+                assert body["response_format"] == "wav"
+                content_type, audio = "audio/wav", bytes((82, 73, 70, 70, 0, 0, 0, 0))
+            else:
+                assert self.path == "/tts"
+                assert body["speaker_ref_b64"] == "aGVsbG8="
+                content_type, audio = "audio/pcm; rate=24000", bytes((1, 2, 3, 4))
+            self.send_response(200)
+            self.send_header("content-type", content_type)
+            self.send_header("content-length", str(len(audio)))
+            self.end_headers()
+            self.wfile.write(audio)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    settings = {"base_url": f"http://127.0.0.1:{server.server_port}"}
+    try:
+        compatible = asyncio.run(
+            llama_server_synthesize(
+                settings,
+                {
+                    "model": "speech",
+                    "input": "hello",
+                    "voice": "fixture",
+                    "format": "wav",
+                },
+            )
+        )
+        assert compatible["audio"] == bytes((82, 73, 70, 70, 0, 0, 0, 0))
+        native = asyncio.run(
+            llama_server_synthesize_native_ephemeral(
+                settings,
+                {
+                    "request": {
+                        "request": {
+                            "model": "speech",
+                            "input": "hello",
+                            "format": "pcm_f32",
+                        }
+                    },
+                    "speaker_ref_b64": "aGVsbG8=",
+                },
+            )
+        )
+        assert native["audio"] == bytes((1, 2, 3, 4))
+        assert native["sample_rate_hz"] == 24000
+        assert captured == [
+            "/v1/models",
+            "/props",
+            "/v1/audio/speech",
+            "/v1/models",
+            "/tts",
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_embedding_and_rerank_contract_versions_match_rust_core() -> None:

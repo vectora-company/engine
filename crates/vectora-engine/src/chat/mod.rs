@@ -7,6 +7,7 @@ mod llama_server;
 mod media;
 mod native_providers;
 mod openai_compatible;
+mod speech;
 mod sse;
 mod turn;
 mod types;
@@ -21,7 +22,7 @@ pub use fallback::{
 };
 pub use llama_server::{
     LlamaServerArchitecture, LlamaServerClient, LlamaServerHealth, LlamaServerModel,
-    LlamaServerModelList, LlamaServerSettings,
+    LlamaServerModelList, LlamaServerProperties, LlamaServerSettings,
 };
 pub use media::{
     CapabilityResolver, CapabilityState, Classified, ContentSite, DEFAULT_MAX_MEDIA_BYTES,
@@ -33,6 +34,9 @@ pub use media::{
 pub use native_providers::{NativeChatClient, NativeChatSettings, NativeProvider};
 pub use openai_compatible::{
     ChatStream, OpenAiCompatibleClient, OpenAiCompatibleConfig, OpenAiCompatibleSettings,
+};
+pub use speech::{
+    EphemeralNativeSpeechRequest, NativeSpeechRequest, SpeechFormat, SpeechRequest, SpeechResponse,
 };
 pub use turn::{TurnAccumulator, TurnAccumulatorSettings, TurnError, assemble_turn};
 pub use types::{

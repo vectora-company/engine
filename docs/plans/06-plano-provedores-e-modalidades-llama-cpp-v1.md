@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo; PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) são a stack base. FalkorDB graph foi empilhado nos PRs [#101](https://github.com/vectora-company/engine/pull/101) e [#102](https://github.com/vectora-company/engine/pull/102). A etapa Decision Model `/v1/systemone` foi publicada no PR [#103](https://github.com/vectora-company/engine/pull/103), filha do #102; estado `MERGEABLE` no head `8943db2`.
+**Estado:** ativo; PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) são a stack base. FalkorDB graph foi empilhado nos PRs [#101](https://github.com/vectora-company/engine/pull/101) e [#102](https://github.com/vectora-company/engine/pull/102). A etapa Decision Model `/v1/systemone` foi publicada no PR [#103](https://github.com/vectora-company/engine/pull/103), filha do #102. A subetapa TTS bufferizada está sendo implementada na branch filha `feat/llama-server-tts`, para publicação como PR #104; stream de áudio e realtime ASR permanecem pendentes.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -77,20 +77,26 @@ neste endpoint. Core Rust e wrappers Python/TypeScript estão implementados; fix
 passaram nos três runtimes. Rust: teste de rota/probabilidades e quatro testes
 de contrato; pytest focado passou; Node: 40 passaram e 11 foram ignorados por
 serviços não configurados. `scons build`, Clippy da lib, Ruff/ty e TypeScript
-typecheck passaram. Integração real llama-server continua pendente. Siga para TTS `/v1/audio/speech` como próxima branch filha do #103, sem esperar CI.
+typecheck passaram. Integração real llama-server continua pendente. A subetapa TTS bufferizada descrita abaixo é filha do #103; stream de áudio e realtime ASR seguem como trabalho separado.
 
 **Saída:** conformidade Rust/Python/TypeScript e testes reais com modelo
 decision compatível quando disponível.
 
 ### Etapa 4 — áudio
 
-Implementar síntese TTS em `/v1/audio/speech` com formatos/voz/sample rate
-reais; depois sessão `/v1/realtime` para streaming ASR e conversa de áudio.
-Modelar batch transcription separadamente: só implementar se a API upstream
-v1.0.0 oferecer rota adequada ou houver outro provider/API aprovado.
+**Subetapa 4a — síntese bufferizada (PR #104, filha do #103):** implementa
+`/v1/audio/speech` e a extensão nativa `/tts`; conserva WAV/PCM16/PCM float,
+bytes binários, `Content-Type`/sample rate e vozes anunciadas por `/props`.
+`speaker_ref_b64` passa apenas pelo envelope efêmero. Rust e bindings
+Python/TypeScript têm fixtures. Streaming de áudio continua pendente.
 
-**Saída:** streaming/backpressure/cancelamento, PCM/WAV e metadados, limites e
-testes de desconexão.
+**Subetapa 4b — áudio ao vivo e transcrição:** implementar `/v1/realtime` com
+WebSocket, fluxo de entrada/saída de áudio, eventos tipados, backpressure e
+cancelamento; modelar batch transcription separadamente, apenas se houver rota
+upstream ou provider cuja API esteja confirmada. Começa na branch filha do #104, sem aguardar CI remoto.
+
+**Saída da etapa:** streaming/backpressure/cancelamento, formatos PCM/WAV e
+metadados, limites e testes de desconexão para cada operação implementada.
 
 ### Etapa 5 — providers e gateways
 
