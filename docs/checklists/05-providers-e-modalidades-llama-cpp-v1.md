@@ -129,6 +129,6 @@
 - [x] Mapear histórico, tools/results, imagens, saída de texto/reasoning/usage e SSE semanticamente no core Rust.
 - [x] Adicionar testes Rust e fixtures HTTP em Python/TypeScript para não-stream e stream.
 - [x] Rust workspace (215 testes), Clippy `-D warnings`, build NAPI/TypeScript, Node (45 pass/11 skips), pytest completo e teste Python focado passaram.
-- [ ] Revalidar Ruff/format/ty, Prettier e hooks; revisar diff, commitar e publicar PR filho de #108.
+- [x] Ruff/format/ty, Prettier e hooks passaram; publicar PR [#109](https://github.com/vectora-company/engine/pull/109), filho do #108.
 - [ ] Integração OpenAI real exige endpoint/credencial; fixtures locais passaram.
-- [ ] Finalizar validações locais, publicar PR filho de #108 e começar a próxima etapa sem aguardar CI remoto.
+- [ ] Próximo: perfil nomeado OpenAI Chat Completions como PR filho do #109.

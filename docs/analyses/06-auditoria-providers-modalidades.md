@@ -184,16 +184,22 @@ e [provider routing](https://openrouter.ai/docs/guides/routing/provider-selectio
 
 Consulte o plano da etapa em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), spec em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e checklist em [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
 
-## Especialização ativa — OpenAI Responses API (branch filha do PR #108)
+## OpenAI Responses API — PR #109, filho do PR #108
 
 Responses é um protocolo distinto de Chat Completions, com input multimodal,
 function calls e stream de eventos tipados. O core implementa `store: false` por
 padrão, histórico completo, texto/imagem, tools da aplicação, reasoning/usage e
-eventos SSE mapeáveis. Testes unitários passaram; fixtures HTTP Python/TypeScript
-foram adicionadas mas ainda aguardam execução com os addons atualizados. Built-in
-tools, geração de imagem, áudio e vídeo ficam fora deste subpasso. Referências:
+eventos SSE mapeáveis. Rust workspace, Clippy, fixture HTTP Python, build NAPI,
+TypeScript/Node e pytest passaram; os hooks completos também passaram. O PR
+[#109](https://github.com/vectora-company/engine/pull/109) foi publicado como
+filho do #108. Built-in tools, geração de imagem, áudio e vídeo ficam fora deste
+subpasso; integração OpenAI real requer credencial. Referências:
 [overview](https://developers.openai.com/api/reference/responses/overview),
 [create](https://developers.openai.com/api/reference/resources/responses/methods/create),
 [eventos](https://developers.openai.com/api/reference/resources/responses/streaming-events),
 [function calling](https://developers.openai.com/api/docs/guides/function-calling)
 e [images](https://developers.openai.com/api/docs/guides/images-vision).
+
+Próxima etapa: perfil nomeado OpenAI Chat Completions, filho do #109, com URL
+padrão oficial e chave obrigatória, preservando o cliente genérico e o perfil
+OpenRouter.

@@ -63,8 +63,9 @@ e define `store: false` como default de privacidade, permitindo override
 explícito no request. O core Rust já traduz input de texto/imagem, function
 calls/results, opções e extensões, interpreta resposta/reasoning/usage e mapeia
 eventos SSE tipados; testes unitários exercitam os contratos. Fixtures HTTP nos
-bindings Python e TypeScript foram adicionadas e aguardam execução após build
-nativo. O perfil é selecionado como `native` com `provider: openai_responses`.
+bindings Python e TypeScript passaram após build nativo. O perfil é selecionado
+como `native` com `provider: openai_responses`; a implementação está publicada
+no PR [#109](https://github.com/vectora-company/engine/pull/109), filho do #108.
 Nesta etapa, suporte será declarado apenas para texto,
 imagem de entrada, function calling, reasoning/usage quando presentes e eventos
 SSE mapeáveis; built-in tools, TTS/STT, vídeo e geração de imagem continuam fora
