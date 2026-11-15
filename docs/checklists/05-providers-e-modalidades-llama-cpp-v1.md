@@ -111,12 +111,13 @@
 - [x] Publicar o PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106; GitHub confirma `OPEN`/`MERGEABLE`.
 - [ ] Testar com daemon/modelo Ollama real quando o serviço estiver disponível; fixtures HTTP cobrem o protocolo sem depender do daemon.
 
-## OpenRouter chat — branch ativa filha do PR #107
+## OpenRouter chat — PR #108, filho do PR #107
 
 - [x] Confirmar endpoint Chat Completions, headers de atribuição e campos de roteamento nas docs oficiais.
 - [x] Definir perfil nomeado `openrouter`, URL oficial padrão e suporte a `base_url` customizada; exigir chave no perfil.
 - [x] Definir atribuição opcional de app via `HTTP-Referer`/`X-OpenRouter-Title`, com override por header explícito.
 - [x] Encaminhar `provider`, `models`, `route`, `user` e `plugins` via extensions por request, sem default global de privacidade/custo.
 - [x] Adicionar testes de contrato Rust e fixtures HTTP em Python e TypeScript.
-- [ ] Rodar suites completas e hooks, atualizar documentos e publicar PR empilhado sobre #107.
-- [ ] Teste contra endpoint OpenRouter real depende de chave autorizada e não é necessário para fixtures contratuais.
+- [x] Suites: workspace Rust 212 + 3 fixtures + binding Python nativo; pytest 58/1 skip; Node 44/11 skips; typecheck, Clippy, Ruff/format/ty/Prettier passaram.
+- [x] Hooks pre-commit completos passaram; PR [#108](https://github.com/vectora-company/engine/pull/108), filho do #107, está `OPEN`/`MERGEABLE`.
+- [ ] Integração real depende de endpoint/credencial OpenRouter e não foi executada; fixtures verificam o contrato sem rede externa.

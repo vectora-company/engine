@@ -172,12 +172,12 @@ A documentação fixa duas superfícies upstream para gerar áudio incrementalme
 
 ## Atualização — perfil de chat OpenRouter (15/11/2026)
 
-Branch `feat/openrouter-chat-profile`, filha do PR #107: o gateway mantém o
+O PR [#108](https://github.com/vectora-company/engine/pull/108), filho do #107 e `OPEN`/`MERGEABLE`, implementa perfil na branch `feat/openrouter-chat-profile`: o gateway mantém o
 transporte OpenAI-compatible e recebe perfil nomeado com URL padrão ou proxy
 customizado, chave obrigatória e atribuição opcional nos headers oficiais. Os
 campos `provider`, `models`, `route`, `user` e `plugins` seguem por request via
 `extensions`; defaults globais desses campos poderiam afetar custo, fallback ou
-política de dados. Testes Rust e fixtures HTTP Python/Node passaram: workspace 212 + 3 fixtures + 1 binding Python nativo, pytest 58/1 skip, Node 44/11 skips, typecheck e Clippy. Hooks completos e PR ainda pendentes. A API Responses e endpoints de geração de áudio/imagem/vídeo seguem sem ser
+política de dados. Testes Rust e fixtures HTTP Python/Node passaram: workspace 212 + 3 fixtures + 1 binding Python nativo, pytest 58/1 skip, Node 44/11 skips, typecheck e Clippy. Hooks completos passaram. A API Responses e endpoints de geração de áudio/imagem/vídeo seguem sem ser
 declarados cobertos. O daemon/endpoint OpenRouter real não foi usado. Referências:
 [API chat/headers](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
 e [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).

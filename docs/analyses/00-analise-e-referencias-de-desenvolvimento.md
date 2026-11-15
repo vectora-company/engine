@@ -447,8 +447,8 @@ Permanecem sem comprovação interoperabilidade com modelos reais e batch STT. O
 ## Etapa ativa empilhada — perfil OpenRouter Chat Completions (15/11/2026)
 
 O PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106,
-implementa Ollama nativo `/api/chat` e permanece aberto. A branch ativa
-`feat/openrouter-chat-profile`, filha do #107, implementa um perfil nomeado
+implementa Ollama nativo `/api/chat`. O PR [#108](https://github.com/vectora-company/engine/pull/108),
+filho do #107 e `OPEN`/`MERGEABLE`, implementa um perfil nomeado
 sobre Chat Completions: endpoint oficial padrão ou proxy configurável, API key
 obrigatória, attribution headers opcionais e campos nativos de routing passados
 por request. Fixtures verificam rota, auth, attribution e serialização sem
