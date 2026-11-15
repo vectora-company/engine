@@ -27,7 +27,8 @@ Estados: `feito`, `pendente`, `bloqueado`, `não aplicável`.
 - [x] Testes funcionais das bindings Python (55) e Node (41); roundtrip, atualização de propriedades e Cypher parametrizado. Dez testes Node de outros serviços foram ignorados por ausência de endpoints.
 - [x] Integração Rust/Python/Node contra FalkorDB 6.0.3 via Podman; auth por URL e propriedades via Cypher exercitadas.
 - [x] Restart/recovery e persistência testados com AOF síncrono e Podman (`VECTORA_TEST_PODMAN_RESTART`); isso valida somente essa configuração.
-- [ ] Exercitar TLS e cancelamento de query no servidor; não alegar cobertura até existir suporte verificado.
+- [x] Exercitar `falkors://` com TLS Rustls e CA local confiável; integração Rust/Python/Node passou contra FalkorDB 6.0.3. O processo aceitou a CA via `SSL_CERT_FILE`.
+- [ ] Cancelamento remoto: o client oficial não expõe cancelamento de comando; timeout server-side é testado, mas cancelar a future local não garante parar o servidor.
 - [x] Corrigir paridade de configuração nos bindings: `GraphStoreSettings` compartilhada, connect/query/response timeout e limites de rows/bytes encaminhados ao core; defaults e rejeição de opções inválidas cobertos.
 - [x] Verificar os bindings Python e TypeScript com opções customizadas contra FalkorDB 6.0.3; roundtrip e limite de linhas passaram.
 

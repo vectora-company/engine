@@ -23,6 +23,7 @@ jsonschema.workspace = true
 lancedb = { version = "0.22", default-features = false }
 redis = { version = "0.27", features = ["tokio-comp"] }
 reqwest.workspace = true
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rusqlite = { version = "0.32", features = ["bundled", "backup"] }
 serde.workspace = true
 serde_json.workspace = true

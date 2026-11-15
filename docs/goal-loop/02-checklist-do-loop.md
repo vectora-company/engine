@@ -6,7 +6,7 @@ acrescentar requisitos, mas não deve remover verificações aplicáveis daqui.
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Todo
 item bloqueado ou não aplicável precisa de uma justificativa curta.
 
-Etapa ativa na stack em 15/11/2026: configuração e limites da capability FalkorDB; consulte [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md), filha do PR #110.
+Etapa ativa na stack em 15/11/2026: TLS da capability FalkorDB após o PR [#111](https://github.com/vectora-company/engine/pull/111); branch `test/falkordb-tls-integration`, baseada no head do #111. Consulte [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
 
 ## Preparação
 

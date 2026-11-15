@@ -186,6 +186,4 @@ query server-side 10 s, response client-side 30 s, 1.000 linhas e 4 MiB. Testes
 Rust verificam defaults, overrides, opções desconhecidas e limites inválidos.
 Com `falkordb/falkordb:6.0.3` em Podman, Rust, Python e Node aceitaram opções
 customizadas; roundtrip e limite de linhas passaram. Python e Node rejeitaram
-configuração inválida antes de abrir conexão. TLS permanece sem teste. A
-interrupção da future caller não prova cancelamento no servidor; não há
-afirmação de que timeout client-side desfaça uma escrita enviada.
+configuração inválida antes de abrir conexão. O teste TLS seguinte revelou que a dependência FalkorDB acessa Rustls sem selecionar provider: Lance/AWS ativa `aws-lc-rs` e outras dependências ativam `ring`, fazendo seleção implícita entrar em panic. A correção seleciona `ring` somente se o host ainda não instalou provider. FalkorDB 6.0.3 com certificado SAN assinado por CA de teste passou roundtrip, limites e timeout em Rust, Python e Node via `falkors://`; `SSL_CERT_FILE` forneceu a CA ao trust store. Cancelar a future ainda não garante parar o comando remoto.
