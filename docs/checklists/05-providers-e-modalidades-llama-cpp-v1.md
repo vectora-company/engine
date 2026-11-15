@@ -88,3 +88,12 @@
 - [x] Hooks completos executados; todos passaram exceto Clippy na primeira rodada, corrigido e revalidado. Prettier/SVGO tocaram arquivos preexistentes fora do escopo; esses arquivos foram restaurados.
 - [ ] Integração opt-in com llama-server v1.0.0 e modelo realtime compatível.
 - [ ] Publicar PR #105 como filho do PR [#104](https://github.com/vectora-company/engine/pull/104); continuar etapas seguintes sem aguardar CI.
+
+## Streaming TTS — próxima branch filha do PR #105
+
+- [ ] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
+- [ ] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.
+- [ ] Expor iterador assíncrono de chunks de áudio em Rust/Python/TypeScript com backpressure e cancelamento.
+- [ ] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
+- [ ] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
+- [ ] Abrir PR empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105), sem aguardar CI remoto.

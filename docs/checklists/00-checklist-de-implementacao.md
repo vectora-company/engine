@@ -233,7 +233,7 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Build maturin e pytest Python: 55 passaram, 1 skipped.
 - [x] Publicar o PR [#104](https://github.com/vectora-company/engine/pull/104) sobre a branch do PR #103; head `8763968`, `MERGEABLE`. Próxima etapa iniciada como filha do #104, sem aguardar CI.
 - [ ] Testar contra llama-server v1.0.0 e modelo compatível quando houver serviço/modelo disponível; não inferir do mock.
-- [x] Sessão realtime/ASR implementada como etapa filha separada; streaming TTS e batch STT seguem fora deste contrato até confirmar APIs upstream distintas.
+- [x] Sessão realtime/ASR implementada no PR #105; streaming TTS tem APIs upstream documentadas e é a próxima etapa filha de #105. Batch STT segue fora até confirmar endpoint próprio.
 
 ## Realtime audio — próxima stack filha do PR #104
 
@@ -246,5 +246,14 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Maturin develop e pytest Python: 55 passaram, 1 skip.
 - [x] Workspace Rust: 205 testes lib + 3 fixtures + teste do binding Python passaram; Clippy `-D warnings` passou após correção.
 - [x] Hooks executados; SVGO/Prettier alteraram arquivos preexistentes fora do escopo e foram restaurados. Clippy corrigido e validado separadamente.
-- [ ] Abrir PR #105 filho do [#104](https://github.com/vectora-company/engine/pull/104), registrar head e checks locais.
+- [x] Publicar [PR #105](https://github.com/vectora-company/engine/pull/105) filho do #104; head `e97925b`, `OPEN`/`MERGEABLE`.
 - [ ] Testar com llama-server v1.0.0 e modelo real; batch STT segue endpoint separado.
+
+## Streaming TTS — próxima branch filha do PR #105
+
+- [ ] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
+- [ ] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.
+- [ ] Expor iterador assíncrono de chunks de áudio em Rust/Python/TypeScript com backpressure e cancelamento.
+- [ ] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
+- [ ] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
+- [ ] Abrir PR empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105), sem aguardar CI remoto.

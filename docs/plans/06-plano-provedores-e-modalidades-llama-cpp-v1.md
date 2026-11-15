@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo. PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) formam a base da stack; FalkorDB está em [#101](https://github.com/vectora-company/engine/pull/101) → [#102](https://github.com/vectora-company/engine/pull/102), seguido pelo Decision Model [#103](https://github.com/vectora-company/engine/pull/103) e TTS [#104](https://github.com/vectora-company/engine/pull/104). A sessão realtime está implementada e verificada localmente na branch `feat/llama-server-realtime-audio`; o PR #105 será publicado sobre a branch de #104.
+**Estado:** ativo. PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) formam a base da stack; FalkorDB está em [#101](https://github.com/vectora-company/engine/pull/101) → [#102](https://github.com/vectora-company/engine/pull/102), seguido pelo Decision Model [#103](https://github.com/vectora-company/engine/pull/103) e TTS [#104](https://github.com/vectora-company/engine/pull/104). A sessão realtime está publicada no PR [#105](https://github.com/vectora-company/engine/pull/105), head `e97925b`, filho da branch do #104; status remoto verificado `OPEN`/`MERGEABLE`.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -96,13 +96,22 @@ transcription/conversation, PCM16 mono com rate model-native ou override,
 eventos JSON forward-compatible, filas com backpressure e fechamento que cancela
 a sessão. Core Rust e wrappers Python/TypeScript expõem o mesmo fluxo de send,
 receive e commit. Testes do core e bindings passaram localmente; a verificação
-com servidor/modelo real continua pendente. O PR #105 será aberto como filho do
+com servidor/modelo real continua pendente. O PR #105 foi aberto como filho do
 [#104](https://github.com/vectora-company/engine/pull/104) sem aguardar CI. Batch
 transcription segue separado: só implementar quando uma API específica for
 confirmada.
 
 **Saída da etapa:** streaming/backpressure/cancelamento, formatos PCM/WAV e
 metadados, limites e testes de desconexão para cada operação implementada.
+
+**Subetapa 4c — streaming TTS (próxima branch filha do #105):** implementar o
+stream binário conforme `stream_format: audio` de `/v1/audio/speech` e `stream: true`
+de `/tts`, com metadata de Content-Type/sample rate, consumo incremental com
+backpressure, cancelamento e limites em Rust/Python/TypeScript. Resposta TTS em
+buffer permanece compatível com a API já entregue no #104. A referência v1.0.0
+descreve WAV streaming com tamanho desconhecido no header; a API deve preservar
+os bytes sem tentar reescrever o header. Este é o próximo trabalho iniciado sem
+aguardar CI do #105.
 
 ### Etapa 5 — providers e gateways
 
