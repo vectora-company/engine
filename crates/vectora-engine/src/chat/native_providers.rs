@@ -28,6 +28,7 @@ const DEFAULT_ANTHROPIC_URL: &str = "https://api.anthropic.com/v1";
 const DEFAULT_GOOGLE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_COHERE_URL: &str = "https://api.cohere.com/v2";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434/api";
+const DEFAULT_OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1";
 const MAX_ERROR_BODY_BYTES: usize = 8 * 1024;
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_EVENT_BYTES: usize = 1024 * 1024;
@@ -39,6 +40,8 @@ pub enum NativeProvider {
     Google,
     Cohere,
     Ollama,
+    #[serde(rename = "openai_responses")]
+    OpenAiResponses,
 }
 
 /// Settings for a native protocol provider. Credentials are supplied by the
@@ -93,6 +96,7 @@ enum NativeProtocolClient {
     Google(ProtocolClient),
     Cohere(ProtocolClient),
     Ollama(ProtocolClient),
+    OpenAiResponses(ProtocolClient),
 }
 
 /// Unified native-protocol facade used by both language bindings.
@@ -111,6 +115,7 @@ impl fmt::Debug for NativeChatClient {
                     NativeProtocolClient::Google(_) => NativeProvider::Google,
                     NativeProtocolClient::Cohere(_) => NativeProvider::Cohere,
                     NativeProtocolClient::Ollama(_) => NativeProvider::Ollama,
+                    NativeProtocolClient::OpenAiResponses(_) => NativeProvider::OpenAiResponses,
                 },
             )
             .finish_non_exhaustive()
@@ -134,6 +139,7 @@ impl NativeChatClient {
             NativeProvider::Google => DEFAULT_GOOGLE_URL,
             NativeProvider::Cohere => DEFAULT_COHERE_URL,
             NativeProvider::Ollama => DEFAULT_OLLAMA_URL,
+            NativeProvider::OpenAiResponses => DEFAULT_OPENAI_RESPONSES_URL,
         };
         let base_url = settings.base_url.as_deref().unwrap_or(base);
         if settings.provider != NativeProvider::Ollama
@@ -169,6 +175,8 @@ impl NativeChatClient {
         let path = endpoint.path().trim_end_matches('/').to_owned();
         if settings.provider == NativeProvider::Anthropic {
             endpoint.set_path(&format!("{path}/messages"));
+        } else if settings.provider == NativeProvider::OpenAiResponses {
+            endpoint.set_path(&format!("{path}/responses"));
         } else {
             endpoint.set_path(&path);
         }
@@ -191,6 +199,9 @@ impl NativeChatClient {
                     matches!(canonical, "authorization" | "content-type" | "host")
                 }
                 NativeProvider::Ollama => {
+                    matches!(canonical, "authorization" | "content-type" | "host")
+                }
+                NativeProvider::OpenAiResponses => {
                     matches!(canonical, "authorization" | "content-type" | "host")
                 }
             };
@@ -220,6 +231,7 @@ impl NativeChatClient {
                 NativeProvider::Google => NativeProtocolClient::Google(protocol),
                 NativeProvider::Cohere => NativeProtocolClient::Cohere(protocol),
                 NativeProvider::Ollama => NativeProtocolClient::Ollama(protocol),
+                NativeProvider::OpenAiResponses => NativeProtocolClient::OpenAiResponses(protocol),
             },
             media_context: None,
         })
@@ -271,6 +283,7 @@ impl NativeChatClient {
             NativeProtocolClient::Google(client) => client.complete(request).await,
             NativeProtocolClient::Cohere(client) => client.complete(request).await,
             NativeProtocolClient::Ollama(client) => client.complete(request).await,
+            NativeProtocolClient::OpenAiResponses(client) => client.complete(request).await,
         }
     }
 
@@ -314,6 +327,7 @@ impl NativeChatClient {
             NativeProtocolClient::Google(_) => "google",
             NativeProtocolClient::Cohere(_) => "cohere",
             NativeProtocolClient::Ollama(_) => "ollama",
+            NativeProtocolClient::OpenAiResponses(_) => "openai_responses",
         }
     }
 
@@ -323,6 +337,7 @@ impl NativeChatClient {
             NativeProtocolClient::Google(client) => client.stream(request).await,
             NativeProtocolClient::Cohere(client) => client.stream(request).await,
             NativeProtocolClient::Ollama(client) => client.stream(request).await,
+            NativeProtocolClient::OpenAiResponses(client) => client.stream(request).await,
         }
     }
 }
@@ -334,6 +349,9 @@ impl ProtocolClient {
             let path = url.path().trim_end_matches('/');
             url.set_path(&format!("{path}/chat"));
             return Ok(url);
+        }
+        if self.provider == NativeProvider::OpenAiResponses {
+            return Ok(self.endpoint.clone());
         }
         if self.provider == NativeProvider::Anthropic {
             return Ok(self.endpoint.clone());
@@ -383,6 +401,9 @@ impl ProtocolClient {
                     builder = builder.bearer_auth(&self.api_key);
                 }
             }
+            NativeProvider::OpenAiResponses => {
+                builder = builder.bearer_auth(&self.api_key);
+            }
         }
         for (name, value) in &self.headers {
             builder = builder.header(name, value);
@@ -428,6 +449,7 @@ impl ProtocolClient {
             NativeProvider::Google => parse_google_completion(value),
             NativeProvider::Cohere => parse_cohere_completion(value),
             NativeProvider::Ollama => parse_ollama_completion(value),
+            NativeProvider::OpenAiResponses => parse_responses_completion(value),
         }
     }
 
@@ -435,6 +457,9 @@ impl ProtocolClient {
         validate_request(&request)?;
         if self.provider == NativeProvider::Ollama {
             return self.stream_ollama(request).await;
+        }
+        if self.provider == NativeProvider::OpenAiResponses {
+            return self.stream_responses(request).await;
         }
         let url = self.endpoint_for(&request.model, true)?;
         let body = native_payload(self.provider, &request, true)?;
@@ -469,6 +494,7 @@ impl ProtocolClient {
                         NativeProvider::Google => parse_google_event(&value, &mut usage, &mut finish_reason, &mut next_google_tool_index)?,
                         NativeProvider::Cohere => parse_cohere_event(&value, &mut usage, &mut finish_reason, &mut cohere_tool_indexes, &mut next_cohere_tool_index)?,
                         NativeProvider::Ollama => Err(ChatError::Protocol("Ollama stream parser dispatch failed"))?,
+                        NativeProvider::OpenAiResponses => Err(ChatError::Protocol("Responses stream parser dispatch failed"))?,
                     };
                     for event in events {
                         if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
@@ -487,6 +513,7 @@ impl ProtocolClient {
                         NativeProvider::Google => parse_google_event(&value, &mut usage, &mut finish_reason, &mut next_google_tool_index)?,
                         NativeProvider::Cohere => parse_cohere_event(&value, &mut usage, &mut finish_reason, &mut cohere_tool_indexes, &mut next_cohere_tool_index)?,
                         NativeProvider::Ollama => Err(ChatError::Protocol("Ollama stream parser dispatch failed"))?,
+                        NativeProvider::OpenAiResponses => Err(ChatError::Protocol("Responses stream parser dispatch failed"))?,
                     };
                     for event in events {
                         if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
@@ -551,6 +578,49 @@ impl ProtocolClient {
         };
         Ok(Box::pin(stream))
     }
+
+    async fn stream_responses(&self, request: ChatRequest) -> Result<ChatStream, ChatError> {
+        let url = self.endpoint_for(&request.model, true)?;
+        let body = responses_payload(&request, true)?;
+        let deadline = Instant::now() + self.total_timeout;
+        let response = self.send(url, true, &body, deadline).await?;
+        if !response.status().is_success() {
+            return Err(http_error(response, deadline, self.provider).await);
+        }
+        let read_timeout = self.read_timeout;
+        let stream = try_stream! {
+            let mut body = response.bytes_stream();
+            let mut decoder = SseDecoder::new(MAX_EVENT_BYTES);
+            let mut received = 0usize;
+            let mut calls: HashMap<u32, (String, String)> = HashMap::new();
+            let mut completed = false;
+            loop {
+                let Some(chunk) = next_chunk(&mut body, deadline, read_timeout).await? else { break; };
+                received = received.saturating_add(chunk.len());
+                if received > MAX_RESPONSE_BYTES { Err(ChatError::ResponseTooLarge)?; }
+                for frame in decoder.push(&chunk)? {
+                    let value: Value = serde_json::from_str(&frame).map_err(|_| ChatError::Protocol("invalid Responses SSE JSON"))?;
+                    for event in parse_responses_event(&value, &mut calls)? {
+                        if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
+                        yield event;
+                    }
+                    if completed { break; }
+                }
+                if completed { break; }
+            }
+            if !completed {
+                for frame in decoder.finish()? {
+                    let value: Value = serde_json::from_str(&frame).map_err(|_| ChatError::Protocol("invalid Responses SSE JSON"))?;
+                    for event in parse_responses_event(&value, &mut calls)? {
+                        if matches!(event.event, ChatEventKind::Completed { .. }) { completed = true; }
+                        yield event;
+                    }
+                }
+            }
+            if !completed { Err(ChatError::Protocol("Responses stream ended before a terminal event"))?; }
+        };
+        Ok(Box::pin(stream))
+    }
 }
 
 fn native_payload(
@@ -563,7 +633,353 @@ fn native_payload(
         NativeProvider::Google => google_payload(request),
         NativeProvider::Cohere => cohere_payload(request, streaming),
         NativeProvider::Ollama => ollama_payload(request, streaming),
+        NativeProvider::OpenAiResponses => responses_payload(request, streaming),
     }
+}
+
+fn responses_payload(request: &ChatRequest, streaming: bool) -> Result<Value, ChatError> {
+    let mut input = Vec::new();
+    for message in &request.messages {
+        match message.role {
+            MessageRole::System | MessageRole::User | MessageRole::Assistant => {
+                let role = match message.role {
+                    MessageRole::System => "system",
+                    MessageRole::User => "user",
+                    _ => "assistant",
+                };
+                let content = responses_content(&message.content)?;
+                if !content.is_empty() {
+                    input.push(json!({"role": role, "content": content}));
+                }
+                if message.role == MessageRole::Assistant {
+                    for call in &message.tool_calls {
+                        input.push(json!({
+                            "type":"function_call",
+                            "call_id":call.id,
+                            "name":call.name,
+                            "arguments":call.arguments.wire_value()
+                        }));
+                    }
+                }
+            }
+            MessageRole::Tool => {
+                let call_id = message
+                    .tool_call_id
+                    .as_deref()
+                    .filter(|id| !id.is_empty())
+                    .ok_or(ChatError::InvalidConfiguration(
+                        "Responses tool result requires tool_call_id",
+                    ))?;
+                input.push(json!({"type":"function_call_output","call_id":call_id,"output":message_text(message)}));
+            }
+        }
+    }
+    let mut body = json!({"model":request.model,"input":input,"stream":streaming,"store":false});
+    if let Some(value) = request.options.temperature {
+        body["temperature"] = json!(value);
+    }
+    if let Some(value) = request.options.max_tokens {
+        body["max_output_tokens"] = json!(value);
+    }
+    if !request.tools.is_empty() {
+        body["tools"] = Value::Array(request.tools.iter().map(|tool| {
+            let mut function = json!({"type":"function","name":tool.name,"parameters":tool.parameters,"strict":false});
+            if let Some(description) = &tool.description { function["description"] = json!(description); }
+            function
+        }).collect());
+    }
+    let mut extensions = request.extensions.clone();
+    let store = extensions.remove("store");
+    merge_extensions(
+        &mut body,
+        &extensions,
+        &[
+            "model",
+            "input",
+            "tools",
+            "stream",
+            "temperature",
+            "max_output_tokens",
+            "previous_response_id",
+            "store",
+        ],
+    )?;
+    if let Some(store) = store {
+        if !store.is_boolean() {
+            return Err(ChatError::InvalidConfiguration(
+                "Responses store extension must be a boolean",
+            ));
+        }
+        body["store"] = store;
+    }
+    Ok(body)
+}
+
+fn responses_content(content: &MessageContent) -> Result<Vec<Value>, ChatError> {
+    let mut result = Vec::new();
+    match content {
+        MessageContent::Text(text) if !text.is_empty() => {
+            result.push(json!({"type":"input_text","text":text}))
+        }
+        MessageContent::Text(_) => {}
+        MessageContent::Parts(parts) => {
+            for part in parts {
+                match part {
+                    ContentPart::Text { text } if !text.is_empty() => {
+                        result.push(json!({"type":"input_text","text":text}))
+                    }
+                    ContentPart::ImageUrl { image_url } => {
+                        let mut image = json!({"type":"input_image","image_url":image_url.url});
+                        if let Some(detail) = &image_url.detail {
+                            image["detail"] = json!(detail);
+                        }
+                        result.push(image);
+                    }
+                    ContentPart::Inline(media) if media.kind == super::media::MediaKind::Image => {
+                        result.push(json!({"type":"input_image","image_url":format!("data:{};base64,{}",media.mime_type,media.data_base64)}));
+                    }
+                    other => {
+                        if let Some(text) = other.fallback_text() {
+                            result.push(json!({"type":"input_text","text":text}));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn parse_responses_completion(value: Value) -> Result<ChatCompletion, ChatError> {
+    let status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or(ChatError::InvalidResponse)?;
+    if status == "failed" {
+        return Err(ChatError::Protocol("OpenAI Responses request failed"));
+    }
+    if !matches!(status, "completed" | "incomplete") {
+        return Err(ChatError::InvalidResponse);
+    }
+    let output = value
+        .get("output")
+        .and_then(Value::as_array)
+        .ok_or(ChatError::InvalidResponse)?;
+    let mut content = String::new();
+    let mut reasoning = String::new();
+    let mut calls = Vec::new();
+    for item in output {
+        match item
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or(ChatError::InvalidResponse)?
+        {
+            "message" => {
+                for part in item
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .ok_or(ChatError::InvalidResponse)?
+                {
+                    match part.get("type").and_then(Value::as_str) {
+                        Some("output_text" | "refusal") => content.push_str(
+                            part.get("text")
+                                .and_then(Value::as_str)
+                                .ok_or(ChatError::InvalidResponse)?,
+                        ),
+                        Some(_) => {
+                            return Err(ChatError::Protocol(
+                                "Responses output content cannot be represented by the chat contract",
+                            ));
+                        }
+                        None => return Err(ChatError::InvalidResponse),
+                    }
+                }
+            }
+            "reasoning" => {
+                for part in item
+                    .get("summary")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(text) = part.get("text").and_then(Value::as_str) {
+                        reasoning.push_str(text);
+                    }
+                }
+            }
+            "function_call" => {
+                let name = item
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .filter(|v| !v.is_empty())
+                    .ok_or(ChatError::InvalidResponse)?;
+                let raw = item
+                    .get("arguments")
+                    .and_then(Value::as_str)
+                    .ok_or(ChatError::InvalidResponse)?;
+                calls.push(ToolCall {
+                    id: item
+                        .get("call_id")
+                        .and_then(Value::as_str)
+                        .filter(|v| !v.is_empty())
+                        .ok_or(ChatError::InvalidResponse)?
+                        .to_owned(),
+                    name: name.to_owned(),
+                    arguments: ToolArguments::from_json(raw),
+                });
+            }
+            _ => {
+                return Err(ChatError::Protocol(
+                    "Responses output item cannot be represented by the chat contract",
+                ));
+            }
+        }
+    }
+    let finish_reason = if !calls.is_empty() {
+        Some(FinishReason::ToolCalls)
+    } else if status == "incomplete" {
+        Some(FinishReason::Length)
+    } else {
+        Some(FinishReason::Stop)
+    };
+    let usage = value.get("usage").and_then(|usage| {
+        let input = usage.get("input_tokens")?.as_u64()?;
+        let output = usage.get("output_tokens")?.as_u64()?;
+        Some(Usage {
+            input_tokens: input,
+            output_tokens: output,
+            total_tokens: usage
+                .get("total_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(input.saturating_add(output)),
+            cost: None,
+        })
+    });
+    Ok(ChatCompletion {
+        contract_version: CHAT_CONTRACT_VERSION,
+        id: value.get("id").and_then(Value::as_str).map(str::to_owned),
+        selected_model_id: None,
+        content,
+        reasoning: (!reasoning.is_empty()).then_some(reasoning),
+        tool_calls: calls,
+        finish_reason,
+        usage,
+        media_decisions: Vec::new(),
+    })
+}
+
+fn parse_responses_event(
+    value: &Value,
+    calls: &mut HashMap<u32, (String, String)>,
+) -> Result<Vec<ChatEvent>, ChatError> {
+    let kind = value
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or(ChatError::InvalidResponse)?;
+    let mut events = Vec::new();
+    match kind {
+        "response.output_text.delta" => {
+            if let Some(text) = value.get("delta").and_then(Value::as_str) {
+                events.push(ChatEvent::new(ChatEventKind::TextDelta {
+                    text: text.to_owned(),
+                }));
+            }
+        }
+        "response.reasoning_summary_text.delta" => {
+            if let Some(text) = value.get("delta").and_then(Value::as_str) {
+                events.push(ChatEvent::new(ChatEventKind::ReasoningDelta {
+                    text: text.to_owned(),
+                }));
+            }
+        }
+        "response.output_item.added" => {
+            let item = value.get("item").ok_or(ChatError::InvalidResponse)?;
+            if item.get("type").and_then(Value::as_str) == Some("function_call") {
+                let index = value
+                    .get("output_index")
+                    .and_then(Value::as_u64)
+                    .and_then(|v| u32::try_from(v).ok())
+                    .ok_or(ChatError::InvalidResponse)?;
+                let id = item
+                    .get("call_id")
+                    .and_then(Value::as_str)
+                    .ok_or(ChatError::InvalidResponse)?
+                    .to_owned();
+                let name = item
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .ok_or(ChatError::InvalidResponse)?
+                    .to_owned();
+                calls.insert(index, (id.clone(), name.clone()));
+                events.push(ChatEvent::new(ChatEventKind::ToolCallDelta {
+                    call: ToolCallDelta {
+                        index,
+                        id: Some(id),
+                        name: Some(name),
+                        arguments_fragment: String::new(),
+                    },
+                }));
+            }
+        }
+        "response.function_call_arguments.delta" => {
+            let index = value
+                .get("output_index")
+                .and_then(Value::as_u64)
+                .and_then(|v| u32::try_from(v).ok())
+                .ok_or(ChatError::InvalidResponse)?;
+            let (id, name) = calls.get(&index).cloned().ok_or(ChatError::Protocol(
+                "Responses function arguments arrived before the call item",
+            ))?;
+            let delta = value
+                .get("delta")
+                .and_then(Value::as_str)
+                .ok_or(ChatError::InvalidResponse)?;
+            events.push(ChatEvent::new(ChatEventKind::ToolCallDelta {
+                call: ToolCallDelta {
+                    index,
+                    id: Some(id),
+                    name: Some(name),
+                    arguments_fragment: delta.to_owned(),
+                },
+            }));
+        }
+        "response.completed" | "response.incomplete" => {
+            let response = value.get("response").ok_or(ChatError::InvalidResponse)?;
+            if let Some(usage) = response.get("usage")
+                && let (Some(input), Some(output)) = (
+                    usage.get("input_tokens").and_then(Value::as_u64),
+                    usage.get("output_tokens").and_then(Value::as_u64),
+                )
+            {
+                events.push(ChatEvent::new(ChatEventKind::Usage {
+                    usage: Usage {
+                        input_tokens: input,
+                        output_tokens: output,
+                        total_tokens: usage
+                            .get("total_tokens")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(input.saturating_add(output)),
+                        cost: None,
+                    },
+                }));
+            }
+            let reason = if kind == "response.incomplete" {
+                Some(FinishReason::Length)
+            } else if !calls.is_empty() {
+                Some(FinishReason::ToolCalls)
+            } else {
+                Some(FinishReason::Stop)
+            };
+            events.push(ChatEvent::new(ChatEventKind::Completed {
+                finish_reason: reason,
+            }));
+        }
+        "response.failed" | "error" => {
+            return Err(ChatError::Protocol("OpenAI Responses stream failed"));
+        }
+        _ => {}
+    }
+    Ok(events)
 }
 
 fn ollama_payload(request: &ChatRequest, streaming: bool) -> Result<Value, ChatError> {
@@ -1877,6 +2293,110 @@ mod tests {
 
     fn req() -> ChatRequest {
         ChatRequest::new("model-x", vec![Message::text(MessageRole::User, "hello")])
+    }
+
+    #[test]
+    fn responses_request_maps_history_tools_images_and_privacy_default() {
+        let mut request = req();
+        request.messages = vec![
+            Message::text(MessageRole::System, "rules"),
+            {
+                let mut assistant = Message::text(MessageRole::Assistant, "calling");
+                assistant.tool_calls.push(ToolCall {
+                    id: "call_1".into(),
+                    name: "lookup".into(),
+                    arguments: ToolArguments::from_json(r#"{"q":"rust"}"#),
+                });
+                assistant
+            },
+            {
+                let mut result = Message::text(MessageRole::Tool, "found");
+                result.tool_call_id = Some("call_1".into());
+                result
+            },
+            {
+                let mut user = Message::text(MessageRole::User, "what is this?");
+                user.content = MessageContent::Parts(vec![
+                    ContentPart::Text {
+                        text: "what is this?".into(),
+                    },
+                    ContentPart::ImageUrl {
+                        image_url: super::super::ImageUrl {
+                            url: "data:image/png;base64,aW1hZ2U=".into(),
+                            detail: Some("high".into()),
+                        },
+                    },
+                ]);
+                user
+            },
+        ];
+        request.tools.push(super::super::ToolDefinition {
+            name: "lookup".into(),
+            description: Some("search".into()),
+            parameters: json!({"type":"object","properties":{"q":{"type":"string"}}}),
+        });
+        request.options.max_tokens = Some(128);
+        let payload = responses_payload(&request, true).unwrap();
+        assert_eq!(payload["model"], "model-x");
+        assert_eq!(payload["stream"], true);
+        assert_eq!(payload["store"], false);
+        assert_eq!(payload["max_output_tokens"], 128);
+        assert_eq!(payload["input"][0]["role"], "system");
+        assert_eq!(payload["input"][2]["type"], "function_call");
+        assert_eq!(payload["input"][3]["type"], "function_call_output");
+        assert_eq!(payload["input"][4]["content"][1]["type"], "input_image");
+        assert_eq!(payload["input"][4]["content"][1]["detail"], "high");
+        assert_eq!(payload["tools"][0]["type"], "function");
+        assert!(responses_payload(&request, false).unwrap()["stream"] == false);
+    }
+
+    #[test]
+    fn responses_parse_text_reasoning_tools_usage_and_stream_terminal_events() {
+        let parsed = parse_responses_completion(json!({
+            "id":"resp_1","status":"completed","output":[
+                {"type":"reasoning","summary":[{"type":"summary_text","text":"think"}]},
+                {"type":"message","content":[{"type":"output_text","text":"answer"}]},
+                {"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\"q\":\"x\"}"}
+            ],"usage":{"input_tokens":8,"output_tokens":4,"total_tokens":12}
+        })).unwrap();
+        assert_eq!(parsed.id.as_deref(), Some("resp_1"));
+        assert_eq!(parsed.content, "answer");
+        assert_eq!(parsed.reasoning.as_deref(), Some("think"));
+        assert_eq!(parsed.tool_calls[0].name, "lookup");
+        assert_eq!(parsed.finish_reason, Some(FinishReason::ToolCalls));
+        assert_eq!(parsed.usage.unwrap().total_tokens, 12);
+
+        let mut calls = HashMap::new();
+        let added = parse_responses_event(&json!({"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"lookup"}}), &mut calls).unwrap();
+        assert!(matches!(
+            added[0].event,
+            ChatEventKind::ToolCallDelta { .. }
+        ));
+        let delta = parse_responses_event(
+            &json!({"type":"response.function_call_arguments.delta","output_index":0,"delta":"{}"}),
+            &mut calls,
+        )
+        .unwrap();
+        assert!(
+            matches!(&delta[0].event, ChatEventKind::ToolCallDelta { call } if call.arguments_fragment == "{}")
+        );
+        let terminal = parse_responses_event(&json!({"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}}), &mut calls).unwrap();
+        assert!(matches!(
+            terminal.last().unwrap().event,
+            ChatEventKind::Completed {
+                finish_reason: Some(FinishReason::ToolCalls)
+            }
+        ));
+        assert!(parse_responses_event(&json!({"type":"response.failed"}), &mut calls).is_err());
+    }
+
+    #[test]
+    fn responses_extension_can_explicitly_override_storage_and_cannot_replace_input() {
+        let mut request = req();
+        request.extensions.insert("store".into(), json!(true));
+        assert_eq!(responses_payload(&request, false).unwrap()["store"], true);
+        request.extensions.insert("input".into(), json!([]));
+        assert!(responses_payload(&request, false).is_err());
     }
 
     #[test]

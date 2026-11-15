@@ -1421,6 +1421,43 @@ test("Ollama native chat streams NDJSON and accepts unauthenticated model contro
   }, /Ollama stream ended before its done message/);
 });
 
+test("OpenAI Responses profile maps a non-stream response and semantic SSE events", async () => {
+  const completion = await withFixtureServer(JSON.stringify({
+    id: "resp_fixture", status: "completed",
+    output: [{ type: "message", content: [{ type: "output_text", text: "Responses answer" }] }],
+    usage: { input_tokens: 4, output_tokens: 3, total_tokens: 7 },
+  }), "application/json", async (baseUrl, captured) => {
+    const result = await nativeChatComplete(
+      { provider: "openai_responses", base_url: baseUrl, api_key: "fixture-secret" },
+      { ...request, options: { temperature: 0.2, max_tokens: 64 } },
+    );
+    assert.equal(captured.path, "/engines/v1/responses");
+    assert.equal(captured.headers.authorization, "Bearer fixture-secret");
+    assert.equal(captured.body.input[0].content[0].type, "input_text");
+    assert.equal(captured.body.max_output_tokens, 64);
+    assert.equal(captured.body.store, false);
+    return result;
+  });
+  assert.equal(completion.content, "Responses answer");
+  assert.equal(completion.usage.total_tokens, 7);
+
+  const events = await withFixtureServer(
+    'data: {"type":"response.output_text.delta","delta":"hello"}\n\n' +
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}\n\n',
+    "text/event-stream",
+    async (baseUrl, captured) => {
+      const collected = [];
+      for await (const event of nativeChatStream(
+        { provider: "openai_responses", base_url: baseUrl, api_key: "fixture-secret" }, request,
+      )) collected.push(event);
+      assert.equal(captured.body.stream, true);
+      return collected;
+    },
+  );
+  assert.deepEqual(events.map((event) => event.type), ["text_delta", "usage", "completed"]);
+  assert.equal(events[1].usage.total_tokens, 3);
+});
+
 test("fallback follows explicit order through Rust and identifies the selected model", async () => {
   const first = await startFixtureServer(
     JSON.stringify({ error: { message: "rate limited" } }), "application/json", 429,

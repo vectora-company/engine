@@ -38,10 +38,13 @@ oferecem os equivalentes `native_*_ephemeral` e `fallback_*_ephemeral`. O
 envelope efêmero valida base64, tipo/MIME pelos bytes e `max_media_bytes` antes
 do transporte. Ele serve só para a chamada atual e não deve ser persistido.
 
-Anthropic Messages, Google Gemini e Cohere Chat v2 usam `native_chat_complete`
-e `native_chat_stream` com o mesmo contrato Rust. `settings.provider` deve ser
-`anthropic`, `google` ou `cohere`; credenciais e configuração específica pertencem ao
-consumer. Campos como Gemini `safetySettings` podem ser passados em
+Anthropic Messages, Google Gemini, Cohere Chat v2, Ollama nativo e OpenAI
+Responses usam `native_chat_complete` e `native_chat_stream` com o mesmo
+contrato Rust. `settings.provider` pode ser `anthropic`, `google`, `cohere`,
+`ollama` ou `openai_responses`; credenciais e configuração específica pertencem ao
+consumer. OpenAI Responses é um protocolo separado do perfil Chat Completions,
+usa `store: false` por padrão e aceita override explícito em `request["extensions"]`.
+Campos como Gemini `safetySettings` podem ser passados em
 `request["extensions"]`, sem defaults de política de produto.
 
 ## Famílias de API

@@ -277,3 +277,18 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Suites completas: workspace Rust 212 + 3 fixtures + 1 binding Python nativo; pytest 58/1 skip; Node 44/11 skips; typecheck, Clippy, Ruff/format/ty e Prettier passaram.
 - [x] Hooks completos passaram; publicar o PR [#108](https://github.com/vectora-company/engine/pull/108) empilhado sobre #107; GitHub confirma `OPEN`/`MERGEABLE`.
 - [ ] Integração com OpenRouter real exige endpoint externo e credencial; fixtures locais passaram.
+
+## OpenAI Responses API — branch ativa filha do PR #108
+
+- [x] Conferir documentação oficial de Responses, SSE, tools e imagem; delimitar protocolo e `store: false` default.
+- [x] Implementar adapter não-streaming e streaming no core Rust; preservar o perfil Chat Completions.
+- [x] Expor perfil por bindings Python/TypeScript e cobrir histórico, ferramentas, imagem, usage e SSE com fixtures.
+- [x] Rust workspace (215 testes), Clippy workspace `-D warnings`, build NAPI/TypeScript, Node (45 pass/11 skips), pytest completo e fixture Python focada passaram.
+- [x] Ruff/format/ty, Prettier e hooks passaram; revisar diff, commitar e abrir PR [#109](https://github.com/vectora-company/engine/pull/109) empilhado sobre #108.
+- [ ] Integração OpenAI real requer credencial; fixtures exercitam o protocolo sem rede externa.
+
+## Próxima etapa — perfil OpenAI Chat Completions, filha do PR #109
+
+- [ ] Adicionar perfil nomeado com endpoint oficial padrão, chave obrigatória e `base_url` configurável.
+- [ ] Preservar o perfil genérico e o perfil OpenRouter; validar auth, headers e rota em Rust/Python/TypeScript.
+- [ ] Verificar suites e hooks, registrar limites por API/modalidade, publicar PR filho do #109 e iniciar a próxima etapa sem aguardar CI.

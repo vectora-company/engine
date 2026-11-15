@@ -52,6 +52,30 @@ Fonte oficial conferida em 15/11/2026: [API Chat Completions e headers de
 atribuição](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion),
 [campos de roteamento](https://openrouter.ai/docs/guides/routing/provider-selection).
 
+### OpenAI Responses API (subetapa planejada 5c)
+
+O protocolo Responses é distinto de Chat Completions: requests usam `input`,
+function tools são itens `function_call`/`function_call_output`, e SSE carrega
+eventos semânticos (`response.output_text.delta`, lifecycle da resposta,
+argumentos de função, usage e terminal status). A implementação em andamento
+converte o histórico portátil completo, sem depender de `previous_response_id`,
+e define `store: false` como default de privacidade, permitindo override
+explícito no request. O core Rust já traduz input de texto/imagem, function
+calls/results, opções e extensões, interpreta resposta/reasoning/usage e mapeia
+eventos SSE tipados; testes unitários exercitam os contratos. Fixtures HTTP nos
+bindings Python e TypeScript passaram após build nativo. O perfil é selecionado
+como `native` com `provider: openai_responses`; a implementação está publicada
+no PR [#109](https://github.com/vectora-company/engine/pull/109), filho do #108.
+Nesta etapa, suporte será declarado apenas para texto,
+imagem de entrada, function calling, reasoning/usage quando presentes e eventos
+SSE mapeáveis; built-in tools, TTS/STT, vídeo e geração de imagem continuam fora
+do adapter até possuírem contratos próprios. Referências oficiais: [Responses
+API overview](https://developers.openai.com/api/reference/responses/overview),
+[create response](https://developers.openai.com/api/reference/resources/responses/methods/create),
+[streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events),
+[function calling](https://developers.openai.com/api/docs/guides/function-calling)
+e [image input](https://developers.openai.com/api/docs/guides/images-vision).
+
 ## Operações declaradas pelas APIs dos providers
 
 Isto é o que a documentação oficial declara, não o que a Engine já suporta. A
