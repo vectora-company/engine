@@ -15,10 +15,12 @@ use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
-    EphemeralDecisionRequest, FallbackChatClient, FallbackChatSettings, LlamaServerClient,
-    LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient,
-    NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
+    EphemeralDecisionRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
+    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
+    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
+    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
+    ProviderMediaLimits, SpeechRequest, TurnAccumulatorSettings, assemble_turn,
+    prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -1914,6 +1916,64 @@ pub async fn llama_server_decide_ephemeral(
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&response)
+}
+
+fn speech_json(response: vectora_engine::chat::SpeechResponse) -> Result<String> {
+    serde_json::to_string(&serde_json::json!({
+        "audio_base64": STANDARD.encode(response.audio),
+        "content_type": response.content_type,
+        "format": response.format,
+        "sample_rate_hz": response.sample_rate_hz,
+    }))
+    .map_err(|_| Error::from_reason("could not encode speech response"))
+}
+
+#[napi]
+pub async fn llama_server_synthesize(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: SpeechRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid speech request"))?;
+    speech_json(
+        client
+            .synthesize(request)
+            .await
+            .map_err(|error| Error::from_reason(error.to_string()))?,
+    )
+}
+
+#[napi]
+pub async fn llama_server_synthesize_native(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: NativeSpeechRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid native speech request"))?;
+    speech_json(
+        client
+            .synthesize_native(request)
+            .await
+            .map_err(|error| Error::from_reason(error.to_string()))?,
+    )
+}
+
+#[napi]
+pub async fn llama_server_synthesize_native_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: EphemeralNativeSpeechRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid ephemeral native speech request"))?;
+    speech_json(
+        client
+            .synthesize_native_ephemeral(request)
+            .await
+            .map_err(|error| Error::from_reason(error.to_string()))?,
+    )
 }
 
 #[napi]

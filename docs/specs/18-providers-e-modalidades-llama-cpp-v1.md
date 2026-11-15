@@ -172,3 +172,19 @@ não transforma geração de imagem em endpoint suportado.
 - Falhas de auth, modalidade, payload, tamanho, cancelamento e stream são
   testadas sem credenciais externas e com integração real opt-in.
 - Nenhuma implementação de regra ou transporte paralela em Python/TypeScript.
+
+## Estado do contrato TTS bufferizado (2026-11-15)
+
+A primeira implementação fornece duas chamadas sobre o mesmo cliente Rust:
+`/v1/audio/speech` (contrato OpenAI-compatible) e `/tts` (extensão nativa com
+controles de amostragem e referência de voz). São opções complementares porque
+a rota compatível oferece portabilidade entre gateways e a rota nativa expõe
+recursos específicos do llama.cpp. As duas devolvem bytes binários, Content-Type
+original e sample rate quando informado pelo servidor ou WAV. Formatos OpenAI
+são WAV e PCM16; `/tts` também suporta PCM float32. Vozes nomeadas são validadas
+com `/props`. Bytes `speaker_ref_b64` só entram pelo request efêmero e não devem
+ser gravados em estado persistível. `instructions` é ignorado pelo upstream e
+`speed` aceita apenas `1.0`. Streaming TTS e sessão WebSocket realtime ficam
+fora desta subetapa; não declarar STT batch, geração de áudio ou modalidade
+real sem teste do modelo. Veja fixtures e estado em
+[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).

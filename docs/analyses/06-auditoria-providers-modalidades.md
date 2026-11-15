@@ -122,3 +122,10 @@ capacidade de cada modelo.
 ## Atualização — Decision Model llama-server (2026-11-15)
 
 A etapa seguinte da stack começa na branch `feat/llama-server-decision-model`, filha do PR #102. O core define `DecisionRequest`, perguntas `choice`/`score`/`noul` e resposta que preserva campos de probabilidade; `/v1/systemone` é não-streaming conforme a API fixada na spec. A validação aceita somente data URLs base64 de imagem/áudio no campo `files`, com limite de mídia; usa auth, timeout e limite de corpo do perfil. A resposta exige exatamente os IDs perguntados. Fixture HTTP Rust passou para rota, bearer token, choice, probabilidades e usage. Wrappers/fixtures Python e TypeScript foram iniciados; build e testes dos bindings ainda pendentes.
+
+## Atualização — TTS bufferizado llama-server (2026-11-15)
+
+A branch `feat/llama-server-tts`, filha do PR #103, implementa duas superfícies
+conforme a API fixada em [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md): `/v1/audio/speech` (WAV/PCM16, voz opcional e speed=1.0) e `/tts` (WAV, PCM float32 ou PCM16; parâmetros nativos e speaker-reference). O retorno é binário, preserva Content-Type e extrai sample rate do header de áudio ou RIFF/WAVE. O formato de request persistível não contém o áudio de referência; `speaker_ref_b64` está isolado no envelope efêmero com Debug redigido e limite de bytes. A rota com voz explícita consulta `/props`; discovery exige model ID e saída `audio`.
+
+Fixtures Rust passaram (8 testes focados, incluindo ambas as rotas); `cargo check` passou para core e crates Python/Node; TypeScript typecheck passou; Node executou 41 testes aprovados e 11 skips relacionados a serviços externos sem endpoint. Build maturin e fixture pytest focado passaram; pytest do binding Python passou com 50 testes e 1 skip. Não há integração com um llama-server/modelo real neste host. Streaming TTS, realtime WebSocket/ASR e cancelamento ficam pendentes para o PR seguinte, sem afirmar batch STT. O store pnpm deste checkout retorna `/home/brunosrz/.local/share/pnpm/store/v11`; os pacotes e build são do checkout em Área de trabalho.

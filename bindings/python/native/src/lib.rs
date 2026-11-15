@@ -15,10 +15,12 @@ use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
-    EphemeralDecisionRequest, FallbackChatClient, FallbackChatSettings, LlamaServerClient,
-    LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient,
-    NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
+    EphemeralDecisionRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
+    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
+    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
+    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
+    ProviderMediaLimits, SpeechRequest, TurnAccumulatorSettings, assemble_turn,
+    prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -2037,6 +2039,67 @@ fn llama_server_decide_ephemeral<'py>(
     })
 }
 
+fn speech_json(response: vectora_engine::chat::SpeechResponse) -> Result<String, String> {
+    serde_json::to_string(&serde_json::json!({
+        "audio_base64": STANDARD.encode(response.audio),
+        "content_type": response.content_type,
+        "format": response.format,
+        "sample_rate_hz": response.sample_rate_hz,
+    }))
+    .map_err(|_| "could not encode speech response".to_owned())
+}
+
+#[pyfunction]
+fn llama_server_synthesize<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: SpeechRequest =
+            serde_json::from_str(&request_json).map_err(|_| py_error("invalid speech request"))?;
+        let response = client.synthesize(request).await.map_err(py_error)?;
+        speech_json(response).map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn llama_server_synthesize_native<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: NativeSpeechRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid native speech request"))?;
+        let response = client.synthesize_native(request).await.map_err(py_error)?;
+        speech_json(response).map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn llama_server_synthesize_native_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: EphemeralNativeSpeechRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid ephemeral native speech request"))?;
+        let response = client
+            .synthesize_native_ephemeral(request)
+            .await
+            .map_err(py_error)?;
+        speech_json(response).map_err(py_error)
+    })
+}
+
 #[pyfunction]
 fn llama_server_chat_complete<'py>(
     py: Python<'py>,
@@ -2616,6 +2679,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(llama_server_models, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide_ephemeral, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_synthesize, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_synthesize_native, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        llama_server_synthesize_native_ephemeral,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(llama_server_chat_complete, module)?)?;
     module.add_function(wrap_pyfunction!(
         llama_server_chat_complete_ephemeral,

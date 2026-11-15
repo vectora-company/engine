@@ -13,21 +13,21 @@
 
 ## Matriz de capacidade (estado observado)
 
-| Operação                                  | Estado atual                                                                | Evidência/cobertura desejada                                                                                                                                 |
-| ----------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat texto/stream                         | Parcial implementado                                                        | OpenAI-compatible; nativos Anthropic/Gemini/Cohere; fixtures por protocolo.                                                                                  |
-| OpenAI/OpenRouter/9router/OmniRouter/Kimi | Transporte genérico possível quando OpenAI-compatible; perfis não equivalem | Rota, auth/headers, erros, streaming, uso e modalidade por endpoint.                                                                                         |
-| Ollama chat                               | Sem adapter dedicado                                                        | API Ollama distinta e perfil OpenAI `/v1` validado separadamente.                                                                                            |
-| llama.cpp chat/discovery                  | Perfil Rust mais APIs health/models/chat/stream nos bindings                | Conformidade por fixture; integração real e modalidades por modelo pendentes.                                                                                |
-| Decision Model                            | `/v1/systemone` em implementação no core e bindings                         | Perguntas choice/score/noul, capability decisions, request persistível e envelope efêmero multimodal, probabilidades validadas e fixtures nos três runtimes. |
-| Entrada de imagem/visão                   | Tipos e preparação existem; roteamento parcial                              | Casos reais por protocolo/modelo e capability desconhecida fail-closed.                                                                                      |
-| Geração de imagem                         | Ausente                                                                     | Adapter próprio apenas quando endpoint estiver confirmado.                                                                                                   |
-| TTS                                       | Ausente                                                                     | `/v1/audio/speech`: WAV/PCM, voz, sample rate, stream e cancelamento.                                                                                        |
-| STT                                       | Ausente                                                                     | `/v1/realtime` é streaming ASR; batch transcription requer API separada.                                                                                     |
-| Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                    | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.                                                                                          |
-| Geração de vídeo                          | Ausente                                                                     | Não confundir com vídeo de entrada.                                                                                                                          |
-| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama                           | Extensão multimodal do llama.cpp em contrato versionado.                                                                                                     |
-| Rerank                                    | Cohere/Voyage/OpenRouter                                                    | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.                                                                                              |
+| Operação                                  | Estado atual                                                                    | Evidência/cobertura desejada                                                                                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat texto/stream                         | Parcial implementado                                                            | OpenAI-compatible; nativos Anthropic/Gemini/Cohere; fixtures por protocolo.                                                                                  |
+| OpenAI/OpenRouter/9router/OmniRouter/Kimi | Transporte genérico possível quando OpenAI-compatible; perfis não equivalem     | Rota, auth/headers, erros, streaming, uso e modalidade por endpoint.                                                                                         |
+| Ollama chat                               | Sem adapter dedicado                                                            | API Ollama distinta e perfil OpenAI `/v1` validado separadamente.                                                                                            |
+| llama.cpp chat/discovery                  | Perfil Rust mais APIs health/models/chat/stream nos bindings                    | Conformidade por fixture; integração real e modalidades por modelo pendentes.                                                                                |
+| Decision Model                            | `/v1/systemone` implementado no core e bindings (PR #103)                       | Perguntas choice/score/noul, capability decisions, request persistível e envelope efêmero multimodal, probabilidades validadas e fixtures nos três runtimes. |
+| Entrada de imagem/visão                   | Tipos e preparação existem; roteamento parcial                                  | Casos reais por protocolo/modelo e capability desconhecida fail-closed.                                                                                      |
+| Geração de imagem                         | Ausente                                                                         | Adapter próprio apenas quando endpoint estiver confirmado.                                                                                                   |
+| TTS                                       | Síntese bufferizada `/v1/audio/speech` e nativa `/tts` implementadas no PR #104 | WAV/PCM16/PCM float e bytes com Content-Type/sample rate; stream e cancelamento ainda pendentes.                                                             |
+| STT                                       | Ausente                                                                         | `/v1/realtime` é streaming ASR; batch transcription requer API separada.                                                                                     |
+| Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                        | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.                                                                                          |
+| Geração de vídeo                          | Ausente                                                                         | Não confundir com vídeo de entrada.                                                                                                                          |
+| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama                               | Extensão multimodal do llama.cpp em contrato versionado.                                                                                                     |
+| Rerank                                    | Cohere/Voyage/OpenRouter                                                        | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.                                                                                              |
 
 ## Gates para etapas de código
 
@@ -48,7 +48,8 @@
 - [ ] Integração real fixa tag de servidor/modelo e é opt-in, sem baixar modelo grande no CI por padrão.
 - [x] `systemone` tem contrato separado e fixture de rota/probabilidades no core Rust.
 - [x] `systemone` é exposto e verificado nos bindings Python e TypeScript (fixture local).
-- [ ] TTS, realtime ASR, geração de imagem e vídeo têm contratos separados.
+- [x] Síntese TTS bufferizada e `/tts` têm formato binário separado do chat; áudio de referência só usa envelope efêmero.
+- [ ] Streaming TTS e realtime ASR têm contratos de sessão separados; geração de imagem e vídeo também.
 - [ ] Documentação anuncia suporte por modalidade/provider/modelo com evidência.
 
 ## Gate do charter de primeira release
@@ -57,3 +58,18 @@
 - [ ] Core e bindings cobrem os contratos de release com conformidade.
 - [ ] Instalação e empacotamento suportados são reproduzíveis.
 - [ ] Gaps independentes de storage, contexto/RAG, segurança e adoção foram fechados ou deliberadamente excluídos do charter por decisão registrada.
+
+## Etapa TTS bufferizada — PR #104, filha do #103
+
+- [x] Implementar `SpeechRequest`, `NativeSpeechRequest`, request efêmero para
+      speaker reference e resposta binária com formato, Content-Type e sample rate.
+- [x] Implementar `/v1/audio/speech` WAV/PCM e `/tts` WAV/PCM16/PCM float;
+      validar discovery de saída `audio`, voz em `/props`, limite de mídia e
+      resposta HTTP limitada.
+- [x] Expor os métodos em Python (`bytes`) e TypeScript (`Uint8Array`) sobre Rust.
+- [x] Fixtures Rust 8/8 focados; Node 41 passaram, 11 skipped por serviços
+      externos não configurados; `cargo check` dos crates Rust/Python/Node e
+      TypeScript typecheck passaram.
+- [x] Build maturin e fixture pytest focado passaram; pytest do binding Python: 55 passaram, 1 skipped.
+- [ ] Integração opt-in contra llama-server v1.0.0/modelo TTS real.
+- [ ] Stream TTS/realtime ASR, desconexão e cancelamento serão etapa filha do #104.
