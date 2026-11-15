@@ -233,7 +233,7 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Build maturin e pytest Python: 55 passaram, 1 skipped.
 - [x] Publicar o PR [#104](https://github.com/vectora-company/engine/pull/104) sobre a branch do PR #103; head `8763968`, `MERGEABLE`. Próxima etapa iniciada como filha do #104, sem aguardar CI.
 - [ ] Testar contra llama-server v1.0.0 e modelo compatível quando houver serviço/modelo disponível; não inferir do mock.
-- [x] Sessão realtime/ASR implementada no PR #105; streaming TTS tem APIs upstream documentadas e é a próxima etapa filha de #105. Batch STT segue fora até confirmar endpoint próprio.
+- [x] Sessão realtime/ASR implementada no PR #105 e streaming TTS publicado no PR #106, filho do #105; batch STT segue fora até confirmar endpoint próprio.
 
 ## Realtime audio — próxima stack filha do PR #104
 
@@ -258,9 +258,10 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Build NAPI/TypeScript, suíte Node (42 pass/11 skips) e pytest (56 pass/1 skip). Publicar PR [#106](https://github.com/vectora-company/engine/pull/106), filho do #105; `OPEN`/`MERGEABLE`.
 - [ ] Integração opt-in com `llama-server` v1.0.0/modelo TTS real.
 
-- [ ] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
-- [ ] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.
-- [ ] Expor iterador assíncrono de chunks de áudio em Rust/Python/TypeScript com backpressure e cancelamento.
-- [ ] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
-- [ ] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
-- [ ] Abrir PR empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105), sem aguardar CI remoto.
+## Ollama chat nativo — etapa ativa filha do PR #106
+
+- [x] Confirmar contrato oficial `/api/chat` JSON/NDJSON e diferenças em relação ao subconjunto OpenAI-compatible.
+- [x] Implementar tradução do contrato de chat, `options`, extensões nativas, imagens inline, tools, reasoning e usage no core Rust.
+- [x] Suportar api_key opcional no endpoint nativo local e Bearer quando configurada.
+- [x] Testes de payload/resposta no Rust e fixtures HTTP Python/TypeScript; suites completas em validação.
+- [ ] Concluir suites completas, hooks, atualizar docs e publicar PR empilhado sobre #106.

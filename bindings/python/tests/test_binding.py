@@ -2512,6 +2512,64 @@ def test_cohere_native_chat_completion_and_stream_use_v2_protocol() -> None:
     assert [event["type"] for event in events] == ["text_delta", "usage", "completed"]
 
 
+def test_ollama_native_chat_streams_ndjson_without_required_api_key() -> None:
+    body = json.dumps(
+        {
+            "message": {"role": "assistant", "content": "native Ollama"},
+            "done": True,
+            "done_reason": "stop",
+            "prompt_eval_count": 5,
+            "eval_count": 2,
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {"provider": "ollama", "base_url": endpoint(server) + "/api"}
+    try:
+        request = {**REQUEST, "extensions": {"think": True, "keep_alive": "5m"}}
+        result = asyncio.run(native_chat_complete(settings, request))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["path"] == "/engines/v1/api/chat"
+    assert "authorization" not in captured["headers"]
+    assert captured["body"]["stream"] is False
+    assert captured["body"]["think"] is True
+    assert captured["body"]["keep_alive"] == "5m"
+    assert result["content"] == "native Ollama"
+    assert result["usage"]["total_tokens"] == 7
+
+    stream_body = (
+        b'{"message":{"role":"assistant","content":"hello "},"done":false}\n'
+        b'{"message":{"role":"assistant","content":"world"},"done":true,"done_reason":"stop","prompt_eval_count":3,"eval_count":2}\n'
+    )
+    server, thread, captured = serve(stream_body, "application/x-ndjson")
+
+    async def collect() -> list[dict[str, Any]]:
+        return [
+            event
+            async for event in native_chat_stream(
+                settings | {"base_url": endpoint(server) + "/api"}, REQUEST
+            )
+        ]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["headers"]["accept"] == "application/x-ndjson"
+    assert captured["body"]["stream"] is True
+    assert [event["type"] for event in events] == [
+        "text_delta",
+        "text_delta",
+        "usage",
+        "completed",
+    ]
+    assert events[2]["usage"]["total_tokens"] == 5
+
+
 def test_fallback_uses_explicit_order_and_returns_selected_model() -> None:
     rejected, rejected_thread, first = serve(
         b'{"error":{"message":"rate limited"}}', "application/json", status=429
