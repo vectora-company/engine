@@ -310,6 +310,20 @@ test("storage selection validates independent backends in Rust", () => {
   }
 });
 
+test("graph store binding validates its timeout and result limits before connecting", async () => {
+  await assert.rejects(
+    graphStoreOperation(
+      {
+        endpoint: "redis://127.0.0.1:1",
+        graph_name: "graph",
+        connect_timeout_ms: 0,
+      },
+      { operation: "get_node", id: "n" },
+    ),
+    /invalid graph request/,
+  );
+});
+
 test("graph store binding roundtrips through FalkorDB when configured", {
   skip: !process.env.VECTORA_TEST_FALKORDB_URL,
 }, async () => {
@@ -317,6 +331,11 @@ test("graph store binding roundtrips through FalkorDB when configured", {
   const config = {
     endpoint: process.env.VECTORA_TEST_FALKORDB_URL,
     graph_name: `node_${randomUUID().replaceAll("-", "")}`,
+    connect_timeout_ms: 5_000,
+    query_timeout_ms: 5_000,
+    response_timeout_ms: 10_000,
+    max_rows: 20,
+    max_result_bytes: 16_384,
   };
   const node = { id, labels: ["Person"], properties: { name: "Ana 東京" } };
   await graphStoreOperation(config, { operation: "upsert_node", node });
@@ -335,6 +354,17 @@ test("graph store binding roundtrips through FalkorDB when configured", {
       params: { id },
     }),
     { columns: ["name", "city"], rows: [[null, "São Paulo"]] },
+  );
+  await assert.rejects(
+    graphStoreOperation(
+      { ...config, max_rows: 1 },
+      {
+        operation: "cypher",
+        query: "UNWIND [1, 2] AS n RETURN n",
+        params: {},
+      },
+    ),
+    /graph result exceeded configured limits/,
   );
 });
 

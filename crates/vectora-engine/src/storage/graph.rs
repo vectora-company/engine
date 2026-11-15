@@ -10,15 +10,71 @@ use thiserror::Error;
 
 pub const GRAPH_CONTRACT_VERSION: u16 = 1;
 const DEFAULT_QUERY_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_MAX_ROWS: usize = 1_000;
 const DEFAULT_MAX_RESULT_BYTES: usize = 4 * 1024 * 1024;
+
+/// JSON-friendly graph client settings shared by the Python and Node bindings.
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GraphStoreSettings {
+    pub endpoint: String,
+    pub graph_name: String,
+    #[serde(default = "default_connect_timeout_ms")]
+    pub connect_timeout_ms: u64,
+    #[serde(default = "default_query_timeout_ms")]
+    pub query_timeout_ms: u64,
+    #[serde(default = "default_response_timeout_ms")]
+    pub response_timeout_ms: u64,
+    #[serde(default = "default_max_rows")]
+    pub max_rows: usize,
+    #[serde(default = "default_max_result_bytes")]
+    pub max_result_bytes: usize,
+}
+
+impl GraphStoreSettings {
+    pub fn into_config(self) -> GraphStoreConfig {
+        GraphStoreConfig {
+            endpoint: self.endpoint,
+            graph_name: self.graph_name,
+            connect_timeout: Duration::from_millis(self.connect_timeout_ms),
+            query_timeout: Duration::from_millis(self.query_timeout_ms),
+            response_timeout: Duration::from_millis(self.response_timeout_ms),
+            max_rows: self.max_rows,
+            max_result_bytes: self.max_result_bytes,
+        }
+    }
+}
+
+const fn default_connect_timeout_ms() -> u64 {
+    DEFAULT_CONNECT_TIMEOUT.as_millis() as u64
+}
+
+const fn default_query_timeout_ms() -> u64 {
+    DEFAULT_QUERY_TIMEOUT.as_millis() as u64
+}
+
+const fn default_response_timeout_ms() -> u64 {
+    DEFAULT_RESPONSE_TIMEOUT.as_millis() as u64
+}
+
+const fn default_max_rows() -> usize {
+    DEFAULT_MAX_ROWS
+}
+
+const fn default_max_result_bytes() -> usize {
+    DEFAULT_MAX_RESULT_BYTES
+}
 
 /// Connection settings for one named FalkorDB graph.
 #[derive(Clone)]
 pub struct GraphStoreConfig {
     pub endpoint: String,
     pub graph_name: String,
+    pub connect_timeout: Duration,
     pub query_timeout: Duration,
+    pub response_timeout: Duration,
     pub max_rows: usize,
     pub max_result_bytes: usize,
 }
@@ -28,7 +84,9 @@ impl GraphStoreConfig {
         Self {
             endpoint: endpoint.into(),
             graph_name: graph_name.into(),
+            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
             query_timeout: DEFAULT_QUERY_TIMEOUT,
+            response_timeout: DEFAULT_RESPONSE_TIMEOUT,
             max_rows: DEFAULT_MAX_ROWS,
             max_result_bytes: DEFAULT_MAX_RESULT_BYTES,
         }
@@ -39,8 +97,12 @@ impl GraphStoreConfig {
             || self.graph_name.trim().is_empty()
             || self.graph_name.len() > 256
             || self.graph_name.chars().any(char::is_control)
+            || self.connect_timeout.is_zero()
             || self.query_timeout.is_zero()
+            || self.response_timeout.is_zero()
+            || self.connect_timeout.as_millis() > i64::MAX as u128
             || self.query_timeout.as_millis() > i64::MAX as u128
+            || self.response_timeout.as_millis() > i64::MAX as u128
             || self.max_rows == 0
             || self.max_result_bytes == 0
         {
@@ -55,7 +117,9 @@ impl fmt::Debug for GraphStoreConfig {
         f.debug_struct("GraphStoreConfig")
             .field("endpoint", &"<redacted>")
             .field("graph_name", &self.graph_name)
+            .field("connect_timeout", &self.connect_timeout)
             .field("query_timeout", &self.query_timeout)
+            .field("response_timeout", &self.response_timeout)
             .field("max_rows", &self.max_rows)
             .field("max_result_bytes", &self.max_result_bytes)
             .finish()
@@ -155,6 +219,8 @@ impl FalkorDbStore {
         let client = falkordb::FalkorClientBuilder::new_async()
             .with_connection_info(connection)
             .with_retry_policy(falkordb::RetryPolicy::disabled())
+            .with_connect_timeout(Some(config.connect_timeout))
+            .with_response_timeout(Some(config.response_timeout))
             .build()
             .await
             .map_err(|_| GraphError::Storage)?;
@@ -470,6 +536,58 @@ mod tests {
         );
         assert!(GraphStoreConfig::new(" ", "tenant").validate().is_err());
         assert!(validate_text("\n").is_err());
+    }
+
+    #[test]
+    fn binding_settings_apply_defaults_and_custom_deadlines_and_limits() {
+        let defaults: GraphStoreSettings = serde_json::from_value(serde_json::json!({
+            "endpoint": "redis://localhost:6379",
+            "graph_name": "default"
+        }))
+        .unwrap();
+        let config = defaults.into_config();
+        assert_eq!(config.connect_timeout, Duration::from_secs(10));
+        assert_eq!(config.query_timeout, Duration::from_secs(10));
+        assert_eq!(config.response_timeout, Duration::from_secs(30));
+        assert_eq!(config.max_rows, DEFAULT_MAX_ROWS);
+        assert_eq!(config.max_result_bytes, DEFAULT_MAX_RESULT_BYTES);
+
+        let custom: GraphStoreSettings = serde_json::from_value(serde_json::json!({
+            "endpoint": "redis://localhost:6379",
+            "graph_name": "custom",
+            "connect_timeout_ms": 250,
+            "query_timeout_ms": 500,
+            "response_timeout_ms": 900,
+            "max_rows": 5,
+            "max_result_bytes": 2048
+        }))
+        .unwrap();
+        let config = custom.into_config();
+        assert_eq!(config.connect_timeout, Duration::from_millis(250));
+        assert_eq!(config.query_timeout, Duration::from_millis(500));
+        assert_eq!(config.response_timeout, Duration::from_millis(900));
+        assert_eq!(config.max_rows, 5);
+        assert_eq!(config.max_result_bytes, 2048);
+        assert!(config.validate().is_ok());
+
+        let invalid: GraphStoreSettings = serde_json::from_value(serde_json::json!({
+            "endpoint": "redis://localhost:6379",
+            "graph_name": "invalid",
+            "max_rows": 0
+        }))
+        .unwrap();
+        assert!(matches!(
+            invalid.into_config().validate(),
+            Err(GraphError::InvalidInput)
+        ));
+        assert!(
+            serde_json::from_value::<GraphStoreSettings>(serde_json::json!({
+                "endpoint": "redis://localhost:6379",
+                "graph_name": "unknown-option",
+                "unexpected": true
+            }))
+            .is_err()
+        );
     }
 
     fn restart_test_container(name: &str) -> bool {

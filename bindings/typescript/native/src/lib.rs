@@ -908,21 +908,12 @@ pub async fn sqlite_ledger_restore(
 
 #[napi]
 pub async fn graph_store_operation(config_json: String, operation_json: String) -> Result<String> {
-    let config: serde_json::Value = serde_json::from_str(&config_json)
-        .map_err(|_| Error::from_reason("invalid graph-store config"))?;
-    let endpoint = config
-        .get("endpoint")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| Error::from_reason("invalid graph-store config"))?;
-    let graph_name = config
-        .get("graph_name")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| Error::from_reason("invalid graph-store config"))?;
-    let store = vectora_engine::storage::graph::FalkorDbStore::connect(
-        vectora_engine::storage::graph::GraphStoreConfig::new(endpoint, graph_name),
-    )
-    .await
-    .map_err(|error| Error::from_reason(error.to_string()))?;
+    let config: vectora_engine::storage::graph::GraphStoreSettings =
+        serde_json::from_str(&config_json)
+            .map_err(|_| Error::from_reason("invalid graph-store config"))?;
+    let store = vectora_engine::storage::graph::FalkorDbStore::connect(config.into_config())
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
     let mut operation: serde_json::Value = serde_json::from_str(&operation_json)
         .map_err(|_| Error::from_reason("invalid graph operation"))?;
     let name = operation

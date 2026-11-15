@@ -2,7 +2,7 @@
 
 ## Estado
 
-Implementação local concluída nesta branch, filha da etapa documental #101; no início não havia adapter de grafos. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core, seleção/capabilities, bindings e testes contra FalkorDB 6.0.3 passaram localmente; TLS e cancelamento remoto permanecem limitações documentadas. Não declarar paridade com SQL/vetores.
+Implementação publicada no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101. Uma auditoria posterior encontrou que os bindings descartavam os timeouts/limites do core; o follow-up [#111](https://github.com/vectora-company/engine/pull/111), filho do #110, expõe esses controles e configura os deadlines de conexão/resposta do client oficial. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core e bindings foram testados contra FalkorDB 6.0.3; TLS e cancelamento remoto seguem limitações documentadas. Não declarar paridade com SQL/vetores.
 
 ## Objetivo e fronteira
 
@@ -57,6 +57,16 @@ implementação deve definir autenticação/TLS, validação do nome do grafo,
 timeout, cancelamento, limite de linhas/bytes, erros, retry (sem retry cego de
 writes), conexão/reconexão, readiness, observabilidade/redaction e suporte nos
 bindings. Parâmetros são dados tipados, nunca interpolados pela Engine.
+
+Bindings aceitam `endpoint`, `graph_name`, `connect_timeout_ms` (10.000 ms),
+`query_timeout_ms` (10.000 ms, limite enviado ao servidor),
+`response_timeout_ms` (30.000 ms, deadline client-side), `max_rows` (1.000) e
+`max_result_bytes` (4 MiB). As opções são validadas no core; campos
+desconhecidos são rejeitados. Descartar/cancelar a future interrompe a espera
+local, mas não garante que FalkorDB interrompa um comando já recebido; o
+timeout de execução do servidor limita esse trabalho quando respeitado pela
+versão/configuração do serviço. O timeout client-side limita espera por
+resposta e não deve ser interpretado como confirmação de rollback de escrita.
 
 ### Dependência e MSRV aprovados
 

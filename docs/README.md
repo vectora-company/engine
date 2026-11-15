@@ -5,7 +5,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 ## Capability ativa
 
-Estado em 15/11/2026: PR [#108](https://github.com/vectora-company/engine/pull/108), filho do [#107](https://github.com/vectora-company/engine/pull/107), está `OPEN`/`MERGEABLE`; adiciona perfil OpenRouter Chat Completions e passou suites/hook. Branch ativa `feat/openai-responses-profile`, filha do #108, implementará Responses como protocolo separado, com histórico portátil, imagem, function tools, eventos SSE semânticos e `store: false` por padrão. A implementação ainda não começou; o contrato foi registrado na spec e plano. Preserve `bindings/typescript/native/index.d.ts` fora do stage e não inclua `bindings/python/uv.lock` não rastreado.
+Estado em 15/11/2026: PR [#110](https://github.com/vectora-company/engine/pull/110), perfil OpenAI Chat Completions, está aberto como filho do #109. O PR [#111](https://github.com/vectora-company/engine/pull/111), filho do #110, publica `feat/falkordb-binding-timeouts`: os bindings encaminham timeouts e limites de resultado; hooks e `scons tests` passaram, incluindo FalkorDB 6.0.3 real. Preserve `bindings/typescript/native/index.d.ts` fora do stage e não inclua `bindings/python/uv.lock` não rastreado.
 
 Histórico das etapas anteriores: Decision Model no [PR #103](https://github.com/vectora-company/engine/pull/103), TTS bufferizado no [#104](https://github.com/vectora-company/engine/pull/104), sessão realtime no [#105](https://github.com/vectora-company/engine/pull/105) e streaming TTS no [#106](https://github.com/vectora-company/engine/pull/106). Consulte [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
 
@@ -56,9 +56,9 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
   itens feitos e pendentes da capability de storage.
 - [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md):
   matriz de capacidade e gates para providers/modalidades.
-- [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md): contrato, estado e aceite da etapa FalkorDB; decisões de API/client/MSRV respondidas.
+- [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md): contrato, estado e aceite de FalkorDB; follow-up de opções de timeout/limites nos bindings no PR #111, filho do #110.
 - [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md): evidências do inventário e leitura da API `llama-server` v1.0.0.
-- [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md): estado local, fatos upstream, implementação, simulação de updates e integração FalkorDB 6.0.3 concluídas localmente; TLS/cancelamento remoto documentados como lacunas.
+- [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md): auditoria de integração FalkorDB 6.0.3 e da paridade das configurações nos bindings; TLS/cancelamento remoto continuam sem comprovação.
 - [`docs/checklists/04-midia-no-chat.md`](checklists/04-midia-no-chat.md): contrato,
   payloads nativos e verificações da etapa de mídia.
 
@@ -70,7 +70,7 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
 - [Storage e ledger](plans/04-plano-storage-ledger.md)
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
 - [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md): plano ativo de providers e modalidades com referência llama.cpp v1.0.0.
-- [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md): etapa de property graph FalkorDB; API de duas camadas, client 0.11.2 e MSRV 1.95 aprovados; conformidade service-real local passou, com limites TLS/cancelamento registrados.
+- [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md): capability graph do PR #102 e follow-up da configuração nos bindings no PR #111, filho do #110; registra conformidade real e limites de TLS/cancelamento.
 
 ## Documentação pública
 
