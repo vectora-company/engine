@@ -188,3 +188,7 @@ ser gravados em estado persistível. `instructions` é ignorado pelo upstream e
 fora desta subetapa; não declarar STT batch, geração de áudio ou modalidade
 real sem teste do modelo. Veja fixtures e estado em
 [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
+
+## Sessão realtime de áudio
+
+`/v1/realtime` é WebSocket e tem contrato de ciclo de vida próprio. O cliente da Engine suporta `intent=transcription` e a sessão default de conversa, PCM16 mono em chunks base64, `input_audio_buffer.commit` final/não final, `session.update` para sample rate entre 8–192 kHz, eventos JSON preservados e fechamento/cancelamento pelo host. Sem override, a taxa é model-native e precisa ser lida de `session.created`; a Engine não presume 24 kHz. O host pode enviar eventos nativos de conversa, como mensagens, `response.create` e `response.cancel`. Eventos desconhecidos, inclusive `error`, preservam campos para o consumidor. Requests de controle são efêmeros; batch STT não é inferido dessa API. A cobertura da etapa filha do PR [#104](https://github.com/vectora-company/engine/pull/104) fica registrada no plano e checklist.

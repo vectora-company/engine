@@ -19,8 +19,8 @@ use vectora_engine::chat::{
     FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
     MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, SpeechRequest, TurnAccumulatorSettings, assemble_turn,
-    prepare_content_with_limits,
+    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest,
+    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -54,6 +54,11 @@ struct StreamState {
 
 static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
 static STREAMS: OnceLock<Mutex<HashMap<String, StreamState>>> = OnceLock::new();
+static REALTIME_SENDERS: OnceLock<Mutex<HashMap<String, mpsc::Sender<String>>>> = OnceLock::new();
+
+fn realtime_senders() -> &'static Mutex<HashMap<String, mpsc::Sender<String>>> {
+    REALTIME_SENDERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 static STORAGE_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 static QUEUE_DELIVERIES: OnceLock<
     Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>>,
@@ -2100,6 +2105,105 @@ fn llama_server_synthesize_native_ephemeral<'py>(
     })
 }
 
+fn register_realtime_session(session: RealtimeSession) -> Result<String, String> {
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (event_tx, event_rx) = mpsc::channel(8);
+    let (command_tx, mut command_rx) = mpsc::channel::<String>(8);
+    let task_id = id.clone();
+    let task = tokio::spawn(async move {
+        let mut session = session;
+        loop {
+            tokio::select! {
+                command = command_rx.recv() => {
+                    let Some(command) = command else { break };
+                    let result = async {
+                        let value: serde_json::Value = serde_json::from_str(&command).map_err(|_| "invalid realtime command".to_owned())?;
+                        match value.get("op").and_then(serde_json::Value::as_str) {
+                            Some("audio") => {
+                                let encoded = value.get("audio_base64").and_then(serde_json::Value::as_str).ok_or_else(|| "missing PCM16 base64".to_owned())?;
+                                let bytes = STANDARD.decode(encoded).map_err(|_| "invalid PCM16 base64".to_owned())?;
+                                session.send_pcm16(&bytes).await.map_err(|e| e.to_string())
+                            }
+                            Some("commit") => session.commit_audio(value.get("final").and_then(serde_json::Value::as_bool).unwrap_or(false)).await.map_err(|e| e.to_string()),
+                            Some("event") => session.send_event(value.get("event").cloned().ok_or_else(|| "missing realtime event".to_owned())?).await.map_err(|e| e.to_string()),
+                            Some("close") => { session.close().await.map_err(|e| e.to_string())?; Ok(()) }
+                            _ => Err("unknown realtime command".to_owned()),
+                        }
+                    }.await;
+                    let close = serde_json::from_str::<serde_json::Value>(&command).ok().and_then(|v| v.get("op").and_then(serde_json::Value::as_str).map(|op| op == "close")).unwrap_or(false);
+                    if let Err(error) = result {
+                        let _ = event_tx.send(Err(error)).await;
+                        break;
+                    }
+                    if close { break; }
+                }
+                event = session.receive() => {
+                    match event {
+                        Ok(Some(event)) => {
+                            let serialized = serde_json::to_string(&event).map_err(|_| "could not encode realtime event".to_owned());
+                            if event_tx.send(serialized).await.is_err() { break; }
+                        }
+                        Ok(None) => break,
+                        Err(error) => { let _ = event_tx.send(Err(error.to_string())).await; break; }
+                    }
+                }
+            }
+        }
+        if let Ok(mut senders) = realtime_senders().lock() {
+            senders.remove(&task_id);
+        }
+    });
+    let state = StreamState {
+        receiver: Arc::new(tokio::sync::Mutex::new(event_rx)),
+        abort: task.abort_handle(),
+    };
+    streams()
+        .lock()
+        .map_err(|_| "stream registry unavailable".to_owned())?
+        .insert(id.clone(), state);
+    realtime_senders()
+        .lock()
+        .map_err(|_| "realtime registry unavailable".to_owned())?
+        .insert(id.clone(), command_tx);
+    Ok(id)
+}
+
+#[pyfunction]
+fn llama_server_realtime_start<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: RealtimeSessionRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid realtime session request"))?;
+        let session = client.connect_realtime(request).await.map_err(py_error)?;
+        register_realtime_session(session).map_err(py_error)
+    })
+}
+
+#[pyfunction]
+fn llama_server_realtime_send<'py>(
+    py: Python<'py>,
+    session_id: String,
+    command_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let sender = realtime_senders()
+            .lock()
+            .map_err(|_| py_error("realtime registry unavailable"))?
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| py_error("realtime session is closed"))?;
+        sender
+            .send(command_json)
+            .await
+            .map_err(|_| py_error("realtime session is closed"))
+    })
+}
+
 #[pyfunction]
 fn llama_server_chat_complete<'py>(
     py: Python<'py>,
@@ -2685,6 +2789,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         llama_server_synthesize_native_ephemeral,
         module
     )?)?;
+    module.add_function(wrap_pyfunction!(llama_server_realtime_start, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_realtime_send, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_chat_complete, module)?)?;
     module.add_function(wrap_pyfunction!(
         llama_server_chat_complete_ephemeral,

@@ -73,3 +73,18 @@
 - [x] Build maturin e fixture pytest focado passaram; pytest do binding Python: 55 passaram, 1 skipped.
 - [ ] Integração opt-in contra llama-server v1.0.0/modelo TTS real.
 - [ ] Implementar stream TTS/realtime ASR, desconexão e cancelamento na etapa filha do [PR #104](https://github.com/vectora-company/engine/pull/104).
+
+## Sessão realtime/ASR — filha do PR #104
+
+- [x] Usar `tokio-websockets` 0.13.3, a versão estável já presente no lockfile, para `ws`/`wss` com autenticação e headers do profile.
+- [x] Validar model ID/capability de entrada audio; intents transcription/conversation.
+- [x] Adicionar send PCM16 mono (chunks), commit final/não final, sample-rate update validado e evento raw forward-compatible.
+- [x] Implementar timeout, payload máximo, backpressure e fechamento da sessão.
+- [x] Fixture Rust local exercita handshake autenticado, rate update, áudio base64, commit e eventos delta/completed.
+- [x] Expor start/send/event/receive/close em Python e TypeScript pelo core Rust.
+- [x] Build NAPI release, typecheck e Node tests: 41 passaram, 11 foram pulados por falta dos serviços externos opcionais.
+- [x] `maturin develop` e pytest: 55 passaram, 1 foi pulado.
+- [x] Workspace Rust: 205 testes da lib, 3 fixtures e teste nativo Python passaram; Clippy `-D warnings` passou após corrigir `manual_is_multiple_of`.
+- [x] Hooks completos executados; todos passaram exceto Clippy na primeira rodada, corrigido e revalidado. Prettier/SVGO tocaram arquivos preexistentes fora do escopo; esses arquivos foram restaurados.
+- [ ] Integração opt-in com llama-server v1.0.0 e modelo realtime compatível.
+- [ ] Publicar PR #105 como filho do PR [#104](https://github.com/vectora-company/engine/pull/104); continuar etapas seguintes sem aguardar CI.

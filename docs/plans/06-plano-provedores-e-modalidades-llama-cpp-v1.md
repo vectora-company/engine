@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo; PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) são a stack base. FalkorDB graph foi empilhado nos PRs [#101](https://github.com/vectora-company/engine/pull/101) e [#102](https://github.com/vectora-company/engine/pull/102). A etapa Decision Model `/v1/systemone` foi publicada no PR [#103](https://github.com/vectora-company/engine/pull/103), filha do #102. A subetapa TTS bufferizada está sendo implementada na branch filha `feat/llama-server-tts`, para publicação como PR #104; stream de áudio e realtime ASR permanecem pendentes.
+**Estado:** ativo. PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) formam a base da stack; FalkorDB está em [#101](https://github.com/vectora-company/engine/pull/101) → [#102](https://github.com/vectora-company/engine/pull/102), seguido pelo Decision Model [#103](https://github.com/vectora-company/engine/pull/103) e TTS [#104](https://github.com/vectora-company/engine/pull/104). A sessão realtime está implementada e verificada localmente na branch `feat/llama-server-realtime-audio`; o PR #105 será publicado sobre a branch de #104.
 **Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -90,10 +90,16 @@ bytes binários, `Content-Type`/sample rate e vozes anunciadas por `/props`.
 `speaker_ref_b64` passa apenas pelo envelope efêmero. Rust e bindings
 Python/TypeScript têm fixtures. Streaming de áudio continua pendente.
 
-**Subetapa 4b — áudio ao vivo e transcrição:** implementar `/v1/realtime` com
-WebSocket, fluxo de entrada/saída de áudio, eventos tipados, backpressure e
-cancelamento; modelar batch transcription separadamente, apenas se houver rota
-upstream ou provider cuja API esteja confirmada. Começa na branch filha do #104, sem aguardar CI remoto.
+**Subetapa 4b — áudio ao vivo e transcrição (PR #105, filha do #104):** a branch
+`feat/llama-server-realtime-audio` implementa conexão `/v1/realtime`, intents
+transcription/conversation, PCM16 mono com rate model-native ou override,
+eventos JSON forward-compatible, filas com backpressure e fechamento que cancela
+a sessão. Core Rust e wrappers Python/TypeScript expõem o mesmo fluxo de send,
+receive e commit. Testes do core e bindings passaram localmente; a verificação
+com servidor/modelo real continua pendente. O PR #105 será aberto como filho do
+[#104](https://github.com/vectora-company/engine/pull/104) sem aguardar CI. Batch
+transcription segue separado: só implementar quando uma API específica for
+confirmada.
 
 **Saída da etapa:** streaming/backpressure/cancelamento, formatos PCM/WAV e
 metadados, limites e testes de desconexão para cada operação implementada.

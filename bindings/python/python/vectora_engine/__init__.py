@@ -969,6 +969,61 @@ async def llama_server_synthesize_native_ephemeral(
     )
 
 
+class LlamaServerRealtimeSession:
+    """Live llama-server audio session; send mono PCM16 and consume JSON events."""
+
+    def __init__(self, session_id: str) -> None:
+        self._id = session_id
+        self._closed = False
+
+    async def send_audio(self, pcm16_mono: bytes) -> None:
+        await _native.llama_server_realtime_send(
+            self._id,
+            json.dumps(
+                {
+                    "op": "audio",
+                    "audio_base64": base64.b64encode(pcm16_mono).decode("ascii"),
+                }
+            ),
+        )
+
+    async def commit_audio(self, *, final: bool = False) -> None:
+        await _native.llama_server_realtime_send(
+            self._id, json.dumps({"op": "commit", "final": final})
+        )
+
+    async def send_event(self, event: JsonObject) -> None:
+        await _native.llama_server_realtime_send(
+            self._id, json.dumps({"op": "event", "event": event}, separators=(",", ":"))
+        )
+
+    async def receive(self) -> dict[str, Any] | None:
+        event = await _native.chat_stream_next(self._id)
+        return None if event is None else json.loads(event)
+
+    async def events(self) -> AsyncIterator[dict[str, Any]]:
+        while (event := await self.receive()) is not None:
+            yield event
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        await _native.llama_server_realtime_send(self._id, '{"op":"close"}')
+        while await _native.chat_stream_next(self._id) is not None:
+            pass
+        self._closed = True
+
+
+async def llama_server_realtime_start(
+    settings: JsonObject, request: JsonObject
+) -> LlamaServerRealtimeSession:
+    """Connect a persistent `/v1/realtime` session over a PCM16 mono stream."""
+    session_id = await _native.llama_server_realtime_start(
+        _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+    )
+    return LlamaServerRealtimeSession(session_id)
+
+
 async def llama_server_chat_complete(
     settings: JsonObject,
     request: JsonObject,
@@ -1213,6 +1268,7 @@ async def fallback_chat_stream_ephemeral(
 
 __all__ = [
     "EphemeralChatRequest",
+    "LlamaServerRealtimeSession",
     "MediaExecutionContext",
     "accept_model_turn",
     "assemble_turn",
@@ -1252,6 +1308,7 @@ __all__ = [
     "llama_server_decide_ephemeral",
     "llama_server_health",
     "llama_server_models",
+    "llama_server_realtime_start",
     "llama_server_synthesize",
     "llama_server_synthesize_native",
     "llama_server_synthesize_native_ephemeral",

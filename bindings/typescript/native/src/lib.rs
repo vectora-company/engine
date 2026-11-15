@@ -19,8 +19,8 @@ use vectora_engine::chat::{
     FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
     MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, SpeechRequest, TurnAccumulatorSettings, assemble_turn,
-    prepare_content_with_limits,
+    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest,
+    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -55,6 +55,11 @@ struct StreamState {
 
 static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
 static STREAMS: OnceLock<Mutex<HashMap<String, StreamState>>> = OnceLock::new();
+static REALTIME_SENDERS: OnceLock<Mutex<HashMap<String, mpsc::Sender<String>>>> = OnceLock::new();
+
+fn realtime_senders() -> &'static Mutex<HashMap<String, mpsc::Sender<String>>> {
+    REALTIME_SENDERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 static STORAGE_HANDLE_ID: AtomicU64 = AtomicU64::new(1);
 static QUEUE_DELIVERIES: OnceLock<
     Mutex<HashMap<String, vectora_engine::storage::messaging::QueueDelivery>>,
@@ -1974,6 +1979,99 @@ pub async fn llama_server_synthesize_native_ephemeral(
             .await
             .map_err(|error| Error::from_reason(error.to_string()))?,
     )
+}
+
+fn register_realtime_session(session: RealtimeSession) -> Result<String> {
+    let id = NEXT_STREAM_ID.fetch_add(1, Ordering::Relaxed).to_string();
+    let (event_tx, event_rx) = mpsc::channel(8);
+    let (command_tx, mut command_rx) = mpsc::channel::<String>(8);
+    let task_id = id.clone();
+    let task = tokio::spawn(async move {
+        let mut session = session;
+        loop {
+            tokio::select! {
+                command = command_rx.recv() => {
+                    let Some(command) = command else { break };
+                    let value: Result<serde_json::Value> = serde_json::from_str(&command).map_err(|_| Error::from_reason("invalid realtime command"));
+                    let value = match value { Ok(value) => value, Err(error) => { let _ = event_tx.send(Err(error)).await; break; } };
+                    let close = value.get("op").and_then(serde_json::Value::as_str) == Some("close");
+                    let result = match value.get("op").and_then(serde_json::Value::as_str) {
+                        Some("audio") => {
+                            let encoded = value.get("audio_base64").and_then(serde_json::Value::as_str);
+                            match encoded.and_then(|encoded| STANDARD.decode(encoded).ok()) {
+                                Some(bytes) => session.send_pcm16(&bytes).await.map_err(|e| Error::from_reason(e.to_string())),
+                                None => Err(Error::from_reason("invalid PCM16 base64")),
+                            }
+                        }
+                        Some("commit") => session.commit_audio(value.get("final").and_then(serde_json::Value::as_bool).unwrap_or(false)).await.map_err(|e| Error::from_reason(e.to_string())),
+                        Some("event") => match value.get("event") {
+                            Some(event) => session.send_event(event.clone()).await.map_err(|e| Error::from_reason(e.to_string())),
+                            None => Err(Error::from_reason("missing realtime event")),
+                        },
+                        Some("close") => session.close().await.map_err(|e| Error::from_reason(e.to_string())),
+                        _ => Err(Error::from_reason("unknown realtime command")),
+                    };
+                    if let Err(error) = result { let _ = event_tx.send(Err(error)).await; break; }
+                    if close { break; }
+                }
+                event = session.receive() => match event {
+                    Ok(Some(event)) => {
+                        let serialized = serde_json::to_string(&event).map_err(|_| Error::from_reason("could not encode realtime event"));
+                        if event_tx.send(serialized).await.is_err() { break; }
+                    }
+                    Ok(None) => break,
+                    Err(error) => { let _ = event_tx.send(Err(Error::from_reason(error.to_string()))).await; break; }
+                }
+            }
+        }
+        if let Ok(mut senders) = realtime_senders().lock() {
+            senders.remove(&task_id);
+        }
+    });
+    streams()
+        .lock()
+        .map_err(|_| Error::from_reason("stream registry unavailable"))?
+        .insert(
+            id.clone(),
+            StreamState {
+                receiver: Arc::new(tokio::sync::Mutex::new(event_rx)),
+                abort: task.abort_handle(),
+            },
+        );
+    realtime_senders()
+        .lock()
+        .map_err(|_| Error::from_reason("realtime registry unavailable"))?
+        .insert(id.clone(), command_tx);
+    Ok(id)
+}
+
+#[napi]
+pub async fn llama_server_realtime_start(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: RealtimeSessionRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid realtime session request"))?;
+    let session = client
+        .connect_realtime(request)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    register_realtime_session(session)
+}
+
+#[napi]
+pub async fn llama_server_realtime_send(session_id: String, command_json: String) -> Result<()> {
+    let sender = realtime_senders()
+        .lock()
+        .map_err(|_| Error::from_reason("realtime registry unavailable"))?
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| Error::from_reason("realtime session is closed"))?;
+    sender
+        .send(command_json)
+        .await
+        .map_err(|_| Error::from_reason("realtime session is closed"))
 }
 
 #[napi]

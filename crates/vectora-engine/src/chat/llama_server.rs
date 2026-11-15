@@ -7,14 +7,15 @@ use futures_util::StreamExt;
 use reqwest::{Client, Response, header};
 use serde::{Deserialize, Serialize};
 use tokio::time::{Instant, timeout_at};
+use tokio_websockets::{ClientBuilder, Limits};
 use url::Url;
 
 use super::decision_model::answer_matches;
 use super::{
     ChatCompletion, ChatError, ChatRequest, ChatStream, DecisionRequest, DecisionResponse,
     EphemeralDecisionRequest, EphemeralNativeSpeechRequest, MediaExecutionContext,
-    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleConfig, SpeechFormat,
-    SpeechRequest, SpeechResponse,
+    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleConfig, RealtimeIntent,
+    RealtimeSession, RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse,
 };
 
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 10_000;
@@ -152,6 +153,7 @@ pub struct LlamaServerClient {
     read_timeout: Duration,
     max_response_bytes: usize,
     max_media_bytes: u64,
+    max_event_bytes: usize,
     chat: OpenAiCompatibleClient,
 }
 
@@ -262,6 +264,7 @@ impl LlamaServerClient {
             read_timeout: Duration::from_millis(settings.read_timeout_ms),
             max_response_bytes: settings.max_response_bytes,
             max_media_bytes: settings.max_media_bytes,
+            max_event_bytes: settings.max_event_bytes,
             chat,
         })
     }
@@ -415,6 +418,80 @@ impl LlamaServerClient {
         endpoint.set_path(&format!("{}/props", endpoint.path().trim_end_matches('/')));
         let response = self.get(endpoint).await?;
         serde_json::from_slice(&response).map_err(|_| ChatError::InvalidResponse)
+    }
+
+    /// Opens the `/v1/realtime` WebSocket for transcription or conversation.
+    pub async fn connect_realtime(
+        &self,
+        request: RealtimeSessionRequest,
+    ) -> Result<RealtimeSession, ChatError> {
+        request.validate().map_err(ChatError::InvalidRequest)?;
+        let models = self.models().await?;
+        let selected = models
+            .data
+            .iter()
+            .find(|model| model.id == request.model)
+            .ok_or(ChatError::ModelCapabilityUnsupported)?;
+        if !selected
+            .architecture
+            .as_ref()
+            .and_then(|architecture| architecture.input_modalities.as_ref())
+            .is_some_and(|modalities| modalities.iter().any(|value| value == "audio"))
+        {
+            return Err(ChatError::ModelCapabilityUnsupported);
+        }
+
+        let mut endpoint = self.v1_url.clone();
+        let scheme = match endpoint.scheme() {
+            "http" => "ws",
+            "https" => "wss",
+            _ => {
+                return Err(ChatError::InvalidConfiguration(
+                    "unsupported realtime URL scheme",
+                ));
+            }
+        };
+        endpoint
+            .set_scheme(scheme)
+            .map_err(|_| ChatError::InvalidConfiguration("invalid realtime URL scheme"))?;
+        endpoint.set_path("/v1/realtime");
+        {
+            let mut query = endpoint.query_pairs_mut();
+            query.append_pair("model", &request.model);
+            if request.intent == RealtimeIntent::Transcription {
+                query.append_pair("intent", "transcription");
+            }
+        }
+        let mut builder = ClientBuilder::new()
+            .uri(endpoint.as_str())
+            .map_err(|_| ChatError::InvalidConfiguration("invalid realtime WebSocket URI"))?
+            .limits(Limits::default().max_payload_len(Some(self.max_event_bytes)));
+        if let Some(key) = &self.api_key {
+            builder = builder
+                .add_header(header::AUTHORIZATION, key.clone())
+                .map_err(|_| {
+                    ChatError::InvalidConfiguration("invalid realtime authorization header")
+                })?;
+        }
+        for (name, value) in &self.headers {
+            builder = builder
+                .add_header(name.clone(), value.clone())
+                .map_err(|_| ChatError::InvalidConfiguration("invalid realtime request header"))?;
+        }
+        let (socket, _handshake) = tokio::time::timeout(self.total_timeout, builder.connect())
+            .await
+            .map_err(|_| ChatError::Timeout)?
+            .map_err(|_| ChatError::Connection)?;
+        let mut session = RealtimeSession::new(
+            socket,
+            self.read_timeout,
+            self.max_event_bytes,
+            usize::try_from(self.max_media_bytes).unwrap_or(usize::MAX),
+        );
+        if let Some(rate) = request.input_sample_rate_hz {
+            session.set_input_sample_rate(rate).await?;
+        }
+        Ok(session)
     }
 
     /// OpenAI-compatible, buffered speech synthesis at `/v1/audio/speech`.
@@ -1001,6 +1078,87 @@ mod tests {
         assert_eq!(native.format, SpeechFormat::PcmF32);
         assert_eq!(native.sample_rate_hz, Some(24_000));
         assert_eq!(native.audio, [1, 2, 3, 4]);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn realtime_transcription_streams_pcm16_and_server_events() {
+        use super::super::{RealtimeIntent, RealtimeSessionRequest};
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_websockets::{Message, ServerBuilder};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut http, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 2048];
+            let n = http.read(&mut request).await.unwrap();
+            assert!(String::from_utf8_lossy(&request[..n]).starts_with("GET /v1/models "));
+            let models = r#"{"data":[{"id":"audio-model","architecture":{"input_modalities":["audio"],"output_modalities":["text"]}}]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{models}",
+                models.len()
+            );
+            http.write_all(response.as_bytes()).await.unwrap();
+
+            let (tcp, _) = listener.accept().await.unwrap();
+            let (request, mut socket) = ServerBuilder::new().accept(tcp).await.unwrap();
+            assert_eq!(request.uri().path(), "/v1/realtime");
+            assert!(request.uri().query().unwrap().contains("model=audio-model"));
+            assert!(
+                request
+                    .uri()
+                    .query()
+                    .unwrap()
+                    .contains("intent=transcription")
+            );
+            assert_eq!(request.headers()["authorization"], "Bearer test-key");
+            let rate = socket.next().await.unwrap().unwrap();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(rate.as_text().unwrap()).unwrap()["type"],
+                "session.update"
+            );
+            socket
+                .send(Message::text(r#"{"type":"session.updated"}"#))
+                .await
+                .unwrap();
+            let audio = socket.next().await.unwrap().unwrap();
+            let audio: serde_json::Value = serde_json::from_str(audio.as_text().unwrap()).unwrap();
+            assert_eq!(audio["type"], "input_audio_buffer.append");
+            assert_eq!(
+                base64::engine::general_purpose::STANDARD
+                    .decode(audio["audio"].as_str().unwrap())
+                    .unwrap(),
+                [1, 2, 3, 4]
+            );
+            let commit = socket.next().await.unwrap().unwrap();
+            let commit: serde_json::Value =
+                serde_json::from_str(commit.as_text().unwrap()).unwrap();
+            assert_eq!(commit["type"], "input_audio_buffer.commit");
+            assert_eq!(commit["final"], true);
+            socket.send(Message::text(r#"{"type":"conversation.item.input_audio_transcription.delta","item_id":"item-1","delta":"hello"}"#)).await.unwrap();
+            socket.send(Message::text(r#"{"type":"conversation.item.input_audio_transcription.completed","item_id":"item-1","transcript":"hello"}"#)).await.unwrap();
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let mut session = client
+            .connect_realtime(RealtimeSessionRequest {
+                model: "audio-model".into(),
+                intent: RealtimeIntent::Transcription,
+                input_sample_rate_hz: Some(16_000),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            session.receive().await.unwrap().unwrap().event_type,
+            "session.updated"
+        );
+        session.send_pcm16(&[1, 2, 3, 4]).await.unwrap();
+        session.commit_audio(true).await.unwrap();
+        let delta = session.receive().await.unwrap().unwrap();
+        assert_eq!(delta.fields["delta"], "hello");
+        let completed = session.receive().await.unwrap().unwrap();
+        assert_eq!(completed.fields["transcript"], "hello");
+        session.close().await.unwrap();
         server.await.unwrap();
     }
 

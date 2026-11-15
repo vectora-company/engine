@@ -6896,6 +6896,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-util",
+ "webpki-roots 1.0.12",
 ]
 
 [[package]]
@@ -7199,6 +7200,7 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "tokio-websockets",
  "url",
 ]
 
