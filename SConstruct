@@ -2,7 +2,6 @@
 
 import glob
 import io
-import json
 import os
 import platform
 import shutil
@@ -76,23 +75,6 @@ def _run(*command: str, cwd: str = ROOT) -> None:
 
 def _pnpm(*arguments: str, cwd: str = ROOT) -> None:
     """Run pnpm through the portable shim used by pre-commit."""
-    metadata = os.path.join(cwd, "node_modules", ".modules.yaml")
-    if (
-        arguments
-        and arguments[0] in {"add", "install", "remove", "update"}
-        and os.path.isfile(metadata)
-        and not any(
-        argument == "--store-dir" or argument.startswith("--store-dir=")
-        for argument in arguments
-        )
-    ):
-        with open(metadata, encoding="utf-8") as modules_file:
-            for line in modules_file:
-                key, separator, value = line.strip().partition(": ")
-                if key.strip('"') == "storeDir" and separator:
-                    store_dir = json.loads(value.rstrip(","))
-                    arguments = (*arguments, "--store-dir", store_dir)
-                    break
     _run(
         sys.executable,
         os.path.join(ROOT, "utils", "run_pnpm.py"),

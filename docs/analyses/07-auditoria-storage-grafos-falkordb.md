@@ -41,6 +41,7 @@ oficial stable `falkordb` 0.11.2 e elevar o MSRV da Engine para Rust 1.95. O
 ambiente local usa Rust 1.99.1. A implementação ativa está no PR
 [#102](https://github.com/vectora-company/engine/pull/102), filho do #101; usa
 Tokio, Serde e TLS Rustls sem habilitar embedded/SSPL.
+
 ## Riscos e controles propostos
 
 - Queries arbitrárias podem ser caras: exigir timeout e limite de resposta;
@@ -146,6 +147,7 @@ parametrizada e bindings Python/TypeScript. Não se declara paridade com os
 adapters SQL, vector, KV, queue ou pubsub, nem suporte GraphRAG completo. O
 FalkorDB vector index continua fora desse contrato devido às diferenças de
 dimensão e ordenação de score descritas acima.
+
 ## Estado
 
 O PR de implementação [#102](https://github.com/vectora-company/engine/pull/102)
@@ -160,11 +162,11 @@ update, `scons tests` passou com 196 testes Rust + 3 fixtures, 87 testes Python
 
 Em 2026-11-15, `scons update` atualizou 51 pacotes Cargo compatíveis com Rust
 1.95 e atualizou Ruff 0.17.4→0.17.5 e ty 0.0.101→0.0.104; pnpm v11.5.0 já
-estava atualizado. A simulação pós-update não encontrou atualizações aplicáveis;
+estava atualizado. O `node_modules` foi reinstalado usando o store padrão local
+`/home/brunosrz/.local/share/pnpm/store/v11`; SCons não consulta `.modules.yaml`
+nem força o store externo. Após rebase no head atual do #101, `scons update`
+também atualizou `xxhash-rust` 0.8.19→0.8.20. A simulação pós-update não encontrou atualizações aplicáveis;
 15 versões mais novas permanecem fora da seleção compatível com o MSRV 1.95.
-A instalação local de `bindings/typescript/node_modules` foi recriada para usar
-o store interno `/home/brunosrz/.local/share/pnpm/store/v11`; o caminho do store
-externo não é mais referenciado pelo checkout ou pelo SCons.
 
 TLS e cancelamento da query no servidor continuam sem teste. A mudança
 preexistente do usuário em `bindings/typescript/native/index.d.ts` foi mantida
