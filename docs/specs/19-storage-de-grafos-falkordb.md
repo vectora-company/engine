@@ -2,9 +2,11 @@
 
 ## Estado
 
-Proposta em análise; nenhum adapter de grafos existe na Engine. A escolha da
-superfície pública está aguardando decisão de `brunosrz` no chat. Esta spec não
-declara suporte implementado nem paridade com SQL/vetores.
+Proposta aprovada para implementação; nenhum adapter de grafos existe na Engine.
+`brunosrz` escolheu as duas camadas: contrato portátil mais extensão Cypher
+específica de FalkorDB. Esta spec ainda não declara suporte implementado nem
+paridade com SQL/vetores. A escolha do client/MSRV ainda depende de decisão no
+chat.
 
 ## Objetivo e fronteira
 
@@ -40,9 +42,10 @@ do serviço são responsabilidade operacional do consumer.
   FalkorDB sozinho não prova que snapshots/AOF estão habilitados.
   [Guia oficial de persistência](https://falkordb.github.io/docs-staging/operations/persistence/).
 
-## Contrato a decidir
+## Contrato aprovado
 
-A API ainda não está aprovada. Alternativas:
+`brunosrz` escolheu as duas camadas: contrato portátil de property graph mais
+extensão Cypher específica de FalkorDB. Alternativas consideradas:
 
 1. **API Cypher específica de FalkorDB:** cliente envia query OpenCypher
    parametrizada, nome de grafo, timeout e limites de resposta; máxima
@@ -54,11 +57,23 @@ A API ainda não está aprovada. Alternativas:
 3. **Duas camadas:** contrato portátil mínimo mais extensão explícita de query
    FalkorDB; mais flexível, com superfície e conformidade maiores.
 
-Decisão bloqueante para a API pública: qual alternativa adotar? A implementação
-deve também definir autenticação/TLS, validação do nome do grafo, timeout,
-cancelamento, limite de linhas/bytes, erros, retry (sem retry cego de writes),
-conexão/reconexão, readiness, observabilidade/redaction e suporte nos bindings.
-Parâmetros de query devem ser dados tipados, nunca interpolados pela Engine.
+O contrato portátil expõe operações tipadas de nós, relações e traversal; a
+extensão FalkorDB expõe queries Cypher parametrizadas e delimitadas. A
+implementação deve definir autenticação/TLS, validação do nome do grafo,
+timeout, cancelamento, limite de linhas/bytes, erros, retry (sem retry cego de
+writes), conexão/reconexão, readiness, observabilidade/redaction e suporte nos
+bindings. Parâmetros são dados tipados, nunca interpolados pela Engine.
+
+### Escolha de dependência/MSRV pendente
+
+A Engine declara Rust 1.89. O crate oficial `falkordb` 0.11.2 declara MSRV 1.95;
+0.10.4 não declara MSRV e também depende de `redis` 1.2.2. O toolchain instalado
+é Rust 1.99.1; não há toolchain 1.89 verificado. Alternativas: elevar o MSRV da
+Engine para 1.95 e usar o client oficial atual; preservar 1.89 e usar o client
+0.10.4 somente após CI/compilação reproduzível com 1.89; ou preservar 1.89 com
+o `redis` já usado pela Engine e implementar o protocolo graph diretamente,
+contra a recomendação de usar clients oficiais da documentação FalkorDB. É uma
+decisão de compatibilidade/dependência a responder no chat.
 
 ## Equivalência e especialização
 

@@ -74,7 +74,7 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 
 ## Storage de grafos FalkorDB — proposta após o PR #100
 
-A documentação e a decisão pendente estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md). Estado inicial: não implementado; #100 é o topo da stack. Decisão vital pedida no chat: escolher API Cypher específica, property graph portátil ou as duas. Nenhum código de implementação foi iniciado antes da decisão.
+A spec, o plano, a análise e o checklist estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md). `brunosrz` escolheu contrato portátil mais extensão Cypher. Estado inicial de código: não implementado; PR documental #101 é a base da etapa. A decisão vital restante é o client/MSRV (1.95, validar 0.10.4 em 1.89 ou usar protocolo direto). Nenhum código de adapter foi iniciado.
 
 ## Preparação e escopo
 
