@@ -219,4 +219,6 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 
 - [x] Abrir a etapa Decision Model em branch filha do PR #102 e validar o core Rust `/v1/systemone` com fixture local.
 - [x] Fixtures Rust/Python/TypeScript e verificação local do Decision Model concluídas.
-- [ ] Publicar o PR filho e atualizar [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
+- [x] Publicar o PR filho [#103](https://github.com/vectora-company/engine/pull/103), filha do #102, e atualizar [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
+
+- [ ] Iniciar TTS `/v1/audio/speech` como PR filho do [#103](https://github.com/vectora-company/engine/pull/103), mantendo áudio binário, codec/sample rate/voz reais e contrato não confundido com STT/realtime.
