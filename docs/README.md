@@ -29,6 +29,7 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
 - [Checklist de implementação](checklists/00-checklist-de-implementacao.md):
   checklist completo para preparar, implementar, verificar e entregar cada
   etapa de um plano.
+- [`docs/checklists/07-checklist-completo-da-engine.md`](checklists/07-checklist-completo-da-engine.md): inventário do estado das capabilities, gaps, issues abertas e documentos da Engine, conferido contra `main` em 15/11/2026.
 - [Checklist da auditoria OpenAI-compatible](checklists/01-review-pr3-openai-compatible.md):
   classificação dos findings antigos e verificação das correções desta etapa.
 - [Análise e referências de desenvolvimento](analyses/00-analise-e-referencias-de-desenvolvimento.md):

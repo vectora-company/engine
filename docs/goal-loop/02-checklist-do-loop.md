@@ -7,6 +7,7 @@ Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Todo
 item bloqueado ou não aplicável precisa de uma justificativa curta.
 
 Etapa concluída na stack local em 15/11/2026: PR [#112](https://github.com/vectora-company/engine/pull/112), filho do #111; TLS real passou e o cancelamento remoto foi documentado como não exposto pelo client oficial. Consulte [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
+Para o panorama de todas as capabilities e issues, consulte o [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md); o estado corrente deve ser revalidado contra o checkout e o GitHub.
 
 ## Preparação
 

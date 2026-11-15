@@ -31,6 +31,7 @@ dedicados; mantenha credenciais e repositórios de produção isolados.
   próxima etapa e atualização dos artefatos.
 - [Checklist do loop](02-checklist-do-loop.md): verificações completas por
   etapa, da preparação à entrega.
+- [Checklist completo do estado da Engine](../checklists/07-checklist-completo-da-engine.md): inventário transversal de implementação, parcialidades, revisões pendentes, gaps e issues.
 - [Fontes, referências e evidências](03-fontes-e-evidencias.md): precedência
   documental, análise de código e registro de fatos e decisões.
 - [Regras de encerramento](04-criterios-de-encerramento.md): condições exatas

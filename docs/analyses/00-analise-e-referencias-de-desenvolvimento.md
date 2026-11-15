@@ -1,5 +1,11 @@
 # Análise e referências para desenvolvimento
 
+O inventário transversal atual está em
+[`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md).
+Sua fotografia foi conferida contra o `main` em 15/11/2026; os registros
+datados abaixo continuam sendo histórico e precisam ser revalidados antes de
+servirem como estado corrente.
+
 Este documento define como investigar uma capability da Engine antes de
 implementar ou alterar seus contratos. Ele complementa `AGENTS.md`; não substitui
 as regras específicas de uma spec ou de um plano.
