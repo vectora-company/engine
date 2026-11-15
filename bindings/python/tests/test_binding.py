@@ -2186,6 +2186,40 @@ def test_openrouter_chat_profile_sets_endpoint_attribution_and_routing() -> None
     assert result["content"] == "routed"
 
 
+def test_openai_chat_profile_uses_chat_completions_with_custom_endpoint() -> None:
+    body = json.dumps(
+        {
+            "choices": [
+                {"message": {"content": "OpenAI chat"}, "finish_reason": "stop"}
+            ],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {
+        "profile": "openai",
+        "base_url": endpoint(server),
+        "api_key": "openai-fixture-token",
+        "app_url": "https://example.test",
+        "app_title": "Should not be sent to OpenAI",
+        "headers": {"X-Client-Route": "engine-test"},
+    }
+    try:
+        result = asyncio.run(chat_complete(settings, REQUEST))
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    assert captured["path"] == "/engines/v1/chat/completions"
+    assert captured["headers"]["authorization"] == "Bearer openai-fixture-token"
+    assert captured["headers"]["x-client-route"] == "engine-test"
+    assert "http-referer" not in captured["headers"]
+    assert "x-openrouter-title" not in captured["headers"]
+    assert result["content"] == "OpenAI chat"
+    assert result["usage"]["total_tokens"] == 5
+
+
 def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
     pdf = b"%PDF-1.4\n"
     media_ref = {

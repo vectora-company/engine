@@ -52,7 +52,16 @@ Fonte oficial conferida em 15/11/2026: [API Chat Completions e headers de
 atribuição](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion),
 [campos de roteamento](https://openrouter.ai/docs/guides/routing/provider-selection).
 
-### OpenAI Responses API (subetapa planejada 5c)
+### Perfil OpenAI Chat Completions (subetapa 5d)
+
+O perfil nomeado `openai` usa `/v1/chat/completions` no endpoint oficial
+`https://api.openai.com/v1`, requer API key e aceita `base_url` para proxy ou
+endpoint de teste, além de headers extras não reservados. Ele conserva o
+contrato Chat Completions e permanece selecionável separadamente do perfil
+`native` com `provider: openai_responses`. O cliente OpenAI-compatible genérico
+e o perfil OpenRouter continuam disponíveis.
+
+### OpenAI Responses API (subetapa 5c, PR #109)
 
 O protocolo Responses é distinto de Chat Completions: requests usam `input`,
 function tools são itens `function_call`/`function_call_output`, e SSE carrega

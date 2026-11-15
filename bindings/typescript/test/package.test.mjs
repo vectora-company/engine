@@ -1458,6 +1458,33 @@ test("OpenAI Responses profile maps a non-stream response and semantic SSE event
   assert.equal(events[1].usage.total_tokens, 3);
 });
 
+test("OpenAI Chat Completions profile uses official auth and supports an endpoint override", async () => {
+  const completion = await withFixtureServer(JSON.stringify({
+    choices: [{ message: { content: "OpenAI chat" }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
+  }), "application/json", async (baseUrl, captured) => {
+    const result = await chatComplete(
+      {
+        profile: "openai",
+        base_url: baseUrl,
+        api_key: "openai-fixture-token",
+        app_url: "https://example.test",
+        app_title: "Should not be sent to OpenAI",
+        headers: { "X-Client-Route": "engine-test" },
+      },
+      request,
+    );
+    assert.equal(captured.path, "/engines/v1/chat/completions");
+    assert.equal(captured.headers.authorization, "Bearer openai-fixture-token");
+    assert.equal(captured.headers["x-client-route"], "engine-test");
+    assert.equal(captured.headers["http-referer"], undefined);
+    assert.equal(captured.headers["x-openrouter-title"], undefined);
+    return result;
+  });
+  assert.equal(completion.content, "OpenAI chat");
+  assert.equal(completion.usage.total_tokens, 5);
+});
+
 test("fallback follows explicit order through Rust and identifies the selected model", async () => {
   const first = await startFixtureServer(
     JSON.stringify({ error: { message: "rate limited" } }), "application/json", 429,

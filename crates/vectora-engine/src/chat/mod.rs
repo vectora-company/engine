@@ -34,7 +34,8 @@ pub use media::{
 };
 pub use native_providers::{NativeChatClient, NativeChatSettings, NativeProvider};
 pub use openai_compatible::{
-    ChatStream, OpenAiCompatibleClient, OpenAiCompatibleConfig, OpenAiCompatibleSettings,
+    ChatStream, OpenAiCompatibleClient, OpenAiCompatibleConfig, OpenAiCompatibleProfile,
+    OpenAiCompatibleSettings,
 };
 pub use realtime::{RealtimeEvent, RealtimeIntent, RealtimeSession, RealtimeSessionRequest};
 pub use speech::{
