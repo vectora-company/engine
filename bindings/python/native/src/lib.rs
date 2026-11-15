@@ -941,6 +941,113 @@ fn sqlite_ledger_restore<'py>(
 }
 
 #[pyfunction]
+fn graph_store_operation<'py>(
+    py: Python<'py>,
+    config_json: String,
+    operation_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config: serde_json::Value = serde_json::from_str(&config_json)
+            .map_err(|_| py_error("invalid graph-store config"))?;
+        let endpoint = config
+            .get("endpoint")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| py_error("invalid graph-store config"))?;
+        let graph_name = config
+            .get("graph_name")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| py_error("invalid graph-store config"))?;
+        let store = vectora_engine::storage::graph::FalkorDbStore::connect(
+            vectora_engine::storage::graph::GraphStoreConfig::new(endpoint, graph_name),
+        )
+        .await
+        .map_err(py_error)?;
+        let mut operation: serde_json::Value = serde_json::from_str(&operation_json)
+            .map_err(|_| py_error("invalid graph operation"))?;
+        let name = operation
+            .get("operation")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| py_error("invalid graph operation"))?;
+        use vectora_engine::storage::graph::{FalkorCypher, GraphDirection, GraphStore};
+        let result = match name {
+            "upsert_node" => {
+                let node = serde_json::from_value(operation["node"].take())
+                    .map_err(|_| py_error("invalid graph node"))?;
+                store.upsert_node(node).await.map_err(py_error)?;
+                serde_json::Value::Null
+            }
+            "get_node" => {
+                let id = operation["id"]
+                    .as_str()
+                    .ok_or_else(|| py_error("invalid graph node id"))?;
+                serde_json::to_value(store.get_node(id).await.map_err(py_error)?)
+                    .map_err(|_| py_error("could not encode graph node"))?
+            }
+            "delete_node" => {
+                let id = operation["id"]
+                    .as_str()
+                    .ok_or_else(|| py_error("invalid graph node id"))?;
+                store.delete_node(id).await.map_err(py_error)?;
+                serde_json::Value::Null
+            }
+            "upsert_relationship" => {
+                let edge = serde_json::from_value(operation["relationship"].take())
+                    .map_err(|_| py_error("invalid graph relationship"))?;
+                store.upsert_relationship(edge).await.map_err(py_error)?;
+                serde_json::Value::Null
+            }
+            "neighbors" => {
+                let id = operation["id"]
+                    .as_str()
+                    .ok_or_else(|| py_error("invalid graph node id"))?;
+                let direction: GraphDirection = serde_json::from_value(
+                    operation
+                        .get("direction")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::String("outgoing".into())),
+                )
+                .map_err(|_| py_error("invalid graph direction"))?;
+                let kind = match operation.get("kind") {
+                    None | Some(serde_json::Value::Null) => None,
+                    Some(serde_json::Value::String(kind)) => Some(kind.as_str()),
+                    _ => return Err(py_error("invalid relationship kind")),
+                };
+                let limit = match operation.get("limit") {
+                    None => 100,
+                    Some(value) => value
+                        .as_u64()
+                        .and_then(|value| usize::try_from(value).ok())
+                        .ok_or_else(|| py_error("invalid graph result limit"))?,
+                };
+                serde_json::to_value(
+                    store
+                        .neighbors(id, direction, kind, limit)
+                        .await
+                        .map_err(py_error)?,
+                )
+                .map_err(|_| py_error("could not encode graph neighbors"))?
+            }
+            "cypher" => {
+                let query = operation
+                    .get("query")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| py_error("invalid Cypher query"))?
+                    .to_owned();
+                let params = match operation.get("params") {
+                    None => serde_json::Map::new(),
+                    Some(serde_json::Value::Object(params)) => params.clone(),
+                    _ => return Err(py_error("invalid Cypher parameters")),
+                };
+                serde_json::to_value(store.query(&query, params).await.map_err(py_error)?)
+                    .map_err(|_| py_error("could not encode Cypher result"))?
+            }
+            _ => return Err(py_error("unsupported graph operation")),
+        };
+        encode_json(&result)
+    })
+}
+
+#[pyfunction]
 fn vector_store_upsert<'py>(
     py: Python<'py>,
     config_json: String,
@@ -2371,6 +2478,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_verification_json, module)?)?;
     module.add_function(wrap_pyfunction!(storage_validate_selection, module)?)?;
     module.add_function(wrap_pyfunction!(storage_capabilities, module)?)?;
+    module.add_function(wrap_pyfunction!(graph_store_operation, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_ledger_append_checkpointed, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_model_tool_loop_start, module)?)?;

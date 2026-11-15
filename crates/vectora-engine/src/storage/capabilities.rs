@@ -9,8 +9,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    KvBackend, PubSubBackend, QueueBackend, STORAGE_CONTRACT_VERSION, SqlBackend, StorageSelection,
-    VectorBackend,
+    GraphBackend, KvBackend, PubSubBackend, QueueBackend, STORAGE_CONTRACT_VERSION, SqlBackend,
+    StorageSelection, VectorBackend,
 };
 
 /// Direction in which a vector score improves.
@@ -233,6 +233,19 @@ impl StorageSelection {
             )),
             None => {}
         }
+        match self.graph {
+            Some(GraphBackend::Falkordb) => backends.push(entry(
+                "graph",
+                "falkordb",
+                &["property_graph", "parameterized_cypher"],
+                &["portable_full_text_search", "portable_vector_search"],
+                None,
+                None,
+                None,
+                &["Cypher follows FalkorDB's OpenCypher-based dialect; compatibility with Neo4j is not implied."],
+            )),
+            None => {}
+        }
         StorageCapabilities {
             contract_version: STORAGE_CONTRACT_VERSION,
             backends,
@@ -305,6 +318,18 @@ mod tests {
                 .capabilities()
                 .backends
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn reports_falkordb_as_an_independent_graph_capability() {
+        let report = selection(r#"{"contract_version":1,"graph":"falkordb"}"#).capabilities();
+        assert_eq!(report.backends.len(), 1);
+        assert_eq!(report.backends[0].kind, "graph");
+        assert!(
+            report.backends[0]
+                .implemented
+                .contains(&"property_graph".into())
         );
     }
 }

@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -30,6 +31,7 @@ from vectora_engine import (
     fallback_chat_stream,
     fallback_embed,
     fallback_rerank,
+    graph_store_operation,
     llama_server_chat_complete,
     llama_server_chat_stream,
     llama_server_health,
@@ -105,9 +107,55 @@ def test_storage_capabilities_state_backend_differences() -> None:
     vector, kv = report["backends"]
     assert vector["score_direction"] == "higher_is_closer"
     assert kv["ttl"] is True
+    graph = storage_capabilities({"contract_version": 1, "graph": "falkordb"})[
+        "backends"
+    ][0]
+    assert graph["kind"] == "graph"
+    assert "property_graph" in graph["implemented"]
     assert storage_capabilities({"contract_version": 1})["backends"] == []
     with pytest.raises(RuntimeError, match="unsupported storage contract version"):
         storage_capabilities({"contract_version": 99})
+
+
+def test_graph_store_binding_against_falkordb_when_configured() -> None:
+    endpoint = os.environ.get("VECTORA_TEST_FALKORDB_URL")
+    if endpoint is None:
+        pytest.skip("VECTORA_TEST_FALKORDB_URL is not configured")
+
+    async def exercise() -> None:
+        config = {"endpoint": endpoint, "graph_name": f"python_{os.getpid()}"}
+        node = {
+            "id": f"node-{os.getpid()}",
+            "labels": ["Person"],
+            "properties": {"name": "Ana 東京"},
+        }
+        await graph_store_operation(config, {"operation": "upsert_node", "node": node})
+        result = await graph_store_operation(
+            config, {"operation": "get_node", "id": node["id"]}
+        )
+        assert result == node
+        await graph_store_operation(
+            config,
+            {
+                "operation": "upsert_node",
+                "node": {
+                    "id": node["id"],
+                    "labels": node["labels"],
+                    "properties": {"city": "São Paulo"},
+                },
+            },
+        )
+        query = await graph_store_operation(
+            config,
+            {
+                "operation": "cypher",
+                "query": "MATCH (n:__VectoraNode {id: $id}) RETURN n.name AS name, n.city AS city",
+                "params": {"id": node["id"]},
+            },
+        )
+        assert query["rows"] == [[None, "São Paulo"]]
+
+    asyncio.run(exercise())
 
 
 def test_queue_dead_letter_receive_is_exposed_through_python_binding() -> None:

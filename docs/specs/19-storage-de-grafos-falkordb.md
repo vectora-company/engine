@@ -2,11 +2,7 @@
 
 ## Estado
 
-Proposta aprovada para implementação; nenhum adapter de grafos existe na Engine.
-`brunosrz` escolheu as duas camadas: contrato portátil mais extensão Cypher
-específica de FalkorDB. Esta spec ainda não declara suporte implementado nem
-paridade com SQL/vetores. A escolha do client/MSRV ainda depende de decisão no
-chat.
+Implementação local concluída nesta branch, filha da etapa documental #101; no início não havia adapter de grafos. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core, seleção/capabilities, bindings e testes contra FalkorDB 6.0.3 passaram localmente; TLS e cancelamento remoto permanecem limitações documentadas. Não declarar paridade com SQL/vetores.
 
 ## Objetivo e fronteira
 
@@ -32,9 +28,7 @@ do serviço são responsabilidade operacional do consumer.
   a interpolação textual. O client oficial mostra `query_with_params`.
 - Existe crate Rust oficial `falkordb` 0.11.2 (verificado em 2026-11-14), com
   API Tokio, Serde e TLS opcionais; `rust-version = 1.95`. A Engine declara
-  `rust-version = 1.89`; adotar o client exige elevar MSRV global, encontrar
-  client compatível ou deixar a feature inacessível aos toolchains antigos.
-  Esse impacto precisa ser decidido antes de incluir a dependência. Recursos embedded
+  `rust-version = 1.95`; essa decisão de MSRV foi aprovada por `brunosrz`. Recursos embedded
   trazem implicações de download/binário e, no `embedded-bundle`, licença SSPL;
   a Engine não deve habilitar embedded por padrão. [Client e features](https://github.com/FalkorDB/falkordb-rs)
   e [crate](https://crates.io/crates/falkordb).
@@ -64,16 +58,9 @@ timeout, cancelamento, limite de linhas/bytes, erros, retry (sem retry cego de
 writes), conexão/reconexão, readiness, observabilidade/redaction e suporte nos
 bindings. Parâmetros são dados tipados, nunca interpolados pela Engine.
 
-### Escolha de dependência/MSRV pendente
+### Dependência e MSRV aprovados
 
-A Engine declara Rust 1.89. O crate oficial `falkordb` 0.11.2 declara MSRV 1.95;
-0.10.4 não declara MSRV e também depende de `redis` 1.2.2. O toolchain instalado
-é Rust 1.99.1; não há toolchain 1.89 verificado. Alternativas: elevar o MSRV da
-Engine para 1.95 e usar o client oficial atual; preservar 1.89 e usar o client
-0.10.4 somente após CI/compilação reproduzível com 1.89; ou preservar 1.89 com
-o `redis` já usado pela Engine e implementar o protocolo graph diretamente,
-contra a recomendação de usar clients oficiais da documentação FalkorDB. É uma
-decisão de compatibilidade/dependência a responder no chat.
+`brunosrz` aprovou o client oficial stable `falkordb` 0.11.2 e elevação do MSRV global para Rust 1.95. O ambiente local usa Rust 1.99.1. A dependência foi adicionada com Tokio, Serde e TLS Rustls, sem embedded/SSPL. Revalidar versões stable antes de futuras atualizações.
 
 ## Equivalência e especialização
 
@@ -95,10 +82,7 @@ substituem os adapters vectoriais existentes sem contrato de equivalência.
 
 - Contrato Rust versionado com conexão e operações, erros tipados, timeout,
   cancelamento, limites e redaction.
-- Seleção/capabilities e bindings Python/TypeScript coerentes com o core.
-- Testes unitários e integração contra FalkorDB real, incluindo autenticação,
-  parâmetros, dados não ASCII, timeout/cancelamento, erros, restart e isolamento
-  entre nomes de grafo; sem service endpoint, teste real é registrado como não
-  executado.
+- Seleção/capabilities e bindings Python/TypeScript coerentes com o core; testes passaram em Python (55) e Node (41; 10 testes de outros backends ignorados por falta de endpoints).
+- Testes unitários e integração contra FalkorDB real. Cobertura executada em FalkorDB 6.0.3: auth via URL, parâmetros, dados não ASCII, substituição de propriedades, isolamento por nome de grafo, traversal nas três direções, limites, timeout, restart/recovery com AOF síncrono, delete e roundtrip nas três linguagens. TLS e cancelamento remoto não foram verificados; não há garantia de que descartar o future interrompa execução no servidor.
 - Documentar versão/imagem, configuração de persistência testada e limites sem
   afirmar durabilidade operacional universal.

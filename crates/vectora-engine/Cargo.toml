@@ -18,6 +18,7 @@ async-trait = "0.1"
 bytes.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
+falkordb = { version = "=0.11.2", default-features = false, features = ["tokio", "serde", "tokio-rustls"] }
 jsonschema.workspace = true
 lancedb = { version = "0.22", default-features = false }
 redis = { version = "0.27", features = ["tokio-comp"] }

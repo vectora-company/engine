@@ -14,11 +14,19 @@ import zipfile
 
 ROOT = Dir(".").abspath
 NATS_VERSION = "2.15.3"
+AddOption(
+    "--simulate",
+    action="store_true",
+    dest="simulate_update",
+    default=False,
+    help="Show dependency updates without changing manifests or lockfiles",
+)
 DEV_SERVICE_IMAGES = (
     "docker.io/library/postgres:18.6-alpine",
     "docker.io/qdrant/qdrant:v1.18.0",
     "docker.io/library/redis:8.10.3-alpine",
     "docker.io/library/nats:2.15.3-alpine",
+    "docker.io/falkordb/falkordb:6.0.3",
 )
 
 
@@ -317,9 +325,31 @@ def _tests(target, source, env):
 
 
 def _update(target, source, env):
+    if GetOption("simulate_update"):
+        _simulate_update()
+        return
     _run("cargo", "update")
     _run("uv", "lock", "--upgrade")
     _pnpm("update", "--latest", cwd=os.path.join(ROOT, "bindings", "typescript"))
+
+
+def _simulate_update() -> None:
+    """Report available dependency updates without changing repository files."""
+    print("Simulating Rust dependency updates (Cargo.lock is not written).")
+    _run("cargo", "update", "--dry-run")
+    print("Simulating Python dependency updates (uv.lock is not written).")
+    _run("uv", "lock", "--upgrade", "--dry-run")
+    print(
+        "Checking TypeScript dependency updates (read-only; latest column "
+        "includes major updates)."
+    )
+    _pnpm(
+        "outdated",
+        "--long",
+        "--format",
+        "json",
+        cwd=os.path.join(ROOT, "bindings", "typescript"),
+    )
 
 
 def _clean(target, source, env):
@@ -366,13 +396,14 @@ Qualidade
 
 Manutenção
   scons update     atualiza Cargo.lock, uv.lock e pnpm-lock.yaml; revise os lockfiles
+  scons update --simulate  mostra atualizações disponíveis sem alterar manifests ou lockfiles
   scons clean      remove target/ e logs do SCons
 
 O alvo update segue as faixas declaradas nos manifests Rust/Python e usa
 pnpm update --latest (inclusive major) no binding TypeScript. Versões de
 serviços e do sidecar NATS são pins explícitos em SConstruct e devem ser
-atualizados ali após revisar as notas de compatibilidade. `scons update --latest`
-não é uma opção SCons válida.
+atualizados ali após revisar as notas de compatibilidade. Use
+`scons update --simulate` para listar candidatos sem gravar manifests ou lockfiles.
 
 """.strip()
     )

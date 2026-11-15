@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod capabilities;
+pub mod graph;
 pub mod messaging;
 pub mod postgres;
 pub mod resilient_ledger;
@@ -53,6 +54,12 @@ pub enum PubSubBackend {
     NatsCore,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphBackend {
+    Falkordb,
+}
+
 /// Independent selections; absence means the capability is not requested.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -68,6 +75,8 @@ pub struct StorageSelection {
     pub queue: Option<QueueBackend>,
     #[serde(default)]
     pub pubsub: Option<PubSubBackend>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<GraphBackend>,
 }
 
 #[derive(Debug, Error)]
