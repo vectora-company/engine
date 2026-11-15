@@ -18,18 +18,18 @@ operacional, após aprovação do contrato público.
 - Existe alteração preexistente do usuário em
   `bindings/typescript/native/index.d.ts`; deve ser preservada e excluída deste
   trabalho.
-- Crate oficial `falkordb` 0.11.2 está publicado e requer Rust 1.95; seu client
-  assíncrono usa Tokio. A Engine declara Rust 1.89. Não foi adicionada dependência;
-  decisão sobre compatibilidade/MSRV precisa acompanhar a escolha da API.
+- Crate oficial `falkordb` 0.11.2 requer Rust 1.95; 0.10.4 não declara MSRV e
+  também depende de `redis` 1.2.2. A Engine declara Rust 1.89. Nenhuma
+  dependência foi adicionada; a decisão de client/MSRV está pendente.
 
 ## Etapas
 
-1. **Contrato e pesquisa — em andamento.** Registrar fatos, escopo, limites,
-   opções de API e decisão vital em
+1. **Contrato e pesquisa — API decidida; dependência pendente.** Registrar
+   fatos, escopo, limites e decisão de implementação em
    [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md)
    e [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md).
-   Gate: resposta de `brunosrz` sobre API Cypher específica, property graph
-   portável ou duas camadas.
+   `brunosrz` escolheu as duas camadas. Gate atual: decisão sobre client
+   oficial/MSRV (1.95 versus 1.89) ou alternativa compatível.
 2. **Core Rust.** Definir seleção `graph`, configuração segura, trait/adapter
    de acordo com a decisão, erros, conexão, execução parametrizada e limites;
    adicionar testes unitários e de serviço.
@@ -62,6 +62,7 @@ conformidade próprios.
 
 ## Bloqueio atual
 
-A decisão sobre superfície pública é vital e aguarda resposta no chat. A pesquisa
-e a documentação são trabalho independente concluído nesta etapa; código que
-fixaria uma das alternativas não deve avançar antes da decisão.
+A decisão sobre as duas camadas foi respondida por `brunosrz`. A escolha de
+dependência/MSRV é vital e aguarda resposta no chat. A pesquisa e documentação
+independente foram concluídas; a mudança de compatibilidade bloqueia adicionar
+o client oficial e implementar o adapter.

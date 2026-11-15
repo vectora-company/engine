@@ -10,14 +10,15 @@ Estados: `feito`, `pendente`, `bloqueado`, `não aplicável`.
 - [x] Confirmar documentação do protocolo/query, parâmetros, timeout, client
       Rust, MSRV/features e persistência upstream.
 - [x] Criar spec, plano e análise com caminho completo nos índices/prompt/goal.
-- [ ] **Bloqueado por decisão vital:** selecionar API Cypher FalkorDB, contrato
-      property graph portável ou as duas camadas; decisão pedida no chat.
+- [x] `brunosrz` escolheu as duas camadas: contrato portátil mais extensão Cypher FalkorDB.
+- [ ] **Bloqueado por decisão vital:** escolher dependência/MSRV: client 0.11.2 com Rust 1.95,
+      validar 0.10.4 com Rust 1.89, ou protocolo direto usando redis existente.
 - [ ] Definir versão mínima do servidor e política operacional depois de fixar
-      contrato e conferir disponibilidade local do serviço.
+      dependência e conferir disponibilidade local do serviço.
 
 ## Implementação
 
-- [ ] Core Rust e dependência oficial com features mínimas, após decisão.
+- [ ] Core Rust e dependência com features mínimas, após decisão de MSRV.
 - [ ] Seleção versionada, erros, capabilities e segurança do nome do grafo.
 - [ ] Queries tipadas/parametrizadas, timeout, cancelamento e limites.
 - [ ] Bindings Python/TypeScript, stubs, fixture e snapshot.

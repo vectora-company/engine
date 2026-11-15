@@ -47,7 +47,7 @@ Providers e modalidades de IA, com referência normativa à release fixa
 [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0).
 O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado em
 `main` (`f4a8cf9d7e30d9fb667a7f443f6572067e536d81`); a branch atualizada parte
-dessa base. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust foi aberto como PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. Os bindings foram abertos como PR [#100](https://github.com/vectora-company/engine/pull/100), filho do #98. Uma etapa de storage graph FalkorDB foi solicitada para a stack como filha do #100; o contrato ainda aguarda decisão no chat. Leia os artefatos:
+dessa base. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust foi aberto como PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. Os bindings foram abertos como PR [#100](https://github.com/vectora-company/engine/pull/100), filho do #98. A etapa de storage graph FalkorDB foi registrada no PR documental [#101](https://github.com/vectora-company/engine/pull/101), filho do #100. `brunosrz` escolheu as duas camadas; dependência/MSRV aguarda decisão no chat. Leia os artefatos:
 
 - Plano: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md).
 - Spec: [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
@@ -63,7 +63,7 @@ GraphRAG.
 
 ### Capability proposta: FalkorDB graph
 
-O próximo trabalho solicitado é adicionar uma capability de storage de grafos FalkorDB, empilhada como filha do PR #100, no checkout `/home/brunosrz/Área de trabalho/engine/`. Consulte [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md). A superfície pública aguarda decisão de `brunosrz` no chat.
+O próximo trabalho solicitado é adicionar uma capability de storage de grafos FalkorDB, como PR filho do PR documental #101, no checkout `/home/brunosrz/Área de trabalho/engine/`. `brunosrz` escolheu contrato portátil mais extensão Cypher. Consulte [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md). A decisão de dependência/MSRV aguarda resposta no chat.
 
 ## Regras operacionais do mantenedor
 

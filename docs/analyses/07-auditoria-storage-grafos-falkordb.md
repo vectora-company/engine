@@ -37,17 +37,18 @@ Verificação em 2026-11-14 no checkout
   upstream de restart não prova durabilidade para qualquer configuração.
   [Guia de persistência](https://falkordb.github.io/docs-staging/operations/persistence/).
 
-## Decisão vital pendente
+## Decisão de API respondida e decisão de MSRV pendente
 
-FalkorDB não tem um peer de property graph atual. O uso do client oficial aponta
-para query OpenCypher, mas isso não decide se a API Engine deve ser específica,
-portável, ou ter ambas as camadas. Essa escolha altera contrato público,
-conformidade e evolução com futuros backends. A decisão da dependência também
-afeta MSRV: client oficial requer Rust 1.95; elevar MSRV global ou restringir o
-recurso graph a toolchain mais novo é mudança de compatibilidade, e não foi
-aprovada. Pergunta registrada em
+Em 2026-11-14, `brunosrz` escolheu as duas camadas: API portátil de property
+graph mais extensão Cypher específica de FalkorDB. A decisão sobre client e MSRV
+ainda altera compatibilidade: o client oficial 0.11.2 requer Rust 1.95, enquanto
+a Engine declara 1.89; 0.10.4 não declara MSRV e usa Redis client 1.2.2. O
+toolchain 1.89 não foi instalado: o download iniciado ficou sem progresso e foi
+interrompido. Decisão registrada em
 [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md);
-aguardar `brunosrz` no chat. Nenhum código de contrato deve antecipar a resposta.
+perguntar no chat se elevar MSRV, validar 0.10.4 no 1.89, ou implementar o
+protocolo com redis já presente (desviando da recomendação upstream). Até a
+resposta, não adicionar dependência nem alterar MSRV.
 
 ## Riscos e controles propostos
 
