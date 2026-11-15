@@ -72,6 +72,10 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Cobrir limites e fronteira em testes Rust e bindings.
 - [x] Verificar workspace Rust (171 testes + 3 fixtures e Clippy), Python (52 testes, Ruff/format/ty), TypeScript (build/typecheck; 38 passaram, 10 de serviço sem endpoint foram ignorados) e diff; registrar no PR [#90](https://github.com/vectora-company/engine/pull/90), filho de #89; commit de implementação `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`.
 
+## Storage de grafos FalkorDB — proposta após o PR #100
+
+A documentação e a decisão pendente estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md). Estado inicial: não implementado; #100 é o topo da stack. Decisão vital pedida no chat: escolher API Cypher específica, property graph portátil ou as duas. Nenhum código de implementação foi iniciado antes da decisão.
+
 ## Preparação e escopo
 
 - [ ] Confirmar repositório, branch, base da stack e estado da working tree.

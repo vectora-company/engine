@@ -6,7 +6,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 ## Capability ativa
 
 O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
-com o charter de primeira release completa e o backlog por fases. O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado; `main` está em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust está no PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. Os bindings Python/TypeScript estão no PR filho [#100](https://github.com/vectora-company/engine/pull/100); a próxima etapa implementa Decision Model sobre o #100. Os artefatos estão em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
+com o charter de primeira release completa e o backlog por fases. O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado; `main` está em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust está no PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. Os bindings Python/TypeScript estão no PR filho [#100](https://github.com/vectora-company/engine/pull/100). A etapa adicional solicitada para FalkorDB graph está registrada em [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md), filha planejada do #100 e aguardando decisão de contrato no chat. Os artefatos estão em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
 
 ## Operação de desenvolvimento
 
@@ -52,7 +52,9 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
   itens feitos e pendentes da capability de storage.
 - [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md):
   matriz de capacidade e gates para providers/modalidades.
+- [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md): contrato e aceite da etapa FalkorDB; decisão pública pendente.
 - [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md): evidências do inventário e leitura da API `llama-server` v1.0.0.
+- [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md): estado local, fatos upstream e decisão de contrato pendente para FalkorDB.
 - [`docs/checklists/04-midia-no-chat.md`](checklists/04-midia-no-chat.md): contrato,
   payloads nativos e verificações da etapa de mídia.
 
@@ -64,6 +66,7 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
 - [Storage e ledger](plans/04-plano-storage-ledger.md)
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
 - [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md): plano ativo de providers e modalidades com referência llama.cpp v1.0.0.
+- [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md): etapa proposta de property graph FalkorDB, aguardando decisão de contrato.
 
 ## Documentação pública
 

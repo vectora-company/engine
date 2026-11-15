@@ -47,7 +47,7 @@ Providers e modalidades de IA, com referência normativa à release fixa
 [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0).
 O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado em
 `main` (`f4a8cf9d7e30d9fb667a7f443f6572067e536d81`); a branch atualizada parte
-dessa base. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust foi aberto como PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. Os bindings foram abertos como PR [#100](https://github.com/vectora-company/engine/pull/100), filho do #98; Decision Model será a próxima etapa, filha do #100. Leia os artefatos:
+dessa base. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust foi aberto como PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. Os bindings foram abertos como PR [#100](https://github.com/vectora-company/engine/pull/100), filho do #98. Uma etapa de storage graph FalkorDB foi solicitada para a stack como filha do #100; o contrato ainda aguarda decisão no chat. Leia os artefatos:
 
 - Plano: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md).
 - Spec: [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
@@ -55,11 +55,15 @@ dessa base. A revisão documental está no PR [#97](https://github.com/vectora-c
 - Análise: [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
 - Plano geral: [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md).
 
-A trilha distingue chat, Decision Models, visão e geração de imagem, entrada e
-geração de áudio/vídeo, embeddings e rerank. Compatibilidade OpenAI-compatible
-não implica suporte a todas essas operações; cada API/provider/modelo precisa
-de evidência e fixtures. Próxima etapa é o adapter HTTP do `llama-server`, sem
-compilar/linkar o runtime C++ dentro da Engine.
+A trilha de providers distingue chat, Decision Models, visão e geração de imagem,
+entrada e geração de áudio/vídeo, embeddings e rerank. Compatibilidade
+OpenAI-compatible não implica suporte a todas as operações. A etapa graph
+FalkorDB é separada dessa trilha e não deve antecipar suporte genérico a
+GraphRAG.
+
+### Capability proposta: FalkorDB graph
+
+O próximo trabalho solicitado é adicionar uma capability de storage de grafos FalkorDB, empilhada como filha do PR #100, no checkout `/home/brunosrz/Área de trabalho/engine/`. Consulte [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md). A superfície pública aguarda decisão de `brunosrz` no chat.
 
 ## Regras operacionais do mantenedor
 

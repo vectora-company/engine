@@ -56,8 +56,10 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 | Pub/sub             | NATS Core, Redis Pub/Sub                                 | Entrega efêmera, reconexão, assinaturas, comportamento sem assinante.             | Limites de buffer do serviço.                                      |
 
 Adapters em memória podem apoiar testes internos, mas não são backends públicos
-nem uma opção de configuração de produto. A configuração pública oferece os
-seis backends concretos desta spec e permite combiná-los por capability.
+nem uma opção de configuração de produto. A configuração pública atualmente
+oferece os seis backends concretos desta spec e permite combiná-los por
+capability. FalkorDB graph está proposto como capability adicional independente
+em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md); ainda não é uma seleção suportada nem membro dos cinco pares.
 Garantias dependem da configuração do serviço; não inferir durabilidade apenas
 pelo nome do backend. A coluna "base equivalente" não é uma lista de
 diferenças aceitas: cada item ausente em um lado é lacuna na matriz abaixo.
@@ -257,6 +259,11 @@ ocorre sem conformidade, evidência operacional e rollback.
   segredo e credenciais nunca entram em logs, fixtures ou exportações.
 
 ## Histórico das entregas de storage
+
+Graph storage FalkorDB não estava no escopo original S0–S5 e não deve ser
+contabilizado como paridade de storage existente. A proposta da capability,
+seu contrato pendente e seus critérios estão em
+[`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md).
 
 As etapas S0–S5 entregues pela stack #45–#72 estão integradas em `main`
 (`dc1aa5e`) e listadas na tabela de fases acima. A execução combinada mais

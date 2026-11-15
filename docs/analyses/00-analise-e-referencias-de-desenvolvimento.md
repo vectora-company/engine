@@ -74,6 +74,12 @@ itens aplicáveis:
 Quando um item não se aplica, anotar por que. Não preencher lacunas com
 suposições silenciosas.
 
+## Proposta FalkorDB graph (2026-11-14)
+
+A Engine ainda não seleciona nem implementa property graph (`storage.rs` e `storage/capabilities.rs`). PRs abertos consultados: #97 → #98 → #100; #100 é o topo e a nova capability deve ser filha dele. Pesquisa primária confirmou que FalkorDB usa protocolo Redis com `GRAPH.QUERY`/`GRAPH.RO_QUERY`, parâmetros e timeout; o dialeto é baseado em OpenCypher e parcial. O client Rust oficial 0.11.2 requer Rust 1.95 e oferece Tokio/Serde/TLS opt-in; persistência depende da configuração do serviço. Fontes, riscos e decisão de API estão em [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](07-auditoria-storage-grafos-falkordb.md) e a proposta em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md).
+
+A API pública é vital: (1) query Cypher específica, (2) property graph portável, ou (3) ambas. A decisão foi registrada para `brunosrz` responder no chat; até lá, não adicionar dependência nem fixar API. FalkorDB é um novo tipo graph, não um par dos backends enumerados na spec 02 nem sinônimo do Redis KV.
+
 ## Registro por etapa
 
 Cada etapa de implementação de um plano deve apontar para:
