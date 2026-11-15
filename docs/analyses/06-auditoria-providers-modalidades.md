@@ -13,14 +13,14 @@ Esta auditoria é inventário documental; não altera o código de produção. O
 
 ## O que o código realmente oferece
 
-| Área           | Implementado                                                                                                                                                                                 | Não inferir                                                                                                                    |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Chat           | OpenAI-compatible Chat Completions; OpenAI Responses separado; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; perfil OpenRouter Chat Completions; fallback; `LlamaServerClient` | OpenAI Responses está em validação local; 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação. |
-| Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                                                                                                       | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade.                         |
-| Rerank         | Cohere, Voyage e OpenRouter                                                                                                                                                                  | llama.cpp ou equivalência de campos/scores em todos os adapters.                                                               |
-| Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                                                                                                | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                                              |
-| Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                                                                                                           | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.                         |
-| TTS/STT        | Não há cliente LLM para TTS/STT                                                                                                                                                              | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                                       |
+| Área           | Implementado                                                                                                                                                                               | Não inferir                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Chat           | OpenAI Chat Completions nomeado em implementação; OpenAI Responses; OpenRouter Chat Completions; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; fallback; `LlamaServerClient` | O novo perfil OpenAI está em validação local; 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação. |
+| Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                                                                                                     | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade.                             |
+| Rerank         | Cohere, Voyage e OpenRouter                                                                                                                                                                | llama.cpp ou equivalência de campos/scores em todos os adapters.                                                                   |
+| Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                                                                                              | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                                                  |
+| Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                                                                                                         | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.                             |
+| TTS/STT        | Não há cliente LLM para TTS/STT                                                                                                                                                            | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                                           |
 
 ### Ollama nativo — PR #107, filho do PR #106
 
@@ -200,6 +200,11 @@ subpasso; integração OpenAI real requer credencial. Referências:
 [function calling](https://developers.openai.com/api/docs/guides/function-calling)
 e [images](https://developers.openai.com/api/docs/guides/images-vision).
 
-Próxima etapa: perfil nomeado OpenAI Chat Completions, filho do #109, com URL
-padrão oficial e chave obrigatória, preservando o cliente genérico e o perfil
-OpenRouter.
+Etapa ativa na branch filha do #109: perfil nomeado OpenAI Chat Completions, com
+URL padrão oficial, chave obrigatória, endpoint customizado e headers extras.
+Core Rust e fixtures HTTP Python/TypeScript foram implementados; workspace Rust
+(216 testes), Clippy, pytest completo e Node (46 pass/11 skips) passaram. Falta
+executar hooks completos e publicar o PR. Na revisão, os headers opcionais de
+atribuição foram restringidos ao perfil OpenRouter; as fixtures Python/Node
+validam que `app_url` e `app_title` não vazam para OpenAI. Integração real
+OpenAI requer credencial; nenhum segredo foi lido.

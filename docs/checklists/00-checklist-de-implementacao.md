@@ -78,6 +78,15 @@ A spec, o plano, a análise e o checklist estão em [`docs/specs/19-storage-de-g
 
 ## Preparação e escopo
 
+Estado do loop em 15/11/2026: PRs abertos foram listados; #109 é o topo atual
+da stack de providers e a branch local `feat/openai-chat-profile` está baseada
+no seu head. O escopo corrente, os testes e os limites estão registrados no
+[plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
+[spec](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
+[checklist da capability](05-providers-e-modalidades-llama-cpp-v1.md) e
+[auditoria](../analyses/06-auditoria-providers-modalidades.md). Não confundir
+essa etapa local ainda não publicada com PR aberto.
+
 - [ ] Confirmar repositório, branch, base da stack e estado da working tree.
 - [ ] Listar PRs abertos; tratar o PR do topo como trabalho ativo e confirmar
       a branch atual, pois o checkout é compartilhado.

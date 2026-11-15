@@ -18,6 +18,12 @@ interface OpenAiCompatibleCommonSettings {
 export type OpenAiCompatibleSettings = OpenAiCompatibleCommonSettings &
   (
     | {
+        profile: "openai";
+        /** Defaults to OpenAI's Chat Completions endpoint when omitted. */
+        base_url?: string;
+        api_key: string;
+      }
+    | {
         profile: "openrouter";
         /** Defaults to OpenRouter's endpoint when omitted. */
         base_url?: string;
