@@ -1,6 +1,6 @@
 //! Portable property-graph operations and the FalkorDB Cypher extension.
 
-use std::{collections::HashMap, fmt, time::Duration};
+use std::{collections::HashMap, fmt, sync::OnceLock, time::Duration};
 
 use async_trait::async_trait;
 use futures_util::{FutureExt, StreamExt, future::BoxFuture};
@@ -14,6 +14,17 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_MAX_ROWS: usize = 1_000;
 const DEFAULT_MAX_RESULT_BYTES: usize = 4 * 1024 * 1024;
+
+/// FalkorDB's Redis TLS connector asks rustls for a process default provider.
+/// Other Engine dependencies may enable a second provider, making implicit
+/// selection panic. Respect a provider installed by the host; otherwise use
+/// ring, which is already part of the Engine's async TLS stack.
+fn ensure_rustls_default_provider() {
+    static PROVIDER: OnceLock<()> = OnceLock::new();
+    PROVIDER.get_or_init(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 /// JSON-friendly graph client settings shared by the Python and Node bindings.
 #[derive(Clone, Deserialize)]
@@ -214,6 +225,9 @@ pub struct FalkorDbStore {
 impl FalkorDbStore {
     pub async fn connect(config: GraphStoreConfig) -> Result<Self, GraphError> {
         config.validate()?;
+        if config.endpoint.starts_with("falkors://") || config.endpoint.starts_with("rediss://") {
+            ensure_rustls_default_provider();
+        }
         let connection = falkordb::FalkorConnectionInfo::try_from(config.endpoint.as_str())
             .map_err(|_| GraphError::InvalidInput)?;
         let client = falkordb::FalkorClientBuilder::new_async()

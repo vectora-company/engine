@@ -102,6 +102,11 @@ export declare function fallbackRerank(
   requestJson: string,
 ): Promise<string>;
 
+export declare function graphStoreOperation(
+  configJson: string,
+  operationJson: string,
+): Promise<string>;
+
 export declare function kvStoreCompareAndSet(
   configJson: string,
   key: string,
@@ -155,6 +160,84 @@ export declare function kvWatchOpen(
 export declare function kvWatchReceive(
   watchId: string,
   timeoutMs: number,
+): Promise<string>;
+
+export declare function llamaServerChatComplete(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerChatCompleteEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerChatStreamStart(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerChatStreamStartEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerDecide(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerDecideEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerHealth(
+  settingsJson: string,
+): Promise<string>;
+
+export declare function llamaServerModels(
+  settingsJson: string,
+): Promise<string>;
+
+export declare function llamaServerRealtimeSend(
+  sessionId: string,
+  commandJson: string,
+): Promise<void>;
+
+export declare function llamaServerRealtimeStart(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerSynthesize(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerSynthesizeNative(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerSynthesizeNativeEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerSynthesizeNativeStream(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerSynthesizeNativeStreamEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerSynthesizeStream(
+  settingsJson: string,
+  requestJson: string,
 ): Promise<string>;
 
 export declare function modelToolLoopAcceptModelTurn(
@@ -269,16 +352,16 @@ export declare function resilientLedgerAppend(
 export declare function resilientLedgerFlushOutbox(
   path: string,
   limit: number,
-  postgresUrl?: string | null,
+  postgresUrl?: string | undefined | null,
 ): Promise<number>;
-
-export declare function resilientLedgerRebuildProjection(
-  path: string,
-  postgresUrl?: string | null,
-): Promise<string>;
 
 export declare function resilientLedgerPendingCount(
   path: string,
+): Promise<string>;
+
+export declare function resilientLedgerRebuildProjection(
+  path: string,
+  postgresUrl?: string | undefined | null,
 ): Promise<string>;
 
 export declare function runContractVersion(): number;

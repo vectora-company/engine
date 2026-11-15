@@ -39,9 +39,11 @@ operacional, com o contrato público aprovado por brunosrz.
 3. **Bindings — concluído no PR #102; paridade de configuração corrigida no PR #111.** Expor o mesmo contrato nas bindings Python e TypeScript, sem lógica de domínio duplicada; snapshots/stubs e fixtures compartilhadas. A auditoria posterior encontrou que wrappers encaminhavam apenas endpoint e graph name e descartavam timeout/limites do core. O PR [#111](https://github.com/vectora-company/engine/pull/111), filho do #110, corrige isso usando `GraphStoreSettings` do Rust nos dois bindings.
 4. **Conformidade operacional — concluída para o escopo local.** Testar FalkorDB local via Podman/Docker:
    conexão/TLS conforme suportado, query parametrizada, isolamento, falhas,
-   timeout, cancelamento, restart e persistência sob a configuração registrada.
+   timeout, comportamento de cancelamento documentado, restart e persistência sob a configuração registrada.
 5. **Entrega empilhada — PR #102 concluído.** O PR [#102](https://github.com/vectora-company/engine/pull/102) foi aberto como filho do #101; documentação, revisão do staging, commit e push estão concluídos.
 6. **Configuração de bindings — PR [#111](https://github.com/vectora-company/engine/pull/111), filho do #110.** A branch `feat/falkordb-binding-timeouts` expõe connection/query/response deadlines e limites de linhas/bytes; usa os valores no client/config do core; valida opções e operações contra FalkorDB real. Cancelar a future do caller não prova cancelamento do comando remoto.
+
+7. **TLS Rustls — PR [#112](https://github.com/vectora-company/engine/pull/112), filho do PR #111.** Integração via `falkors://` contra FalkorDB 6.0.3 com CA confiável passou nos três bindings; a implementação seleciona provider Rustls sem sobrescrever seleção prévia do host.
 
 ## Critérios de aceite
 
@@ -74,4 +76,4 @@ e validação passaram; integração Python/Node contra FalkorDB 6.0.3 passou co
 timeouts/limites customizados, roundtrip e limite de linhas. O client agora
 aplica timeout de conexão (10 s default) e resposta (30 s default), além do
 timeout server-side de execução (10 s default). Cancelar a future encerra a
-espera local, mas não prova interrupção do comando remoto. TLS e cancelamento remoto continuam sem teste. Hooks completos passaram: 217 testes Rust + 3 fixtures, pytest 95, Node 48/10 skips opcionais, Clippy, rustdoc, Ruff, Bandit, ty, oxlint e typecheck; `scons tests` passou com FalkorDB real configurado. PR [#111](https://github.com/vectora-company/engine/pull/111), commit `039798c`, foi publicado como filho do #110. A base `feat/openai-chat-profile` foi confirmada e o GitHub reportou `MERGEABLE` ao criar o PR.
+espera local, mas não prova interrupção do comando remoto. TLS Rustls foi testado em Rust/Python/Node contra FalkorDB 6.0.3 com CA local confiável. O client oficial não expõe API de cancelamento remoto; timeout server-side é testado e a limitação está documentada. Hooks completos passaram: 217 testes Rust + 3 fixtures, pytest 95, Node 48/10 skips opcionais, Clippy, rustdoc, Ruff, Bandit, ty, oxlint e typecheck; `scons tests` passou com FalkorDB real configurado. PR [#111](https://github.com/vectora-company/engine/pull/111), commit `039798c`, foi publicado como filho do #110; PR [#112](https://github.com/vectora-company/engine/pull/112), commit `cdead0a`, é filho do #111. Ambos foram reportados `MERGEABLE` na criação.

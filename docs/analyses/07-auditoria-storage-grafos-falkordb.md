@@ -168,9 +168,10 @@ nem força o store externo. Após rebase no head atual do #101, `scons update`
 também atualizou `xxhash-rust` 0.8.19→0.8.20. A simulação pós-update não encontrou atualizações aplicáveis;
 15 versões mais novas permanecem fora da seleção compatível com o MSRV 1.95.
 
-TLS e cancelamento da query no servidor continuam sem teste. A mudança
-preexistente do usuário em `bindings/typescript/native/index.d.ts` foi mantida
-fora do PR.
+Naquele ponto da auditoria, TLS e cancelamento remoto ainda não tinham sido
+testados. O follow-up abaixo cobriu TLS e investigou a API de cancelamento. A
+mudança preexistente do usuário em `bindings/typescript/native/index.d.ts` foi
+mantida fora dos PRs.
 
 ## Auditoria posterior: configuração de timeouts e limites nos bindings
 
@@ -186,6 +187,4 @@ query server-side 10 s, response client-side 30 s, 1.000 linhas e 4 MiB. Testes
 Rust verificam defaults, overrides, opções desconhecidas e limites inválidos.
 Com `falkordb/falkordb:6.0.3` em Podman, Rust, Python e Node aceitaram opções
 customizadas; roundtrip e limite de linhas passaram. Python e Node rejeitaram
-configuração inválida antes de abrir conexão. TLS permanece sem teste. A
-interrupção da future caller não prova cancelamento no servidor; não há
-afirmação de que timeout client-side desfaça uma escrita enviada.
+configuração inválida antes de abrir conexão. O teste TLS seguinte revelou que a dependência FalkorDB acessa Rustls sem selecionar provider: Lance/AWS ativa `aws-lc-rs` e outras dependências ativam `ring`, fazendo seleção implícita entrar em panic. A correção seleciona `ring` somente se o host ainda não instalou provider. FalkorDB 6.0.3 com certificado SAN assinado por CA de teste passou roundtrip, limites e timeout em Rust, Python e Node via `falkors://`; `SSL_CERT_FILE` forneceu a CA ao trust store. O client oficial 0.11.2 não expõe API/handle de cancelamento remoto; cancelar a future não garante parar o comando. O timeout server-side é exercitado separadamente. Essa correção está no PR [#112](https://github.com/vectora-company/engine/pull/112), filho do #111; o GitHub reportou `MERGEABLE` na abertura.

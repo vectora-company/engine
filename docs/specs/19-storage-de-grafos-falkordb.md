@@ -2,7 +2,7 @@
 
 ## Estado
 
-Implementação publicada no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101. Uma auditoria posterior encontrou que os bindings descartavam os timeouts/limites do core; o follow-up [#111](https://github.com/vectora-company/engine/pull/111), filho do #110, expõe esses controles e configura os deadlines de conexão/resposta do client oficial. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core e bindings foram testados contra FalkorDB 6.0.3; TLS e cancelamento remoto seguem limitações documentadas. Não declarar paridade com SQL/vetores.
+Implementação publicada no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101. Uma auditoria posterior encontrou que os bindings descartavam os timeouts/limites do core; o follow-up [#111](https://github.com/vectora-company/engine/pull/111), filho do #110, expõe esses controles e configura os deadlines de conexão/resposta do client oficial. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core e bindings foram testados contra FalkorDB 6.0.3 em TCP e TLS com CA confiável; cancelamento remoto segue limitação documentada. Não declarar paridade com SQL/vetores.
 
 ## Objetivo e fronteira
 
@@ -93,6 +93,6 @@ substituem os adapters vectoriais existentes sem contrato de equivalência.
 - Contrato Rust versionado com conexão e operações, erros tipados, timeout,
   cancelamento, limites e redaction.
 - Seleção/capabilities e bindings Python/TypeScript coerentes com o core; testes passaram em Python (55) e Node (41; 10 testes de outros backends ignorados por falta de endpoints).
-- Testes unitários e integração contra FalkorDB real. Cobertura executada em FalkorDB 6.0.3: auth via URL, parâmetros, dados não ASCII, substituição de propriedades, isolamento por nome de grafo, traversal nas três direções, limites, timeout, restart/recovery com AOF síncrono, delete e roundtrip nas três linguagens. TLS e cancelamento remoto não foram verificados; não há garantia de que descartar o future interrompa execução no servidor.
+- Testes unitários e integração contra FalkorDB real. Cobertura executada em FalkorDB 6.0.3: auth via URL, parâmetros, dados não ASCII, substituição de propriedades, isolamento por nome de grafo, traversal nas três direções, limites, timeout, restart/recovery com AOF síncrono, delete e roundtrip nas três linguagens. TLS Rustls foi verificado no PR [#112](https://github.com/vectora-company/engine/pull/112) contra FalkorDB 6.0.3 com CA de teste confiável no trust store do processo (`SSL_CERT_FILE`). Cancelar a future do caller não prova que o comando remoto parou; o client oficial não expõe API de cancelamento, e o timeout server-side foi testado separadamente.
 - Documentar versão/imagem, configuração de persistência testada e limites sem
   afirmar durabilidade operacional universal.
