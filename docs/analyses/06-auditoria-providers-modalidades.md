@@ -148,8 +148,9 @@ reportadas ao consumidor. Wrappers Python e TypeScript expõem iteradores
 assíncronos com backpressure/cancelamento através de canal limitado. Testes
 Rust cobrem resposta incremental, erro após áudio parcial e limites. Workspace
 Rust e Clippy passaram; pytest passou (56/1 skip), Node passou (42/11 skips) e
-build NAPI/typecheck passaram. A criação do PR ainda está pendente; integração
-com modelo TTS real não foi executada. Consulte
+build NAPI/typecheck passaram. O PR [#106](https://github.com/vectora-company/engine/pull/106)
+está `OPEN`/`MERGEABLE` como filho do #105; integração com modelo TTS real não
+foi executada. Consulte
 [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e
 [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).

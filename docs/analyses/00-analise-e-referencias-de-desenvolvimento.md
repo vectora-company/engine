@@ -442,7 +442,7 @@ A branch atual é filha do PR #104 e implementa sessão `/v1/realtime` conforme 
 
 A branch `feat/llama-server-realtime-audio` implementa `/v1/realtime` como filha de #104. O teste local não foi limitado ao core: workspace Rust passou com 205 testes da lib, 3 fixtures e teste do binding nativo Python; Clippy passou após corrigir uma lint; `maturin develop` + pytest passaram (55 + 1 skip); NAPI release, TypeScript typecheck e Node passaram (41 + 11 skips opcionais). Ruff, `ty` e format passaram. O PR #102 está `MERGEABLE`; a captura de conflito não reflete o status remoto atual. O `node_modules` usado está em `/home/brunosrz/Área de trabalho/engine/bindings/typescript/node_modules`; nenhum build foi rodado no checkout de `/media`. A alteração local do usuário em `bindings/typescript/native/index.d.ts` foi preservada e fica fora do stage.
 
-Permanecem sem comprovação apenas interoperabilidade com llama-server/modelo realtime real, batch STT e streaming TTS; esses itens não bloqueiam publicar o PR #105 como filho do #104 e avançar a stack. Estado da capability e links completos nos documentos relacionados: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
+Permanecem sem comprovação interoperabilidade com modelos reais e batch STT. O streaming TTS foi implementado e publicado no PR #106, filho do #105; os gaps de integração real não bloqueiam iniciar a etapa de providers/gateways. Estado da capability e links completos nos documentos relacionados: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
 ## Etapa ativa empilhada — streaming TTS (15/11/2026)
 
@@ -459,9 +459,7 @@ TypeScript typecheck e Node (42 pass/11 skips) passaram. O endpoint upstream
 evidenciado é binário, então o contrato não tenta interpretar ou reescrever o
 header WAV de tamanho desconhecido.
 
-Limites: não foi executado um modelo TTS real; isso não impede publicar fixtures
-deterministas e prosseguir a stack. Status do PR #105 deve ser lido por seu SHA,
-sem bloquear trabalho local. Plano, spec, checklist e análise detalhada:
+Limites: não foi executado um modelo TTS real. O PR [#106](https://github.com/vectora-company/engine/pull/106), head `3b28190`, está `OPEN`/`MERGEABLE` como filho do #105. A próxima etapa é caracterizar providers e gateways no #107, sem aguardar CI. Plano, spec, checklist e análise detalhada:
 [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
 [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e

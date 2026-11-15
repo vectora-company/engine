@@ -255,7 +255,7 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Expor iteradores async equivalentes nos bindings Python e TypeScript, incluindo cancelamento.
 - [x] Cobrir metadados, limites, chunks limitados, resposta incremental e desconexão parcial.
 - [x] Workspace Rust: 208 testes, 3 fixtures e teste nativo Python passaram; Clippy `-D warnings` passou.
-- [ ] Finalizar build NAPI/TypeScript, suíte Node e pytest completo; publicar PR empilhado sobre #105.
+- [x] Build NAPI/TypeScript, suíte Node (42 pass/11 skips) e pytest (56 pass/1 skip). Publicar PR [#106](https://github.com/vectora-company/engine/pull/106), filho do #105; `OPEN`/`MERGEABLE`.
 - [ ] Integração opt-in com `llama-server` v1.0.0/modelo TTS real.
 
 - [ ] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.

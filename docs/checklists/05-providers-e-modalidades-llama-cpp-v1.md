@@ -97,4 +97,4 @@
 - [x] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
 - [x] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
 - [x] Workspace Rust 208 testes + 3 fixtures; Clippy `-D warnings`; pytest Python 56 pass/1 skip; NAPI build + TypeScript typecheck; Node 42 pass/11 skips; Ruff/format/ty.
-- [ ] Atualizar docs, publicar PR filho do [#105](https://github.com/vectora-company/engine/pull/105), sem aguardar CI remoto.
+- [x] Atualizar docs, publicar o PR [#106](https://github.com/vectora-company/engine/pull/106) como filho do #105; GitHub confirma `OPEN`/`MERGEABLE`.

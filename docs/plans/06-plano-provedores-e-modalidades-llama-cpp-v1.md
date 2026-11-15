@@ -121,8 +121,10 @@ drop/close cancela o consumo. Fixtures cobrem ambas as rotas e entrega
 incremental. Workspace Rust (208 testes, 3 fixtures e teste nativo Python),
 Clippy, pytest Python (56 passaram, 1 FalkorDB opt-in pulado), build NAPI,
 TypeScript typecheck e Node (42 passaram, 11 serviços opcionais pulados)
-passaram. Integração com modelo real continua pendente; publicação do PR é o
-próximo ato operacional.
+passaram. O PR [#106](https://github.com/vectora-company/engine/pull/106), head
+`3b28190`, foi publicado como filho do #105 e está `OPEN`/`MERGEABLE`. Integração
+com modelo real continua pendente; a próxima etapa é caracterizar e ampliar os
+providers/gateways da Etapa 5 sobre o #106, sem aguardar CI remoto.
 
 ### Etapa 5 — providers e gateways
 
