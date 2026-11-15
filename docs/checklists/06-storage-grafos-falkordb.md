@@ -28,7 +28,7 @@ Estados: `feito`, `pendente`, `bloqueado`, `não aplicável`.
 - [x] Integração Rust/Python/Node contra FalkorDB 6.0.3 via Podman; auth por URL e propriedades via Cypher exercitadas.
 - [x] Restart/recovery e persistência testados com AOF síncrono e Podman (`VECTORA_TEST_PODMAN_RESTART`); isso valida somente essa configuração.
 - [x] Exercitar `falkors://` com TLS Rustls e CA local confiável; integração Rust/Python/Node passou contra FalkorDB 6.0.3. O processo aceitou a CA via `SSL_CERT_FILE`.
-- [ ] Cancelamento remoto: o client oficial não expõe cancelamento de comando; timeout server-side é testado, mas cancelar a future local não garante parar o servidor.
+- [x] Avaliar cancelamento remoto: o client oficial 0.11.2 não expõe handle/operação de cancelamento de comando. O timeout server-side foi testado; a ausência de cancelamento remoto está documentada e não se afirma que cancelar a future local pare o servidor.
 - [x] Corrigir paridade de configuração nos bindings: `GraphStoreSettings` compartilhada, connect/query/response timeout e limites de rows/bytes encaminhados ao core; defaults e rejeição de opções inválidas cobertos.
 - [x] Verificar os bindings Python e TypeScript com opções customizadas contra FalkorDB 6.0.3; roundtrip e limite de linhas passaram.
 
@@ -41,3 +41,4 @@ Estados: `feito`, `pendente`, `bloqueado`, `não aplicável`.
 - [x] PR [#102](https://github.com/vectora-company/engine/pull/102) aberto como filho do #101; lockfiles atualizados e SCons ajustado para reutilizar a store do `node_modules`.
 - [x] Hooks completos passaram: rustfmt, Clippy, rustdoc, 217 testes Rust + 3 fixtures, Ruff, Bandit, ty, oxlint e typecheck. `scons tests` passou: Rust 217 + 3 fixtures, pytest 95 e Node 48/10 skips opcionais; FalkorDB real configurado nos três bindings. Staging revisado sem `bindings/typescript/native/index.d.ts` ou `bindings/python/uv.lock`.
 - [x] Commit `039798c`, push e PR [#111](https://github.com/vectora-company/engine/pull/111) aberto como filho do #110 (base `feat/openai-chat-profile`); GitHub reportou `MERGEABLE` na criação.
+- [x] Commit `cdead0a`, push e PR [#112](https://github.com/vectora-company/engine/pull/112) aberto como filho do #111; GitHub reportou `MERGEABLE` na criação.

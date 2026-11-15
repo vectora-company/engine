@@ -5,7 +5,7 @@ capability. `AGENTS.md` continua sendo a autoridade para as regras do repositór
 
 ## Capability ativa
 
-Estado em 15/11/2026: PR [#111](https://github.com/vectora-company/engine/pull/111) corrige a paridade de configuração FalkorDB. O trabalho ativo é o teste/correção de TLS na branch `test/falkordb-tls-integration`, filha do #111; a integração TLS real revelou provider Rustls ambíguo e a correção passou em Rust/Python/Node. Preserve `bindings/typescript/native/index.d.ts` fora do stage e não inclua `bindings/python/uv.lock` não rastreado.
+Estado em 15/11/2026: PR [#112](https://github.com/vectora-company/engine/pull/112), filho do #111, corrige o provider Rustls e cobre TLS real de FalkorDB 6.0.3 em Rust/Python/Node. Os dois PRs foram reportados `MERGEABLE` na criação; cancelamento remoto não é exposto pelo client oficial e permanece documentado como limite. Preserve `bindings/typescript/native/index.d.ts` fora do stage e não inclua `bindings/python/uv.lock` não rastreado.
 
 Histórico das etapas anteriores: Decision Model no [PR #103](https://github.com/vectora-company/engine/pull/103), TTS bufferizado no [#104](https://github.com/vectora-company/engine/pull/104), sessão realtime no [#105](https://github.com/vectora-company/engine/pull/105) e streaming TTS no [#106](https://github.com/vectora-company/engine/pull/106). Consulte [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
 
@@ -56,9 +56,9 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
   itens feitos e pendentes da capability de storage.
 - [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md):
   matriz de capacidade e gates para providers/modalidades.
-- [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md): contrato, estado e aceite de FalkorDB; follow-up de opções de timeout/limites nos bindings no PR #111, filho do #110.
+- [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md): contrato, estado e aceite de FalkorDB; follow-up de opções de timeout/limites nos bindings no PR #111 e TLS Rustls no #112, empilhados sobre #110.
 - [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md): evidências do inventário e leitura da API `llama-server` v1.0.0.
-- [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md): auditoria de integração FalkorDB 6.0.3 e da paridade das configurações nos bindings; TLS/cancelamento remoto continuam sem comprovação.
+- [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md): auditoria de integração FalkorDB 6.0.3 e da paridade das configurações nos bindings; PR #112 cobre TLS real, enquanto o cancelamento remoto não é exposto pelo client oficial.
 - [`docs/checklists/04-midia-no-chat.md`](checklists/04-midia-no-chat.md): contrato,
   payloads nativos e verificações da etapa de mídia.
 

@@ -72,28 +72,32 @@ permanece geral e não substitui critérios específicos. A etapa de limites exp
 - [x] Cobrir limites e fronteira em testes Rust e bindings.
 - [x] Verificar workspace Rust (171 testes + 3 fixtures e Clippy), Python (52 testes, Ruff/format/ty), TypeScript (build/typecheck; 38 passaram, 10 de serviço sem endpoint foram ignorados) e diff; registrar no PR [#90](https://github.com/vectora-company/engine/pull/90), filho de #89; commit de implementação `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`.
 
-## Storage de grafos FalkorDB — TLS, filho do PR #111
+## Storage de grafos FalkorDB — TLS, PR #112
 
-A spec, o plano, a análise e o checklist estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md). `brunosrz` escolheu contrato portátil mais extensão Cypher e aprovou `falkordb` 0.11.2/MSRV 1.95. O core, seleção/capabilities e wrappers Python/TypeScript foram implementados; hooks completos passaram (196 testes Rust + 3 fixtures), além de 92 testes Rust de storage service-real, 55 Python e build/typecheck/41 testes Node (10 skips de outros serviços sem endpoints). FalkorDB 6.0.3 cobriu auth, parâmetros, limites, timeout e restart/AOF. A simulação `scons update --simulate` não alterou lockfiles; Cargo reportou 50 updates possíveis compatíveis com Rust 1.95, uv reportou Ruff 0.17.5 e ty 0.0.104 disponíveis, pnpm retornou `{}`. FalkorDB 6.0.3 real passou integração Rust/Python/Node, inclusive auth URL, limites, timeout e restart/AOF. TLS e cancelamento remoto ainda não têm evidência. Atualização real em 2026-11-15: `scons update` resolveu 51 pacotes Cargo compatíveis com Rust 1.95, atualizou Ruff 0.17.4→0.17.5 e ty 0.0.101→0.0.104; pnpm não alterou o lockfile; a instalação local usa `/home/brunosrz/.local/share/pnpm/store/v11` e SCons deixa o pnpm selecionar seu store padrão. Após rebase no #101, Cargo também atualizou `xxhash-rust` 0.8.19→0.8.20. Simulação posterior: zero updates aplicáveis, 15 crates atrás do latest no MSRV vigente. `scons lint` passou; `scons tests`: Rust 196 + 3 fixtures, pytest 87/1 skipped, Node 40/11 skipped por ausência de serviços.
+A spec, o plano, a análise e o checklist estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md). `brunosrz` escolheu contrato portátil mais extensão Cypher e aprovou `falkordb` 0.11.2/MSRV 1.95. O core, seleção/capabilities e wrappers Python/TypeScript foram implementados; hooks completos passaram (196 testes Rust + 3 fixtures), além de 92 testes Rust de storage service-real, 55 Python e build/typecheck/41 testes Node (10 skips de outros serviços sem endpoints). FalkorDB 6.0.3 cobriu auth, parâmetros, limites, timeout e restart/AOF. A simulação `scons update --simulate` não alterou lockfiles; Cargo reportou 50 updates possíveis compatíveis com Rust 1.95, uv reportou Ruff 0.17.5 e ty 0.0.104 disponíveis, pnpm retornou `{}`. FalkorDB 6.0.3 real passou integração Rust/Python/Node, inclusive auth URL, limites, timeout e restart/AOF. Naquele estágio do trabalho, TLS e cancelamento remoto ainda não tinham evidência; os follow-ups abaixo atualizaram esse estado. Atualização real em 2026-11-15: `scons update` resolveu 51 pacotes Cargo compatíveis com Rust 1.95, atualizou Ruff 0.17.4→0.17.5 e ty 0.0.101→0.0.104; pnpm não alterou o lockfile; a instalação local usa `/home/brunosrz/.local/share/pnpm/store/v11` e SCons deixa o pnpm selecionar seu store padrão. Após rebase no #101, Cargo também atualizou `xxhash-rust` 0.8.19→0.8.20. Simulação posterior: zero updates aplicáveis, 15 crates atrás do latest no MSRV vigente. `scons lint` passou; `scons tests`: Rust 196 + 3 fixtures, pytest 87/1 skipped, Node 40/11 skipped por ausência de serviços.
 
 Atualização em 15/11/2026: a auditoria encontrou que os bindings ignoravam
 timeouts e limites definidos pelo core. O PR [#111](https://github.com/vectora-company/engine/pull/111),
 branch `feat/falkordb-binding-timeouts`, filho do #110, usa `GraphStoreSettings`
 compartilhada e testa opções customizadas contra FalkorDB 6.0.3 em Rust, Python
-e Node. Hooks completos, `scons tests`, commit e push passaram; TLS e cancelamento
-remoto seguem sem comprovação.
+e Node. Em seguida, o PR [#112](https://github.com/vectora-company/engine/pull/112),
+filho do #111, corrigiu a seleção do provider Rustls e passou TLS real nos três
+bindings com CA confiável. O client oficial não expõe cancelamento remoto; a
+limitação foi investigada e registrada, e o timeout server-side foi testado.
+Hooks completos e `scons tests` passaram. Os dois PRs foram publicados; o
+GitHub reportou `MERGEABLE` quando cada um foi aberto.
 
 ## Preparação e escopo
 
-Estado do loop em 15/11/2026: #110 é PR aberto filho do #109. A branch local
-`feat/falkordb-binding-timeouts` está baseada no head do #110. O escopo corrente,
+Estado do loop em 15/11/2026: PR #112 é o topo desta stack, filho do #111. A
+branch local `test/falkordb-tls-integration` está baseada no head do #111. O escopo corrente,
 os testes e os limites estão registrados no
 [plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [spec](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
 [checklist da capability](05-providers-e-modalidades-llama-cpp-v1.md) e
 [auditoria](../analyses/06-auditoria-providers-modalidades.md), além dos
-[artefatos FalkorDB](../plans/07-plano-storage-grafos-falkordb.md). O PR #111 foi publicado; a branch ativa `test/falkordb-tls-integration` é
-filha dele. Prossiga sem aguardar CI dos PRs anteriores.
+[artefatos FalkorDB](../plans/07-plano-storage-grafos-falkordb.md). Os PRs #111 e #112 foram publicados em sequência; #112 é o topo. Prossiga sem
+aguardar CI dos PRs anteriores.
 
 - [ ] Confirmar repositório, branch, base da stack e estado da working tree.
 - [ ] Listar PRs abertos; tratar o PR do topo como trabalho ativo e confirmar
