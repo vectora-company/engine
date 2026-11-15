@@ -39,4 +39,4 @@ Estados: `feito`, `pendente`, `bloqueado`, `não aplicável`.
 - [x] Revisar staging; a mudança preexistente em `bindings/typescript/native/index.d.ts` ficou fora do PR.
 - [x] PR [#102](https://github.com/vectora-company/engine/pull/102) aberto como filho do #101; lockfiles atualizados e SCons ajustado para reutilizar a store do `node_modules`.
 - [x] Hooks completos passaram: rustfmt, Clippy, rustdoc, 217 testes Rust + 3 fixtures, Ruff, Bandit, ty, oxlint e typecheck. `scons tests` passou: Rust 217 + 3 fixtures, pytest 95 e Node 48/10 skips opcionais; FalkorDB real configurado nos três bindings. Staging revisado sem `bindings/typescript/native/index.d.ts` ou `bindings/python/uv.lock`.
-- [ ] Commitar, fazer push e publicar PR filho do [PR #110](https://github.com/vectora-company/engine/pull/110).
+- [x] Commit `039798c`, push e PR [#111](https://github.com/vectora-company/engine/pull/111) aberto como filho do #110 (base `feat/openai-chat-profile`); GitHub reportou `MERGEABLE` na criação.

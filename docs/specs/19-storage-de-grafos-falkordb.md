@@ -2,7 +2,7 @@
 
 ## Estado
 
-Implementação publicada no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101. Uma auditoria posterior encontrou que os bindings descartavam os timeouts/limites do core; a etapa filha #110 expõe esses controles e configura os deadlines de conexão/resposta do client oficial. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core e bindings foram testados contra FalkorDB 6.0.3; TLS e cancelamento remoto seguem limitações documentadas. Não declarar paridade com SQL/vetores.
+Implementação publicada no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101. Uma auditoria posterior encontrou que os bindings descartavam os timeouts/limites do core; o follow-up [#111](https://github.com/vectora-company/engine/pull/111), filho do #110, expõe esses controles e configura os deadlines de conexão/resposta do client oficial. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core e bindings foram testados contra FalkorDB 6.0.3; TLS e cancelamento remoto seguem limitações documentadas. Não declarar paridade com SQL/vetores.
 
 ## Objetivo e fronteira
 
