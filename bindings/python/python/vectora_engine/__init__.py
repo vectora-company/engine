@@ -908,6 +908,28 @@ async def llama_server_models(settings: JsonObject) -> dict[str, Any]:
     )
 
 
+async def llama_server_decide(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Answer a media-free, persistable request via `/v1/systemone`."""
+    return json.loads(
+        await _native.llama_server_decide(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
+async def llama_server_decide_ephemeral(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Send a transient decision request with image/audio data URLs."""
+    return json.loads(
+        await _native.llama_server_decide_ephemeral(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
 async def llama_server_chat_complete(
     settings: JsonObject,
     request: JsonObject,
@@ -1187,6 +1209,8 @@ __all__ = [
     "llama_server_chat_complete_ephemeral",
     "llama_server_chat_stream",
     "llama_server_chat_stream_ephemeral",
+    "llama_server_decide",
+    "llama_server_decide_ephemeral",
     "llama_server_health",
     "llama_server_models",
     "model_tool_loop_contract_version",

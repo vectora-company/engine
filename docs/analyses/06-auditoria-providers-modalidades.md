@@ -118,3 +118,7 @@ Não foi iniciado `llama-server`, baixado modelo, nem chamada externa a provider
 O inventário prova a presença/ausência de adapters no código local e os
 endpoints declarados no upstream v1.0.0; não prova interoperabilidade real nem
 capacidade de cada modelo.
+
+## Atualização — Decision Model llama-server (2026-11-15)
+
+A etapa seguinte da stack começa na branch `feat/llama-server-decision-model`, filha do PR #102. O core define `DecisionRequest`, perguntas `choice`/`score`/`noul` e resposta que preserva campos de probabilidade; `/v1/systemone` é não-streaming conforme a API fixada na spec. A validação aceita somente data URLs base64 de imagem/áudio no campo `files`, com limite de mídia; usa auth, timeout e limite de corpo do perfil. A resposta exige exatamente os IDs perguntados. Fixture HTTP Rust passou para rota, bearer token, choice, probabilidades e usage. Wrappers/fixtures Python e TypeScript foram iniciados; build e testes dos bindings ainda pendentes.

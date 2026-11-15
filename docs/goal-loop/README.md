@@ -61,9 +61,13 @@ OpenAI-compatible não implica suporte a todas as operações. A etapa graph
 FalkorDB é separada dessa trilha e não deve antecipar suporte genérico a
 GraphRAG.
 
-### Capability em implementação: FalkorDB graph
+### PR aberto no topo da stack: FalkorDB graph #102
 
-O trabalho ativo é adicionar uma capability de storage de grafos FalkorDB, como PR filho do PR documental #101, no checkout `/home/brunosrz/Área de trabalho/engine/`. `brunosrz` escolheu contrato portátil mais extensão Cypher. Consulte [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md). A decisão de dependência/MSRV foi respondida: `falkordb` 0.11.2 e Rust 1.95. Implementação e verificações locais concluídas; PR [#102](https://github.com/vectora-company/engine/pull/102) aberto como filho do #101. A atualização real SCons também foi executada depois, com lint e testes aprovados.
+O [PR #102](https://github.com/vectora-company/engine/pull/102), filho do #101, implementa o backend graph FalkorDB. O conflito no documento de análise foi resolvido preservando a análise do exporter do Vectora; o PR foi rebaseado, atualizado com o store pnpm local e está `MERGEABLE`. Detalhes em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
+
+### PR filho #103: Decision Model llama-server
+
+O PR [#103](https://github.com/vectora-company/engine/pull/103), branch `feat/llama-server-decision-model`, filha do #102, implementa `/v1/systemone` na referência llama.cpp v1.0.0 e está `MERGEABLE`. Core Rust e bindings Python/TypeScript passaram fixtures HTTP; integração real com llama-server permanece pendente. A próxima implementação é TTS `/v1/audio/speech`, filha do #103. Consulte [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md) e [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
 
 ## Regras operacionais do mantenedor
 

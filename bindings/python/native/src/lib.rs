@@ -14,11 +14,11 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
-    ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
-    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
-    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
-    OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest, ProviderMediaLimits,
-    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
+    ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
+    EphemeralDecisionRequest, FallbackChatClient, FallbackChatSettings, LlamaServerClient,
+    LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient,
+    NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
+    ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -2006,6 +2006,38 @@ fn llama_server_models<'py>(py: Python<'py>, settings_json: String) -> PyResult<
 }
 
 #[pyfunction]
+fn llama_server_decide<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: DecisionRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid decision request"))?;
+        let response = client.decide(request).await.map_err(py_error)?;
+        serde_json::to_string(&response).map_err(|_| py_error("could not encode decision response"))
+    })
+}
+
+#[pyfunction]
+fn llama_server_decide_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (client, _, _) =
+            parse_llama_server_inputs(&settings_json, None, false).map_err(py_error)?;
+        let request: EphemeralDecisionRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid ephemeral decision request"))?;
+        let response = client.decide_ephemeral(request).await.map_err(py_error)?;
+        serde_json::to_string(&response).map_err(|_| py_error("could not encode decision response"))
+    })
+}
+
+#[pyfunction]
 fn llama_server_chat_complete<'py>(
     py: Python<'py>,
     settings_json: String,
@@ -2582,6 +2614,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(chat_complete_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_health, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_models, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_decide, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_decide_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_chat_complete, module)?)?;
     module.add_function(wrap_pyfunction!(
         llama_server_chat_complete_ephemeral,

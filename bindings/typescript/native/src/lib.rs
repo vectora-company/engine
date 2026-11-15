@@ -14,11 +14,11 @@ use napi_derive::napi;
 use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
-    ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, EphemeralChatRequest, FallbackChatClient,
-    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
-    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
-    OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest, ProviderMediaLimits,
-    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
+    ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
+    EphemeralDecisionRequest, FallbackChatClient, FallbackChatSettings, LlamaServerClient,
+    LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient,
+    NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
+    ProviderMediaLimits, TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -1887,6 +1887,33 @@ pub async fn llama_server_models(settings_json: String) -> Result<String> {
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&models)
+}
+
+#[napi]
+pub async fn llama_server_decide(settings_json: String, request_json: String) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: DecisionRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid decision request"))?;
+    let response = client
+        .decide(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
+pub async fn llama_server_decide_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let request: EphemeralDecisionRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid ephemeral decision request"))?;
+    let response = client
+        .decide_ephemeral(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
 }
 
 #[napi]

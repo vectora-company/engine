@@ -1,5 +1,6 @@
 //! Versioned provider-neutral chat contracts and first provider transport.
 
+mod decision_model;
 mod error;
 mod fallback;
 mod llama_server;
@@ -10,6 +11,10 @@ mod sse;
 mod turn;
 mod types;
 
+pub use decision_model::{
+    DecisionQuestion, DecisionQuestionKind, DecisionRequest, DecisionResponse, DecisionUsage,
+    EphemeralDecisionRequest,
+};
 pub use error::ChatError;
 pub use fallback::{
     FallbackCandidateSettings, FallbackChatClient, FallbackChatSettings, FallbackClientSettings,

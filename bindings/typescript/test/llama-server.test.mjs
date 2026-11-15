@@ -4,6 +4,8 @@ import { test } from "node:test";
 import {
   llamaServerChatComplete,
   llamaServerChatStream,
+  llamaServerDecide,
+  llamaServerDecideEphemeral,
   llamaServerHealth,
   llamaServerModels,
 } from "../dist/index.js";
@@ -27,6 +29,20 @@ test("llama-server binding uses health, models and shared chat routes", async ()
       );
       return;
     }
+    if (request.url === "/v1/systemone") {
+      if (requestBody.files?.length) {
+        assert.deepEqual(Object.keys(requestBody.questions), ["route"]);
+        assert.deepEqual(requestBody.files, ["data:image/png;base64,aGVsbG8="]);
+      } else {
+        assert.deepEqual(Object.keys(requestBody.questions), ["route"]);
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        answers: { route: { choice: "billing", probabilities: { billing: 0.8, shipping: 0.2 }, confidence: 0.6 } },
+        usage: { input_tokens: 12, output_tokens: 0 },
+      }));
+      return;
+    }
     const body =
       request.url === "/health"
         ? { status: "ok" }
@@ -38,7 +54,7 @@ test("llama-server binding uses health, models and shared chat routes", async ()
                   id: "fixture",
                   architecture: {
                     input_modalities: ["text", "image"],
-                    output_modalities: ["text"],
+                    output_modalities: ["text", "decisions"],
                   },
                 },
               ],
@@ -60,6 +76,29 @@ test("llama-server binding uses health, models and shared chat routes", async ()
     assert.deepEqual(await llamaServerHealth(settings), { status: "ok" });
     const models = await llamaServerModels(settings);
     assert.deepEqual(models.data[0].architecture.input_modalities, ["text", "image"]);
+    const decision = await llamaServerDecide(settings, {
+      model: "fixture",
+      state: { ticket: "charged twice" },
+      questions: { route: {
+        type: "choice",
+        instructions: "Which team?",
+        criteria: { billing: null, shipping: null },
+      } },
+    });
+    assert.equal(decision.answers.route.probabilities.billing, 0.8);
+    const ephemeralDecision = await llamaServerDecideEphemeral(settings, {
+      request: {
+        model: "fixture",
+        state: { ticket: "charged twice" },
+        questions: { route: {
+          type: "choice",
+          instructions: "Which team?",
+          criteria: { billing: null, shipping: null },
+        } },
+      },
+      files: ["data:image/png;base64,aGVsbG8="],
+    });
+    assert.equal(ephemeralDecision.answers.route.choice, "billing");
     const completion = await llamaServerChatComplete(settings, {
       contract_version: 1,
       model: "fixture",
@@ -80,6 +119,10 @@ test("llama-server binding uses health, models and shared chat routes", async ()
     assert.deepEqual(paths, [
       "/health",
       "/v1/models",
+      "/v1/models",
+      "/v1/systemone",
+      "/v1/models",
+      "/v1/systemone",
       "/v1/chat/completions",
       "/v1/chat/completions",
     ]);
