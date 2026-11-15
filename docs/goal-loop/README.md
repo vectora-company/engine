@@ -1,8 +1,8 @@
 # Goal loop da Engine
 
-## Estado atual — perfil OpenRouter (15/11/2026)
+## Estado atual — follow-up de configuração FalkorDB (15/11/2026)
 
-PR [#108](https://github.com/vectora-company/engine/pull/108), filho do [#107](https://github.com/vectora-company/engine/pull/107), implementa OpenRouter Chat Completions, está `OPEN`/`MERGEABLE` e passou suites/hooks. Branch ativa `feat/openai-responses-profile`, filha do #108, inicia a preparação do adapter Responses separado de Chat Completions, com `store: false` default, histórico completo, imagens, function calls e stream semântico. O contrato está documentado; implementação de código pendente. Preserve `bindings/typescript/native/index.d.ts` do usuário fora do stage. Ollama local não está ativo, por isso ainda não há teste com serviço real. Checkout autorizado `/home/brunosrz/Área de trabalho/engine`; preserve a mudança local em `bindings/typescript/native/index.d.ts` fora do stage. O plano, spec, checklist e análise estão em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
+PR [#110](https://github.com/vectora-company/engine/pull/110), perfil OpenAI Chat Completions, é filho do #109. Branch ativa `feat/falkordb-binding-timeouts`, filha do #110, corrige a configuração dos bindings FalkorDB: deadlines de conexão/query/resposta e limites de linhas/bytes agora chegam ao core. Rust, Python e Node passaram contra FalkorDB 6.0.3; hooks completos e `scons tests` passaram (217 Rust + 3 fixtures, pytest 95, Node 48/10 skips opcionais). Falta commit, push e publicação do PR. Preserve `bindings/typescript/native/index.d.ts` e `bindings/python/uv.lock` fora do stage. Checkout autorizado `/home/brunosrz/Área de trabalho/engine`. O plano, spec, checklist e análise FalkorDB estão em [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md) e [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md).
 
 Este conjunto define os documentos que orientam um goal contínuo de
 implementação. O [prompt curto](../plans/00-prompt-loop-goal.md) é o ponto de
@@ -65,9 +65,9 @@ OpenAI-compatible não implica suporte a todas as operações. A etapa graph
 FalkorDB é separada dessa trilha e não deve antecipar suporte genérico a
 GraphRAG.
 
-### PR aberto no topo da stack: FalkorDB graph #102
+### Capability FalkorDB entregue no PR #102; follow-up em #111
 
-O [PR #102](https://github.com/vectora-company/engine/pull/102), filho do #101, implementa o backend graph FalkorDB. O conflito no documento de análise foi resolvido preservando a análise do exporter do Vectora; o PR foi rebaseado, atualizado com o store pnpm local e está `MERGEABLE`. Detalhes em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
+O [PR #102](https://github.com/vectora-company/engine/pull/102), filho do #101, implementa a capability graph. Ele continua aberto e `MERGEABLE`, mas já não é o topo da stack. Uma auditoria posterior encontrou paridade incompleta de configuração nos bindings; a correção está na branch `feat/falkordb-binding-timeouts`, filha do PR #110 e planejada como #111. Detalhes em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
 
 ### PR filho #103: Decision Model llama-server
 

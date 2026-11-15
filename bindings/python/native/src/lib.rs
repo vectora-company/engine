@@ -955,21 +955,12 @@ fn graph_store_operation<'py>(
     operation_json: String,
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
-        let config: serde_json::Value = serde_json::from_str(&config_json)
-            .map_err(|_| py_error("invalid graph-store config"))?;
-        let endpoint = config
-            .get("endpoint")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| py_error("invalid graph-store config"))?;
-        let graph_name = config
-            .get("graph_name")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| py_error("invalid graph-store config"))?;
-        let store = vectora_engine::storage::graph::FalkorDbStore::connect(
-            vectora_engine::storage::graph::GraphStoreConfig::new(endpoint, graph_name),
-        )
-        .await
-        .map_err(py_error)?;
+        let config: vectora_engine::storage::graph::GraphStoreSettings =
+            serde_json::from_str(&config_json)
+                .map_err(|_| py_error("invalid graph-store config"))?;
+        let store = vectora_engine::storage::graph::FalkorDbStore::connect(config.into_config())
+            .await
+            .map_err(py_error)?;
         let mut operation: serde_json::Value = serde_json::from_str(&operation_json)
             .map_err(|_| py_error("invalid graph operation"))?;
         let name = operation

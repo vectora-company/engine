@@ -124,13 +124,36 @@ def test_storage_capabilities_state_backend_differences() -> None:
         storage_capabilities({"contract_version": 99})
 
 
+def test_graph_store_binding_rejects_invalid_config_before_connecting() -> None:
+    async def call() -> None:
+        with pytest.raises(RuntimeError, match="invalid graph request"):
+            await graph_store_operation(
+                {
+                    "endpoint": "redis://127.0.0.1:1",
+                    "graph_name": "graph",
+                    "connect_timeout_ms": 0,
+                },
+                {"operation": "get_node", "id": "n"},
+            )
+
+    asyncio.run(call())
+
+
 def test_graph_store_binding_against_falkordb_when_configured() -> None:
     endpoint = os.environ.get("VECTORA_TEST_FALKORDB_URL")
     if endpoint is None:
         pytest.skip("VECTORA_TEST_FALKORDB_URL is not configured")
 
     async def exercise() -> None:
-        config = {"endpoint": endpoint, "graph_name": f"python_{os.getpid()}"}
+        config = {
+            "endpoint": endpoint,
+            "graph_name": f"python_{os.getpid()}",
+            "connect_timeout_ms": 5_000,
+            "query_timeout_ms": 5_000,
+            "response_timeout_ms": 10_000,
+            "max_rows": 20,
+            "max_result_bytes": 16_384,
+        }
         node = {
             "id": f"node-{os.getpid()}",
             "labels": ["Person"],
@@ -161,6 +184,17 @@ def test_graph_store_binding_against_falkordb_when_configured() -> None:
             },
         )
         assert query["rows"] == [[None, "São Paulo"]]
+        with pytest.raises(
+            RuntimeError, match="graph result exceeded configured limits"
+        ):
+            await graph_store_operation(
+                {**config, "max_rows": 1},
+                {
+                    "operation": "cypher",
+                    "query": "UNWIND [1, 2] AS n RETURN n",
+                    "params": {},
+                },
+            )
 
     asyncio.run(exercise())
 

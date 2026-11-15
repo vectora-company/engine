@@ -171,3 +171,21 @@ também atualizou `xxhash-rust` 0.8.19→0.8.20. A simulação pós-update não 
 TLS e cancelamento da query no servidor continuam sem teste. A mudança
 preexistente do usuário em `bindings/typescript/native/index.d.ts` foi mantida
 fora do PR.
+
+## Auditoria posterior: configuração de timeouts e limites nos bindings
+
+Em 15/11/2026, a revisão do código no checkout da Área de trabalho encontrou
+uma divergência real: `GraphStoreConfig` do core aceitava timeout de query e
+limites de linhas/bytes, mas as funções NAPI/PyO3 reconstruíam a configuração
+com apenas `endpoint` e `graph_name`. Também não se definiam deadlines de
+conexão nem de resposta client-side no builder oficial.
+
+A branch filha do PR #110 introduz `GraphStoreSettings`, usada diretamente por
+Python e Node, com validação no core e defaults explícitos: connection 10 s,
+query server-side 10 s, response client-side 30 s, 1.000 linhas e 4 MiB. Testes
+Rust verificam defaults, overrides, opções desconhecidas e limites inválidos.
+Com `falkordb/falkordb:6.0.3` em Podman, Rust, Python e Node aceitaram opções
+customizadas; roundtrip e limite de linhas passaram. Python e Node rejeitaram
+configuração inválida antes de abrir conexão. TLS permanece sem teste. A
+interrupção da future caller não prova cancelamento no servidor; não há
+afirmação de que timeout client-side desfaça uma escrita enviada.

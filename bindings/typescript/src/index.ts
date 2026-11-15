@@ -1093,6 +1093,16 @@ export interface PubSubConfig {
 export interface GraphStoreConfig {
   endpoint: string;
   graph_name: string;
+  /** Connection establishment and topology probe deadline (default 10 seconds). */
+  connect_timeout_ms?: number;
+  /** FalkorDB server-side query execution timeout (default 10 seconds). */
+  query_timeout_ms?: number;
+  /** Client deadline while waiting for a server response (default 30 seconds). */
+  response_timeout_ms?: number;
+  /** Maximum rows materialized by one query (default 1000). */
+  max_rows?: number;
+  /** Maximum encoded result bytes per query (default 4 MiB). */
+  max_result_bytes?: number;
 }
 export interface VectorRecord {
   id: number;
