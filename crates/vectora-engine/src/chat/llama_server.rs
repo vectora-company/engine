@@ -1976,6 +1976,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn multimodal_rerank_fails_closed_for_bad_digest_and_oversized_assets() {
+        use super::super::{CapabilityResolver, MediaExecutionContext, MediaPart};
+        let bytes = b"\x89PNG\r\n\x1a\nrerank-guard".to_vec();
+        for invalid_digest in [false, true] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut buffer = vec![0; 4096];
+                let n = stream.read(&mut buffer).await.unwrap();
+                assert!(String::from_utf8_lossy(&buffer[..n]).starts_with("GET /v1/models "));
+                let body = r#"{"data":[{"id":"vision-ranker","architecture":{"input_modalities":["text","image"]}}]}"#;
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            });
+            let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+            let mut media_ref = png_ref(&bytes);
+            if invalid_digest {
+                media_ref.sha256 = "0".repeat(64);
+            }
+            let context = MediaExecutionContext::new(
+                CapabilityResolver::default(),
+                std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::from([(
+                    "image-1".to_owned(),
+                    bytes.clone(),
+                )]))),
+            )
+            .with_max_media_bytes(if invalid_digest {
+                bytes.len() as u64
+            } else {
+                8
+            });
+            let result = client
+                .rerank_ephemeral(
+                    EphemeralLlamaServerRerankRequest {
+                        contract_version: RERANK_CONTRACT_VERSION,
+                        model: "vision-ranker".into(),
+                        query: vec![ContentPart::Image(MediaPart {
+                            media_ref,
+                            text: None,
+                            previews: vec![],
+                        })],
+                        documents: vec![LlamaServerRerankInput {
+                            content: vec![ContentPart::Text {
+                                text: "candidate".into(),
+                            }],
+                        }],
+                        top_n: None,
+                    },
+                    &context,
+                )
+                .await;
+            assert!(matches!(result, Err(ChatError::ModelCapabilityUnsupported)));
+            server.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
     async fn multimodal_embeddings_resolve_and_materialize_only_consumer_assets() {
         use super::super::{CapabilityResolver, MediaExecutionContext, MediaPart};
         let bytes = b"\x89PNG\r\n\x1a\nfixture".to_vec();
