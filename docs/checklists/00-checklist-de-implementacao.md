@@ -383,3 +383,13 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] `scons tests`: Rust 242; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
 - [x] `scons lint`.
 - [ ] Pre-commit e publicar PR filho de [#119](https://github.com/vectora-company/engine/pull/119).
+      Artefatos específicos desta etapa: `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.
+
+## CLI independente para testar a Engine
+
+- [x] Especificação, plano, checklist e análise específicos estão em `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.
+- [x] Crate separada `crates/engine-cli` com config local, referência de credenciais por environment, chat ReAct limitado e interface rustyline/termimad/indicatif.
+- [x] `cargo test -p engine-cli --locked`: 5 testes; `scons tests`: Rust 242, fixtures 3, binding Python 1, pytest 99/1 skip, Node 52/11 skips.
+- [x] `scons lint` passou.
+- [x] `scons build-cli` e pre-commit específico passaram.
+- [ ] Publicar PR filho do #120.

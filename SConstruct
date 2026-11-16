@@ -239,6 +239,12 @@ def _build_core(target, source, env):
     )
 
 
+def _build_cli(target, source, env):
+    """Build the standalone Engine exercise CLI."""
+    _configure_build_cache()
+    _run("cargo", "build", "-p", "engine-cli", "--release", "--locked")
+
+
 def _build_python(target, source, env):
     """Build the Python package and its PyO3 extension."""
     _configure_build_cache()
@@ -276,6 +282,7 @@ def _build_go(target, source, env):
 def _build(target, source, env):
     """Build core and bindings sequentially into the shared Cargo cache."""
     _build_core(target, source, env)
+    _build_cli(target, source, env)
     _build_python(target, source, env)
     _build_typescript(target, source, env)
     _build_go(target, source, env)
@@ -382,10 +389,11 @@ Vectora Engine — alvos SCons (rodar da raiz do repositório)
 
 Setup
   scons install    instala dependências e sidecars de desenvolvimento
-  scons build      compila core Rust e bindings Python/TypeScript (e Go quando existir)
+  scons build      compila core, engine-cli e bindings Python/TypeScript (e Go quando existir)
 
 Build focado
   scons build-core       compila só o core Rust, sem testes
+  scons build-cli        compila o executável engine-cli em release
   scons build-python     compila só o binding Python/PyO3
   scons build-typescript compila só o binding TypeScript/N-API
 
@@ -420,6 +428,7 @@ env = Environment(ENV=os.environ)
 env.Command("_help", [], _help)
 env.Command("_install", [], _install)
 env.Command("_build_core", [], _build_core)
+env.Command("_build_cli", [], _build_cli)
 env.Command("_build_python", [], _build_python)
 env.Command("_build_typescript", [], _build_typescript)
 env.Command("_build", [], _build)
@@ -433,6 +442,7 @@ Default("_help")
 for alias, target in {
     "install": "_install",
     "build-core": "_build_core",
+    "build-cli": "_build_cli",
     "build-python": "_build_python",
     "build-typescript": "_build_typescript",
     "build": "_build",

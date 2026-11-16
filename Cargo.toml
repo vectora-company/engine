@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/vectora-engine",
+  "crates/engine-cli",
   "bindings/python/native",
   "bindings/typescript/native",
 ]

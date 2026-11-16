@@ -82,3 +82,4 @@ Uma etapa está concluída quando todos os critérios de aceite aplicáveis têm
 implementação ou justificativa explícita, verificação local registrada,
 documentação sincronizada e nenhuma decisão vital pendente para aquela etapa.
 Isso não encerra o goal se restarem etapas aprovadas no plano.
+Artefatos específicos desta etapa: `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.
