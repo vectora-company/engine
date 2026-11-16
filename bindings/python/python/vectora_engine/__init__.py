@@ -901,6 +901,17 @@ async def llama_server_health(settings: JsonObject) -> dict[str, Any]:
     )
 
 
+async def llama_server_embed(
+    settings: JsonObject, request: JsonObject
+) -> dict[str, Any]:
+    """Create text embeddings through llama-server `/v1/embeddings`."""
+    return json.loads(
+        await _native.llama_server_embed(
+            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+        )
+    )
+
+
 async def llama_server_models(settings: JsonObject) -> dict[str, Any]:
     """Return raw model metadata from the llama-server `/v1/models` endpoint."""
     return json.loads(
@@ -1404,6 +1415,7 @@ __all__ = [
     "llama_server_chat_stream_ephemeral",
     "llama_server_decide",
     "llama_server_decide_ephemeral",
+    "llama_server_embed",
     "llama_server_health",
     "llama_server_models",
     "llama_server_realtime_start",

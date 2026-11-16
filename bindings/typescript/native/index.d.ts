@@ -196,6 +196,11 @@ export declare function llamaServerHealth(
   settingsJson: string,
 ): Promise<string>;
 
+export declare function llamaServerEmbed(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
 export declare function llamaServerModels(
   settingsJson: string,
 ): Promise<string>;

@@ -24,6 +24,7 @@ use super::{
     RealtimeSession, RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse,
     SpeechStreamInfo,
 };
+use crate::llm::embeddings::{EmbeddingRequest, EmbeddingResponse, LlmUsage};
 
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 10_000;
 const DEFAULT_READ_TIMEOUT_MS: u64 = 60_000;
@@ -485,6 +486,117 @@ impl LlamaServerClient {
         endpoint.set_path(&format!("{}/models", endpoint.path().trim_end_matches('/')));
         let response = self.get(endpoint).await?;
         serde_json::from_slice(&response).map_err(|_| ChatError::InvalidResponse)
+    }
+
+    /// Creates text embeddings through llama-server v1.0.0 `/v1/embeddings`.
+    /// Multimodal inputs are exposed separately once their ephemeral asset
+    /// contract is implemented; this method never serializes media into history.
+    pub async fn embed(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse, ChatError> {
+        if request.contract_version != crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION
+            || request.model.trim().is_empty()
+            || request.texts.iter().any(|text| text.trim().is_empty())
+        {
+            return Err(ChatError::InvalidRequest("invalid embedding request"));
+        }
+        if request.texts.is_empty() {
+            return Ok(EmbeddingResponse {
+                contract_version: crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION,
+                embeddings: Vec::new(),
+                dimensions: 0,
+                usage: None,
+                selected_model_id: None,
+                model_switches: Vec::new(),
+            });
+        }
+        let mut endpoint = self.v1_url.clone();
+        endpoint.set_path(&format!(
+            "{}/embeddings",
+            endpoint.path().trim_end_matches('/')
+        ));
+        let body = serde_json::to_vec(&serde_json::json!({
+            "model": request.model,
+            "input": request.texts,
+            "encoding_format": "float",
+        }))
+        .map_err(|_| ChatError::InvalidRequest("embedding request could not be encoded"))?;
+        if body.len() > self.max_response_bytes {
+            return Err(ChatError::ResponseTooLarge);
+        }
+        let deadline = Instant::now() + self.total_timeout;
+        let mut http = self
+            .client
+            .post(endpoint)
+            .timeout(self.read_timeout)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(body);
+        if let Some(key) = &self.api_key {
+            http = http.header(header::AUTHORIZATION, key.clone());
+        }
+        for (name, value) in &self.headers {
+            http = http.header(name, value);
+        }
+        let response = timeout_at(deadline, http.send())
+            .await
+            .map_err(|_| ChatError::Timeout)?
+            .map_err(|error| {
+                if error.is_timeout() {
+                    ChatError::Timeout
+                } else {
+                    ChatError::Connection
+                }
+            })?;
+        if !response.status().is_success() {
+            return Err(classify_status(response.status().as_u16()));
+        }
+        let bytes = read_limited(response, self.max_response_bytes, deadline).await?;
+        #[derive(Deserialize)]
+        struct Data {
+            index: usize,
+            embedding: Vec<f32>,
+        }
+        #[derive(Deserialize)]
+        struct Usage {
+            prompt_tokens: u64,
+        }
+        #[derive(Deserialize)]
+        struct Raw {
+            data: Vec<Data>,
+            #[serde(default)]
+            usage: Option<Usage>,
+        }
+        let raw: Raw = serde_json::from_slice(&bytes).map_err(|_| ChatError::InvalidResponse)?;
+        if raw.data.len() != request.texts.len() {
+            return Err(ChatError::InvalidResponse);
+        }
+        let mut vectors = vec![None; request.texts.len()];
+        let mut dimensions = None;
+        for item in raw.data {
+            if item.index >= vectors.len()
+                || vectors[item.index].is_some()
+                || item.embedding.is_empty()
+                || item.embedding.iter().any(|value| !value.is_finite())
+                || dimensions.is_some_and(|size| size != item.embedding.len())
+            {
+                return Err(ChatError::InvalidResponse);
+            }
+            dimensions = Some(item.embedding.len());
+            vectors[item.index] = Some(item.embedding);
+        }
+        let embeddings = vectors
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .ok_or(ChatError::InvalidResponse)?;
+        Ok(EmbeddingResponse {
+            contract_version: crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION,
+            dimensions: dimensions.unwrap_or_default() as u32,
+            embeddings,
+            usage: raw.usage.map(|usage| LlmUsage {
+                input_tokens: usage.prompt_tokens,
+                cost: None,
+            }),
+            selected_model_id: Some(request.model),
+            model_switches: Vec::new(),
+        })
     }
 
     /// Returns server properties such as model-specific TTS voice names.
@@ -1196,6 +1308,103 @@ mod tests {
             body
         );
         stream.write_all(response.as_bytes()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn embeddings_use_authenticated_endpoint_and_restore_response_order() {
+        use crate::llm::embeddings::{EMBEDDING_CONTRACT_VERSION, EmbeddingInputType};
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 8192];
+            let n = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..n]);
+            assert!(request.starts_with("POST /v1/embeddings "));
+            assert!(
+                request
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer test-key")
+            );
+            assert!(request.contains("\"input\":[\"first\",\"second\"]"));
+            let body = r#"{"data":[{"index":1,"embedding":[0.3,0.4]},{"index":0,"embedding":[0.1,0.2]}],"usage":{"prompt_tokens":7}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let response = client
+            .embed(EmbeddingRequest {
+                contract_version: EMBEDDING_CONTRACT_VERSION,
+                model: "embed-model".into(),
+                input_type: EmbeddingInputType::Document,
+                texts: vec!["first".into(), "second".into()],
+                dimensions: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(response.embeddings, vec![vec![0.1, 0.2], vec![0.3, 0.4]]);
+        assert_eq!(response.dimensions, 2);
+        assert_eq!(response.usage.unwrap().input_tokens, 7);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn embeddings_reject_duplicate_indices_and_non_finite_vectors() {
+        use crate::llm::embeddings::{EMBEDDING_CONTRACT_VERSION, EmbeddingInputType};
+        for body in [
+            r#"{"data":[{"index":0,"embedding":[1.0]},{"index":0,"embedding":[2.0]}]}"#,
+            r#"{"data":[{"index":0,"embedding":[1e999]}]}"#,
+            r#"{"data":[{"index":1,"embedding":[1.0]}]}"#,
+            r#"{"data":[{"index":0,"embedding":[1.0]},{"index":1,"embedding":[1.0,2.0]}]}"#,
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 4096];
+                let _ = stream.read(&mut request).await.unwrap();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+            let result = client
+                .embed(EmbeddingRequest {
+                    contract_version: EMBEDDING_CONTRACT_VERSION,
+                    model: "embed-model".into(),
+                    input_type: EmbeddingInputType::Query,
+                    texts: vec!["input".into()],
+                    dimensions: None,
+                })
+                .await;
+            assert!(matches!(result, Err(ChatError::InvalidResponse)));
+            server.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_embedding_batch_returns_without_network() {
+        use crate::llm::embeddings::{EMBEDDING_CONTRACT_VERSION, EmbeddingInputType};
+        let client = LlamaServerClient::new(settings("http://127.0.0.1:1".into())).unwrap();
+        let response = client
+            .embed(EmbeddingRequest {
+                contract_version: EMBEDDING_CONTRACT_VERSION,
+                model: "embed-model".into(),
+                input_type: EmbeddingInputType::Query,
+                texts: Vec::new(),
+                dimensions: None,
+            })
+            .await
+            .unwrap();
+        assert!(response.embeddings.is_empty());
+        assert_eq!(response.dimensions, 0);
     }
 
     #[tokio::test]

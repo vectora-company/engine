@@ -1879,6 +1879,21 @@ pub async fn llama_server_health(settings_json: String) -> Result<String> {
 }
 
 #[napi]
+pub async fn llama_server_embed(settings_json: String, request_json: String) -> Result<String> {
+    let settings: LlamaServerSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid llama-server settings"))?;
+    let request: EmbeddingRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid embedding request"))?;
+    let client =
+        LlamaServerClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    let response = client
+        .embed(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
 pub async fn llama_server_models(settings_json: String) -> Result<String> {
     let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
     let models = client

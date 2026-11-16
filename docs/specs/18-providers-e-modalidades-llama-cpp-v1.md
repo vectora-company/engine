@@ -192,6 +192,36 @@ originais: TTS aceita WAV/PCM, não MP3, e sample rate e vozes dependem do
 modelo. A release registra suporte a Drama-3 TTS e novos modelos vision; isso
 não transforma geração de imagem em endpoint suportado.
 
+### Subetapa 6a — `/v1/embeddings` texto
+
+O perfil llama-server expõe embeddings de texto pelo mesmo endpoint v1.0.0.
+Mantém o contrato `EmbeddingRequest` com versão, modelo, input type e lote de
+textos; `input_type` e `dimensions` não são enviados como opções inventadas do
+servidor. Reordena a resposta pelo `index`, rejeita cardinalidade/índices/
+dimensões inválidos e vetores vazios ou não finitos. Usage é normalizado para
+tokens de entrada; a direção/normalização do vetor permanece a definida pelo
+llama-server/modelo. Lotes vazios retornam sem rede.
+
+### Subetapa 6b — `/v1/embeddings` multimodal
+
+O servidor v1.0.0 aceita `input` como string, lista de strings ou lista de
+objetos `{ "content": [...] }`; cada objeto de conteúdo pode conter texto,
+`image_url`, `input_audio` ou `input_video`. A operação retorna um embedding
+por elemento; exige pooling diferente de `none` e normaliza vetores pela norma
+Euclidiana. Áudio/vídeo dependem do suporte real do modelo/projetor; vídeo usa
+FFmpeg.
+
+A Engine adiciona uma API de envio efêmero com assets autorizados pelo
+consumidor. Cada input é uma sequência ordenada de partes textuais ou refs de
+asset. A Engine confere tamanho, MIME e digest, serializa as imagens como
+`image_url` com data URL e áudio/vídeo no formato nativo; nunca busca URL remota
+nem lê caminho local. Respostas devem conter exatamente um vetor por input,
+índices únicos e contíguos, vetores finitos e dimensão constante. A API não
+promete `dimensions` customizável nem outros modos de normalização, pois não
+estão no contrato OpenAI-compatible documentado pelo llama-server.
+
+Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#post-v1embeddings-openai-compatible-embeddings-api), [formatos de conteúdo multimodal](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#post-v1chatcompletions-openai-compatible-chat-completions-api).
+
 ## Contrato compartilhado
 
 1. Configuração identifica `protocol`, `endpoint`, auth/headers e timeouts;

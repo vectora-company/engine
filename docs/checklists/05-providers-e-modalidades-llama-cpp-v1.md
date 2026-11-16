@@ -27,7 +27,7 @@
 | STT                                       | Ausente                                                                                                                | `/v1/realtime` é streaming ASR; batch transcription requer API separada.                                                                                         |
 | Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                                                               | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.                                                                                              |
 | Geração de vídeo                          | Ausente                                                                                                                | Não confundir com vídeo de entrada.                                                                                                                              |
-| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama                                                                      | Extensão multimodal do llama.cpp em contrato versionado.                                                                                                         |
+| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama; texto llama-server implementado no core e bindings                  | Fixtures Rust/Python/Node cobrem rota, auth, ordem, dimensões e usage. Multimodal ainda não implementado.                                                        |
 | Rerank                                    | Cohere/Voyage/OpenRouter                                                                                               | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.                                                                                                  |
 
 ## Gates para etapas de código
@@ -53,6 +53,14 @@
 - [x] Fixtures Laya cobrem health, Bearer, choice arredondado, score em maps, `noul`, limites e ambos os bindings.
 - [x] `scons tests`: Rust 227 + fixtures 3 + binding Rust 1; pytest 95/1 skip; Node 48/11 skips de serviços externos não configurados.
 - [ ] Smoke opt-in contra `laya-serve` e checkpoint compatível.
+- [x] llama-server embeddings texto usa `/v1/embeddings`, autentica e reordena pelo índice.
+- [x] Binding Python e erros/limites básicos da API de embeddings têm fixture dedicada.
+- [ ] llama-server embeddings envia imagem/áudio/vídeo conforme contrato v1.0.0.
+- [ ] Media bytes entram por asset map efêmero com MIME/digest/limite validados; URL/path remotos não são buscados pela Engine.
+- [ ] Validador verifica cardinalidade, índices, dimensão uniforme e valores finitos.
+- [x] Fixtures Rust/Python/TypeScript cobrem embeddings texto, erro estrutural, auth e resposta.
+- [ ] Fixtures Python/TypeScript cobrem embeddings multimodais, erros e autenticação.
+- [ ] Smoke opt-in com modelo multimodal de embeddings, pooling suportado e tag de servidor imutável.
 - [x] Síntese TTS bufferizada e `/tts` têm formato binário separado do chat; áudio de referência só usa envelope efêmero.
 - [ ] Streaming TTS e realtime ASR têm contratos de sessão separados; geração de imagem e vídeo também.
 - [ ] Documentação anuncia suporte por modalidade/provider/modelo com evidência.

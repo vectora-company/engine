@@ -1,7 +1,7 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado verificado em 16/11/2026:** a stack até o PR [#112](https://github.com/vectora-company/engine/pull/112) está integrada em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). A etapa de cliente standalone para `laya-serve` foi publicada como PR [#113](https://github.com/vectora-company/engine/pull/113), aberto e `MERGEABLE` sobre `main`; distinto do perfil `llama-server`.
-**Base do plano:** `main` em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; checkout permitido `/home/brunosrz/Área de trabalho/engine`.
+**Estado verificado em 16/11/2026:** a stack até o PR [#112](https://github.com/vectora-company/engine/pull/112) está integrada em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). O cliente standalone `laya-serve` está no PR [#113](https://github.com/vectora-company/engine/pull/113), `MERGEABLE` sobre `main`. Etapa ativa: embeddings multimodais de llama.cpp v1.0.0, em `feat/llama-server-multimodal-embeddings`, filha do #113.
+**Base ativa:** PR #113, head `b6da4ed6a420f0093098e05534fba30adf0df50d`; checkout permitido `/home/brunosrz/Área de trabalho/engine`.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
 ## Objetivo
@@ -189,6 +189,17 @@ paridade por API e registrar especializações comprovadas.
 
 **Saída:** testes com conteúdo e limites; separação entre visão e geração de
 imagem e entre vídeo de entrada/saída.
+
+**Subetapa 6a — embeddings texto llama-server (filha do PR #113):** adicionar
+`/v1/embeddings` como operação nomeada nos três runtimes. Preservar a ordem por
+`index`, validar cardinalidade, dimensão e finitude, mapear usage e autenticar;
+entrada vazia não abre conexão. Fixtures Rust/Node verificam request e resposta.
+
+**Subetapa 6b — embeddings multimodais:** inputs tipados com imagem, áudio e
+vídeo nos formatos documentados em `llama.cpp` v1.0.0. Bytes virão apenas do
+mapa efêmero do consumidor, com digest/tamanho/MIME conferidos, nunca de URL
+remota buscada pela Engine. Fixtures nos três runtimes cobrem modos, limites e
+respostas. Geração de imagem e TTS/STT seguem operações separadas.
 
 ### Etapa 7 — integração, suporte e gates de release
 

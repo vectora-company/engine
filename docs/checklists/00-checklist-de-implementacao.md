@@ -313,3 +313,13 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [ ] Adicionar perfil nomeado com endpoint oficial padrão, chave obrigatória e `base_url` configurável.
 - [ ] Preservar o perfil genérico e o perfil OpenRouter; validar auth, headers e rota em Rust/Python/TypeScript.
 - [ ] Verificar suites e hooks, registrar limites por API/modalidade, publicar PR filho do #109 e iniciar a próxima etapa sem aguardar CI.
+
+## Embeddings texto llama-server v1.0.0 — branch `feat/llama-server-multimodal-embeddings`
+
+- [x] Adicionar `/v1/embeddings` ao cliente Rust e bindings Python/TypeScript usando o contrato existente de embeddings.
+- [x] Cobrir auth, rota, ordem de resposta, índices duplicados, finitude, dimensões e usage com fixtures.
+- [x] `scons tests`: Rust 230 + 3 fixtures + 1 teste fronteira Python; pytest 96 passed/1 skipped; Node 49 passed/11 skips.
+- [x] `scons lint`: format, Clippy, rustdoc, Ruff, ty, Bandit, Oxlint e TypeScript passaram.
+- [x] Fixture Python verifica rota, autenticação, payload e normalização de usage; limites ficam cobertos por `max_response_bytes` e teste de respostas inválidas no core.
+- [ ] Implementar embeddings multimodais com asset map efêmero em todos os bindings.
+- [ ] Atualizar spec/plano/análise/checklists e índices para os resultados após cada etapa; commit/push/PR empilhado pendentes.

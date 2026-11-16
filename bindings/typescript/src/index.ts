@@ -977,6 +977,7 @@ interface NativeBinding {
     requestJson: string,
   ): Promise<string>;
   llamaServerHealth(settingsJson: string): Promise<string>;
+  llamaServerEmbed(settingsJson: string, requestJson: string): Promise<string>;
   llamaServerModels(settingsJson: string): Promise<string>;
   llamaServerDecide(settingsJson: string, requestJson: string): Promise<string>;
   llamaServerDecideEphemeral(
@@ -2344,6 +2345,19 @@ export async function llamaServerHealth(
   return JSON.parse(
     await native.llamaServerHealth(JSON.stringify(settings)),
   ) as LlamaServerHealth;
+}
+
+/** Create text embeddings through llama-server `/v1/embeddings`. */
+export async function llamaServerEmbed(
+  settings: LlamaServerSettings,
+  request: EmbeddingRequest,
+): Promise<EmbeddingResponse> {
+  return JSON.parse(
+    await native.llamaServerEmbed(
+      JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  ) as EmbeddingResponse;
 }
 
 /** Read model metadata from `/v1/models`; returned modalities are raw server metadata. */
