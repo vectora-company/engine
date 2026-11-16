@@ -181,7 +181,7 @@ outras etapas aprovadas no plano ativo.
 - [x] Converter resultado em mensagem de tool por helper no núcleo Rust, compartilhado pelos bindings.
 - [x] Serializar imagens de resultado em Anthropic, Gemini e OpenAI Chat Completions; manter fallback textual de Cohere.
 - [x] Cobrar texto e metadados serializados nos limites do loop; limitar bytes ao reidratar no contexto de mídia.
-- [x] Rodar suíte Rust workspace (163 testes + 3 fixtures), Clippy, `cargo check` de todos os targets, rustdoc, testes Python, build/typecheck e 37 testes Node (10 testes de serviços ignorados sem URLs).
+- [x] Rodar suíte Rust workspace (163 testes + 3 fixtures), Clippy, `cargo check` de todos os targets, rustdoc, testes Python, build/typecheck e 38 testes Node (10 testes de serviços ignorados sem URLs).
 - [x] Rodar todos os hooks de pre-commit, corrigir stubs Python ausentes e revisar diffs.
 - [x] Abrir PR #86 sobre o #85: https://github.com/vectora-company/engine/pull/86 (head `b188a94`).
 
@@ -389,7 +389,17 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 
 - [x] Especificação, plano, checklist e análise específicos estão em `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.
 - [x] Crate separada `crates/engine-cli` com config local, referência de credenciais por environment, chat ReAct limitado e interface rustyline/termimad/indicatif.
-- [x] `cargo test -p engine-cli --locked`: 5 testes; `scons tests`: Rust 242, fixtures 3, binding Python 1, pytest 99/1 skip, Node 52/11 skips.
+- [x] Baseline inicial: `cargo test -p engine-cli --locked` 5 testes; `scons tests` Rust 242, fixtures 3, binding Python 1, pytest 99/1 skip, Node 52/11 skips. Extensão atual: 8 testes CLI.
 - [x] `scons lint` passou.
-- [x] `scons build-cli` e pre-commit específico passaram.
-- [ ] Publicar PR filho do #120.
+- [x] `scons build` instalou o binário em `~/.cargo/bin`; `scons build-core` também registrou a versão atual.
+- [x] PR #121 aberto filho do #120.
+
+### Atualização do onboarding CLI — 16/11/2026
+
+- [x] PR #121 aberto sobre #120; manter a atualização neste PR.
+- [x] Perfis para OpenAI Chat/Responses, OpenRouter, Ollama, Anthropic, Gemini, Cohere e gateways compatíveis customizados.
+- [x] Wizard coleta provider/modelo/URL e captura chave sem eco; arquivo de secrets separado usa modo 0600 no Unix e rejeita permissões mais abertas.
+- [x] Oito testes focados passam (`cargo test -p engine-cli --locked`).
+- [x] `scons build` e `scons build-core` registram o executável em `~/.cargo/bin` e o build completo compila os bindings.
+- [x] `scons install` chama o mesmo helper antes das instalações externas; execução completa do alvo não realizada.
+- [x] Wizard smoke e resolução pelo PATH passaram; pre-commit atual passou; falta push ao PR #121.

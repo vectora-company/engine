@@ -16,16 +16,34 @@ use termimad::print_text;
 use vectora_engine::chat::{
     ChatCompletion, ChatRequest, DecisionQuestion, DecisionQuestionKind, DecisionRequest,
     LayaClient, LayaSettings, LlamaServerClient, LlamaServerSettings, Message, MessageRole,
-    OpenAiCompatibleClient, OpenAiCompatibleConfig, ToolArguments, ToolCall, ToolDefinition,
+    NativeChatClient, NativeChatSettings, OpenAiCompatibleClient, OpenAiCompatibleProfile,
+    OpenAiCompatibleSettings, ToolArguments, ToolCall, ToolDefinition,
 };
 
 const TOOL_NAME: &str = "calculator";
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum ChatBackend {
     LlamaServer,
     OpenAiCompatible,
+    Native,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum ChatProfile {
+    #[serde(rename = "openai")]
+    OpenAi,
+    #[serde(rename = "openrouter")]
+    OpenRouter,
+    Ollama,
+    Custom,
+    Anthropic,
+    Google,
+    Cohere,
+    #[serde(rename = "openai_responses")]
+    OpenAiResponses,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -39,6 +57,8 @@ enum DecisionBackend {
 #[serde(deny_unknown_fields)]
 struct ChatConfig {
     backend: ChatBackend,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    profile: Option<ChatProfile>,
     base_url: String,
     model: String,
     #[serde(default)]
@@ -74,13 +94,14 @@ impl Default for Config {
         Self {
             chat: ChatConfig {
                 backend: ChatBackend::LlamaServer,
+                profile: None,
                 base_url: "http://127.0.0.1:8080".into(),
                 model: "local-model".into(),
                 api_key_env: None,
             },
             decision: Some(DecisionConfig {
                 backend: DecisionBackend::LayaServer,
-                base_url: "http://127.0.0.1:8081".into(),
+                base_url: "http://127.0.0.1:18000".into(),
                 model: "jev-1".into(),
                 api_key_env: None,
             }),
@@ -114,17 +135,75 @@ fn write_config(path: &Path, config: &Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn api_key(env_name: &Option<String>) -> Result<Option<String>, Box<dyn Error>> {
+fn write_secrets(path: &Path, values: &BTreeMap<String, String>) -> Result<(), Box<dyn Error>> {
+    if values.is_empty() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let serialized = serde_json::to_vec_pretty(values)?;
+    fs::write(path, serialized)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+fn read_secrets(path: &Path) -> Result<BTreeMap<String, String>, Box<dyn Error>> {
+    if !path.exists() {
+        return Ok(BTreeMap::new());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(path)?.permissions().mode();
+        if mode & 0o077 != 0 {
+            return Err(format!(
+                "{} must be accessible only by its owner (chmod 600)",
+                path.display()
+            )
+            .into());
+        }
+    }
+    Ok(serde_json::from_slice(&fs::read(path)?)?)
+}
+
+fn secrets_path(config_path: &Path) -> PathBuf {
+    config_path.with_file_name("secrets.json")
+}
+
+fn read_secret(env_name: &str, config_path: &Path) -> Result<Option<String>, Box<dyn Error>> {
+    if let Ok(value) = env::var(env_name) {
+        return Ok(Some(value));
+    }
+    let path = secrets_path(config_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let values = read_secrets(&path)?;
+    Ok(values.get(env_name).cloned())
+}
+
+fn api_key(
+    env_name: &Option<String>,
+    config_path: &Path,
+) -> Result<Option<String>, Box<dyn Error>> {
     env_name
         .as_ref()
         .map(|name| {
-            env::var(name).map_err(|_| format!("environment variable {name} is not set").into())
+            read_secret(name, config_path)?.ok_or_else(|| {
+                format!("set environment variable {name} or configure it with `engine-cli setup`")
+                    .into()
+            })
         })
         .transpose()
 }
 
-fn make_chat_client(config: &ChatConfig) -> Result<ChatClient, Box<dyn Error>> {
-    let key = api_key(&config.api_key_env)?;
+fn make_chat_client(config: &ChatConfig, config_path: &Path) -> Result<ChatClient, Box<dyn Error>> {
+    let key = api_key(&config.api_key_env, config_path)?;
     match config.backend {
         ChatBackend::LlamaServer => {
             let mut settings = json!({ "base_url": config.base_url });
@@ -136,13 +215,54 @@ fn make_chat_client(config: &ChatConfig) -> Result<ChatClient, Box<dyn Error>> {
             Ok(ChatClient::LlamaServer(Box::new(client)))
         }
         ChatBackend::OpenAiCompatible => {
-            let mut endpoint = OpenAiCompatibleConfig::new(&config.base_url);
-            if let Some(key) = key {
-                endpoint = endpoint.api_key(key);
+            let profile = match config.profile {
+                Some(ChatProfile::OpenAi) => Some(OpenAiCompatibleProfile::OpenAi),
+                Some(ChatProfile::OpenRouter) => Some(OpenAiCompatibleProfile::OpenRouter),
+                Some(
+                    ChatProfile::Ollama
+                    | ChatProfile::Custom
+                    | ChatProfile::Anthropic
+                    | ChatProfile::Google
+                    | ChatProfile::Cohere
+                    | ChatProfile::OpenAiResponses,
+                )
+                | None => None,
+            };
+            let mut settings = json!({ "base_url": config.base_url });
+            if let Some(profile) = profile {
+                settings["profile"] = json!(match profile {
+                    OpenAiCompatibleProfile::OpenAi => "openai",
+                    OpenAiCompatibleProfile::OpenRouter => "openrouter",
+                });
             }
+            if let Some(key) = key {
+                settings["api_key"] = json!(key);
+            }
+            let endpoint =
+                serde_json::from_value::<OpenAiCompatibleSettings>(settings)?.into_config();
             Ok(ChatClient::OpenAi(Box::new(OpenAiCompatibleClient::new(
                 endpoint,
             )?)))
+        }
+        ChatBackend::Native => {
+            let provider = match config.profile {
+                Some(ChatProfile::Anthropic) => "anthropic",
+                Some(ChatProfile::Google) => "google",
+                Some(ChatProfile::Cohere) => "cohere",
+                Some(ChatProfile::Ollama) => "ollama",
+                Some(ChatProfile::OpenAiResponses) => "openai_responses",
+                _ => return Err("native provider profile is missing or incompatible".into()),
+            };
+            let mut settings = json!({ "provider": provider });
+            if !config.base_url.is_empty() {
+                settings["base_url"] = json!(config.base_url);
+            }
+            if let Some(key) = key {
+                settings["api_key"] = json!(key);
+            }
+            let client =
+                NativeChatClient::new(serde_json::from_value::<NativeChatSettings>(settings)?)?;
+            Ok(ChatClient::Native(Box::new(client)))
         }
     }
 }
@@ -150,6 +270,7 @@ fn make_chat_client(config: &ChatConfig) -> Result<ChatClient, Box<dyn Error>> {
 enum ChatClient {
     LlamaServer(Box<LlamaServerClient>),
     OpenAi(Box<OpenAiCompatibleClient>),
+    Native(Box<NativeChatClient>),
 }
 
 impl ChatClient {
@@ -157,6 +278,7 @@ impl ChatClient {
         match self {
             Self::LlamaServer(client) => Ok(client.complete(request).await?),
             Self::OpenAi(client) => Ok(client.complete(request).await?),
+            Self::Native(client) => Ok(client.complete(request).await?),
         }
     }
 }
@@ -348,8 +470,12 @@ async fn react_turn(
     Ok(())
 }
 
-async fn decide(config: &DecisionConfig, prompt: &str) -> Result<Value, Box<dyn Error>> {
-    let key = api_key(&config.api_key_env)?;
+async fn decide(
+    config: &DecisionConfig,
+    prompt: &str,
+    config_path: &Path,
+) -> Result<Value, Box<dyn Error>> {
+    let key = api_key(&config.api_key_env, config_path)?;
     let request = DecisionRequest {
         model: config.model.clone(),
         state: json!({ "prompt": prompt }),
@@ -396,12 +522,193 @@ async fn decide(config: &DecisionConfig, prompt: &str) -> Result<Value, Box<dyn 
 
 fn usage() {
     eprintln!(
-        "engine-cli <init|show|validate|set|chat|decide> [args]\n\n  init [path]                 write a starter config\n  show [path]                 print config with secret references only\n  validate [path]             validate config without connecting\n  set <key> <value> [path]    update a dotted JSON config field\n  chat [path]                 start a ReAct chat\n  decide <prompt> [path]      test configured Laya/llama.cpp Decision Model\n\nAPI keys are read from environment variables named by api_key_env."
+        "engine-cli [setup|init|show|validate|set|chat|decide] [args]\n\n  engine-cli                  first run: setup wizard; later: start chat\n  setup [path]                configure provider, model and credentials\n  init [path]                 write a starter config\n  show [path]                 print config with secret references only\n  validate [path]             validate config without connecting\n  set <key> <value> [path]    update a dotted JSON config field\n  chat [path]                 start a ReAct chat\n  decide <prompt> [path]      test configured Laya/llama.cpp Decision Model\n\nAPI keys are read from environment variables first, then from the local secrets file."
     );
+}
+
+fn ask(editor: &mut DefaultEditor, label: &str, default: &str) -> Result<String, Box<dyn Error>> {
+    let prompt = format!("{label} [{default}]: ");
+    let answer = editor.readline(&prompt)?;
+    Ok(if answer.trim().is_empty() {
+        default.to_owned()
+    } else {
+        answer.trim().to_owned()
+    })
+}
+
+fn setup_wizard(path: &Path) -> Result<Config, Box<dyn Error>> {
+    println!(
+        "Engine CLI setup — secrets are captured without echo and stored separately with user-only permissions."
+    );
+    let mut editor = DefaultEditor::new()?;
+    println!(
+        "\nChat provider:\n  1) llama.cpp / Laya GGUF\n  2) Ollama\n  3) OpenAI Chat Completions\n  4) OpenAI Responses\n  5) OpenRouter\n  6) Anthropic\n  7) Google Gemini\n  8) Cohere\n  9) OpenAI-compatible endpoint (9router, OmniRouter, or custom gateway)"
+    );
+    let selection = ask(&mut editor, "Choose provider 1-9", "1")?;
+    let (backend, profile, default_url, default_model, needs_key) = match selection.as_str() {
+        "1" => (
+            ChatBackend::LlamaServer,
+            None,
+            "http://127.0.0.1:8080",
+            "local-model",
+            false,
+        ),
+        "2" => (
+            ChatBackend::Native,
+            Some(ChatProfile::Ollama),
+            "http://localhost:11434/api",
+            "llama3.2",
+            false,
+        ),
+        "3" => (
+            ChatBackend::OpenAiCompatible,
+            Some(ChatProfile::OpenAi),
+            "https://api.openai.com/v1",
+            "gpt-4.1-mini",
+            true,
+        ),
+        "4" => (
+            ChatBackend::Native,
+            Some(ChatProfile::OpenAiResponses),
+            "https://api.openai.com/v1",
+            "",
+            true,
+        ),
+        "5" => (
+            ChatBackend::OpenAiCompatible,
+            Some(ChatProfile::OpenRouter),
+            "https://openrouter.ai/api/v1",
+            "",
+            true,
+        ),
+        "6" => (
+            ChatBackend::Native,
+            Some(ChatProfile::Anthropic),
+            "https://api.anthropic.com/v1",
+            "",
+            true,
+        ),
+        "7" => (
+            ChatBackend::Native,
+            Some(ChatProfile::Google),
+            "https://generativelanguage.googleapis.com/v1beta",
+            "",
+            true,
+        ),
+        "8" => (
+            ChatBackend::Native,
+            Some(ChatProfile::Cohere),
+            "https://api.cohere.com/v2",
+            "",
+            true,
+        ),
+        "9" => (
+            ChatBackend::OpenAiCompatible,
+            Some(ChatProfile::Custom),
+            "",
+            "",
+            true,
+        ),
+        _ => return Err("choose a provider from 1 to 9".into()),
+    };
+    let endpoint = ask(&mut editor, "API base URL", default_url)?;
+    let model = ask(&mut editor, "Model id", default_model)?;
+    let mut secrets = BTreeMap::new();
+    secrets.extend(read_secrets(&secrets_path(path))?);
+    let api_key_env = if needs_key {
+        let env_name = ask(
+            &mut editor,
+            "API key environment variable",
+            "ENGINE_API_KEY",
+        )?;
+        if env::var_os(&env_name).is_none() {
+            let secret = rpassword::prompt_password(format!(
+                "Value for {env_name} (leave empty to set it in your shell): "
+            ))?;
+            if !secret.is_empty() {
+                secrets.insert(env_name.clone(), secret);
+            }
+        }
+        Some(env_name)
+    } else {
+        None
+    };
+    println!(
+        "\nDecision Model runtime:\n  1) Laya standalone server\n  2) llama.cpp server (including Laya-GGUF)\n  3) Skip Decision Model"
+    );
+    let decision_choice = ask(&mut editor, "Choose Decision Model runtime 1-3", "1")?;
+    let decision = match decision_choice.as_str() {
+        "1" | "2" => {
+            let backend = if decision_choice == "1" {
+                DecisionBackend::LayaServer
+            } else {
+                DecisionBackend::LlamaServer
+            };
+            let (default_url, default_model) = if backend == DecisionBackend::LayaServer {
+                ("http://127.0.0.1:18000", "jev-1")
+            } else {
+                ("http://127.0.0.1:8080", "local-model")
+            };
+            let decision_url = ask(&mut editor, "Decision Model API base URL", default_url)?;
+            let decision_model = ask(&mut editor, "Decision Model id", default_model)?;
+            let key_name = ask(
+                &mut editor,
+                "Decision Model API key environment variable (blank for none)",
+                "",
+            )?;
+            let api_key_env = if key_name.is_empty() {
+                None
+            } else {
+                if env::var_os(&key_name).is_none() {
+                    let secret = rpassword::prompt_password(format!(
+                        "Value for {key_name} (leave empty to set it in your shell): "
+                    ))?;
+                    if !secret.is_empty() {
+                        secrets.insert(key_name.clone(), secret);
+                    }
+                }
+                Some(key_name)
+            };
+            Some(DecisionConfig {
+                backend,
+                base_url: decision_url,
+                model: decision_model,
+                api_key_env,
+            })
+        }
+        "3" => None,
+        _ => return Err("choose a Decision Model runtime from 1 to 3".into()),
+    };
+    let config = Config {
+        chat: ChatConfig {
+            backend,
+            profile,
+            base_url: endpoint,
+            model,
+            api_key_env,
+        },
+        decision,
+        max_tool_turns: default_tool_turns(),
+    };
+    validate_config(&config)?;
+    write_config(path, &config)?;
+    write_secrets(&secrets_path(path), &secrets)?;
+    println!("Configuration saved to {}", path.display());
+    if let Some(name) = &config.chat.api_key_env
+        && !secrets.contains_key(name)
+        && env::var_os(name).is_none()
+    {
+        println!("Set {name} in your shell before chatting; its value was not stored.");
+    }
+    Ok(config)
 }
 
 fn run_config_command(command: &str, args: &[String]) -> Result<(), Box<dyn Error>> {
     match command {
+        "setup" => {
+            let path = args.first().map(PathBuf::from).unwrap_or_else(config_path);
+            setup_wizard(&path)?;
+        }
         "init" => {
             let path = args.first().map(PathBuf::from).unwrap_or_else(config_path);
             if path.exists() {
@@ -452,6 +759,27 @@ fn validate_config(config: &Config) -> Result<(), Box<dyn Error>> {
     {
         return Err("decision endpoint/model must be non-empty".into());
     }
+    let profile_matches_backend = matches!(
+        (config.chat.backend, config.chat.profile),
+        (ChatBackend::LlamaServer, None)
+            | (
+                ChatBackend::OpenAiCompatible,
+                None | Some(ChatProfile::OpenAi | ChatProfile::OpenRouter | ChatProfile::Custom),
+            )
+            | (
+                ChatBackend::Native,
+                Some(
+                    ChatProfile::Ollama
+                        | ChatProfile::Anthropic
+                        | ChatProfile::Google
+                        | ChatProfile::Cohere
+                        | ChatProfile::OpenAiResponses,
+                ),
+            )
+    );
+    if !profile_matches_backend {
+        return Err("chat backend and provider profile do not match".into());
+    }
     Ok(())
 }
 
@@ -481,7 +809,7 @@ fn set_dotted(root: &mut Value, dotted: &str, text: &str) -> Result<(), Box<dyn 
 fn main_result() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("help");
-    if matches!(command, "init" | "show" | "validate" | "set") {
+    if matches!(command, "setup" | "init" | "show" | "validate" | "set") {
         return run_config_command(command, &args[1..]);
     }
     if command == "help" || command == "--help" || command == "-h" {
@@ -491,41 +819,70 @@ fn main_result() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+async fn run_chat(config: &Config, config_path: &Path) -> Result<(), Box<dyn Error>> {
+    let client = make_chat_client(&config.chat, config_path)?;
+    let mut editor = DefaultEditor::new()?;
+    let mut history = vec![Message::text(
+        MessageRole::System,
+        "You are a concise assistant. Use the calculator tool for arithmetic; never invent tool results.",
+    )];
+    loop {
+        match editor.readline("you> ") {
+            Ok(line) if line.trim() == "/exit" || line.trim() == "/quit" => break,
+            Ok(line) if line.trim().is_empty() => continue,
+            Ok(line) => {
+                let _ = editor.add_history_entry(line.as_str());
+                history.push(Message::text(MessageRole::User, line));
+                react_turn(&client, &config.chat, &mut history, config.max_tool_turns).await?;
+            }
+            Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     let result = async {
         let args: Vec<String> = env::args().skip(1).collect();
-        let command = args.first().map(String::as_str).unwrap_or("help");
-        if matches!(command, "init" | "show" | "validate" | "set" | "help" | "--help" | "-h") {
+        let command = args.first().map(String::as_str).unwrap_or("chat");
+        if matches!(
+            command,
+            "setup" | "init" | "show" | "validate" | "set" | "help" | "--help" | "-h"
+        ) {
             return main_result();
         }
-        let path = args.last().filter(|arg| Path::new(arg).exists()).map(PathBuf::from).unwrap_or_else(config_path);
-        let config = read_config(&path)?;
+        let path = args
+            .iter()
+            .skip(1)
+            .find(|arg| Path::new(arg).exists())
+            .map(PathBuf::from)
+            .unwrap_or_else(config_path);
+        let config = if command == "chat" && !path.exists() {
+            setup_wizard(&path)?
+        } else {
+            read_config(&path)?
+        };
         validate_config(&config)?;
         match command {
-            "chat" => {
-                let client = make_chat_client(&config.chat)?;
-                let mut editor = DefaultEditor::new()?;
-                let mut history = vec![Message::text(MessageRole::System, "You are a concise assistant. Use the calculator tool for arithmetic; never invent tool results.")];
-                loop {
-                    match editor.readline("you> ") {
-                        Ok(line) if line.trim() == "/exit" || line.trim() == "/quit" => break,
-                        Ok(line) if line.trim().is_empty() => continue,
-                        Ok(line) => { let _ = editor.add_history_entry(line.as_str()); history.push(Message::text(MessageRole::User, line)); react_turn(&client, &config.chat, &mut history, config.max_tool_turns).await?; }
-                        Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
-                        Err(error) => return Err(error.into()),
-                    }
-                }
-            }
+            "chat" => run_chat(&config, &path).await?,
             "decide" => {
                 let prompt = args.get(1).ok_or("decide requires a prompt")?;
-                let decision = config.decision.as_ref().ok_or("no decision endpoint configured")?;
-                println!("{}", serde_json::to_string_pretty(&decide(decision, prompt).await?)?);
+                let decision = config
+                    .decision
+                    .as_ref()
+                    .ok_or("no decision endpoint configured")?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&decide(decision, prompt, &path).await?)?
+                );
             }
             _ => usage(),
         }
         Ok::<(), Box<dyn Error>>(())
-    }.await;
+    }
+    .await;
     if let Err(error) = result {
         let _ = writeln!(io::stderr(), "engine-cli: {error}");
         std::process::exit(1);
@@ -560,6 +917,112 @@ mod tests {
         set_dotted(&mut value, "chat.model", "laya-GGUF").unwrap();
         assert_eq!(value["chat"]["model"], "laya-GGUF");
         assert!(set_dotted(&mut value, "chat.secret", "oops").is_err());
+    }
+
+    #[test]
+    fn config_accepts_named_and_custom_openai_compatible_profiles() {
+        for (backend, profile) in [
+            ("open_ai_compatible", "openai"),
+            ("open_ai_compatible", "openrouter"),
+            ("native", "ollama"),
+            ("open_ai_compatible", "custom"),
+            ("native", "anthropic"),
+            ("native", "google"),
+            ("native", "cohere"),
+            ("native", "openai_responses"),
+        ] {
+            let config: Config = serde_json::from_value(json!({
+                "chat": {
+                    "backend": backend,
+                    "profile": profile,
+                    "base_url": "https://gateway.example/v1",
+                    "model": "test-model",
+                    "api_key_env": "ROUTER_KEY"
+                },
+                "max_tool_turns": 6
+            }))
+            .unwrap();
+            validate_config(&config).unwrap();
+        }
+    }
+
+    #[test]
+    fn builds_each_supported_provider_client_without_network_access() {
+        let config_path = env::temp_dir().join(format!(
+            "engine-cli-provider-config-{}.json",
+            std::process::id()
+        ));
+        let secrets_path = secrets_path(&config_path);
+        write_secrets(
+            &secrets_path,
+            &BTreeMap::from([("CHAT_KEY".to_owned(), "test-credential".to_owned())]),
+        )
+        .unwrap();
+        let providers = [
+            (ChatBackend::LlamaServer, None, None),
+            (
+                ChatBackend::OpenAiCompatible,
+                Some(ChatProfile::OpenAi),
+                Some("CHAT_KEY".to_owned()),
+            ),
+            (
+                ChatBackend::OpenAiCompatible,
+                Some(ChatProfile::OpenRouter),
+                Some("CHAT_KEY".to_owned()),
+            ),
+            (
+                ChatBackend::OpenAiCompatible,
+                Some(ChatProfile::Custom),
+                Some("CHAT_KEY".to_owned()),
+            ),
+            (ChatBackend::Native, Some(ChatProfile::Ollama), None),
+            (
+                ChatBackend::Native,
+                Some(ChatProfile::Anthropic),
+                Some("CHAT_KEY".to_owned()),
+            ),
+            (
+                ChatBackend::Native,
+                Some(ChatProfile::Google),
+                Some("CHAT_KEY".to_owned()),
+            ),
+            (
+                ChatBackend::Native,
+                Some(ChatProfile::Cohere),
+                Some("CHAT_KEY".to_owned()),
+            ),
+            (
+                ChatBackend::Native,
+                Some(ChatProfile::OpenAiResponses),
+                Some("CHAT_KEY".to_owned()),
+            ),
+        ];
+        for (backend, profile, api_key_env) in providers {
+            let config = ChatConfig {
+                backend,
+                profile,
+                base_url: "https://provider.example/v1".into(),
+                model: "test-model".into(),
+                api_key_env,
+            };
+            make_chat_client(&config, &config_path).unwrap();
+        }
+        fs::remove_file(secrets_path).unwrap();
+    }
+
+    #[test]
+    fn secret_file_roundtrips_and_rejects_group_or_world_access_on_unix() {
+        let path = env::temp_dir().join(format!("engine-cli-secrets-{}.json", std::process::id()));
+        let secrets = BTreeMap::from([("ROUTER_KEY".to_owned(), "hidden-test-value".to_owned())]);
+        write_secrets(&path, &secrets).unwrap();
+        assert_eq!(read_secrets(&path).unwrap(), secrets);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(read_secrets(&path).is_err());
+        }
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

@@ -14,6 +14,7 @@ import zipfile
 
 ROOT = Dir(".").abspath
 NATS_VERSION = "2.15.3"
+_CLI_REGISTERED = False
 AddOption(
     "--simulate",
     action="store_true",
@@ -134,6 +135,7 @@ def _install(target, source, env):
         )
     _run("rustup", "component", "add", "rustfmt", "clippy")
     _run("cargo", "fetch", "--locked")
+    _build_cli(target, source, env)
     _run("uv", "sync", "--locked", "--all-groups", *_project_python_args())
     if shutil.which("podman") is None:
         raise SystemExit(
@@ -237,12 +239,25 @@ def _build_core(target, source, env):
         "--release",
         "--locked",
     )
+    _build_cli(target, source, env)
 
 
 def _build_cli(target, source, env):
     """Build the standalone Engine exercise CLI."""
+    global _CLI_REGISTERED
+    if _CLI_REGISTERED:
+        return
     _configure_build_cache()
     _run("cargo", "build", "-p", "engine-cli", "--release", "--locked")
+    cargo_home = os.environ.get("CARGO_HOME", os.path.join(os.path.expanduser("~"), ".cargo"))
+    cargo_bin = os.path.join(cargo_home, "bin")
+    os.makedirs(cargo_bin, exist_ok=True)
+    binary_name = "engine-cli.exe" if os.name == "nt" else "engine-cli"
+    shutil.copy2(
+        os.path.join(ROOT, "target", "release", binary_name),
+        os.path.join(cargo_bin, binary_name),
+    )
+    _CLI_REGISTERED = True
 
 
 def _build_python(target, source, env):
@@ -260,12 +275,14 @@ def _build_python(target, source, env):
         os.path.join(ROOT, "target", "wheels"),
         cwd=os.path.join(ROOT, "bindings", "python"),
     )
+    _build_cli(target, source, env)
 
 
 def _build_typescript(target, source, env):
     """Build the TypeScript package and its N-API extension."""
     _configure_build_cache()
     _pnpm("build", cwd=os.path.join(ROOT, "bindings", "typescript"))
+    _build_cli(target, source, env)
 
 
 def _build_go(target, source, env):
@@ -282,7 +299,6 @@ def _build_go(target, source, env):
 def _build(target, source, env):
     """Build core and bindings sequentially into the shared Cargo cache."""
     _build_core(target, source, env)
-    _build_cli(target, source, env)
     _build_python(target, source, env)
     _build_typescript(target, source, env)
     _build_go(target, source, env)
@@ -388,14 +404,13 @@ def _help(target, source, env):
 Vectora Engine — alvos SCons (rodar da raiz do repositório)
 
 Setup
-  scons install    instala dependências e sidecars de desenvolvimento
-  scons build      compila core, engine-cli e bindings Python/TypeScript (e Go quando existir)
+  scons install    instala dependências, sidecars e engine-cli no PATH
+  scons build      compila core, instala engine-cli no PATH e compila bindings
 
 Build focado
-  scons build-core       compila só o core Rust, sem testes
-  scons build-cli        compila o executável engine-cli em release
-  scons build-python     compila só o binding Python/PyO3
-  scons build-typescript compila só o binding TypeScript/N-API
+  scons build-core       compila o core Rust e registra engine-cli no PATH
+  scons build-python     compila Python/PyO3 e registra engine-cli no PATH
+  scons build-typescript compila TypeScript/N-API e registra engine-cli no PATH
 
 Qualidade
   scons lint       Rust (rustfmt + Clippy) e Python (Ruff + ty + Bandit)
@@ -428,7 +443,6 @@ env = Environment(ENV=os.environ)
 env.Command("_help", [], _help)
 env.Command("_install", [], _install)
 env.Command("_build_core", [], _build_core)
-env.Command("_build_cli", [], _build_cli)
 env.Command("_build_python", [], _build_python)
 env.Command("_build_typescript", [], _build_typescript)
 env.Command("_build", [], _build)
@@ -442,7 +456,6 @@ Default("_help")
 for alias, target in {
     "install": "_install",
     "build-core": "_build_core",
-    "build-cli": "_build_cli",
     "build-python": "_build_python",
     "build-typescript": "_build_typescript",
     "build": "_build",

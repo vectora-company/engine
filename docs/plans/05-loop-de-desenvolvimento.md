@@ -18,6 +18,8 @@ checklist e análise específicos e este índice a cada etapa. O
 estado verificável fica em
 [`docs/goal-loop/README.md`](../goal-loop/README.md).
 
+Atualização da etapa CLI, 16/11/2026: PR #121 está aberto sobre #120. Wizard inclui OpenAI Chat/Responses, OpenRouter, Ollama, Anthropic, Gemini, Cohere, routers customizados e seleção Decision Model Laya/llama.cpp. Credencial é capturada sem eco e guardada separadamente com modo 0600 no Unix. Oito testes, smoke do wizard, `scons build`, `build-core`, PATH, `scons lint` e pre-commit passaram. `scons install` reutiliza o helper; seu setup completo não foi executado. Falta push da atualização ao PR #121.
+
 ## Fonte de verdade
 
 - `AGENTS.md`: regras do repositório e checks obrigatórios.
