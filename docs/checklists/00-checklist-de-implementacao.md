@@ -373,3 +373,13 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] `scons lint` passou.
 - [x] Pre-commit passou.
 - [ ] Publicar PR filho de [#118](https://github.com/vectora-company/engine/pull/118).
+
+## Contrato de resposta de rerank — `test/llama-rerank-response-contract`
+
+- [x] Índice fora dos documentos enviados é rejeitado.
+- [x] Resposta com mais itens do que `top_n` é rejeitada.
+- [x] Resposta sem `results` é rejeitada.
+- [x] Seis testes Rust focados passam.
+- [x] `scons tests`: Rust 242; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
+- [x] `scons lint`.
+- [ ] Pre-commit e publicar PR filho de [#119](https://github.com/vectora-company/engine/pull/119).
