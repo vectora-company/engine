@@ -1860,6 +1860,122 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn multimodal_rerank_fails_closed_when_model_does_not_declare_images() {
+        use super::super::{CapabilityResolver, MediaExecutionContext, MediaPart};
+        let bytes = b"\x89PNG\r\n\x1a\nunsupported".to_vec();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buffer = vec![0; 4096];
+            let n = stream.read(&mut buffer).await.unwrap();
+            assert!(String::from_utf8_lossy(&buffer[..n]).starts_with("GET /v1/models "));
+            let body =
+                r#"{"data":[{"id":"text-ranker","architecture":{"input_modalities":["text"]}}]}"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::default(),
+            std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::from([(
+                "image-1".to_owned(),
+                bytes.clone(),
+            )]))),
+        );
+        let result = client
+            .rerank_ephemeral(
+                EphemeralLlamaServerRerankRequest {
+                    contract_version: RERANK_CONTRACT_VERSION,
+                    model: "text-ranker".into(),
+                    query: vec![ContentPart::Image(MediaPart {
+                        media_ref: png_ref(&bytes),
+                        text: None,
+                        previews: vec![],
+                    })],
+                    documents: vec![LlamaServerRerankInput {
+                        content: vec![ContentPart::Text {
+                            text: "candidate".into(),
+                        }],
+                    }],
+                    top_n: None,
+                },
+                &context,
+            )
+            .await;
+        assert!(matches!(result, Err(ChatError::ModelCapabilityUnsupported)));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn multimodal_rerank_rejects_out_of_range_scores_and_duplicate_indices() {
+        use super::super::{CapabilityResolver, MediaExecutionContext};
+        for malformed in [
+            r#"{"results":[{"index":0,"relevance_score":1.1}]}"#,
+            r#"{"results":[{"index":0,"relevance_score":0.8},{"index":0,"relevance_score":0.7}]}"#,
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let body = malformed.to_owned();
+            let server = tokio::spawn(async move {
+                for _ in 0..2 {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let mut buffer = vec![0; 8192];
+                    let n = stream.read(&mut buffer).await.unwrap();
+                    let request = String::from_utf8_lossy(&buffer[..n]);
+                    let response_body = if request.starts_with("GET /v1/models ") {
+                        r#"{"data":[{"id":"text-ranker","architecture":{"input_modalities":["text"]}}]}"#
+                    } else {
+                        assert!(request.starts_with("POST /rerank "));
+                        &body
+                    };
+                    stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response_body}", response_body.len()).as_bytes()).await.unwrap();
+                }
+            });
+            let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+            let context = MediaExecutionContext::new(
+                CapabilityResolver::default(),
+                std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::new())),
+            );
+            let result = client
+                .rerank_ephemeral(
+                    EphemeralLlamaServerRerankRequest {
+                        contract_version: RERANK_CONTRACT_VERSION,
+                        model: "text-ranker".into(),
+                        query: vec![ContentPart::Text {
+                            text: "query".into(),
+                        }],
+                        documents: vec![
+                            LlamaServerRerankInput {
+                                content: vec![ContentPart::Text {
+                                    text: "first".into(),
+                                }],
+                            },
+                            LlamaServerRerankInput {
+                                content: vec![ContentPart::Text {
+                                    text: "second".into(),
+                                }],
+                            },
+                        ],
+                        top_n: None,
+                    },
+                    &context,
+                )
+                .await;
+            assert!(matches!(result, Err(ChatError::InvalidResponse)));
+            server.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
     async fn multimodal_embeddings_resolve_and_materialize_only_consumer_assets() {
         use super::super::{CapabilityResolver, MediaExecutionContext, MediaPart};
         let bytes = b"\x89PNG\r\n\x1a\nfixture".to_vec();

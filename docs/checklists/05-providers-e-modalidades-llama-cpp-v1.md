@@ -168,4 +168,13 @@
 - [ ] Rejeições adicionais de payload e limites de media cobertos por casos negativos nos bindings.
 - [x] `scons tests`: Rust 238; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips opcionais.
 - [x] `scons lint` passou.
-- [ ] Pre-commit integral passou; publicar o PR filho de #116.
+- [x] Pre-commit integral passou; PR #116 e filho #117 publicados.
+
+### Casos negativos de rerank multimodal
+
+- [x] Falhar sem POST se o modelo não declara imagem.
+- [x] Rejeitar score fora de `[0,1]` e índice duplicado.
+- [x] Quatro testes focados Rust passam.
+- [x] Gates integrados: Rust 240; pytest 99/1 skip; Node 52/11 skips; lint.
+- [x] Pre-commit integral passou.
+- [ ] Publicar PR filho de #117.
