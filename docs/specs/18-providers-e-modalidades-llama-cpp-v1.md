@@ -211,14 +211,19 @@ por elemento; exige pooling diferente de `none` e normaliza vetores pela norma
 Euclidiana. Áudio/vídeo dependem do suporte real do modelo/projetor; vídeo usa
 FFmpeg.
 
-A Engine adiciona uma API de envio efêmero com assets autorizados pelo
-consumidor. Cada input é uma sequência ordenada de partes textuais ou refs de
-asset. A Engine confere tamanho, MIME e digest, serializa as imagens como
-`image_url` com data URL e áudio/vídeo no formato nativo; nunca busca URL remota
-nem lê caminho local. Respostas devem conter exatamente um vetor por input,
-índices únicos e contíguos, vetores finitos e dimensão constante. A API não
-promete `dimensions` customizável nem outros modos de normalização, pois não
-estão no contrato OpenAI-compatible documentado pelo llama-server.
+O core implementa `EphemeralLlamaServerEmbeddingRequest` em Rust: cada input é
+uma sequência ordenada de texto e refs do asset store. O adapter exige que
+`/v1/models` anuncie a modalidade solicitada, materializa o asset pelo
+`MediaExecutionContext`, confere tamanho, MIME e digest, serializa imagem como
+`image_url` com data URL e áudio/vídeo como `input_audio.data`/
+`input_video.data`. URL remota, path, `ImageUrl` caller-supplied e `Inline` são
+rejeitados antes da chamada de embeddings. Teto global e limite por provider/
+modelo se aplicam. Respostas preservam exatamente um vetor por input e validam
+índices, dimensão e finitude. A API não promete `dimensions` customizável nem
+outros modos de normalização, pois não estão no contrato documentado.
+
+Python e TypeScript encaminham essa chamada pelo mesmo core e exigem um contexto
+efêmero do consumidor. Não persistem os bytes.
 
 Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#post-v1embeddings-openai-compatible-embeddings-api), [formatos de conteúdo multimodal](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#post-v1chatcompletions-openai-compatible-chat-completions-api).
 

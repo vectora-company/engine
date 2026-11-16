@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado verificado em 16/11/2026:** a stack até o PR [#112](https://github.com/vectora-company/engine/pull/112) está integrada em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). O cliente standalone `laya-serve` está no PR [#113](https://github.com/vectora-company/engine/pull/113), `MERGEABLE` sobre `main`. Etapa ativa: embeddings multimodais de llama.cpp v1.0.0, em `feat/llama-server-multimodal-embeddings`, filha do #113.
+**Estado verificado em 16/11/2026:** a stack até o PR [#112](https://github.com/vectora-company/engine/pull/112) está integrada em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). O cliente standalone `laya-serve` está no PR [#113](https://github.com/vectora-company/engine/pull/113). Embeddings textuais llama-server estão no PR [#114](https://github.com/vectora-company/engine/pull/114), empilhado sobre #113. Etapa ativa: embeddings multimodais de llama.cpp v1.0.0, em `feat/llama-server-multimodal-embeddings-assets`, filha do #114.
 **Base ativa:** PR #113, head `b6da4ed6a420f0093098e05534fba30adf0df50d`; checkout permitido `/home/brunosrz/Área de trabalho/engine`.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
@@ -190,16 +190,13 @@ paridade por API e registrar especializações comprovadas.
 **Saída:** testes com conteúdo e limites; separação entre visão e geração de
 imagem e entre vídeo de entrada/saída.
 
-**Subetapa 6a — embeddings texto llama-server (filha do PR #113):** adicionar
-`/v1/embeddings` como operação nomeada nos três runtimes. Preservar a ordem por
+**Subetapa 6a — embeddings texto llama-server (PR #114, filho do #113):** adicionar
+`/v1/embeddings` como operação nomeada nos três runtimes. Implementado e publicado;
+preserva a ordem por
 `index`, validar cardinalidade, dimensão e finitude, mapear usage e autenticar;
 entrada vazia não abre conexão. Fixtures Rust/Node verificam request e resposta.
 
-**Subetapa 6b — embeddings multimodais:** inputs tipados com imagem, áudio e
-vídeo nos formatos documentados em `llama.cpp` v1.0.0. Bytes virão apenas do
-mapa efêmero do consumidor, com digest/tamanho/MIME conferidos, nunca de URL
-remota buscada pela Engine. Fixtures nos três runtimes cobrem modos, limites e
-respostas. Geração de imagem e TTS/STT seguem operações separadas.
+**Subetapa 6b — embeddings multimodais (branch `feat/llama-server-multimodal-embeddings-assets`, filha do PR #114):** inputs tipados por texto, imagem, áudio e vídeo conforme `llama.cpp` v1.0.0. O core busca assets somente no mapa efêmero do consumidor, confere digest/tamanho/MIME e exige que o modelo anuncie a modalidade; rejeita URLs, paths e bytes inline. Python e TypeScript expõem a chamada efêmera. Quatro testes Rust focados passaram, incluindo serialização das três modalidades, recusa de URL remota e fail-closed sem POST quando o modelo não anuncia imagem. Fixtures Python e Node passaram. A suíte integrada anterior passou (Rust 234 + 3 fixtures + 1 fronteira Python; pytest 97/1 skip; Node 50/11 skips); lint e hooks passaram. Reexecutar gates após a fixture mais recente e então publicar o PR #115.
 
 ### Etapa 7 — integração, suporte e gates de release
 

@@ -912,6 +912,21 @@ async def llama_server_embed(
     )
 
 
+async def llama_server_embed_ephemeral(
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext,
+) -> dict[str, Any]:
+    """Create multimodal embeddings from consumer-owned transient assets."""
+    return json.loads(
+        await _native.llama_server_embed_ephemeral(
+            _media_settings(settings, media_context),
+            json.dumps(request, separators=(",", ":")),
+        )
+    )
+
+
 async def llama_server_models(settings: JsonObject) -> dict[str, Any]:
     """Return raw model metadata from the llama-server `/v1/models` endpoint."""
     return json.loads(
@@ -1416,6 +1431,7 @@ __all__ = [
     "llama_server_decide",
     "llama_server_decide_ephemeral",
     "llama_server_embed",
+    "llama_server_embed_ephemeral",
     "llama_server_health",
     "llama_server_models",
     "llama_server_realtime_start",

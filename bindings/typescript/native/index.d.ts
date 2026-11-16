@@ -162,6 +162,13 @@ export declare function kvWatchReceive(
   timeoutMs: number,
 ): Promise<string>;
 
+export declare function layaDecide(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function layaHealth(settingsJson: string): Promise<string>;
+
 export declare function llamaServerChatComplete(
   settingsJson: string,
   requestJson: string,
@@ -192,13 +199,18 @@ export declare function llamaServerDecideEphemeral(
   requestJson: string,
 ): Promise<string>;
 
-export declare function llamaServerHealth(
-  settingsJson: string,
-): Promise<string>;
-
 export declare function llamaServerEmbed(
   settingsJson: string,
   requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerEmbedEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerHealth(
+  settingsJson: string,
 ): Promise<string>;
 
 export declare function llamaServerModels(
