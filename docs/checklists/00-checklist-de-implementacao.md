@@ -342,4 +342,13 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] Fixtures Rust/Python/TypeScript cobrem request, auth, response e validação de score `[0,1]`.
 - [x] `scons tests`: Rust 236; 3 fixtures de conformidade + 1 fronteira Python; pytest 98 passed/1 skipped; Node 51 passed/11 skips opcionais.
 - [x] `scons lint` passou; pre-commit completo passou após ajuste automático de formatação Markdown.
-- [ ] Commit/push e PR filho de [#115](https://github.com/vectora-company/engine/pull/115); iniciar a próxima etapa sem esperar CI remoto.
+- [x] Publicar rerank textual em [#116](https://github.com/vectora-company/engine/pull/116), filho de #115; seguir sem aguardar CI remoto.
+
+## Rerank multimodal efêmero llama-server — `feat/llama-server-multimodal-rerank`
+
+- [x] Core Rust recebe texto e asset refs de imagem em query e documents; valida capability de modelo, materializa Jina e limita a score/usage válidos.
+- [x] Testes Rust cobrem envio Jina de asset e rejeição de URL sem POST.
+- [x] Fixtures Python e TypeScript exercitam a API efêmera e asset map.
+- [x] `scons tests`: Rust 238; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
+- [x] `scons lint` passou; pre-commit integral passou após formatação automática de Markdown.
+- [ ] Publicar PR empilhado sobre [#116](https://github.com/vectora-company/engine/pull/116).

@@ -15,13 +15,13 @@ use tokio::{sync::mpsc, task::AbortHandle};
 use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
-    EphemeralDecisionRequest, EphemeralLlamaServerEmbeddingRequest, EphemeralNativeSpeechRequest,
-    FallbackChatClient, FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient,
-    LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient,
-    NativeChatSettings, NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings,
-    PersistableChatRequest, ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest,
-    SpeechRequest, SpeechStream, TurnAccumulatorSettings, assemble_turn,
-    prepare_content_with_limits,
+    EphemeralDecisionRequest, EphemeralLlamaServerEmbeddingRequest,
+    EphemeralLlamaServerRerankRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
+    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerSettings,
+    MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
+    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
+    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
+    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -1907,6 +1907,23 @@ pub async fn llama_server_embed_ephemeral(
         .map_err(|_| Error::from_reason("invalid ephemeral embedding request"))?;
     let response = client
         .embed_ephemeral(request, &context)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
+pub async fn llama_server_rerank_ephemeral(
+    settings_json: String,
+    request_json: String,
+) -> Result<String> {
+    let (client, _, context) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let context = context
+        .ok_or_else(|| Error::from_reason("ephemeral rerank requires a consumer media context"))?;
+    let request: EphemeralLlamaServerRerankRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid ephemeral rerank request"))?;
+    let response = client
+        .rerank_ephemeral(request, &context)
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&response)

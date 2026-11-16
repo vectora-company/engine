@@ -323,6 +323,15 @@ export interface EphemeralLlamaServerEmbeddingRequest {
   inputs: { content: JsonValue[] }[];
 }
 
+/** Runtime-only Jina rerank request; media bytes resolve from the supplied asset map. */
+export interface EphemeralLlamaServerRerankRequest {
+  contract_version: number;
+  model: string;
+  query: JsonValue[];
+  documents: { content: JsonValue[] }[];
+  top_n?: number;
+}
+
 export interface RerankRequest {
   contract_version: number;
   model: string;
@@ -2383,6 +2392,26 @@ export async function llamaServerEmbedEphemeral(
       JSON.stringify(request),
     ),
   ) as EmbeddingResponse;
+}
+
+/** Rerank transient text and image assets with llama-server's Jina endpoint. */
+export async function llamaServerRerankEphemeral(
+  settings: LlamaServerSettings,
+  request: EphemeralLlamaServerRerankRequest,
+  mediaContext: MediaExecutionContext,
+): Promise<RerankResponse> {
+  const nativeWithRerank = native as typeof native & {
+    llamaServerRerankEphemeral(
+      settingsJson: string,
+      requestJson: string,
+    ): Promise<string>;
+  };
+  return JSON.parse(
+    await nativeWithRerank.llamaServerRerankEphemeral(
+      encodeMediaSettings(settings, mediaContext),
+      JSON.stringify(request),
+    ),
+  ) as RerankResponse;
 }
 
 /** Read model metadata from `/v1/models`; returned modalities are raw server metadata. */

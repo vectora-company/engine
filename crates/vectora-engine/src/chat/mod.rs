@@ -24,9 +24,10 @@ pub use fallback::{
 };
 pub use laya::{LayaClient, LayaHealth, LayaSettings};
 pub use llama_server::{
-    EphemeralLlamaServerEmbeddingRequest, LlamaServerArchitecture, LlamaServerClient,
-    LlamaServerEmbeddingInput, LlamaServerHealth, LlamaServerModel, LlamaServerModelList,
-    LlamaServerProperties, LlamaServerSettings, SpeechStream,
+    EphemeralLlamaServerEmbeddingRequest, EphemeralLlamaServerRerankRequest,
+    LlamaServerArchitecture, LlamaServerClient, LlamaServerEmbeddingInput, LlamaServerHealth,
+    LlamaServerModel, LlamaServerModelList, LlamaServerProperties, LlamaServerRerankInput,
+    LlamaServerSettings, SpeechStream,
 };
 pub use media::{
     CapabilityResolver, CapabilityState, Classified, ContentSite, DEFAULT_MAX_MEDIA_BYTES,

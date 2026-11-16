@@ -158,3 +158,14 @@
 - [x] Cobrir endpoint/auth/request em Rust e fixtures HTTP Python/TypeScript.
 - [x] Rust workspace (216 testes), Clippy, build NAPI/TypeScript, Node (46 pass/11 skips), pytest completo e fixture focada passaram.
 - [ ] Rodar hooks completos, revisar/stage apenas arquivos da etapa (manter `bindings/typescript/native/index.d.ts` e `bindings/python/uv.lock` fora), commitar e publicar PR filho do #109; seguir à próxima etapa sem aguardar CI remoto.
+
+### Rerank multimodal efêmero llama-server
+
+- [x] Core Rust materializa texto/imagens por referências efêmeras do consumidor, exige capability `image` e envia Jina `query`/`documents`.
+- [x] Rust rejeita URLs remotas e inclui score/usage da resposta.
+- [x] Fixture Python confirma materialização de imagem por asset map.
+- [x] Fixture Node confirma formato Jina usando asset map.
+- [ ] Rejeições adicionais de payload e limites de media cobertos por casos negativos nos bindings.
+- [x] `scons tests`: Rust 238; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips opcionais.
+- [x] `scons lint` passou.
+- [ ] Pre-commit integral passou; publicar o PR filho de #116.

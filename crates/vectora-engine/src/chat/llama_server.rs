@@ -26,6 +26,7 @@ use super::{
     prepare_content_with_limits,
 };
 use crate::llm::embeddings::{EmbeddingRequest, EmbeddingResponse, LlmUsage};
+use crate::llm::rerank::{RERANK_CONTRACT_VERSION, RerankResponse, RerankResult};
 
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 10_000;
 const DEFAULT_READ_TIMEOUT_MS: u64 = 60_000;
@@ -216,6 +217,26 @@ pub struct EphemeralLlamaServerEmbeddingRequest {
     pub contract_version: u16,
     pub model: String,
     pub inputs: Vec<LlamaServerEmbeddingInput>,
+}
+
+/// One transient Jina rerank item. Content references are resolved from the
+/// consumer-owned media store for this call and never enter persisted requests.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct LlamaServerRerankInput {
+    pub content: Vec<ContentPart>,
+}
+
+/// Ephemeral Jina rerank request supporting text and images via asset refs.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct EphemeralLlamaServerRerankRequest {
+    pub contract_version: u16,
+    pub model: String,
+    pub query: Vec<ContentPart>,
+    pub documents: Vec<LlamaServerRerankInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_n: Option<u32>,
 }
 
 /// Result of a successful `GET /health` probe.
@@ -627,6 +648,212 @@ impl LlamaServerClient {
         }
         self.post_embeddings(request.model, serde_json::json!(inputs), expected_count)
             .await
+    }
+
+    /// Reranks text and consumer-owned image assets through the Jina wire
+    /// format. Remote URLs and inline/persistible media are rejected.
+    pub async fn rerank_ephemeral(
+        &self,
+        request: EphemeralLlamaServerRerankRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<RerankResponse, ChatError> {
+        if request.contract_version != RERANK_CONTRACT_VERSION || request.model.trim().is_empty() {
+            return Err(ChatError::InvalidRequest(
+                "invalid ephemeral rerank request",
+            ));
+        }
+        if request.query.is_empty() || request.documents.is_empty() {
+            return Err(ChatError::InvalidRequest(
+                "rerank query and documents must not be empty",
+            ));
+        }
+        let model = self
+            .models()
+            .await?
+            .data
+            .into_iter()
+            .find(|candidate| candidate.id == request.model)
+            .ok_or(ChatError::ModelCapabilityUnsupported)?;
+        let modalities = model
+            .architecture
+            .as_ref()
+            .and_then(|a| a.input_modalities.as_ref());
+        let supports_image =
+            modalities.is_some_and(|items| items.iter().any(|item| item == "image"));
+        let capabilities = ModalityCapabilities {
+            vision: if supports_image {
+                CapabilityState::Supported
+            } else {
+                CapabilityState::Unsupported
+            },
+            pdf: CapabilityState::Unsupported,
+            audio_input: CapabilityState::Unsupported,
+            video_input: CapabilityState::Unsupported,
+            tool_result_images: CapabilityState::Unsupported,
+        };
+        let document_count = request.documents.len();
+        let query = self
+            .materialize_rerank_item(request.query, &request.model, &capabilities, context)
+            .await?;
+        let mut documents = Vec::with_capacity(request.documents.len());
+        for document in request.documents {
+            documents.push(
+                self.materialize_rerank_item(
+                    document.content,
+                    &request.model,
+                    &capabilities,
+                    context,
+                )
+                .await?,
+            );
+        }
+        let mut payload =
+            serde_json::json!({"model": request.model, "query": query, "documents": documents});
+        if let Some(top_n) = request.top_n {
+            payload["top_n"] = serde_json::json!(top_n);
+        }
+        let mut endpoint = self.root_url.clone();
+        endpoint.set_path(&format!("{}/rerank", endpoint.path().trim_end_matches('/')));
+        let deadline = Instant::now() + self.total_timeout;
+        let mut outgoing = self
+            .client
+            .post(endpoint)
+            .json(&payload)
+            .timeout(self.read_timeout);
+        if let Some(key) = &self.api_key {
+            outgoing = outgoing.header(header::AUTHORIZATION, key.clone());
+        }
+        for (name, value) in &self.headers {
+            outgoing = outgoing.header(name, value);
+        }
+        let response = timeout_at(deadline, outgoing.send())
+            .await
+            .map_err(|_| ChatError::Timeout)?
+            .map_err(|e| {
+                if e.is_timeout() {
+                    ChatError::Timeout
+                } else {
+                    ChatError::Connection
+                }
+            })?;
+        if !response.status().is_success() {
+            return Err(classify_status(response.status().as_u16()));
+        }
+        let bytes = read_limited(response, self.max_response_bytes, deadline).await?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|_| ChatError::InvalidResponse)?;
+        let values = value
+            .get("results")
+            .and_then(serde_json::Value::as_array)
+            .ok_or(ChatError::InvalidResponse)?;
+        let mut results = Vec::with_capacity(values.len());
+        let mut seen = std::collections::HashSet::new();
+        for result in values {
+            let index = result
+                .get("index")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or(ChatError::InvalidResponse)? as usize;
+            let score = result
+                .get("relevance_score")
+                .and_then(serde_json::Value::as_f64)
+                .ok_or(ChatError::InvalidResponse)?;
+            if index >= document_count || !seen.insert(index) || !(0.0..=1.0).contains(&score) {
+                return Err(ChatError::InvalidResponse);
+            }
+            results.push(RerankResult {
+                index,
+                relevance_score: score,
+            });
+        }
+        if request.top_n.is_some_and(|n| results.len() > n as usize) {
+            return Err(ChatError::InvalidResponse);
+        }
+        let usage = value
+            .get("usage")
+            .and_then(|u| u.get("prompt_tokens"))
+            .and_then(serde_json::Value::as_u64)
+            .map(|input_tokens| LlmUsage {
+                input_tokens,
+                cost: None,
+            });
+        Ok(RerankResponse {
+            contract_version: RERANK_CONTRACT_VERSION,
+            results,
+            usage,
+            selected_model_id: None,
+            model_switches: Vec::new(),
+        })
+    }
+
+    async fn materialize_rerank_item(
+        &self,
+        parts: Vec<ContentPart>,
+        model: &str,
+        capabilities: &ModalityCapabilities,
+        context: &MediaExecutionContext,
+    ) -> Result<serde_json::Value, ChatError> {
+        if parts.is_empty()
+            || parts.iter().any(|part| {
+                matches!(
+                    part,
+                    ContentPart::ImageUrl { .. }
+                        | ContentPart::Inline(_)
+                        | ContentPart::Audio(_)
+                        | ContentPart::Video(_)
+                        | ContentPart::Document(_)
+                        | ContentPart::File(_)
+                )
+            })
+        {
+            return Err(ChatError::InvalidRequest(
+                "rerank accepts text and consumer image assets only",
+            ));
+        }
+        let prepared = prepare_content_with_limits(
+            parts,
+            capabilities,
+            context.store.as_ref(),
+            model,
+            ContentSite::UserMessage,
+            context.max_media_bytes.min(self.max_media_bytes),
+            context.resolver.media_limits_for("llama_cpp", model),
+        )
+        .await;
+        if prepared
+            .decisions
+            .iter()
+            .any(|d| d.mode != MediaMode::Native)
+        {
+            return Err(ChatError::ModelCapabilityUnsupported);
+        }
+        let mut text = Vec::new();
+        let mut images = Vec::new();
+        for part in prepared.parts {
+            match part {
+                ContentPart::Text { text: value } if !value.trim().is_empty() => text.push(value),
+                ContentPart::ImageUrl { image_url } if image_url.url.starts_with("data:image/") => {
+                    images.push(image_url.url)
+                }
+                _ => {
+                    return Err(ChatError::InvalidRequest(
+                        "unsupported or empty rerank content part",
+                    ));
+                }
+            }
+        }
+        let mut value = serde_json::Map::new();
+        if !text.is_empty() {
+            value.insert("text".into(), serde_json::json!(text.join("\n")));
+        }
+        if !images.is_empty() {
+            value.insert("image".into(), serde_json::json!(images));
+        }
+        if value.is_empty() {
+            return Err(ChatError::InvalidRequest(
+                "rerank item must contain text or image",
+            ));
+        }
+        Ok(serde_json::Value::Object(value))
     }
 
     async fn post_embeddings(
@@ -1510,6 +1737,126 @@ mod tests {
             size_bytes: bytes.len() as u64,
             name: "fixture.png".into(),
         }
+    }
+
+    #[tokio::test]
+    async fn multimodal_rerank_resolves_image_assets_and_sends_jina_objects() {
+        use super::super::{CapabilityResolver, MediaExecutionContext, MediaPart};
+        let bytes = b"\x89PNG\r\n\x1a\nrerank-image".to_vec();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut buffer = vec![0; 16 * 1024];
+                let n = stream.read(&mut buffer).await.unwrap();
+                let request = String::from_utf8_lossy(&buffer[..n]);
+                let body = if request.starts_with("GET /v1/models ") {
+                    r#"{"data":[{"id":"vision-ranker","architecture":{"input_modalities":["text","image"]}}]}"#
+                } else {
+                    assert!(request.starts_with("POST /rerank "));
+                    assert!(request.contains("\"image\":[\"data:image/png;base64,"));
+                    assert!(request.contains("\"text\":\"compare this\""));
+                    assert!(!request.contains("file://"));
+                    r#"{"model":"vision-ranker","results":[{"index":0,"relevance_score":0.91}],"usage":{"prompt_tokens":9}}"#
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::default(),
+            std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::from([(
+                "image-1".to_owned(),
+                bytes.clone(),
+            )]))),
+        );
+        let response = client
+            .rerank_ephemeral(
+                EphemeralLlamaServerRerankRequest {
+                    contract_version: RERANK_CONTRACT_VERSION,
+                    model: "vision-ranker".into(),
+                    query: vec![
+                        ContentPart::Text {
+                            text: "compare this".into(),
+                        },
+                        ContentPart::Image(MediaPart {
+                            media_ref: png_ref(&bytes),
+                            text: None,
+                            previews: vec![],
+                        }),
+                    ],
+                    documents: vec![LlamaServerRerankInput {
+                        content: vec![ContentPart::Text {
+                            text: "candidate".into(),
+                        }],
+                    }],
+                    top_n: Some(1),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.results[0].index, 0);
+        assert_eq!(response.results[0].relevance_score, 0.91);
+        assert_eq!(response.usage.unwrap().input_tokens, 9);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn multimodal_rerank_rejects_remote_images_without_posting() {
+        use super::super::{CapabilityResolver, MediaExecutionContext};
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut buffer = vec![0; 4096];
+            let n = stream.read(&mut buffer).await.unwrap();
+            assert!(String::from_utf8_lossy(&buffer[..n]).starts_with("GET /v1/models "));
+            let body = r#"{"data":[{"id":"vision-ranker","architecture":{"input_modalities":["text","image"]}}]}"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::default(),
+            std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::new())),
+        );
+        let result = client
+            .rerank_ephemeral(
+                EphemeralLlamaServerRerankRequest {
+                    contract_version: RERANK_CONTRACT_VERSION,
+                    model: "vision-ranker".into(),
+                    query: vec![ContentPart::ImageUrl {
+                        image_url: super::super::ImageUrl {
+                            url: "https://example.invalid/image.png".into(),
+                            detail: None,
+                        },
+                    }],
+                    documents: vec![LlamaServerRerankInput {
+                        content: vec![ContentPart::Text {
+                            text: "candidate".into(),
+                        }],
+                    }],
+                    top_n: None,
+                },
+                &context,
+            )
+            .await;
+        assert!(matches!(result, Err(ChatError::InvalidRequest(_))));
+        server.await.unwrap();
     }
 
     #[tokio::test]

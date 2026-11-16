@@ -11,9 +11,7 @@ servirem como estado corrente.
 `main` remota está em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`. PR #113
 inclui cliente Laya; PR [#114](https://github.com/vectora-company/engine/pull/114),
 filho do #113, adiciona embeddings textuais; PR [#115](https://github.com/vectora-company/engine/pull/115),
-filho do #114, adiciona embeddings multimodais por asset map. A branch ativa
-`feat/llama-server-rerank`, filha do #115, implementa rerank textual Jina, validando
-request/response, Bearer, top_n, índices, score e usage. Fixtures Rust/Python/TypeScript e gates integrados passam: Rust 236; 3 fixtures + 1 fronteira Python; pytest 98/1 skip; Node 51/11 skips opcionais; `scons lint` aprovado. Pre-commit e publicação do PR ainda pendentes. A referência é a API fixada do llama.cpp v1.0.0. Estado e
+filho do #114, adiciona embeddings multimodais por asset map. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, implementa rerank textual Jina. A branch ativa `feat/llama-server-multimodal-rerank`, filha do #116, implementa rerank multimodal efêmero por asset map. Gates integrados passam: Rust 238; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips opcionais; `scons lint`. Pre-commit passou; publicação do #117 pendente. A referência é a API fixada do llama.cpp v1.0.0. Estado e
 lacunas ficam na análise específica
 [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md)
 e nos artefatos ligados em [`docs/README.md`](../README.md).
