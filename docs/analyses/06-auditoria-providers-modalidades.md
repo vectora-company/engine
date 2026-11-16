@@ -43,14 +43,9 @@ e [README upstream](https://github.com/NandhaKishorM/laya).
 
 ### Atualização — embeddings multimodais llama-server v1.0.0 (16/11/2026)
 
-O PR [#114](https://github.com/vectora-company/engine/pull/114), filho do #113,
-adicionou embeddings textuais por `/v1/embeddings` nos três runtimes. A etapa
-ativa, `feat/llama-server-multimodal-embeddings-assets`, filha do #114, estende
-esse endpoint com requests efêmeros multimodais e assets fornecidos pelo
-consumidor. Quatro testes focados Rust cobrem imagem, áudio/vídeo, URL remota e
-fail-closed quando falta a modalidade; fixtures Python e TypeScript cobrem a
-materialização por asset map. Suíte final: Rust 234 + 3 fixtures + 1 fronteira
-Python; pytest 97/1 skip; Node 50/11 skips. `scons lint` e hooks passaram.
+O PR [#114](https://github.com/vectora-company/engine/pull/114), filho do #113, adicionou embeddings textuais; o PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, adicionou embeddings multimodais efêmeros por asset map. A etapa ativa `feat/llama-server-rerank`, filha do #115, implementa rerank textual Jina via `/rerank`: Bearer opcional, `top_n`, índices, score e usage. Dois testes focados Rust e fixtures Python/TypeScript passaram. Gates integrados: Rust 236; 3 fixtures de conformidade + 1 fronteira Python; pytest 98/1 skip; Node 51/11 skips opcionais; `scons lint` aprovado. O pre-commit ainda será executado antes da publicação.
+
+A API oficial fixa aliases `/rerank`, `/v1/rerank` e `/v1/reranking`; Jina usa `documents` e retorna `results` com índice e score de 0 a 1. Este adapter não habilita entrada multimodal: mídia precisa do envelope efêmero e asset map próprios.
 
 O contrato parte da API fixada em
 [`tools/server/README.md` v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#L1920-L1932).
@@ -71,7 +66,7 @@ pooling configurados no server.
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Chat           | OpenAI Chat Completions nomeado em implementação; OpenAI Responses; OpenRouter Chat Completions; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; fallback; `LlamaServerClient` | O novo perfil OpenAI está em validação local; 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação. |
 | Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                                                                                                     | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade.                             |
-| Rerank         | Cohere, Voyage e OpenRouter                                                                                                                                                                | llama.cpp ou equivalência de campos/scores em todos os adapters.                                                                   |
+| Rerank         | Cohere, Voyage, OpenRouter e Jina textual via llama-server v1.0.0 em implementação local                                                                                                   | Rerank multimodal ainda não ligado ao asset map; não inferir compatibilidade com TEI/Jina de outros providers.                     |
 | Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                                                                                              | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                                                  |
 | Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                                                                                                         | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.                             |
 | TTS/STT        | Não há cliente LLM para TTS/STT                                                                                                                                                            | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                                           |

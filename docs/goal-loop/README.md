@@ -1,12 +1,8 @@
 # Goal loop da Engine
 
-## Estado atual — embeddings multimodais llama-server v1.0.0 (16/11/2026)
+## Estado atual — rerank llama-server v1.0.0 (16/11/2026)
 
-PR [#114](https://github.com/vectora-company/engine/pull/114), filho do #113,
-implementa embeddings texto no `/v1/embeddings`. Branch ativa
-`feat/llama-server-multimodal-embeddings-assets`, filha do #114, implementa
-entrada efêmera por asset map nos formatos text/image/audio/video e recusa URL,
-path ou bytes inline. Quatro testes focados Rust cobrem imagem, áudio/vídeo, URL remota e fail-closed para modalidade não declarada. Fixtures Python e TypeScript passaram. `scons tests` passou (Rust 234 + 3 fixtures + 1 fronteira Python; pytest 97/1 skip; Node 50/11 skips), além de `scons lint` e hooks. A fixture fail-closed está incluída na suíte integrada final. O plano, spec,
+PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, entrega embeddings multimodais efêmeros por asset map. A branch ativa `feat/llama-server-rerank`, filha do #115, implementa rerank Jina em `/rerank`, com top_n, usage e validação dos scores. Gates integrados passaram (Rust 236; pytest 98/1 skip; Node 51/11 skips; `scons lint`); pre-commit passou; publicação do PR ainda pendente. O plano, spec,
 checklist e análise são
 [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md),

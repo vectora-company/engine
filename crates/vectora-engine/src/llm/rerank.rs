@@ -21,6 +21,7 @@ pub enum RerankClientSettings {
     Cohere(ProviderHttpSettings),
     Voyage(ProviderHttpSettings),
     OpenRouter(ProviderHttpSettings),
+    LlamaServer(ProviderHttpSettings),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -61,6 +62,7 @@ enum RerankProtocol {
     Cohere(ProviderHttpClient),
     Voyage(ProviderHttpClient),
     OpenRouter(ProviderHttpClient),
+    LlamaServer(ProviderHttpClient),
 }
 
 pub struct RerankClient {
@@ -79,6 +81,9 @@ impl RerankClient {
             RerankClientSettings::OpenRouter(settings) => {
                 RerankProtocol::OpenRouter(ProviderHttpClient::new(settings, OPENROUTER_URL, true)?)
             }
+            RerankClientSettings::LlamaServer(settings) => RerankProtocol::LlamaServer(
+                ProviderHttpClient::new(settings, "http://127.0.0.1:8080", false)?,
+            ),
         };
         Ok(Self { protocol })
     }
@@ -111,6 +116,13 @@ impl RerankClient {
             {
                 return Err(LlmError::InvalidConfiguration(
                     "OpenRouter rerank does not support truncation options",
+                ));
+            }
+            RerankProtocol::LlamaServer(_)
+                if request.max_tokens_per_doc.is_some() || request.truncation.is_some() =>
+            {
+                return Err(LlmError::InvalidConfiguration(
+                    "llama-server rerank does not support truncation options",
                 ));
             }
             _ => {}
@@ -156,9 +168,27 @@ impl RerankClient {
                 }
                 (client, "/rerank", payload, "results")
             }
+            RerankProtocol::LlamaServer(client) => {
+                let mut payload = json!({
+                    "model": request.model,
+                    "query": request.query,
+                    "documents": request.documents,
+                });
+                if let Some(top_n) = request.top_n {
+                    payload["top_n"] = json!(top_n);
+                }
+                (client, "/rerank", payload, "results")
+            }
         };
         let response = client.post_json(path, payload).await?;
         let results = parse_results(&response, field, request.documents.len())?;
+        if matches!(&self.protocol, RerankProtocol::LlamaServer(_))
+            && results
+                .iter()
+                .any(|result| !(0.0..=1.0).contains(&result.relevance_score))
+        {
+            return Err(LlmError::InvalidResponse);
+        }
         if request
             .top_n
             .is_some_and(|top_n| results.len() > top_n as usize)
@@ -361,8 +391,13 @@ fn parse_rerank_usage(response: &Value) -> Option<LlmUsage> {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 
-    use super::{RERANK_CONTRACT_VERSION, RerankRequest, parse_results, validate_request};
+    use super::{
+        RERANK_CONTRACT_VERSION, RerankClient, RerankClientSettings, RerankRequest, parse_results,
+        validate_request,
+    };
+    use crate::llm::http::ProviderHttpSettings;
 
     #[test]
     fn preserves_provider_ranking_order_and_accepts_score_alias() {
@@ -408,5 +443,100 @@ mod tests {
             truncation: None,
         };
         assert!(validate_request(&request).is_err());
+    }
+
+    #[tokio::test]
+    async fn llama_server_rerank_uses_jina_wire_shape_and_preserves_order() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 8192];
+            let n = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..n]);
+            assert!(request.starts_with("POST /v1/rerank "));
+            assert!(
+                request
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer local-token")
+            );
+            assert!(request.contains("\"documents\":[\"first\",\"second\"]"));
+            assert!(request.contains("\"top_n\":1"));
+            let body = r#"{"model":"ranker","results":[{"index":1,"relevance_score":0.93}],"usage":{"prompt_tokens":7}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let client = RerankClient::new(RerankClientSettings::LlamaServer(ProviderHttpSettings {
+            base_url: Some(format!("http://{address}/v1")),
+            api_key: Some("local-token".into()),
+            ..Default::default()
+        }))
+        .unwrap();
+        let response = client
+            .rerank(RerankRequest {
+                contract_version: RERANK_CONTRACT_VERSION,
+                model: "ranker".into(),
+                query: "query".into(),
+                documents: vec!["first".into(), "second".into()],
+                top_n: Some(1),
+                max_tokens_per_doc: None,
+                truncation: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(response.results[0].index, 1);
+        assert_eq!(response.results[0].relevance_score, 0.93);
+        assert_eq!(response.usage.unwrap().input_tokens, 7);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn llama_server_rerank_rejects_provider_options_and_non_probability_scores() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let _ = stream.read(&mut request).await.unwrap();
+            let body = r#"{"results":[{"index":0,"relevance_score":1.1}]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let client = RerankClient::new(RerankClientSettings::LlamaServer(ProviderHttpSettings {
+            base_url: Some(format!("http://{address}")),
+            ..Default::default()
+        }))
+        .unwrap();
+        let invalid_options = RerankRequest {
+            contract_version: RERANK_CONTRACT_VERSION,
+            model: "ranker".into(),
+            query: "query".into(),
+            documents: vec!["document".into()],
+            top_n: None,
+            max_tokens_per_doc: Some(20),
+            truncation: None,
+        };
+        assert!(client.rerank(invalid_options).await.is_err());
+
+        let invalid_score = RerankRequest {
+            contract_version: RERANK_CONTRACT_VERSION,
+            model: "ranker".into(),
+            query: "query".into(),
+            documents: vec!["document".into()],
+            top_n: None,
+            max_tokens_per_doc: None,
+            truncation: None,
+        };
+        assert!(matches!(
+            client.rerank(invalid_score).await,
+            Err(crate::llm::LlmError::InvalidResponse)
+        ));
+        server.await.unwrap();
     }
 }
