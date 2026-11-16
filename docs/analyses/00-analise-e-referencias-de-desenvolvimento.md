@@ -6,6 +6,18 @@ Sua fotografia foi conferida contra o `main` em 15/11/2026; os registros
 datados abaixo continuam sendo histórico e precisam ser revalidados antes de
 servirem como estado corrente.
 
+## Estado verificado em 16/11/2026
+
+`main` remota está em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; PRs até #112
+estão integrados e não há PR aberto. A implementação ativa acrescenta perfil
+independente para `laya-serve`: a API oficial expõe `/health` e
+`/v1/systemone`, sem `/v1/models`, e não aceita mídia na rota HTTP documentada.
+O perfil existente `LlamaServerClient` não pode ser usado diretamente com esse
+servidor, pois exige discovery e valida metadata própria do `llama-server`.
+Estado e lacunas ficam na análise específica
+[`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md)
+e nos artefatos ligados em [`docs/README.md`](../README.md).
+
 Este documento define como investigar uma capability da Engine antes de
 implementar ou alterar seus contratos. Ele complementa `AGENTS.md`; não substitui
 as regras específicas de uma spec ou de um plano.

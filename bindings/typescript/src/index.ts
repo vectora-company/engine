@@ -41,6 +41,18 @@ export type LlamaServerSettings = OpenAiCompatibleCommonSettings & {
   max_media_bytes?: number;
 };
 
+/** Settings for the standalone Laya `laya-serve` decision API. */
+export interface LayaSettings {
+  base_url: string;
+  api_key?: string;
+  headers?: Record<string, string>;
+  connect_timeout_ms?: number;
+  read_timeout_ms?: number;
+  total_timeout_ms?: number;
+  max_response_bytes?: number;
+  max_request_bytes?: number;
+}
+
 export type SpeechFormat = "wav" | "pcm16" | "pcm_f32";
 export interface SpeechRequest {
   model: string;
@@ -129,6 +141,10 @@ export interface LlamaServerModelList {
 }
 
 export interface LlamaServerHealth {
+  status: string;
+}
+
+export interface LayaHealth {
   status: string;
 }
 
@@ -967,6 +983,8 @@ interface NativeBinding {
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
+  layaHealth(settingsJson: string): Promise<string>;
+  layaDecide(settingsJson: string, requestJson: string): Promise<string>;
   llamaServerSynthesize(
     settingsJson: string,
     requestJson: string,
@@ -2347,6 +2365,23 @@ export async function llamaServerDecide(
       JSON.stringify(settings),
       JSON.stringify(request),
     ),
+  ) as DecisionResponse;
+}
+
+/** Probe the standalone Laya `/health` endpoint. */
+export async function layaHealth(settings: LayaSettings): Promise<LayaHealth> {
+  return JSON.parse(
+    await native.layaHealth(JSON.stringify(settings)),
+  ) as LayaHealth;
+}
+
+/** Send a typed decision to Laya's native, text-only `/v1/systemone` API. */
+export async function layaDecide(
+  settings: LayaSettings,
+  request: DecisionRequest,
+): Promise<DecisionResponse> {
+  return JSON.parse(
+    await native.layaDecide(JSON.stringify(settings), JSON.stringify(request)),
   ) as DecisionResponse;
 }
 

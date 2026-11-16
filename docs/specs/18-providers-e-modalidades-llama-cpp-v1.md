@@ -142,6 +142,31 @@ spec. Deve ser atualizado junto com cada implementação e fixture.
   `operator_override` ou `unknown`. Unknown deve falhar fechado para payloads
   que possam ser rejeitados ou caros.
 
+## Perfil standalone Laya `laya-serve`
+
+O servidor Python de Laya é outro protocolo Jev, não um `llama-server` nem um
+endpoint OpenAI-compatible. Seu contrato HTTP documenta `GET /health` e
+`POST /v1/systemone`; não há `GET /v1/models`. O request contém `model`, `state`
+e `questions`. O campo `model` aceita nomes de checkpoint, IDs Jev que delegam
+roteamento ao servidor, ou pode ser omitido pelo cliente que adotar uma API
+opcional própria. Nesta versão do contrato compartilhado, `DecisionRequest`
+exige model e o perfil o encaminha sem reinterpretar.
+
+A rota `/v1/systemone` do `laya-serve` aceita estado textual; não recebe
+`image`, `audio` nem `video`. Assets efêmeros multimodais não devem ser enviados
+por esse cliente. Laya retorna `answers` e `usage`, mais campos como `model`,
+`routing`, metadata de confiança e detalhes de truncamento. O adapter valida e
+normaliza os campos comuns, tolera metadata adicional e não persiste nem
+reencaminha `routing` automaticamente, pois pode carregar dados derivados do
+estado. Choice e score trazem probabilidades arredondadas independentemente a
+quatro casas; a validação permite erro de soma proporcional ao número de
+opções/níveis. Para score, os mapas `probabilities` e `legend` são validados por
+índice e comparados com `criteria`. A API não transmite resultados.
+
+Contrato upstream: [`laya/docs/http-api.md`](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md).
+Compatibilidade de schema é exercitada por fixtures; execução com checkpoint
+real é um smoke opt-in, separado de integração com o GGUF no llama.cpp.
+
 ## Base llama.cpp v1.0.0
 
 Implementar contra a tag imutável, não contra `master`. O servidor v1.0.0

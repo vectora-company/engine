@@ -1,7 +1,7 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado:** ativo. PRs [#97](https://github.com/vectora-company/engine/pull/97) → [#98](https://github.com/vectora-company/engine/pull/98) → [#100](https://github.com/vectora-company/engine/pull/100) formam a base da stack; FalkorDB está em [#101](https://github.com/vectora-company/engine/pull/101) → [#102](https://github.com/vectora-company/engine/pull/102), seguido pelo Decision Model [#103](https://github.com/vectora-company/engine/pull/103) e TTS [#104](https://github.com/vectora-company/engine/pull/104). A sessão realtime está publicada no PR [#105](https://github.com/vectora-company/engine/pull/105), head `e97925b`, filho da branch do #104; status remoto verificado `OPEN`/`MERGEABLE`.
-**Base do plano:** `main` em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81` após o merge do PR [#96](https://github.com/vectora-company/engine/pull/96); etapa ativa em branch atualizada por fast-forward.
+**Estado verificado em 16/11/2026:** a stack até o PR [#112](https://github.com/vectora-company/engine/pull/112) está integrada em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`); o GitHub não lista PRs abertos. A etapa ativa adiciona cliente próprio para `laya-serve`, distinto do perfil `llama-server`.
+**Base do plano:** `main` em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; checkout permitido `/home/brunosrz/Área de trabalho/engine`.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
 ## Objetivo
@@ -78,6 +78,25 @@ passaram nos três runtimes. Rust: teste de rota/probabilidades e quatro testes
 de contrato; pytest focado passou; Node: 40 passaram e 11 foram ignorados por
 serviços não configurados. `scons build`, Clippy da lib, Ruff/ty e TypeScript
 typecheck passaram. Integração real llama-server continua pendente. A subetapa TTS bufferizada descrita abaixo é filha do #103; stream de áudio e realtime ASR seguem como trabalho separado.
+
+### Etapa 3b — servidor oficial Laya `laya-serve`
+
+`laya-serve` implementa Jev diretamente: health `/health` e inferência
+`/v1/systemone`; não fornece discovery `/v1/models` e a rota HTTP documentada
+aceita texto, não mídia. `LayaClient` é um perfil separado de
+`LlamaServerClient`: Bearer opcional, envio direto de `model/state/questions`,
+timeouts e limites de corpo, sem preflight OpenAI. Ele aceita os campos extras
+Laya (`routing`, metadata das respostas e usage estendido), valida `choice` e
+`score` com distribuição arredondada a quatro casas e suporta score no formato
+de mapas `probabilities`/`legend`. Python e TypeScript expõem health e decisão
+de texto. O smoke test real é opt-in por `VECTORA_TEST_LAYA_URL`,
+`VECTORA_TEST_LAYA_API_KEY` e `VECTORA_TEST_LAYA_MODEL` (padrão `jev-1`); não
+baixa checkpoints no CI padrão. Verificação local: Clippy da lib e testes com
+`-D warnings`; `scons tests` passou com Rust 227 + 3 fixtures de conformidade +
+1 teste Rust do binding, pytest 95/1 skip e Node 48/11 skips opcionais. O build
+release NAPI levou 20m19s no cache frio inicial e passou; a recompilação dentro
+do gate SCons levou 0,85s. O servidor/checkpoint real Laya não estava
+configurado, então o smoke opt-in continua pendente.
 
 **Saída:** conformidade Rust/Python/TypeScript e testes reais com modelo
 decision compatível quando disponível.

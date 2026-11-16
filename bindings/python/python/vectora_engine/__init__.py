@@ -930,6 +930,23 @@ async def llama_server_decide_ephemeral(
     )
 
 
+async def laya_health(settings: JsonObject) -> dict[str, Any]:
+    """Probe the standalone Laya server `/health` endpoint."""
+    return json.loads(
+        await _native.laya_health(json.dumps(settings, separators=(",", ":")))
+    )
+
+
+async def laya_decide(settings: JsonObject, request: JsonObject) -> dict[str, Any]:
+    """Run a typed text decision through Laya's native `/v1/systemone` API."""
+    return json.loads(
+        await _native.laya_decide(
+            json.dumps(settings, separators=(",", ":")),
+            json.dumps(request, separators=(",", ":")),
+        )
+    )
+
+
 def _speech_response(value: str) -> dict[str, Any]:
     result = json.loads(value)
     result["audio"] = base64.b64decode(result.pop("audio_base64"), validate=True)
@@ -1379,6 +1396,8 @@ __all__ = [
     "kv_watch_close",
     "kv_watch_open",
     "kv_watch_receive",
+    "laya_decide",
+    "laya_health",
     "llama_server_chat_complete",
     "llama_server_chat_complete_ephemeral",
     "llama_server_chat_stream",

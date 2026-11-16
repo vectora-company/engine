@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import {
+  layaDecide,
+  layaHealth,
   llamaServerChatComplete,
   llamaServerChatStream,
   llamaServerDecide,
@@ -13,6 +15,59 @@ import {
   llamaServerSynthesizeStream,
   llamaServerSynthesizeNativeEphemeral,
 } from "../dist/index.js";
+
+test("Laya binding calls native systemone without llama-server model discovery", async () => {
+  const seen = [];
+  const server = createServer(async (request, response) => {
+    const parts = [];
+    for await (const part of request) parts.push(part);
+    assert.equal(request.headers.authorization, "Bearer laya-test-key");
+    if (request.method === "GET") {
+      seen.push(request.url);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+    seen.push(request.url);
+    const body = JSON.parse(Buffer.concat(parts).toString("utf8"));
+    assert.equal(body.model, "multilingual");
+    assert.equal(body.questions.route.type, "choice");
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({
+      model: "laya-systemone",
+      answers: { route: {
+        type: "choice",
+        choice: "billing",
+        probabilities: { billing: 0.6667, shipping: 0.3333 },
+        confidence: 0.3,
+        answer_confidence: 0.6667,
+        action: { act_probability: 1.0 },
+      } },
+      usage: { input_tokens: 12, output_tokens: 0, state_tokens: 7 },
+      routing: { model: "english", repo: "convaiinnovations/laya" },
+    }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    const settings = { base_url: `http://127.0.0.1:${port}/v1`, api_key: "laya-test-key" };
+    assert.deepEqual(await layaHealth(settings), { status: "ok" });
+    const result = await layaDecide(settings, {
+      model: "multilingual",
+      state: { ticket: "charged twice" },
+      questions: { route: {
+        type: "choice",
+        instructions: "Which queue?",
+        criteria: { billing: "billing issue", shipping: "delivery issue" },
+      } },
+    });
+    assert.equal(result.answers.route.choice, "billing");
+    assert.equal(result.usage.input_tokens, 12);
+    assert.deepEqual(seen, ["/health", "/v1/systemone"]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
 
 test("llama-server TTS streams binary chunks through both routes", async () => {
   const bodies = [];

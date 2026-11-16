@@ -3,6 +3,7 @@
 mod decision_model;
 mod error;
 mod fallback;
+mod laya;
 mod llama_server;
 mod media;
 mod native_providers;
@@ -21,6 +22,7 @@ pub use error::ChatError;
 pub use fallback::{
     FallbackCandidateSettings, FallbackChatClient, FallbackChatSettings, FallbackClientSettings,
 };
+pub use laya::{LayaClient, LayaHealth, LayaSettings};
 pub use llama_server::{
     LlamaServerArchitecture, LlamaServerClient, LlamaServerHealth, LlamaServerModel,
     LlamaServerModelList, LlamaServerProperties, LlamaServerSettings, SpeechStream,

@@ -1,6 +1,22 @@
 # Goal loop da Engine
 
-## Estado atual — follow-up de configuração FalkorDB (15/11/2026)
+## Estado atual — cliente standalone Laya (16/11/2026)
+
+`main` está em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; PRs até #112 foram
+integrados e GitHub não lista PR aberto. A branch `feat/laya-decision-model-client`
+implementa o cliente `laya-serve` no core Rust e bindings. `scons tests` e
+`scons lint` passaram (Rust 227 + 3 fixtures, pytest 95/1 skip, Node 48/11
+skips); a publicação desta etapa usa `main` como base, pois não havia PR aberto.
+Smoke opt-in permanece pendente por depender de servidor/checkpoint Laya real. O
+instalador [laya-install.sh](../../laya-install.sh) oferece o servidor Python
+Laya ou `llama.cpp` com `ggml-org/Laya-GGUF:Q8_0`; instalação/modelo real ainda
+não foi executado nesta etapa. O plano, spec, checklist e análise são
+[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
+[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
+[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e
+[`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
+
+## Histórico — follow-up de configuração FalkorDB (15/11/2026)
 
 PR [#110](https://github.com/vectora-company/engine/pull/110), perfil OpenAI Chat Completions, é filho do #109. Branch ativa `feat/falkordb-binding-timeouts`, filha do #110, corrige a configuração dos bindings FalkorDB: deadlines de conexão/query/resposta e limites de linhas/bytes agora chegam ao core. Rust, Python e Node passaram contra FalkorDB 6.0.3; hooks completos e `scons tests` passaram (217 Rust + 3 fixtures, pytest 95, Node 48/10 skips opcionais). O commit `039798c` foi enviado e o PR [#111](https://github.com/vectora-company/engine/pull/111) está aberto como filho do #110, com base `feat/openai-chat-profile`. A etapa `test/falkordb-tls-integration` foi publicada no PR [#112](https://github.com/vectora-company/engine/pull/112), filho do #111; corrige a seleção Rustls e passou TLS real em Rust/Python/Node. O client oficial não expõe cancelamento remoto; isso ficou registrado como limitação. Preserve `bindings/typescript/native/index.d.ts` e `bindings/python/uv.lock` fora do stage. Checkout autorizado `/home/brunosrz/Área de trabalho/engine`. O plano, spec, checklist e análise FalkorDB estão em [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md) e [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md).
 
@@ -46,7 +62,7 @@ gerais relacionados são o [protocolo detalhado](../plans/05-loop-de-desenvolvim
 o [checklist geral](../checklists/00-checklist-de-implementacao.md) e a
 [análise geral](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 
-## Capability ativa
+## Histórico da trilha de providers e modalidades
 
 Providers e modalidades de IA, com referência normativa à release fixa
 [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0).
