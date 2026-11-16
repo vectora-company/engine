@@ -1,6 +1,6 @@
 # Plano: providers e modalidades de IA com referência llama.cpp v1.0.0
 
-**Estado verificado em 16/11/2026:** a stack até o PR [#112](https://github.com/vectora-company/engine/pull/112) está integrada em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`); o GitHub não lista PRs abertos. A etapa ativa adiciona cliente próprio para `laya-serve`, distinto do perfil `llama-server`.
+**Estado verificado em 16/11/2026:** a stack até o PR [#112](https://github.com/vectora-company/engine/pull/112) está integrada em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). A etapa de cliente standalone para `laya-serve` foi publicada como PR [#113](https://github.com/vectora-company/engine/pull/113), aberto e `MERGEABLE` sobre `main`; distinto do perfil `llama-server`.
 **Base do plano:** `main` em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; checkout permitido `/home/brunosrz/Área de trabalho/engine`.
 **Referência normativa:** [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 

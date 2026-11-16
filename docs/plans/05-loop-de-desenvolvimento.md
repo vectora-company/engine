@@ -15,9 +15,10 @@ do loop e os critérios sucintos de encerramento.
 Estado corrente em 16/11/2026: PRs até #112 estão integrados em `main`
 (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). A capability ativa é o cliente
 direto `laya-serve`, em `feat/laya-decision-model-client`; `scons tests` passou
-(Rust 227 + 3 fixtures, pytest 95/1 skip, Node 48/11 skips). O PR desta etapa
-deve usar `main` como base, pois não há PR aberto no repositório. Atualize
-plano, spec, checklist e análise específicos e este índice a cada etapa. O
+(Rust 227 + 3 fixtures, pytest 95/1 skip, Node 48/11 skips). A etapa foi
+publicada como PR [#113](https://github.com/vectora-company/engine/pull/113),
+aberto e `MERGEABLE` sobre `main`. Atualize plano, spec, checklist e análise
+específicos e este índice a cada etapa. O
 estado verificável fica em
 [`docs/goal-loop/README.md`](../goal-loop/README.md).
 
