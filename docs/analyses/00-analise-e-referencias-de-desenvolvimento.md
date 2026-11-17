@@ -119,7 +119,11 @@ títulos e bases de PR no estado dinâmico do GitHub.
   categoria, Jev é um modelo específico, e SystemOne é o protocolo usado pelos
   adapters standalone Laya e llama-server; os runtimes mantêm discovery e
   capacidades próprias. Seletor Laya opcional permite checkpoint Laya ou
-  roteamento do servidor.
+  roteamento do servidor. OpenAI Responses mapeia input audio WAV/MP3; a
+  capability fica desconhecida sem metadata/override do modelo, também no Chat
+  Completions.
+  A fixture Rust exercita WAV/MP3 e rejeição de formatos não suportados; smoke
+  real por modelo permanece pendente.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
   [checklist](../checklists/06-storage-grafos-falkordb.md) e

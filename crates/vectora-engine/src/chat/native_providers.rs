@@ -738,6 +738,24 @@ fn responses_content(content: &MessageContent) -> Result<Vec<Value>, ChatError> 
                     ContentPart::Inline(media) if media.kind == super::media::MediaKind::Image => {
                         result.push(json!({"type":"input_image","image_url":format!("data:{};base64,{}",media.mime_type,media.data_base64)}));
                     }
+                    ContentPart::Inline(media) if media.kind == super::media::MediaKind::Audio => {
+                        let format = match media.mime_type.as_str() {
+                            "audio/wav" => "wav",
+                            "audio/mpeg" => "mp3",
+                            _ => {
+                                return Err(ChatError::InvalidRequest(
+                                    "OpenAI Responses input audio must be WAV or MP3",
+                                ));
+                            }
+                        };
+                        result.push(json!({
+                            "type":"input_audio",
+                            "input_audio": {
+                                "data": media.data_base64,
+                                "format": format,
+                            }
+                        }));
+                    }
                     other => {
                         if let Some(text) = other.fallback_text() {
                             result.push(json!({"type":"input_text","text":text}));
@@ -2348,6 +2366,55 @@ mod tests {
         assert_eq!(payload["input"][4]["content"][1]["detail"], "high");
         assert_eq!(payload["tools"][0]["type"], "function");
         assert!(responses_payload(&request, false).unwrap()["stream"] == false);
+    }
+
+    #[test]
+    fn responses_request_maps_supported_audio_formats_and_rejects_others() {
+        let mut request = req();
+        request.messages[0].content = MessageContent::Parts(vec![
+            ContentPart::Inline(super::super::media::InlineMedia {
+                kind: super::super::media::MediaKind::Audio,
+                mime_type: "audio/wav".into(),
+                name: "voice.wav".into(),
+                data_base64: "UklGRg==".into(),
+            }),
+            ContentPart::Inline(super::super::media::InlineMedia {
+                kind: super::super::media::MediaKind::Audio,
+                mime_type: "audio/mpeg".into(),
+                name: "voice.mp3".into(),
+                data_base64: "SUQz".into(),
+            }),
+        ]);
+
+        let payload = responses_payload(&request, false).unwrap();
+        assert_eq!(payload["input"][0]["content"][0]["type"], "input_audio");
+        assert_eq!(
+            payload["input"][0]["content"][0]["input_audio"]["format"],
+            "wav"
+        );
+        assert_eq!(
+            payload["input"][0]["content"][1]["input_audio"]["format"],
+            "mp3"
+        );
+        assert_eq!(
+            payload["input"][0]["content"][1]["input_audio"]["data"],
+            "SUQz"
+        );
+
+        request.messages[0].content = MessageContent::Parts(vec![ContentPart::Inline(
+            super::super::media::InlineMedia {
+                kind: super::super::media::MediaKind::Audio,
+                mime_type: "audio/ogg".into(),
+                name: "voice.ogg".into(),
+                data_base64: "T2dnUw==".into(),
+            },
+        )]);
+        assert!(matches!(
+            responses_payload(&request, false),
+            Err(ChatError::InvalidRequest(
+                "OpenAI Responses input audio must be WAV or MP3"
+            ))
+        ));
     }
 
     #[test]

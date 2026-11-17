@@ -68,6 +68,13 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
       modelo/gateway > perfil genérico > desconhecido. Metadata de `/v1/models`
       pode ser convertida explicitamente nos bindings; discovery/cache
       automático permanece pendente.
+- [x] OpenAI Responses serializa input audio WAV/MP3; capability fica
+      desconhecida sem metadata/override por modelo nos perfis OpenAI. Fixtures
+      verificam formatos aceitos e rejeição de outros. Ver os checklists de
+      mídia e providers para os limites por modelo e smoke real pendente.
+- [x] Gating da etapa multimodal local: `scons lint` e `scons tests` passaram;
+      contagens e limitações específicas estão em
+      `docs/analyses/06-auditoria-providers-modalidades.md`.
 
 ## Contratos e desenho
 
