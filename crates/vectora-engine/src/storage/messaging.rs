@@ -2061,6 +2061,131 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn kv_cas_increment_prefix_watch_and_delete_match_across_backends() {
+        let mut targets = Vec::new();
+        if let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") {
+            targets.push((super::super::KvBackend::Redis, url, "redis"));
+        }
+        if let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") {
+            targets.push((super::super::KvBackend::NatsJetstream, url, "nats"));
+        }
+        for (backend, endpoint, label) in targets {
+            let store = KvStoreAdapter::connect(KvStoreConfig {
+                backend,
+                endpoint,
+                namespace: format!("CONFORMANCE_{}_{}", label, unique_suffix()),
+            })
+            .await
+            .unwrap();
+            store.put("job.b", b"1".to_vec(), None).await.unwrap();
+            let first = store.get_with_revision("job.b").await.unwrap().unwrap();
+            let (left, right) = tokio::join!(
+                store.compare_and_set("job.b", &first.revision, b"2".to_vec(), None),
+                store.compare_and_set("job.b", &first.revision, b"3".to_vec(), None),
+            );
+            let (left, right) = (left.unwrap(), right.unwrap());
+            assert_eq!(usize::from(left) + usize::from(right), 1);
+            assert_eq!(
+                store.get("job.b").await.unwrap(),
+                Some(if left { b"2".to_vec() } else { b"3".to_vec() })
+            );
+            assert!(
+                !store
+                    .compare_and_set("job.b", &first.revision, b"stale".to_vec(), None)
+                    .await
+                    .unwrap()
+            );
+            store
+                .put(
+                    "job.expiring",
+                    b"short".to_vec(),
+                    Some(Duration::from_secs(1)),
+                )
+                .await
+                .unwrap();
+            tokio::time::sleep(Duration::from_millis(1_200)).await;
+            assert_eq!(store.get("job.expiring").await.unwrap(), None);
+
+            let increments = futures_util::future::join_all(
+                (0..8).map(|_| async { store.increment("job.counter", 1, None).await.unwrap() }),
+            )
+            .await;
+            let mut increments = increments;
+            increments.sort_unstable();
+            assert_eq!(increments, (1..=8).collect::<Vec<_>>(), "{backend:?}");
+            for value in &increments {
+                store
+                    .put(&format!("job.result.{value}"), b"done".to_vec(), None)
+                    .await
+                    .unwrap();
+            }
+            assert_eq!(store.increment("job.counter", -3, None).await.unwrap(), 5);
+            assert_eq!(
+                store.list_keys("job.result.", 10).await.unwrap(),
+                (1..=8)
+                    .map(|n| format!("job.result.{n}"))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(store.list_keys("job.", 1).await.unwrap(), vec!["job.b"]);
+
+            let watch = store.watch("watch.").await.unwrap();
+            store
+                .put("watch.key", b"present".to_vec(), None)
+                .await
+                .unwrap();
+            assert_eq!(
+                watch.receive(Duration::from_secs(2)).await.unwrap(),
+                Some(KvChange {
+                    key: "watch.key".into(),
+                    kind: KvChangeKind::Put,
+                })
+            );
+            store.delete("watch.key").await.unwrap();
+            assert_eq!(
+                watch.receive(Duration::from_secs(2)).await.unwrap(),
+                Some(KvChange {
+                    key: "watch.key".into(),
+                    kind: KvChangeKind::Remove,
+                })
+            );
+            store
+                .put(
+                    "watch.expiring",
+                    b"short".to_vec(),
+                    Some(Duration::from_secs(1)),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                watch.receive(Duration::from_secs(2)).await.unwrap(),
+                Some(KvChange {
+                    key: "watch.expiring".into(),
+                    kind: KvChangeKind::Put,
+                })
+            );
+            assert_eq!(
+                watch.receive(Duration::from_secs(3)).await.unwrap(),
+                Some(KvChange {
+                    key: "watch.expiring".into(),
+                    kind: KvChangeKind::Remove,
+                })
+            );
+            watch.close().await;
+            store.delete("job.b").await.unwrap();
+            store.delete("job.counter").await.unwrap();
+            for n in 1..=8 {
+                store.delete(&format!("job.result.{n}")).await.unwrap();
+            }
+            store.delete("job.expiring").await.unwrap();
+            store.delete("watch.expiring").await.unwrap();
+            assert_eq!(
+                store.list_keys("job.", 100).await.unwrap(),
+                Vec::<String>::new()
+            );
+        }
+    }
+
     /// Restarts a local test container. Enabled only when the operator sets
     /// `VECTORA_TEST_PODMAN_RESTART`, because it interrupts the service.
     fn restart_test_container(name: &str) -> bool {

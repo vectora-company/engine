@@ -33,6 +33,16 @@ from vectora_engine import (
     fallback_embed,
     fallback_rerank,
     graph_store_operation,
+    kv_store_compare_and_set,
+    kv_store_delete,
+    kv_store_get,
+    kv_store_get_with_revision,
+    kv_store_increment,
+    kv_store_list_keys,
+    kv_store_put,
+    kv_watch_close,
+    kv_watch_open,
+    kv_watch_receive,
     laya_decide,
     laya_health,
     llama_server_chat_complete,
@@ -127,6 +137,106 @@ def test_storage_capabilities_state_backend_differences() -> None:
     assert storage_capabilities({"contract_version": 1})["backends"] == []
     with pytest.raises(RuntimeError, match="unsupported storage contract version"):
         storage_capabilities({"contract_version": 99})
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable", "watch_variable"),
+    [
+        ("redis", "VECTORA_TEST_REDIS_URL", "VECTORA_TEST_REDIS_WATCH_URL"),
+        ("nats_jetstream", "VECTORA_TEST_NATS_URL", "VECTORA_TEST_NATS_URL"),
+    ],
+)
+def test_kv_conformance_against_real_services(
+    backend: str, variable: str, watch_variable: str
+) -> None:
+    endpoint = os.environ.get(variable)
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {
+            "backend": backend,
+            "endpoint": endpoint,
+            "namespace": f"python_kv_{os.getpid()}_{time.time_ns()}",
+        }
+        key = "job.counter"
+        assert await kv_store_get_with_revision(config, key) is None
+        try:
+            await kv_store_put(config, key, 1, 60)
+            first = await kv_store_get_with_revision(config, key)
+            assert first == await kv_store_get_with_revision(config, key)
+            assert first is not None
+            assert first["value"] == 1
+            results = await asyncio.gather(
+                kv_store_compare_and_set(config, key, first["revision"], 2, 60),
+                kv_store_compare_and_set(config, key, first["revision"], 3, 60),
+            )
+            assert sum(results) == 1
+            current = await kv_store_get_with_revision(config, key)
+            assert current is not None
+            assert current["revision"] != first["revision"]
+            assert current["value"] in (2, 3)
+            assert not await kv_store_compare_and_set(config, key, first["revision"], 4)
+            await kv_store_put(config, "job.expiring", "short", 1)
+            await asyncio.sleep(1.2)
+            assert await kv_store_get(config, "job.expiring") is None
+
+            values = await asyncio.gather(
+                *(kv_store_increment(config, "job.increment", 1, 60) for _ in range(8))
+            )
+            assert sorted(values) == list(range(1, 9))
+            assert await kv_store_increment(config, "job.increment", -3, 60) == 5
+            assert await kv_store_list_keys(config, "job.", 10) == [
+                "job.counter",
+                "job.increment",
+            ]
+            assert await kv_store_list_keys(config, "job.", 1) == ["job.counter"]
+            await kv_store_delete(config, key)
+            assert await kv_store_get(config, key) is None
+            assert await kv_store_list_keys(config, "job.", 10) == ["job.increment"]
+
+            watch_endpoint = os.environ.get(watch_variable)
+            if watch_endpoint is None:
+                pytest.skip(f"{watch_variable} is required for KV watch")
+            watch_config = {**config, "endpoint": watch_endpoint}
+            watch = await kv_watch_open(watch_config, "watch.")
+            watch_closed = False
+            try:
+                await kv_store_put(watch_config, "watch.key", "seen", 60)
+                assert await kv_watch_receive(watch, 2_000) == {
+                    "key": "watch.key",
+                    "kind": "put",
+                }
+                await kv_store_delete(watch_config, "watch.key")
+                assert await kv_watch_receive(watch, 2_000) == {
+                    "key": "watch.key",
+                    "kind": "remove",
+                }
+                await kv_store_put(watch_config, "watch.expiring", "short", 1)
+                assert await kv_watch_receive(watch, 2_000) == {
+                    "key": "watch.expiring",
+                    "kind": "put",
+                }
+                assert await kv_watch_receive(watch, 4_000) == {
+                    "key": "watch.expiring",
+                    "kind": "remove",
+                }
+                pending = asyncio.create_task(kv_watch_receive(watch, 30_000))
+                await asyncio.sleep(0.03)
+                await kv_watch_close(watch)
+                watch_closed = True
+                assert await pending is None
+            finally:
+                if not watch_closed:
+                    await kv_watch_close(watch)
+                await kv_store_delete(watch_config, "watch.key")
+                await kv_store_delete(watch_config, "watch.expiring")
+        finally:
+            await kv_store_delete(config, key)
+            await kv_store_delete(config, "job.increment")
+            await kv_store_delete(config, "job.expiring")
+
+    asyncio.run(exercise())
 
 
 def test_graph_store_binding_rejects_invalid_config_before_connecting() -> None:
