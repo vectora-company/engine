@@ -20,10 +20,9 @@ use super::decision_model::answer_matches;
 use super::{
     CapabilityState, ChatCompletion, ChatError, ChatRequest, ChatStream, ContentPart, ContentSite,
     DecisionRequest, DecisionResponse, EphemeralDecisionRequest, EphemeralNativeSpeechRequest,
-    MediaExecutionContext, MediaKind, MediaMode, ModalityCapabilities, NativeSpeechRequest,
-    OpenAiCompatibleClient, OpenAiCompatibleConfig, PreparedContent, RealtimeIntent,
-    RealtimeSession, RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse,
-    SpeechStreamInfo,
+    MediaExecutionContext, MediaKind, MediaMode, NativeSpeechRequest, OpenAiCompatibleClient,
+    OpenAiCompatibleConfig, PartialCapabilities, PreparedContent, RealtimeIntent, RealtimeSession,
+    RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse, SpeechStreamInfo,
 };
 use crate::llm::embeddings::{EmbeddingRequest, EmbeddingResponse, LlmUsage};
 use crate::llm::rerank::{RERANK_CONTRACT_VERSION, RerankResponse, RerankResult};
@@ -176,6 +175,15 @@ pub struct LlamaServerArchitecture {
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 
+/// Model-specific media metadata in the shape consumed by `MediaExecutionContext`.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LlamaServerModelCapabilities {
+    pub provider: String,
+    pub model: String,
+    pub capabilities: PartialCapabilities,
+}
+
 /// One model as reported by `GET /v1/models`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct LlamaServerModel {
@@ -190,6 +198,43 @@ pub struct LlamaServerModel {
     pub meta: Option<serde_json::Value>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+impl LlamaServerModel {
+    /// Converts declared input modalities into gateway metadata. Missing
+    /// metadata stays unknown; an explicit list marks omitted modalities as
+    /// unsupported. Tool-result image support is not inferred from vision.
+    pub fn media_capabilities(&self) -> PartialCapabilities {
+        let inputs = self
+            .architecture
+            .as_ref()
+            .and_then(|architecture| architecture.input_modalities.as_ref());
+        let supports = |modality: &str| {
+            inputs.map(|items| {
+                if items.iter().any(|item| item == modality) {
+                    CapabilityState::Supported
+                } else {
+                    CapabilityState::Unsupported
+                }
+            })
+        };
+        PartialCapabilities {
+            vision: supports("image"),
+            pdf: supports("pdf"),
+            audio_input: supports("audio"),
+            video_input: supports("video"),
+            tool_result_images: None,
+        }
+    }
+
+    /// Returns model metadata ready to add to a media context's gateway layer.
+    pub fn gateway_media_metadata(&self) -> LlamaServerModelCapabilities {
+        LlamaServerModelCapabilities {
+            provider: "llama_cpp".to_owned(),
+            model: self.id.clone(),
+            capabilities: self.media_capabilities(),
+        }
+    }
 }
 
 /// Model list returned by the OpenAI-compatible `GET /v1/models` route.
@@ -601,31 +646,11 @@ impl LlamaServerClient {
             .into_iter()
             .find(|candidate| candidate.id == request.model)
             .ok_or(ChatError::ModelCapabilityUnsupported)?;
-        let modalities = model
-            .architecture
-            .as_ref()
-            .and_then(|architecture| architecture.input_modalities.as_ref());
-        let supports =
-            |kind: &str| modalities.is_some_and(|items| items.iter().any(|item| item == kind));
-        let capabilities = ModalityCapabilities {
-            vision: if supports("image") {
-                CapabilityState::Supported
-            } else {
-                CapabilityState::Unsupported
-            },
-            pdf: CapabilityState::Unsupported,
-            audio_input: if supports("audio") {
-                CapabilityState::Supported
-            } else {
-                CapabilityState::Unsupported
-            },
-            video_input: if supports("video") {
-                CapabilityState::Supported
-            } else {
-                CapabilityState::Unsupported
-            },
-            tool_result_images: CapabilityState::Unsupported,
-        };
+        let capabilities = context
+            .resolver
+            .clone()
+            .with_gateway_metadata("llama_cpp", &request.model, model.media_capabilities())
+            .resolve("llama_cpp", &request.model);
         let prepared_inputs = context
             .prepare_contents_with_capabilities(
                 "llama_cpp",
@@ -717,23 +742,11 @@ impl LlamaServerClient {
             .into_iter()
             .find(|candidate| candidate.id == model)
             .ok_or(ChatError::ModelCapabilityUnsupported)?;
-        let modalities = model
-            .architecture
-            .as_ref()
-            .and_then(|a| a.input_modalities.as_ref());
-        let supports_image =
-            modalities.is_some_and(|items| items.iter().any(|item| item == "image"));
-        let capabilities = ModalityCapabilities {
-            vision: if supports_image {
-                CapabilityState::Supported
-            } else {
-                CapabilityState::Unsupported
-            },
-            pdf: CapabilityState::Unsupported,
-            audio_input: CapabilityState::Unsupported,
-            video_input: CapabilityState::Unsupported,
-            tool_result_images: CapabilityState::Unsupported,
-        };
+        let capabilities = context
+            .resolver
+            .clone()
+            .with_gateway_metadata("llama_cpp", &model.id, model.media_capabilities())
+            .resolve("llama_cpp", &model.id);
         let document_count = content.len() - 1;
         let mut prepared = context
             .prepare_contents_with_capabilities(
@@ -1640,6 +1653,36 @@ mod tests {
             None
         );
         assert_eq!(models.extra["future_server_field"], "preserved");
+    }
+
+    #[test]
+    fn model_media_metadata_is_specific_and_conservative() {
+        let text_only: LlamaServerModel = serde_json::from_value(serde_json::json!({
+            "id": "text-only",
+            "architecture": {"input_modalities": ["text"]}
+        }))
+        .unwrap();
+        let mapped = text_only.gateway_media_metadata();
+        assert_eq!(mapped.provider, "llama_cpp");
+        assert_eq!(mapped.model, "text-only");
+        assert_eq!(
+            mapped.capabilities.vision,
+            Some(CapabilityState::Unsupported)
+        );
+        assert_eq!(mapped.capabilities.pdf, Some(CapabilityState::Unsupported));
+        assert_eq!(
+            mapped.capabilities.audio_input,
+            Some(CapabilityState::Unsupported)
+        );
+        assert_eq!(
+            mapped.capabilities.video_input,
+            Some(CapabilityState::Unsupported)
+        );
+        assert_eq!(mapped.capabilities.tool_result_images, None);
+
+        let unknown: LlamaServerModel =
+            serde_json::from_value(serde_json::json!({"id": "legacy"})).unwrap();
+        assert_eq!(unknown.media_capabilities(), PartialCapabilities::default());
     }
 
     async fn serve_once(listener: TcpListener, health: &'static str, models: &'static str) {

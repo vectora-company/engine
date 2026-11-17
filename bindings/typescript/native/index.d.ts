@@ -217,6 +217,10 @@ export declare function llamaServerModels(
   settingsJson: string,
 ): Promise<string>;
 
+export declare function llamaServerModelMediaCapabilities(
+  modelJson: string,
+): string;
+
 export declare function llamaServerRealtimeSend(
   sessionId: string,
   commandJson: string,

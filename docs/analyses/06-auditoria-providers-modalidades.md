@@ -39,6 +39,10 @@ Fontes de protocolo específicas ficam nos trechos da
 3. **Modalidade pertence à operação e ao modelo.** “Suporta visão” não implica
    PDF, áudio, vídeo, imagem em resultado de tool ou geração de imagem. Dados
    de discovery permanecem declarativos até verificação adequada.
+   A precedência executável é override do consumidor > metadata do modelo/gateway
+   > perfil genérico > desconhecido. O teste usa um modelo text-only para impedir
+   > que o perfil genérico OpenAI habilite visão; conversão `/v1/models` é opt-in,
+   > sem fetch, cache ou catálogo automático.
 4. **Laya e llama-server são integrações distintas.** O servidor standalone
    Jev atende decisão; o GGUF servido por llama.cpp usa endpoints do
    llama-server. Ter o mesmo modelo/weights não unifica protocolos.
@@ -69,7 +73,8 @@ ambiente ou configuração. O processo reutilizável está no
 - Construir e manter uma tabela verificável provider × endpoint × operação ×
   modalidade × modelo, incluindo auth, erros, limites, stream e status real.
 - Orçamento agregado configurável de bytes/assets cobre chat, Decision Model
-  efêmero, embeddings e rerank multimodais. Completar catálogo/metadata
+  efêmero, embeddings e rerank multimodais. Conversão explícita de metadata de
+  modelo está nos bindings, mas discovery/cache é do consumidor. Completar catálogo/metadata
   confiáveis e definir limites de duração/resolução; ausência de dado precisa
   continuar como `unknown` e falhar de modo conservador.
 - Definir contratos antes de adicionar geração de imagem, batch STT e operações

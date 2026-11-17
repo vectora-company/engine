@@ -10,7 +10,7 @@ Este documento define como a Engine representa imagem, áudio, vídeo, documento
 - `ToolResult` contém partes tipadas; adapters convertem as modalidades que o protocolo do provider suporta.
 - O preparo existe nos três modos dos bindings: manual, contexto por chamada e contexto padrão do cliente. O mapa temporário `asset_id → bytes` é fornecido pelo host.
 - O contexto valida digest, MIME, limite por asset e escopo de reidratação. O limite padrão é 20 MiB por asset; overrides por provider/modelo/modalidade não excedem o teto global.
-- Limites agregados opcionais de bytes/assets cobrem chat e requests efêmeros inline. Decision Model, embeddings e rerank de llama-server usam limites de operação conforme a [spec 18](18-providers-e-modalidades-llama-cpp-v1.md). Catálogo automático confiável e limites de duração/resolução seguem pendentes.
+- Limites agregados opcionais de bytes/assets cobrem chat, requests efêmeros inline, Decision Model, embeddings e rerank multimodais do llama-server conforme a [spec 18](18-providers-e-modalidades-llama-cpp-v1.md). Catálogo automático confiável e limites de duração/resolução seguem pendentes.
 - A Engine não faz STT local, OCR, renderização de PDF, extração de frames ou gestão de assets persistentes; o consumidor mantém essas responsabilidades.
 
 ## Integração com o envio
@@ -165,12 +165,18 @@ Cada modelo resolve um conjunto de capabilities: `vision`, `pdf`, `audio_input`,
 `video_input` e `tool_result_images`, cada uma `suportado`, `não suportado` ou
 `desconhecido`. A resolução é em camadas, da mais específica para a mais geral:
 
-1. override do consumidor para o modelo;
-2. tabela de modelos e protocolos conhecidos;
-3. metadado de modalidades do gateway (OpenRouter, 9router), quando o consumidor
-   o fornece;
-4. padrão conservador: só `vision` quando o provider é conhecido por aceitar
-   imagem; todo o resto `desconhecido`.
+1. override explícito do consumidor para o modelo;
+2. metadado específico do modelo/gateway fornecido pelo consumidor, incluindo
+   conversão de `architecture.input_modalities` do llama-server;
+3. perfil genérico conhecido do provider;
+4. padrão conservador: capacidades não declaradas permanecem `desconhecido`.
+
+Um perfil genérico nunca pode elevar uma modalidade que a metadata específica
+do modelo declara como não suportada. `llamaServerModelMediaCapabilities` e
+`llama_server_model_media_capabilities` convertem um registro de `/v1/models`
+para `gateway_metadata` nos bindings. A conversão é explícita e não faz
+discovery, cache ou atualização automática; metadata ausente permanece
+desconhecida, e `tool_result_images` não é inferido de suporte a visão.
 
 `desconhecido` é tratado como não suportado para efeito de envio nativo, e o
 consumidor pode sobrescrever. A capability precisa corresponder ao protocolo
