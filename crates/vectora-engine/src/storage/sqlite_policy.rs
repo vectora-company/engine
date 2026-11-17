@@ -740,4 +740,49 @@ mod tests {
         let _ = first_pending;
         std::fs::remove_file(path).unwrap();
     }
+
+    #[test]
+    fn unchanged_digest_and_revision_cannot_hide_policy_changes() {
+        let path = database_path();
+        let mut ledger = super::super::sqlite::SqliteLedger::open_persistent(&path).unwrap();
+        ledger.enable_projection().unwrap();
+        drop(ledger);
+        let run = active_run();
+        let mut store = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();
+        let saved = store
+            .save_snapshot(&run, snapshot(), "policy-original", 100)
+            .unwrap();
+
+        let mut changed = snapshot();
+        changed.disabled_tools.push("write_file".into());
+        assert!(matches!(
+            store.save_snapshot(&run, changed, "policy-digest-reuse", 101),
+            Err(SqliteToolPolicyStoreError::PolicyDigestReuse)
+        ));
+        assert_eq!(
+            store.load_latest("run-1", "turn-1").unwrap().unwrap(),
+            saved
+        );
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 1);
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn policy_state_over_limit_is_rejected_without_ledger_write() {
+        let path = database_path();
+        let run = active_run();
+        let mut store = SqliteToolPolicyStore::open(&path, "workspace-1").unwrap();
+        let mut oversized = snapshot();
+        oversized.disabled_tools = vec!["x".repeat(4096); 129];
+
+        assert!(matches!(
+            store.save_snapshot(&run, oversized, "oversized-policy", 100),
+            Err(SqliteToolPolicyStoreError::StateTooLarge)
+        ));
+        assert!(store.load_latest("run-1", "turn-1").unwrap().is_none());
+        assert_eq!(store.ledger.pending_outbox_count().unwrap(), 0);
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
 }

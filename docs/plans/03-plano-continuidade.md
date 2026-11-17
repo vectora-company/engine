@@ -99,9 +99,10 @@ indicada. Não as reabra sem pedido dele.
    tem teste contra vazamento. Ver checklist de storage e análise de storage.
 4. **Cobertura de persistência e policy — parcial.** Os testes do core para
    `SqliteModelToolLoopStore::submit_tool_result`, `recover` e
-   `reconcile_tool_result` foram acrescentados e passaram; continuam pendentes
-   `PolicyDigestReuse`, `StateTooLarge` (spec 16) e os testes Rust/Python de KV
-   (CAS, incremento, watch, prefixo, delete; hoje só Node).
+   `reconcile_tool_result`, além de `PolicyDigestReuse` e `StateTooLarge` no
+   store de policy (spec 16), foram acrescentados e passaram. Continuam
+   pendentes os testes Rust/Python de KV (CAS, incremento, watch, prefixo,
+   delete; hoje só Node).
 5. **Validação real de #62–#64.** Transferência para a DLQ no NATS e corrida
    ACK×transferência no Redis; uma entrega por leitura e expiração no JetStream;
    preservação de configuração e recusa de subjects incompatíveis. Origem:
