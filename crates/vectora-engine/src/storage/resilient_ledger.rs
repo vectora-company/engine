@@ -558,6 +558,200 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn independent_processes_project_events_admissions_and_reservations() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let path = db_path();
+        let scope = format!("multiprocess-projection-{suffix}");
+        let reservation_scope = format!("multiprocess-reservation-{suffix}");
+        let reservation = super::super::sqlite::RunReservation {
+            scope: scope.clone(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+            run_id: format!("run-{suffix}"),
+            idempotency_key: format!("request-{suffix}"),
+            request: json!({"prompt":"multiprocess admission"}),
+        };
+        let admission_event = EventDraft {
+            scope: scope.clone(),
+            aggregate: "thread".into(),
+            event_id: format!("admission-{suffix}"),
+            idempotency_key: format!("admission-key-{suffix}"),
+            event_type: "run_admitted".into(),
+            payload: json!({"run_id":reservation.run_id.clone()}),
+            expected_version: 0,
+        };
+        let next_event = EventDraft {
+            scope: scope.clone(),
+            aggregate: "thread".into(),
+            event_id: format!("event-next-{suffix}"),
+            idempotency_key: format!("idem-next-{suffix}"),
+            event_type: "continued".into(),
+            payload: json!({"source":"sqlite"}),
+            expected_version: 1,
+        };
+        let standalone_reservation = super::super::sqlite::RunReservation {
+            scope: reservation_scope.clone(),
+            thread_id: "standalone-thread".into(),
+            turn_id: "turn".into(),
+            run_id: format!("standalone-run-{suffix}"),
+            idempotency_key: format!("standalone-request-{suffix}"),
+            request: json!({"prompt":"reservation without admission"}),
+        };
+        {
+            let mut setup = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+            setup
+                .local
+                .admit_run(reservation.clone(), admission_event.clone())
+                .unwrap();
+            setup.local.append_with_outbox(next_event.clone()).unwrap();
+            setup
+                .local
+                .reserve_run(standalone_reservation.clone())
+                .unwrap();
+        }
+
+        let executable = std::env::current_exe().unwrap();
+        let unavailable = std::process::Command::new(&executable)
+            .args([
+                "storage::resilient_ledger::tests::multiprocess_projector_child",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env("VECTORA_TEST_POSTGRES_URL", &url)
+            .env("VECTORA_MULTIPROCESS_PROJECTOR_PATH", &path)
+            .env("VECTORA_MULTIPROCESS_PROJECTOR_UNAVAILABLE", "1")
+            .env("VECTORA_MULTIPROCESS_VERIFY_PENDING", "1")
+            .output()
+            .unwrap();
+        assert!(
+            unavailable.status.success(),
+            "offline projector failed unexpectedly: stdout={} stderr={}",
+            String::from_utf8_lossy(&unavailable.stdout),
+            String::from_utf8_lossy(&unavailable.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&unavailable.stdout).contains("MULTIPROCESS_PENDING_RETAINED")
+        );
+        let pending = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(pending.pending_count().unwrap(), 3);
+        drop(pending);
+
+        let children: Vec<_> = [false, true]
+            .into_iter()
+            .map(|simulate_outage| {
+                let executable = executable.clone();
+                let path = path.clone();
+                let url = url.clone();
+                std::thread::spawn(move || {
+                    let mut command = std::process::Command::new(executable);
+                    command
+                        .args([
+                            "storage::resilient_ledger::tests::multiprocess_projector_child",
+                            "--exact",
+                            "--nocapture",
+                            "--test-threads=1",
+                        ])
+                        .env("VECTORA_TEST_POSTGRES_URL", url)
+                        .env("VECTORA_MULTIPROCESS_PROJECTOR_PATH", path);
+                    if simulate_outage {
+                        command.env("VECTORA_MULTIPROCESS_PROJECTOR_UNAVAILABLE", "1");
+                    }
+                    command.output().unwrap()
+                })
+            })
+            .collect();
+        let outputs: Vec<_> = children
+            .into_iter()
+            .map(|child| child.join().unwrap())
+            .collect();
+        for output in &outputs {
+            assert!(
+                output.status.success(),
+                "projector process failed: stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        let ledger = ResilientLedger::open(&path, Some(url.clone())).unwrap();
+        assert_eq!(ledger.pending_count().unwrap(), 0);
+        let pg = PostgresLedger::connect(&url, 2).await.unwrap();
+        assert_eq!(
+            pg.read(&scope, "thread", 0, 10).await.unwrap().len(),
+            2,
+            "both ordered events should project once"
+        );
+        assert_eq!(
+            pg.read_run_reservation(&scope, "thread", "turn")
+                .await
+                .unwrap(),
+            Some(reservation.clone())
+        );
+        assert_eq!(
+            pg.read_run_admission(&scope, &reservation.run_id)
+                .await
+                .unwrap()
+                .unwrap()
+                .reservation,
+            reservation
+        );
+        assert_eq!(
+            pg.read_run_reservation(
+                &reservation_scope,
+                &standalone_reservation.thread_id,
+                &standalone_reservation.turn_id
+            )
+            .await
+            .unwrap(),
+            Some(standalone_reservation)
+        );
+
+        let pool = sqlx::PgPool::connect(&url).await.unwrap();
+        delete_postgres_scope(&pool, &scope).await;
+        delete_postgres_scope(&pool, &reservation_scope).await;
+        drop(pool);
+        drop(pg);
+        drop(ledger);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn multiprocess_projector_child() {
+        let (Ok(configured_url), Ok(path)) = (
+            std::env::var("VECTORA_TEST_POSTGRES_URL"),
+            std::env::var("VECTORA_MULTIPROCESS_PROJECTOR_PATH"),
+        ) else {
+            return;
+        };
+        let unavailable = std::env::var_os("VECTORA_MULTIPROCESS_PROJECTOR_UNAVAILABLE").is_some();
+        let url = if unavailable {
+            "postgres://unavailable:unavailable@127.0.0.1:1/unavailable".to_owned()
+        } else {
+            configured_url
+        };
+        let mut ledger = ResilientLedger::open(path, Some(url)).unwrap();
+        let projected = ledger.flush_outbox(100).await.unwrap();
+        if unavailable {
+            assert_eq!(projected, 0);
+            if std::env::var_os("VECTORA_MULTIPROCESS_VERIFY_PENDING").is_some() {
+                assert!(ledger.pending_count().unwrap() > 0);
+                println!("MULTIPROCESS_PENDING_RETAINED");
+            }
+        } else {
+            assert_eq!(ledger.pending_count().unwrap(), 0);
+            println!("MULTIPROCESS_PROJECTED {projected}");
+        }
+    }
+
+    #[tokio::test]
     async fn flush_outbox_validates_limit_even_without_postgres() {
         let path = db_path();
         let mut ledger = ResilientLedger::open(&path, None).unwrap();
