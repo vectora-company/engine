@@ -1029,12 +1029,16 @@ async def llama_server_decide(
 
 
 async def llama_server_decide_ephemeral(
-    settings: JsonObject, request: JsonObject
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
 ) -> dict[str, Any]:
     """Send a transient decision request with image/audio data URLs."""
     return json.loads(
         await _native.llama_server_decide_ephemeral(
-            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+            _media_settings(settings, media_context),
+            json.dumps(request, separators=(",", ":")),
         )
     )
 

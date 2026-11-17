@@ -2580,10 +2580,11 @@ export async function layaDecide(
 export async function llamaServerDecideEphemeral(
   settings: LlamaServerSettings,
   request: EphemeralDecisionRequest,
+  mediaContext?: MediaExecutionContext,
 ): Promise<DecisionResponse> {
   return JSON.parse(
     await native.llamaServerDecideEphemeral(
-      JSON.stringify(settings),
+      encodeMediaSettings(settings, mediaContext),
       JSON.stringify(request),
     ),
   ) as DecisionResponse;

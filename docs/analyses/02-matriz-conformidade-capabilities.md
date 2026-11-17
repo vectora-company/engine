@@ -1,7 +1,7 @@
 # Matriz de conformidade das capabilities
 
 **Base de referência:** estado do checkout e dos serviços verificado em
-17 de novembro de 2026. Revalide branches, integrações e testes ao retomar; esta
+17 de novembro de 2026, antes das etapas de limites agregados de mídia. Revalide branches, integrações e testes ao retomar; esta
 matriz acompanha capabilities e evidência, não a posição mutável da stack. Código
 em branch ainda não integrada não equivale a capability disponível em `main`.
 A matriz registra gaps de conformidade, não um selo de maturidade ou prontidão

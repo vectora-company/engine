@@ -2092,11 +2092,17 @@ pub async fn llama_server_decide_ephemeral(
     settings_json: String,
     request_json: String,
 ) -> Result<String> {
-    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let (client, _, context) = parse_llama_server_inputs(&settings_json, None, false)?;
     let request: EphemeralDecisionRequest = serde_json::from_str(&request_json)
         .map_err(|_| Error::from_reason("invalid ephemeral decision request"))?;
     let response = client
-        .decide_ephemeral(request)
+        .decide_ephemeral_with_limits(
+            request,
+            context
+                .as_ref()
+                .and_then(|context| context.max_total_media_bytes),
+            context.as_ref().and_then(|context| context.max_media_parts),
+        )
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&response)

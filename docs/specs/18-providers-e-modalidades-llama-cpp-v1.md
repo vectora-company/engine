@@ -153,6 +153,12 @@ quatro casas; a validação permite erro de soma proporcional ao número de
 opções/níveis. Para score, os mapas `probabilities` e `legend` são validados por
 índice e comparados com `criteria`. A API não transmite resultados.
 
+No llama-server, `EphemeralDecisionRequest.files` aceita data URLs de imagem e
+áudio. `MediaExecutionContext` pode limitar bytes totais e quantidade de
+arquivos; o limite efetivo de bytes nunca excede o teto global do client. O
+binding valida e decodifica os arquivos antes de descobrir o modelo ou enviar
+`/v1/systemone`; essa rota recebe bytes inline somente no envelope efêmero.
+
 Contrato upstream: [`laya/docs/http-api.md`](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md).
 Compatibilidade de schema é exercitada por fixtures; execução com checkpoint
 real é um smoke opt-in, separado de integração com o GGUF no llama.cpp. A CLI de referência está especificada em [`docs/specs/20-engine-cli.md`](20-engine-cli.md); ela mantém separados o cliente Jev standalone e o cliente llama-server usado para Laya-GGUF.
@@ -213,7 +219,16 @@ modelo se aplicam. Respostas preservam exatamente um vetor por input e validam
 outros modos de normalização, pois não estão no contrato documentado.
 
 Python e TypeScript encaminham essa chamada pelo mesmo core e exigem um contexto
-efêmero do consumidor. Não persistem os bytes.
+efêmero do consumidor. O orçamento configurado em `MediaExecutionContext` é
+compartilhado entre todos os inputs da mesma chamada; excedentes não são enviados
+e tornam a operação não suportada para aquele request. Não persistem os bytes.
+
+### Rerank multimodal no llama-server
+
+O request efêmero reúne query e todos os documentos no mesmo preparo com
+`MediaExecutionContext`. Os limites agregados cobrem assets materializados na
+query e nos documentos em conjunto; se um excedente cair para referência, a
+operação falha antes do `POST /rerank`, sem enviar mídia parcial.
 
 Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#post-v1embeddings-openai-compatible-embeddings-api), [formatos de conteúdo multimodal](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#post-v1chatcompletions-openai-compatible-chat-completions-api).
 
@@ -251,7 +266,8 @@ Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama
 
 1. Manter a matriz provider × operação atualizada e validar cada endpoint usado por consumidores.
 2. Fechar conformidade de erros, autenticação, cancelamento, stream, redaction e limites entre Rust/Python/TypeScript.
-3. Completar catálogo de modalidade/limites e limites agregados de mídia.
+3. Completar catálogo de modalidade/limites; ampliar limites de duração e
+   resolução e cobrir operações multimodais adicionais que exponham assets.
 4. Implementar operações ausentes somente após contrato e endpoint verificáveis; começar por geração de imagem, batch STT e vídeo conforme a prioridade da EPIC.
 5. Executar smoke tests opt-in com versões fixadas e consolidar gates de distribuição/adoção no plano geral.
 

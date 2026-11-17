@@ -62,6 +62,10 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
       TypeScript. Decision Model, embeddings e rerank ainda não aplicam esse
       orçamento; estado e critérios estão em
       `docs/checklists/04-midia-no-chat.md`.
+- [x] Decision Model efêmero limita bytes totais e quantidade de arquivos; as
+      entradas multimodais de embeddings e rerank no llama-server compartilham
+      orçamento entre todos os inputs. Rust/Python/TypeScript cobertos; detalhes
+      e lacunas no checklist de providers.
 
 ## Contratos e desenho
 

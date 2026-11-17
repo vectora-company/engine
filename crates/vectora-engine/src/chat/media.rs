@@ -600,21 +600,84 @@ impl MediaExecutionContext {
         parts: Vec<ContentPart>,
         site: ContentSite,
     ) -> PreparedContent {
-        let capabilities = self.resolver.resolve(provider, model);
-        let mut budget = MediaBudget::new(self.max_total_media_bytes, self.max_media_parts);
-        prepare_content_with_budget(
-            parts,
-            MediaPreparation {
-                capabilities: &capabilities,
-                store: self.store.as_ref(),
-                model,
-                site,
-                max_media_bytes: self.max_media_bytes,
-                model_limits: self.resolver.media_limits_for(provider, model),
-            },
-            &mut budget,
+        self.prepare_contents(provider, model, vec![parts], site)
+            .await
+            .pop()
+            .expect("one content batch returns one prepared result")
+    }
+
+    /// Prepares multiple operation inputs against one shared request budget.
+    pub async fn prepare_contents(
+        &self,
+        provider: &str,
+        model: &str,
+        contents: Vec<Vec<ContentPart>>,
+        site: ContentSite,
+    ) -> Vec<PreparedContent> {
+        self.prepare_contents_with_max_media_bytes(
+            provider,
+            model,
+            contents,
+            site,
+            self.max_media_bytes,
         )
         .await
+    }
+
+    /// Prepares multiple inputs with one shared budget and an additional
+    /// operation-specific per-asset ceiling.
+    pub async fn prepare_contents_with_max_media_bytes(
+        &self,
+        provider: &str,
+        model: &str,
+        contents: Vec<Vec<ContentPart>>,
+        site: ContentSite,
+        max_media_bytes: u64,
+    ) -> Vec<PreparedContent> {
+        let capabilities = self.resolver.resolve(provider, model);
+        self.prepare_contents_with_capabilities(
+            provider,
+            model,
+            contents,
+            site,
+            max_media_bytes,
+            capabilities,
+        )
+        .await
+    }
+
+    /// Prepares multiple inputs using discovered operation capabilities and
+    /// one shared request budget.
+    pub async fn prepare_contents_with_capabilities(
+        &self,
+        provider: &str,
+        model: &str,
+        contents: Vec<Vec<ContentPart>>,
+        site: ContentSite,
+        max_media_bytes: u64,
+        capabilities: ModalityCapabilities,
+    ) -> Vec<PreparedContent> {
+        let mut budget = MediaBudget::new(self.max_total_media_bytes, self.max_media_parts);
+        let model_limits = self.resolver.media_limits_for(provider, model);
+        let mut prepared = Vec::with_capacity(contents.len());
+        for parts in contents {
+            prepared.push(
+                prepare_content_with_budget(
+                    parts,
+                    MediaPreparation {
+                        capabilities: &capabilities,
+                        store: self.store.as_ref(),
+                        model,
+                        site,
+                        max_media_bytes: self.max_media_bytes.min(max_media_bytes),
+                        model_limits,
+                    },
+                    &mut budget,
+                )
+                .await,
+            );
+        }
+        prepared
     }
 
     /// Prepares media in the current user turn and following tool results.
@@ -1666,6 +1729,26 @@ mod tests {
         assert_eq!(prepared.decisions[0].mode, MediaMode::Native);
         assert_eq!(prepared.decisions[1].mode, MediaMode::Reference);
         assert!(prepared.decisions[1].reason.contains("agregado de assets"));
+    }
+
+    #[tokio::test]
+    async fn media_context_shares_budget_across_operation_inputs() {
+        let mut store = MemoryStore::default();
+        let first = ContentPart::Image(part(store.put("first", PNG), None, vec![]));
+        let second = ContentPart::Image(part(store.put("second", PNG), None, vec![]));
+        let context = MediaExecutionContext::new(CapabilityResolver::new(), Arc::new(store))
+            .with_max_total_media_bytes(PNG.len() as u64);
+
+        let prepared = context
+            .prepare_contents(
+                "openai",
+                "model",
+                vec![vec![first], vec![second]],
+                ContentSite::UserMessage,
+            )
+            .await;
+        assert_eq!(prepared[0].decisions[0].mode, MediaMode::Native);
+        assert_eq!(prepared[1].decisions[0].mode, MediaMode::Reference);
     }
 
     #[tokio::test]
