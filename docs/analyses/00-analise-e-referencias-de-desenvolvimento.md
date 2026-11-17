@@ -16,6 +16,12 @@ bases e estado de PR. O marco normativo dos contratos llama.cpp é a release
 v1.0.0; sua cobertura está no plano, spec, checklist e análise específicos,
 indexados em [`docs/README.md`](../README.md).
 
+Na etapa ativa de storage (2026-11-17), a paridade de operações KV entre Redis
+e NATS ganhou cobertura real em Rust e Python para CAS, incremento, listagem,
+watch e remoção. A análise específica registra comandos, versões dos serviços,
+resultados e limites; essa evidência pertence à capability e não altera o
+inventário geral sem revalidar todas as demais áreas.
+
 Este documento define como investigar uma capability da Engine antes de
 implementar ou alterar seus contratos. Ele complementa `AGENTS.md`; não substitui
 as regras específicas de uma spec ou de um plano.
