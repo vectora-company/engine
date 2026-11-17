@@ -51,7 +51,7 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Executar testes Rust de storage e runtime Python/Node com addons nativos atualizados (resultados e SHAs na análise; reinício PostgreSQL apenas isolado).
 - [x] Revisar alterações, staged list e ausência de arquivos ignorados/artefatos nas etapas concluídas.
 - [x] Registrar resultados dos checks concluídos e testes pendentes na auditoria.
-- [x] Publicar as etapas de storage em branches empilhadas; conteúdo integrado em `main`.
+- [x] Entregar as capabilities de storage pelo fluxo de contribuição; posição e estado da stack são transitórios e consultados no GitHub, enquanto este checklist acompanha capacidades e evidências.
 
 Os testes/limites restantes estão descritos na análise vinculada. A antiga nota
 de interrupção de testes e addons desatualizados pertencia à etapa inicial e foi

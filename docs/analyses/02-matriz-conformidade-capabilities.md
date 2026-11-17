@@ -108,7 +108,7 @@ consumer. O backlog atual está no [plano ativo](../plans/03-plano-continuidade.
 
 Redirects, validação do header de API key, serialização de opcionais e
 independência do typecheck são requisitos dos clientes de provider e estão
-registrados na [auditoria de clientes HTTP](01-auditoria-review-pr3.md).
+registrados na [auditoria de clientes HTTP](01-auditoria-cliente-openai-compatible.md).
 
 ## Fixture de conformidade
 

@@ -1,116 +1,62 @@
-# Checklist — mídia nativa no chat
+# Checklist: mídia no chat
 
-Checklist da [spec de mídia](../specs/17-midia-no-chat.md) e do
-[plano ativo](../plans/03-plano-continuidade.md). O payload (#79), a integração
-Rust (#81) e bindings (#82) estão em PRs abertos; limites estão no [#84](https://github.com/vectora-company/engine/pull/84), retry no [#85](https://github.com/vectora-company/engine/pull/85) e `ToolResult` tipado no [#86](https://github.com/vectora-company/engine/pull/86). A stack começa em #73 e ainda não está integrada em `main`. A revisão documental ampla está no PR [#87](https://github.com/vectora-company/engine/pull/87), filho do #86. A reclassificação MIME na reidratação está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87.
+Contrato em [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md),
+plano geral em [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md)
+e estado de providers na
+[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md).
+Os estados abaixo descrevem o checkout verificado; teste de binding/fake não
+substitui serviço real.
 
-## Contrato e implementação
+## Modelo e segurança
 
-- [x] Confirmar que Anthropic Messages aceita blocos `document` com fonte
-      `base64` para PDFs e que Gemini `generateContent` aceita `inlineData`.
-- [x] Emitir PDF inline no formato de documento da Anthropic.
-- [x] Emitir mídia inline em `inlineData` no adapter Gemini.
-- [x] Emitir PDF como `file.file_data` e áudio WAV/MP3 como `input_audio` no
-      adapter OpenAI Chat Completions.
-- [x] Manter formatos de áudio que OpenAI Chat Completions não aceita na forma
-      textual.
-- [x] Testar payloads Anthropic, Gemini e OpenAI e resolução das capabilities
-      com assertions Rust; o teste integrado percorre `MediaRef` → decisão
-      nativa → payload OpenAI.
-- [x] Verificar que áudio não aceito pelo formato OpenAI não envia bytes inline.
+- [x] Tipos de conteúdo para imagem, áudio, vídeo, documento e arquivo.
+- [x] `ToolResult` com partes tipadas e helpers Rust/Python/TypeScript.
+- [x] Separar `PersistableChatRequest` de `EphemeralChatRequest`; persistência
+      rejeita bytes inline e URLs `data:`.
+- [x] Três modos nos bindings: preparo manual, contexto por chamada e padrão
+      do cliente.
+- [x] Resolver bytes somente por mapa efêmero `asset_id → bytes` fornecido
+      pelo consumidor; autorização e storage persistente pertencem ao host.
+- [x] Validar digest, assinatura/MIME, modalidade e limite por asset antes do
+      envio; padrão 20 MiB por asset, configurável.
+- [x] Reidratar somente o turno atual e resultados de tools subsequentes;
+      registrar evidência sem bytes.
+- [x] Retry único de texto somente em rejeição multimodal classificada, antes
+      de saída parcial e sem repetir falhas de auth/rede.
+- [x] Responses de erro e logs não incluem bytes ou credenciais.
 
-## Verificação e entrega
+## Routing e operações
 
-- [x] `cargo fmt --all -- --check`.
-- [x] `cargo test -p vectora-engine --lib chat:: --locked` — 44 testes passaram.
-- [x] `cargo clippy -p vectora-engine --all-targets --all-features --locked -- -D warnings`.
-- [x] Prettier e `git diff --check`; revisar o diff.
-- [x] Atualizar plano, spec, análise e Q&As com evidência real e limites.
-- [x] Commit e push do código da etapa de payload.
-- [x] Abrir o PR #79 sobre a branch do PR #77.
-- [x] Iniciar a próxima etapa em `feat/chat-media-routing-evidence`, filha do PR #79.
-- [x] Commit, push e abrir o PR #80 empilhado sobre #79, sem marcar brunosrz no GitHub.
-- [x] Registrar a decisão de brunosrz no chat: oferecer os três modos de integração.
+| Estado   | Capacidade                                           | Notas                                                                                                                                                     |
+| -------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| parcial  | Chat multimodal por protocolo                        | Anthropic, Gemini, OpenAI Chat Completions/Responses e adapters compatíveis têm mapeamentos próprios; conferir a tabela da spec antes de inferir suporte. |
+| parcial  | Imagens em resultados de tools                       | Partes tipadas disponíveis; conversão depende do protocolo e da capability.                                                                               |
+| parcial  | PDF, áudio e vídeo                                   | Tipos e algumas rotas nativas existem; conversão de arquivos e STT local são responsabilidade do consumidor.                                              |
+| parcial  | Embeddings/rerank multimodais                        | llama-server suporta entradas efêmeras documentadas e protegidas; não generalizar para outros providers.                                                  |
+| pendente | Catálogo automático de capability/limites por modelo | Overrides explícitos existem; descoberta confiável ligada a endpoint/modelo ainda não existe.                                                             |
+| pendente | Limites agregados                                    | Falta teto comum de request total, número de partes, duração e resolução.                                                                                 |
+| pendente | Geração de imagem e operações gerais de vídeo        | Requerem contratos e adapters dedicados.                                                                                                                  |
 
-## Evidência do consumidor Vectora
+## Testes e critérios de conclusão
 
-A stack de mídia da Vectora, PRs [#479–#502](https://github.com/vectora-company/vectora/pulls),
-foi integrada em 19 PRs empilhados em 2026-11-13; isso confirma a necessidade
-funcional no consumidor, não paridade da Engine. Padrões transferíveis e ainda
-pendentes na Engine: roteamento por modelo/catálogo e limites por provider.
-Reidratação no turno atual, retry textual único, evidência de roteamento e
-partes tipadas em `ToolResult` estão implementados nesta stack aberta.
-STT local (faster-whisper/Speech do macOS), conversão de PDF/vídeo, preferências
-UI, permissões e empacotamento SCons são responsabilidades do Vectora nesta
-implementação; não foram adicionados à API pública da Engine.
+- [x] Fixtures cobrem serializers e adapters Rust e bindings para modalidades
+      implementadas.
+- [x] Testes negativos cobrem MIME divergente, bytes inválidos, limite,
+      capability ausente e envelope persistível.
+- [ ] Fixtures compartilhadas para a mesma matriz de conteúdo nos três
+      bindings e em todos os adapters que alegam equivalência.
+- [ ] Limites agregados e catálogo cobertos com dados ausentes, conflitantes
+      e desatualizados.
+- [ ] Smoke tests opt-in com modelos reais para cada operação multimodal; não
+      considerar teste ignorado por falta de endpoint como sucesso.
+- [ ] Atualizar spec, análise e checklist provider × operação sempre que um
+      adapter ampliar ou restringir suporte.
+- [ ] Concluir revisão de cancelamento/stream parcial para áudio e mídia em
+      todas as bindings.
 
-## Limites
+## Responsabilidades do consumidor
 
-- OpenAI Responses API não existe neste adapter; o contrato se limita aos
-  formatos do Chat Completions.
-- Catálogo automático de capabilities/limites por modelo e limites agregados do request seguem no backlog da spec 17. Partes tipadas em `ToolResult` estão no PR aberto #86, filho do #85; bindings e adaptadores foram verificados. O retry específico está implementado no PR aberto #85. Os overrides de limite por asset/modalidade são configuráveis no contexto de execução e estão implementados no PR aberto #84; catálogo automático e limites agregados não estão incluídos.
-
-## Integração — etapa atual
-
-- [x] brunosrz escolheu oferecer preparo manual, contexto por chamada e
-      contexto padrão por cliente.
-- [x] Contexto por chamada prevalece sobre o padrão; mídia já preparada não é
-      processada de novo.
-- [x] `MediaStore` async e `ChatRequest` sem bytes persistidos.
-- [x] Implementar preparo no core Rust para OpenAI-compatible, native e fallback.
-- [x] Reidratar só a mensagem de usuário atual e resultados de tools posteriores.
-- [x] Limitar cada asset a 20 MiB por padrão, configurável, antes da leitura.
-- [x] Incluir evidência sem bytes em `ChatCompletion` e evento `media_routed`.
-- [x] Cobrir no teste HTTP o contexto explícito por chamada prevalecendo sobre
-      o padrão do cliente.
-- [x] Verificar Rust: 49 testes `chat::`, suíte Rust do workspace e docs no hook,
-      fmt, Clippy e `git diff --check` passaram.
-- [x] Verificar TypeScript: build, typecheck e testes; 37 passaram e 10 testes
-      dependentes de serviços externos foram ignorados sem URLs configuradas.
-- [x] Verificar Python: build editável e `test_binding.py` — 51 passaram.
-- [x] Commit, push e abrir o PR #82, filho do #81: https://github.com/vectora-company/engine/pull/82.
-- [x] Expor os três modos nos bindings Python/TypeScript com mapa temporário
-      `asset_id → bytes`; documentar a autorização no host.
-- [ ] Criar fixtures de conformidade comuns para conteúdo de mídia.
-- [x] Aceitar limites explícitos de bytes por provider/modelo e modalidade nos três níveis; prevalece o menor entre o limite específico e o teto global por asset.
-- [x] Cobrir limite documental em Rust, Python e TypeScript; o override não vaza para outro modelo.
-- [ ] Resolver automaticamente capabilities e limites a partir de catálogo/metadados confiáveis e ligados ao endpoint/protocolo.
-- [ ] Validar limites de requisição total, quantidade de partes e duração/resolução, além dos bytes por asset.
-- [x] Implementar retry textual único em rejeição HTTP 400 classificada como
-      incompatibilidade multimodal, no mesmo modelo; preservar erros de
-      autenticação/rede e não repetir erros após abertura do stream. Os 51 testes
-      `chat::` incluem classificação, retry complete/stream no cliente direto e
-      retry de completion no wrapper fallback. 51 testes `chat::` e hooks
-      completos passaram no SHA `0767636` do PR #85.
-- [x] Substituir `ToolResult.output: String` por partes `text`/`image` em
-      Rust, Python e TypeScript; converter pelo helper Rust e mapear para
-      Anthropic, Gemini e OpenAI Chat Completions, com referência textual no
-      Cohere. Implementação local verificada: 163 testes Rust, suíte Python, build/typecheck e 37 testes Node passaram; 10 testes Node condicionais a serviços externos foram ignorados.
-- [ ] Definir se a Engine permanece consumidora de um store do host ou se ganha
-      um asset store persistente próprio; não ligar armazenamento persistente à
-      leitura de mídia antes de fechar ownership e autorização.
-- [ ] Não declarar a spec concluída até os critérios aplicáveis estarem
-      implementados e verificados nos três níveis.
-
-## Evidência do consumidor Vectora
-
-A stack de mídia da Vectora, PRs [#479–#502](https://github.com/vectora-company/vectora/pulls),
-foi integrada em 19 PRs empilhados em 2026-11-13; isso confirma a necessidade
-funcional no consumidor, não paridade da Engine. Padrões transferíveis ainda
-pendentes: catálogo automático de modalidades/limites por modelo. O retry está implementado no PR aberto #85, com cobertura de cliente direto e wrapper fallback; 51 testes `chat::` e hooks completos passaram no SHA `0767636`. A API já aceita overrides explícitos por provider/modelo/modalidade; ainda não consulta catálogo nem deriva limites automaticamente. STT local, conversão de PDF/vídeo,
-preferências UI, permissões e empacotamento SCons permanecem capacidades do
-Vectora nesta implementação.
-
-## Limites
-
-- OpenAI Responses API não existe neste adapter; o contrato é Chat Completions.
-- O mapa efêmero carrega bytes em memória para a duração da chamada; hosts com
-  stores externos validam escopo antes de montar `asset_id → bytes`.
-
-## Fronteira persistível/efêmera
-
-- [x] `PersistableChatRequest` rejeita `Inline` e URL `data:`; o contrato Chat v1 adjacente não muda.
-- [x] `EphemeralChatRequest` valida versão, base64, bytes/MIME e teto de 20 MiB configurável.
-- [x] Complete/stream efêmeros disponíveis para os três clientes Rust-backed em Python e TypeScript.
-- [x] Prático nos três modos: preparo manual, contexto por chamada e contexto padrão.
-- [x] Verificar: workspace Rust (171 testes + 3 fixtures, serviços reais), Python (52), TypeScript (build/typecheck; 38 passaram, 10 sem endpoints ignorados), Clippy e formatação; PR #90 é filho de #89.
+O consumidor decide autorização, escopo e persistência de assets e fornece os
+bytes autorizados ao mapa efêmero. UI, preview, PDF/vídeo para imagens, OCR,
+transcrição local e seleção de modelo de produto permanecem no consumidor, a
+menos que exista capability genérica aprovada separadamente.

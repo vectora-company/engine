@@ -118,6 +118,18 @@ títulos e bases de PR no estado dinâmico do GitHub.
   [checklist](../checklists/08-engine-cli.md) e
   [análise](08-auditoria-engine-cli.md).
 
+## Estado da revisão documental
+
+A auditoria do checkout de 17/11/2026 identificou documentos de provider,
+mídia e FalkorDB cuja organização seguia uma sequência de PRs e cujo texto
+contradizia o código (incluindo OpenAI Responses e filtro vetorial). Planos,
+specs, checklists e análises dessas capabilities foram atualizados por domínio
+ou operação. O inventário de 60 Markdown, a comparação com as três issues
+abertas e os documentos ainda pendentes de revisão estão em
+[`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md).
+Não registrar topo, número ou branch de PR no prompt reutilizável nem como
+estrutura de roadmap; o GitHub é fonte dinâmica de entrega.
+
 ## Encerramento por decisão vital
 
 Se uma decisão puder alterar materialmente contrato público, dados, segurança,

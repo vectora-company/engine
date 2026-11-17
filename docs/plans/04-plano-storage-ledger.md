@@ -65,10 +65,10 @@ diferenças aceitas: cada item ausente em um lado é lacuna na matriz abaixo.
 
 ## Matriz de equivalência por par (estado verificado em 2026-11-17)
 
-Fonte: `main` no GitHub em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099` e
-código/testes da stack local. A posição publicada e a base da stack são
-consultadas dinamicamente no GitHub; esta matriz permanece organizada por
-capability e não por entrega ou pull request. Consulte também a
+Fonte: código e testes do checkout auditado em 2026-11-17. O estado
+publicado e a base de integração mudam com frequência e são consultados
+dinamicamente no GitHub; esta matriz acompanha capabilities e evidências, não
+uma sequência de entregas. Consulte também a
 [auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md).
 
 | Par                       | Base equivalente entregue                                                                                                                                                                                                                                                                             | Lacunas verificadas                                                                                                                                                                                                                                                                                              | Base comum ainda ausente                                                                                        |
