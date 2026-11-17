@@ -425,6 +425,13 @@ export declare function runContractVersion(): number;
 
 export declare function runCreate(identityJson: string): string;
 
+export declare function hostIdentityContractVersion(): number;
+
+export declare function validateHostIdentityContext(
+  contextJson: string,
+  nowMs: number,
+): string;
+
 export declare function runTransition(
   lifecycleJson: string,
   nextStatus: string,

@@ -38,6 +38,99 @@ pub use verification::{
 
 /// Version of the public run lifecycle contract.
 pub const RUN_CONTRACT_VERSION: u16 = 1;
+/// Version of the host-issued identity and capability grant contract.
+pub const HOST_IDENTITY_CONTRACT_VERSION: u16 = 1;
+const MAX_HOST_IDENTITY_GRANTS: usize = 1024;
+
+/// A capability granted by the trusted host for one scope and policy revision.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapabilityGrant {
+    pub capability: String,
+    pub scope_id: String,
+    pub policy_digest: String,
+    pub issued_at_ms: u64,
+    pub expires_at_ms: u64,
+}
+
+/// Product-agnostic identity assertion supplied by a host that has already
+/// authenticated its issuer. Validation here checks structure and freshness;
+/// it does not authenticate the host or grant capabilities by itself.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostIdentityContext {
+    pub contract_version: u16,
+    pub issuer: String,
+    pub subject: String,
+    pub identity_id: String,
+    pub identity_revision: String,
+    pub identity_digest: String,
+    pub scope_id: String,
+    pub policy_digest: String,
+    pub issued_at_ms: u64,
+    pub expires_at_ms: u64,
+    #[serde(default)]
+    pub grants: Vec<CapabilityGrant>,
+}
+
+/// Validate a host-authenticated context immediately before using its grants.
+pub fn validate_host_identity_context(
+    context: &HostIdentityContext,
+    now_ms: u64,
+) -> Result<(), HostIdentityError> {
+    if context.contract_version != HOST_IDENTITY_CONTRACT_VERSION {
+        return Err(HostIdentityError::UnsupportedContractVersion {
+            received: context.contract_version,
+        });
+    }
+    for value in [
+        &context.issuer,
+        &context.subject,
+        &context.identity_id,
+        &context.identity_revision,
+        &context.identity_digest,
+        &context.scope_id,
+        &context.policy_digest,
+    ] {
+        if value.trim().is_empty() {
+            return Err(HostIdentityError::EmptyField);
+        }
+    }
+    if context.issued_at_ms > now_ms || context.expires_at_ms <= now_ms {
+        return Err(HostIdentityError::ExpiredOrNotYetValid);
+    }
+    if context.grants.len() > MAX_HOST_IDENTITY_GRANTS {
+        return Err(HostIdentityError::TooManyGrants);
+    }
+    let mut seen = std::collections::HashSet::with_capacity(context.grants.len());
+    for grant in &context.grants {
+        if grant.capability.trim().is_empty()
+            || grant.scope_id != context.scope_id
+            || grant.policy_digest != context.policy_digest
+            || grant.issued_at_ms > now_ms
+            || grant.expires_at_ms <= now_ms
+            || grant.expires_at_ms > context.expires_at_ms
+            || !seen.insert(grant.capability.as_str())
+        {
+            return Err(HostIdentityError::InvalidGrant);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum HostIdentityError {
+    #[error("unsupported host identity contract version {received}")]
+    UnsupportedContractVersion { received: u16 },
+    #[error("host identity context contains an empty required field")]
+    EmptyField,
+    #[error("host identity context is expired or not yet valid")]
+    ExpiredOrNotYetValid,
+    #[error("host identity capability grant is invalid")]
+    InvalidGrant,
+    #[error("host identity context contains too many capability grants")]
+    TooManyGrants,
+}
 
 /// Product-agnostic identity and context supplied by a consumer.
 ///
@@ -252,6 +345,100 @@ mod tests {
             model: Some("test-model".into()),
             capabilities: vec!["chat".into()],
         }
+    }
+
+    fn host_context() -> HostIdentityContext {
+        HostIdentityContext {
+            contract_version: HOST_IDENTITY_CONTRACT_VERSION,
+            issuer: "host:test".into(),
+            subject: "user-1".into(),
+            identity_id: "assistant-1".into(),
+            identity_revision: "revision-3".into(),
+            identity_digest: "sha256:identity".into(),
+            scope_id: "workspace-1".into(),
+            policy_digest: "sha256:policy".into(),
+            issued_at_ms: 100,
+            expires_at_ms: 1000,
+            grants: vec![CapabilityGrant {
+                capability: "filesystem.read".into(),
+                scope_id: "workspace-1".into(),
+                policy_digest: "sha256:policy".into(),
+                issued_at_ms: 100,
+                expires_at_ms: 900,
+            }],
+        }
+    }
+
+    #[test]
+    fn validates_fresh_host_identity_and_scoped_grants() {
+        let context = host_context();
+        validate_host_identity_context(&context, 500).unwrap();
+        let encoded = serde_json::to_string(&context).unwrap();
+        assert_eq!(
+            serde_json::from_str::<HostIdentityContext>(&encoded).unwrap(),
+            context
+        );
+    }
+
+    #[test]
+    fn rejects_expired_context_and_mismatched_or_duplicate_grants() {
+        assert_eq!(
+            validate_host_identity_context(&host_context(), 1000),
+            Err(HostIdentityError::ExpiredOrNotYetValid)
+        );
+        let mut context = host_context();
+        context.grants[0].scope_id = "other-workspace".into();
+        assert_eq!(
+            validate_host_identity_context(&context, 500),
+            Err(HostIdentityError::InvalidGrant)
+        );
+        let mut context = host_context();
+        context.grants.push(context.grants[0].clone());
+        assert_eq!(
+            validate_host_identity_context(&context, 500),
+            Err(HostIdentityError::InvalidGrant)
+        );
+    }
+
+    #[test]
+    fn rejects_context_issued_in_the_future_and_unknown_version() {
+        let mut context = host_context();
+        context.issued_at_ms = 501;
+        assert_eq!(
+            validate_host_identity_context(&context, 500),
+            Err(HostIdentityError::ExpiredOrNotYetValid)
+        );
+        let mut context = host_context();
+        context.contract_version += 1;
+        assert!(matches!(
+            validate_host_identity_context(&context, 500),
+            Err(HostIdentityError::UnsupportedContractVersion { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_context_fields() {
+        let mut value = serde_json::to_value(host_context()).unwrap();
+        value["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<HostIdentityContext>(value).is_err());
+    }
+
+    #[test]
+    fn bounds_host_identity_grant_count() {
+        let mut context = host_context();
+        context.grants = (0..=MAX_HOST_IDENTITY_GRANTS)
+            .map(|index| CapabilityGrant {
+                capability: format!("capability-{index}"),
+                scope_id: "workspace-1".into(),
+                policy_digest: "sha256:policy".into(),
+                issued_at_ms: 100,
+                expires_at_ms: 900,
+            })
+            .collect();
+        assert_eq!(
+            validate_host_identity_context(&context, 500),
+            Err(HostIdentityError::TooManyGrants)
+        );
     }
 
     #[test]

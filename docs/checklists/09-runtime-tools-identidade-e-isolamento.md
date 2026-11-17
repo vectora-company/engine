@@ -9,7 +9,10 @@ implementação e teste; planejar não equivale a implementar.
   [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
 - [parcial] Tool schemas, loop, policy snapshot e aprovação existem; a Engine
   ainda não executa tool packs seguros por si.
-- [pendente] Descriptor comum de identidade configurado pelo host.
+- [parcial] Descriptor versionado `HostIdentityContext` e `CapabilityGrant`;
+  validadores Rust/Python/TypeScript conferem expiração, unicidade e vínculo
+  de scope/policy digest e impõem limite de 1024 grants. O host ainda precisa
+  autenticar o issuer e garantir revogação imediatamente antes do efeito.
 - [pendente] Filesystem root-confined e ferramentas de busca/edição no core.
 - [pendente] Git adapter seguro, serializado e com fronteira local/remota.
 - [pendente] Shell com encerramento de descendentes e broker sandbox efetivo.

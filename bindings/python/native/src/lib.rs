@@ -25,12 +25,13 @@ use vectora_engine::chat::{
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
-    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot,
-    RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
-    TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch,
-    ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
-    authorize_tool_dispatch, cancel_model_tool_loop, evaluate_verification, prepare_tool_dispatch,
-    reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
+    HOST_IDENTITY_CONTRACT_VERSION, HostIdentityContext, MODEL_TOOL_LOOP_CONTRACT_VERSION,
+    ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity,
+    RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION,
+    TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult,
+    VerificationReport, advance_model_turn, advance_tool_result, authorize_tool_dispatch,
+    cancel_model_tool_loop, evaluate_verification, prepare_tool_dispatch, reconcile_tool_result,
+    recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -1959,6 +1960,19 @@ fn run_create(identity_json: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn host_identity_contract_version() -> u16 {
+    HOST_IDENTITY_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn validate_host_identity_context(context_json: String, now_ms: u64) -> PyResult<String> {
+    let context: HostIdentityContext = serde_json::from_str(&context_json)
+        .map_err(|_| py_error("invalid host identity context"))?;
+    vectora_engine::harness::validate_host_identity_context(&context, now_ms).map_err(py_error)?;
+    encode_json(&context)
+}
+
+#[pyfunction]
 fn run_transition(lifecycle_json: String, next_status: String) -> PyResult<String> {
     let mut run: RunLifecycle = serde_json::from_str(&lifecycle_json)
         .map_err(|_| py_error("invalid run lifecycle snapshot"))?;
@@ -3205,6 +3219,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sqlite_save_checkpoint, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_latest_checkpoint, module)?)?;
     module.add_function(wrap_pyfunction!(run_create, module)?)?;
+    module.add_function(wrap_pyfunction!(host_identity_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(validate_host_identity_context, module)?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_admit, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_load_latest, module)?)?;

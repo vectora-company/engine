@@ -88,6 +88,10 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
       padrão e `store_in_media_context` grava no mapa mutável do host. Fixtures
       offline validam payload, assinatura, MIME, SHA-256, limites e ambos os
       caminhos; os smokes remotos seguem pendentes no checklist de providers.
+- [parcial] `HostIdentityContext`/`CapabilityGrant` versionados e validados no
+  core e em Python/TypeScript: expiração, unicidade, scope e policy digest.
+  O host autentica o issuer; revogação e revalidação antes de efeitos ainda
+  não estão ligadas ao dispatcher.
 
 ## Contratos e desenho
 

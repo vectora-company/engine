@@ -36,6 +36,7 @@ from vectora_engine import (
     fallback_rerank,
     generate_image,
     graph_store_operation,
+    host_identity_contract_version,
     image_generation_contract_version,
     kv_store_compare_and_set,
     kv_store_delete,
@@ -120,6 +121,7 @@ from vectora_engine import (
     transcribe_ephemeral,
     transcription_contract_version,
     transition_run,
+    validate_host_identity_context,
     validate_storage_selection,
     vector_store_search_filtered,
     vector_store_upsert,
@@ -3911,3 +3913,31 @@ def test_verification_gate_binding_rejects_unredacted_evidence() -> None:
     }
     with pytest.raises(RuntimeError, match="redacted"):
         evaluate_verification(report, policy)
+
+
+def test_host_identity_context_binding_validates_version_and_scope() -> None:
+    context = {
+        "contract_version": host_identity_contract_version(),
+        "issuer": "host:test",
+        "subject": "user-1",
+        "identity_id": "assistant-1",
+        "identity_revision": "r1",
+        "identity_digest": "sha256:identity",
+        "scope_id": "workspace-1",
+        "policy_digest": "sha256:policy",
+        "issued_at_ms": 10,
+        "expires_at_ms": 100,
+        "grants": [
+            {
+                "capability": "filesystem.read",
+                "scope_id": "workspace-1",
+                "policy_digest": "sha256:policy",
+                "issued_at_ms": 10,
+                "expires_at_ms": 90,
+            }
+        ],
+    }
+    assert validate_host_identity_context(context, now_ms=50) == context
+    context["grants"][0]["scope_id"] = "other"
+    with pytest.raises(RuntimeError, match="capability grant is invalid"):
+        validate_host_identity_context(context, now_ms=50)

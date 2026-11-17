@@ -20,6 +20,11 @@ modelo.
   sandbox. API de produto, UI e workbenches continuam no consumidor.
 - Uma capability ausente, expirada, ambígua ou revogada nega o efeito. O modelo,
   resultado de busca, memória e conteúdo de arquivos são dados não confiáveis.
+- `HostIdentityContext` v1 identifica issuer/subject e a configuração do
+  consumidor por ID, revisão e digest. `CapabilityGrant` vincula capability,
+  scope, policy digest e validade temporal; o core limita cada contexto a 1024
+  grants, rejeita duplicatas e campos desconhecidos. O host autentica o issuer
+  e controla revogação; a validação do contrato não substitui isso.
 - O ledger SQLite é a autoridade local para execução e recuperação. PostgreSQL
   pode receber projeções; falha ou ausência dele não apaga estado confirmado.
 
@@ -125,8 +130,13 @@ opacas a capabilities/adapters e nunca serializam secrets.
 ## Estado observado em 2026-11-17
 
 O loop, stores SQLite de loop/policy, ledger e APIs genéricas de chat/tools são
-fundação experimental. A Engine ainda não oferece tool packs de filesystem,
-Git, shell, navegação, plano persistente de alto nível, memória estruturada ou
-dispatch de subagentes. Identidade/souls e policy são recebidas do host em
-formas parciais; não há broker sandbox. Cada item tem estado e dependências em
+fundação experimental. `HostIdentityContext` e `CapabilityGrant` versionados
+agora têm validadores no core Rust e nos bindings Python/TypeScript: conferem
+campos obrigatórios, validade temporal, unicidade, vínculo de scope/digest,
+limite de 1024 grants e rejeição de campos desconhecidos.
+Essa validação não autentica o issuer nem torna o grant revogável; o host
+precisa autenticar a assertion e impedir uso após revogação. A Engine ainda não
+oferece tool packs de filesystem, Git, shell, navegação, plano persistente de
+alto nível, memória estruturada ou dispatch de subagentes; não há broker
+sandbox. Cada item tem estado e dependências em
 [`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](../plans/09-plano-runtime-tools-identidade-e-isolamento.md).

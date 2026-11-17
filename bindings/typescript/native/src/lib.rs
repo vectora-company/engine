@@ -25,13 +25,13 @@ use vectora_engine::chat::{
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
-    MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot,
-    RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION,
-    TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION, TOOL_RESULT_CONTRACT_VERSION,
-    ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, VerificationReport,
-    advance_model_turn, advance_tool_result, authorize_tool_dispatch, cancel_model_tool_loop,
-    evaluate_verification, prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop,
-    tool_chat_definitions,
+    HOST_IDENTITY_CONTRACT_VERSION, HostIdentityContext, MODEL_TOOL_LOOP_CONTRACT_VERSION,
+    ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity,
+    RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION,
+    TOOL_POLICY_CONTRACT_VERSION, TOOL_RESULT_CONTRACT_VERSION, ToolContract, ToolDispatch,
+    ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
+    authorize_tool_dispatch, cancel_model_tool_loop, evaluate_verification, prepare_tool_dispatch,
+    reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -1732,6 +1732,23 @@ pub fn run_create(identity_json: String) -> Result<String> {
         .map_err(|_| Error::from_reason("invalid run identity"))?;
     let run = RunLifecycle::new(identity).map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&run)
+}
+
+#[napi]
+pub fn host_identity_contract_version() -> u32 {
+    u32::from(HOST_IDENTITY_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn validate_host_identity_context(context_json: String, now_ms: f64) -> Result<String> {
+    let context: HostIdentityContext = serde_json::from_str(&context_json)
+        .map_err(|_| Error::from_reason("invalid host identity context"))?;
+    if !now_ms.is_finite() || now_ms < 0.0 || now_ms > u64::MAX as f64 {
+        return Err(Error::from_reason("invalid validation timestamp"));
+    }
+    vectora_engine::harness::validate_host_identity_context(&context, now_ms as u64)
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&context)
 }
 
 #[napi]
