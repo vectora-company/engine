@@ -1,107 +1,35 @@
-# Checklist de implementação
+# Checklist geral de implementação
 
-Use este checklist como modelo para cada etapa de plano em execução. Copie os
-itens aplicáveis para o plano ou checklist específico e mantenha o estado
-atualizado durante o trabalho. Não marque um item como feito sem evidência.
+Este arquivo define gates reutilizáveis por etapa; não é um diário de PRs nem
+um inventário cronológico. O estado das capabilities está no plano da EPIC,
+[`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md), e
+nos checklists específicos. Confirme a stack ao vivo no GitHub em cada sessão.
 
-Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`.
+Use os seguintes checklists por domínio:
 
-O estado verificado em 2026-11-13 inclui os PRs #92 e #93 abertos e empilhados sobre #91, além do PR [#94](https://github.com/vectora-company/engine/pull/94), aberto sobre #93, head `984e2d066dcc05b0a98e076361ada632751fc61a`. A decisão de brunosrz no chat combina `pg_dump`/backup gerenciado com verify/rebuild da projeção a partir do SQLite; ver evidências e limites na análise. Revisões documentais anteriores são registros históricos. Este checklist alinha o plano à meta de uma primeira release completa. Para implementação de mídia, use também
-[`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md); este arquivo
-permanece geral e não substitui critérios específicos. A etapa de limites explícitos por provider/modelo/modalidade foi publicada no PR [#84](https://github.com/vectora-company/engine/pull/84), filho do #83 (head local/remoto `58980b3`). O retry de incompatibilidade multimodal foi publicado no [PR #85](https://github.com/vectora-company/engine/pull/85), filho do #84.
+- Mídia no chat: [`docs/checklists/04-midia-no-chat.md`](04-midia-no-chat.md).
+- Providers e modalidades: [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md).
+- Storage de grafos: [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md).
+- Inventário transversal: [`docs/checklists/07-checklist-completo-da-engine.md`](07-checklist-completo-da-engine.md).
+- CLI: [`docs/checklists/08-engine-cli.md`](08-engine-cli.md).
 
-## Revisão documental anterior — PR #83
-
-- [x] Inventariar os 55 arquivos Markdown versionados e distinguir documentos
-      vigentes de snapshots históricos.
-- [x] Revalidar a branch e stack daquela etapa: PR #82 estava no topo.
-- [x] Corrigir referências contraditórias sobre payloads de mídia, bindings,
-      estado de storage, PRs abertos e objetivo da primeira release.
-- [x] Verificar todos os links Markdown locais; todos os destinos existem.
-- [x] Rodar Prettier em todos os Markdown; a segunda execução passou.
-- [x] Executar `git diff --check`.
-- [x] Revisar o diff final; commits `00e2fe9`, `4c9a329` e `9db6d45`; abrir o [PR #83](https://github.com/vectora-company/engine/pull/83) sobre `feat/chat-media-bindings` (#82).
-
-## Limites de mídia por provider/modelo — PR #84, filho do #83
-
-- [x] Adicionar limites explícitos por modalidade e par provider/modelo no core Rust; teto global continua como máximo absoluto por asset.
-- [x] Encaminhar configuração equivalente em Python e TypeScript.
-- [x] Verificar 18 testes `chat::media::tests`; teste de binding Python (1) e Node (1); build maturin e `pnpm build`.
-- [ ] Registrar limites oficiais por endpoint/protocolo/modelo com fonte e data, sem inferir um teto universal por marca de provider.
-- [ ] Avaliar limites totais do payload, contagem de partes, duração/resolução e consistência com gateways OpenAI-compatible.
-- [x] Atualizar plano, spec, análise e checklist; executar verificações; commit `d4ccd3d`, push e abrir o [PR #84](https://github.com/vectora-company/engine/pull/84) empilhado sobre o PR #83.
-
-## Retry textual para rejeição multimodal — PR #85, filho do #84
-
-- [x] Classificar incompatibilidades multimodais HTTP 400 sem reclassificar autenticação.
-- [x] Repetir uma vez como texto no cliente OpenAI-compatible e no cliente nativo, inclusive ao abrir stream antes de devolvê-lo.
-- [x] Aplicar a mesma regra ao wrapper fallback antes de trocar de candidato.
-- [x] Testar classificação e retry complete/stream no cliente OpenAI-compatible.
-- [x] Cobrir o wrapper fallback; cliente direto cobre que o retry de stream ocorre antes da abertura e preserva o evento de evidência.
-- [x] Rodar Clippy, format, suíte Rust workspace, rustdoc, Prettier e hooks de pre-commit; revisar docs/diff.
-- [x] Commit `0767636`, push e abrir o [PR #85](https://github.com/vectora-company/engine/pull/85), empilhado sobre `feat/chat-media-provider-limits-docs83` (#84).
-- [ ] Aguardar review/CI sem bloquear o início da próxima etapa; PRs continuam sem aprovação pelo agente.
-- [x] Registrar decisão de brunosrz: substituir diretamente `ToolResult.output: String` por partes tipadas, sem compatibilidade v1.
-
-## Revisão documental ampla — filha do PR #86
-
-- [x] Inventariar os 55 Markdown versionados; separar afirmações atuais de snapshots históricos.
-- [x] Conferir a stack no GitHub: PR #86 aberto com head `b188a94`; branch desta revisão criada como sua filha.
-- [x] Procurar versões de contratos obsoletas e atualizar loop v3 / `ToolResult` v2 nos documentos de runtime e verificação.
-- [x] Corrigir estado da mídia, stack de PRs e verificações locais nos índices, plano, análise, checklist, spec e sabatina.
-- [x] Verificar destinos relativos de links nos 55 Markdown versionados: 0 quebrados.
-- [x] Rodar Prettier, hooks aplicáveis e `git diff --check`; links relativos válidos nos 55 Markdown.
-- [x] Commit `4ab3df3`, push e abrir o [PR #87](https://github.com/vectora-company/engine/pull/87), filho do #86 (head `4ab3df3`).
-
-## Reclassificar MIME pelos bytes reidratados — filha do PR #87
-
-- [x] Classificar os bytes verificados e usar o MIME detectado no payload quando a modalidade coincide.
-- [x] Rebaixar para texto/referência quando os bytes não correspondem à modalidade declarada; aceitar documento nativo somente quando a assinatura identifica PDF.
-- [x] Validar previews reidratados como imagens antes de serializar.
-- [x] Adicionar testes para MIME de imagem incorreto, MIME genérico em PDF e divergência entre modalidade declarada e bytes; 22 testes `chat::media::tests` passaram.
-- [x] Rodar hooks completos: format, Prettier, Clippy, testes Rust workspace e rustdoc passaram; os 22 testes focados passaram.
-- [x] Commit `18c2eca`, push e abrir o [PR #88](https://github.com/vectora-company/engine/pull/88), filho do #87.
-
-## Fronteira de bytes inline — implementação da decisão 3
-
-- [x] Receber no chat a decisão de separar request persistível de envio efêmero.
-- [x] Rejeitar `Inline` e `data:` ao desserializar/serializar request persistível.
-- [x] Validar envelope efêmero, base64, assinatura/tipo, MIME e limite configurável (20 MiB padrão).
-- [x] Expor complete/stream efêmeros em Python e TypeScript para OpenAI-compatible, nativo e fallback.
-- [x] Preservar preparo manual, contexto por chamada e contexto padrão.
-- [x] Cobrir limites e fronteira em testes Rust e bindings.
-- [x] Verificar workspace Rust (171 testes + 3 fixtures e Clippy), Python (52 testes, Ruff/format/ty), TypeScript (build/typecheck; 38 passaram, 10 de serviço sem endpoint foram ignorados) e diff; registrar no PR [#90](https://github.com/vectora-company/engine/pull/90), filho de #89; commit de implementação `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`.
-
-## Storage de grafos FalkorDB — TLS, PR #112
-
-A spec, o plano, a análise e o checklist estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](../plans/07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md). `brunosrz` escolheu contrato portátil mais extensão Cypher e aprovou `falkordb` 0.11.2/MSRV 1.95. O core, seleção/capabilities e wrappers Python/TypeScript foram implementados; hooks completos passaram (196 testes Rust + 3 fixtures), além de 92 testes Rust de storage service-real, 55 Python e build/typecheck/41 testes Node (10 skips de outros serviços sem endpoints). FalkorDB 6.0.3 cobriu auth, parâmetros, limites, timeout e restart/AOF. A simulação `scons update --simulate` não alterou lockfiles; Cargo reportou 50 updates possíveis compatíveis com Rust 1.95, uv reportou Ruff 0.17.5 e ty 0.0.104 disponíveis, pnpm retornou `{}`. FalkorDB 6.0.3 real passou integração Rust/Python/Node, inclusive auth URL, limites, timeout e restart/AOF. Naquele estágio do trabalho, TLS e cancelamento remoto ainda não tinham evidência; os follow-ups abaixo atualizaram esse estado. Atualização real em 2026-11-15: `scons update` resolveu 51 pacotes Cargo compatíveis com Rust 1.95, atualizou Ruff 0.17.4→0.17.5 e ty 0.0.101→0.0.104; pnpm não alterou o lockfile; a instalação local usa `/home/brunosrz/.local/share/pnpm/store/v11` e SCons deixa o pnpm selecionar seu store padrão. Após rebase no #101, Cargo também atualizou `xxhash-rust` 0.8.19→0.8.20. Simulação posterior: zero updates aplicáveis, 15 crates atrás do latest no MSRV vigente. `scons lint` passou; `scons tests`: Rust 196 + 3 fixtures, pytest 87/1 skipped, Node 40/11 skipped por ausência de serviços.
-
-Atualização em 15/11/2026: a auditoria encontrou que os bindings ignoravam
-timeouts e limites definidos pelo core. O PR [#111](https://github.com/vectora-company/engine/pull/111),
-branch `feat/falkordb-binding-timeouts`, filho do #110, usa `GraphStoreSettings`
-compartilhada e testa opções customizadas contra FalkorDB 6.0.3 em Rust, Python
-e Node. Em seguida, o PR [#112](https://github.com/vectora-company/engine/pull/112),
-filho do #111, corrigiu a seleção do provider Rustls e passou TLS real nos três
-bindings com CA confiável. O client oficial não expõe cancelamento remoto; a
-limitação foi investigada e registrada, e o timeout server-side foi testado.
-Hooks completos e `scons tests` passaram. Os dois PRs foram publicados; o
-GitHub reportou `MERGEABLE` quando cada um foi aberto.
+Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Não
+marque um item como feito sem evidência local identificável.
 
 ## Preparação e escopo
 
-Estado do loop em 15/11/2026: PR #112 é o topo desta stack, filho do #111. A
-branch local `test/falkordb-tls-integration` está baseada no head do #111. O escopo corrente,
-os testes e os limites estão registrados no
+Estado da etapa: determine a capability e a base da stack no início de cada
+sessão. O escopo, os testes e os limites estão registrados no
 [plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [spec](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
 [checklist da capability](05-providers-e-modalidades-llama-cpp-v1.md) e
-[auditoria](../analyses/06-auditoria-providers-modalidades.md), além dos
-[artefatos FalkorDB](../plans/07-plano-storage-grafos-falkordb.md). Os PRs #111 e #112 foram publicados em sequência; #112 é o topo. Prossiga sem
-aguardar CI dos PRs anteriores.
+[auditoria](../analyses/06-auditoria-providers-modalidades.md), ou nos
+artefatos do domínio correspondente. Consulte GitHub para a posição atual da
+stack e prossiga sem aguardar CI dos PRs anteriores.
 
 - [ ] Confirmar repositório, branch, base da stack e estado da working tree.
-- [ ] Listar PRs abertos; tratar o PR do topo como trabalho ativo e confirmar
-      a branch atual, pois o checkout é compartilhado.
+- [ ] Listar PRs abertos e suas bases; confirmar qual branch da stack está
+      ativa e se corresponde ao checkout compartilhado.
 - [ ] Para storage, inspecionar `podman ps -a` e usar os serviços locais reais;
       registrar as versões efetivamente executadas.
 - [ ] Ler `AGENTS.md`, instruções locais e [análise/referências](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
@@ -174,212 +102,12 @@ explicitamente registradas, a documentação reflete o código e não há uma de
 vital pendente. Concluir uma etapa não encerra automaticamente o loop se houver
 outras etapas aprovadas no plano ativo.
 
-## Partes multimodais em `ToolResult` — PR #86, filho do #85
+## Atualização documental
 
-- [x] Substituir a string por `parts` tipadas e rejeitar formatos/snapshots legados.
-- [x] Incrementar as versões do resultado e do loop; expor as versões aos bindings.
-- [x] Converter resultado em mensagem de tool por helper no núcleo Rust, compartilhado pelos bindings.
-- [x] Serializar imagens de resultado em Anthropic, Gemini e OpenAI Chat Completions; manter fallback textual de Cohere.
-- [x] Cobrar texto e metadados serializados nos limites do loop; limitar bytes ao reidratar no contexto de mídia.
-- [x] Rodar suíte Rust workspace (163 testes + 3 fixtures), Clippy, `cargo check` de todos os targets, rustdoc, testes Python, build/typecheck e 37 testes Node (10 testes de serviços ignorados sem URLs).
-- [x] Rodar todos os hooks de pre-commit, corrigir stubs Python ausentes e revisar diffs.
-- [x] Abrir PR #86 sobre o #85: https://github.com/vectora-company/engine/pull/86 (head `b188a94`).
-
-## Diagnóstico da outbox nos bindings — PR #91
-
-- [x] Expor flush da outbox e contagem pendente em Python e TypeScript; manter SQLite como autoridade local e PostgreSQL como projeção retomável.
-- [x] Validar limite 1–1000 inclusive quando PostgreSQL não está configurado; flush sem URL retorna zero sem remover pendências.
-- [x] Testar contrato offline nos bindings Python e Node e limite no core.
-- [x] Rodar workspace Rust (172 testes + 3 fixtures), Python (53), Node (39 aprovados; 10 testes service-real ignorados sem endpoints), Clippy, rustdoc e hooks completos.
-- [x] Commit `4f7e980`, push e abrir o PR [#91](https://github.com/vectora-company/engine/pull/91), filho do #90.
-- [ ] Criar fixtures comuns de KV, filas e vetores nos três níveis; trabalho continua na Fase 2 do plano.
-
-## Projeção PostgreSQL de checkpoints — PR #92
-
-- [x] Evoluir schema do outbox SQLite para armazenar checkpoint junto ao evento (schema v6; migração aditiva).
-- [x] Tornar a projeção opt-in por arquivo: `ResilientLedger` com PostgreSQL habilita-a e faz backfill histórico; stores SQLite-only não acumulam outbox. Admission e stores lifecycle/loop/policy enfileiram eventos/checkpoints na transação local quando habilitados; itens confirmados são removidos da outbox.
-- [x] Projetar evento + checkpoint atomicamente e de forma idempotente no PostgreSQL.
-- [x] Repetir workspace Rust e matriz de serviços após corrigir a fixture de migração: 175 Rust + 3 fixtures + 1 teste nativo; `storage::` 76/76; 34 testes SQLite focados; PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0 reais. Format, Clippy `-D warnings` e rustdoc passaram. Python 53 e Node 39 (10 sem endpoints ignorados) são da rodada anterior; bindings não mudaram.
-- [x] Commit `b01b20b`, push e abrir o PR [#92](https://github.com/vectora-company/engine/pull/92), filho do #91.
-- [x] Publicar a correção da fixture de migração e a projeção opt-in no mesmo PR #92 (commit `69af992`).
-- [x] Projetar reservas/admissions como entidade consultável e criar APIs de leitura PostgreSQL no PR [#93](https://github.com/vectora-company/engine/pull/93).
-- [x] Registrar a decisão de backup gerenciado/`pg_dump` e verify/rebuild da projeção a partir do SQLite. PR [#94](https://github.com/vectora-company/engine/pull/94) aberto sobre #93; head `984e2d066dcc05b0a98e076361ada632751fc61a`.
-- [x] Verificar reconstrução service-real PostgreSQL após apagar a scope isolada; eventos, checkpoint, reservations/admissions e reserva standalone restaurados com contagens iguais.
-- [x] Binding Python: `maturin develop` e `pytest` local explícito — 53 passaram.
-- [x] Binding TypeScript: `pnpm typecheck`, `pnpm build` e `pnpm test` — 39 passaram, 10 ignorados sem endpoints.
-- [x] Simular perda de eventos, checkpoints, reservas/admissions e reserva standalone na scope de teste.
-- [x] Cobrir linha extra em `ve_ledger_versions` e conteúdo de evento alterado na projeção; testes PostgreSQL service-real passaram no PR [#95](https://github.com/vectora-company/engine/pull/95), integrado.
-- [x] Cobrir corrida entre dois projetores independentes drenando duas sequências do mesmo agregado (16 rodadas service-real no PR [#96](https://github.com/vectora-company/engine/pull/96)).
-- [ ] Cobrir indisponibilidade remota durante a reconstrução.
-- [ ] Reexecutar a suíte NATS com servidor 2.11+; o contêiner atual é 2.10 e falhou em 3 testes que exigem TTL de KV.
-- [x] Concorrência entre dois projetores independentes no mesmo processo verificada em 16 rodadas service-real no PR [#96](https://github.com/vectora-company/engine/pull/96), head `fb1977a`, merge commit `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`.
-- [ ] Tratar concorrência entre processos/admissions e migrations PostgreSQL com rollback.
-
-## Projeção de reservas e admissions — PR #93, filho do PR #92
-
-- [x] Evoluir SQLite ao schema v8 com outbox para reservation standalone, backfill único e vínculo da reserva ao evento admission.
-- [x] Projetar reservation/admission/event/checkpoint atomicamente no PostgreSQL e expor leitura de reserva e admission.
-- [x] Testes SQLite cobrem migração v1, opt-in/backfill, replay e reserva standalone; testes service-real cobrem reservation/admission projetados e APIs de leitura (PostgreSQL 18.6).
-- [x] Workspace Rust 182 + 3 fixtures + 1 teste nativo; `storage::` 83/83 com PostgreSQL 18.6, Redis 8.10.3, NATS 2.15.3 e Qdrant 1.18.0.
-- [x] Clippy `-D warnings`, rustdoc, formatação e hooks completos passaram.
-- [x] Commit `58e1619`, push e abrir o PR [#93](https://github.com/vectora-company/engine/pull/93), filho do #92.
-
-## Providers e modalidades de IA — referência llama.cpp v1.0.0
-
-Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md) e [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md).
-
-- [x] Atualizar a branch documental sobre `main` após o merge do PR #96.
-- [x] Registrar o estado verificado de Ollama: API nativa para visão/chat, embeddings de texto e compatibilidade OpenAI parcial.
-- [x] Inventariar providers e operações no core/bindings e conferir APIs HTTP upstream da tag `v1.0.0`.
-- [x] Separar chat, Decision Model, visão/geração de imagem, TTS, ASR/STT, vídeo, embeddings e rerank nos contratos e lacunas.
-- [x] Revisar e sincronizar spec, plano, análise, checklist, índices e goal loop.
-- [x] Abrir o PR documental [#97](https://github.com/vectora-company/engine/pull/97) sobre `main`; head `616f558`.
-- [x] Implementar adapter Rust llama-server, health/discovery e chat/stream com fixtures no PR [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`.
-- [x] Expor profile llama-server por Python/TypeScript, com fixtures de health, models, completion e SSE, no PR filho [#100](https://github.com/vectora-company/engine/pull/100).
-- [ ] Expandir os perfis/providers e modalidades previstos no plano, sem declarar suporte por compatibilidade presumida.
-
-- [x] Abrir a etapa Decision Model em branch filha do PR #102 e validar o core Rust `/v1/systemone` com fixture local.
-- [x] Fixtures Rust/Python/TypeScript e verificação local do Decision Model concluídas.
-- [x] Publicar o PR filho [#103](https://github.com/vectora-company/engine/pull/103), filha do #102, e atualizar [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
-
-- [x] Implementar TTS `/v1/audio/speech` e `/tts` no PR [#104](https://github.com/vectora-company/engine/pull/104), filho do #103, mantendo áudio binário e request efêmero para referência de voz.
-
-## Providers llama.cpp v1.0.0 — atualização do goal loop (2026-11-15)
-
-- [x] PR #102: resolver conflito preservando conteúdo documental; atualizar a dependência pnpm ao store local, mantendo `node_modules` no checkout.
-- [x] PR #103 filho de #102: Decision Model `/v1/systemone`, core Rust e bindings com fixtures.
-- [x] Implementar TTS bufferizado `/v1/audio/speech` e `/tts` na branch filha do #103, com áudio binário e metadados de formato/sample rate.
-- [x] Separar speaker-reference transient de request persistível e redigir seu Debug.
-- [x] Fixture Rust 8/8; typecheck TypeScript e `cargo check` para core/Python/Node; Node: 41 passed, 11 skipped.
-- [x] Build maturin e pytest Python: 55 passaram, 1 skipped.
-- [x] Publicar o PR [#104](https://github.com/vectora-company/engine/pull/104) sobre a branch do PR #103; head `8763968`, `MERGEABLE`. Próxima etapa iniciada como filha do #104, sem aguardar CI.
-- [ ] Testar contra llama-server v1.0.0 e modelo compatível quando houver serviço/modelo disponível; não inferir do mock.
-- [x] Sessão realtime/ASR implementada no PR #105 e streaming TTS publicado no PR #106, filho do #105; batch STT segue fora até confirmar endpoint próprio.
-
-## Realtime audio — próxima stack filha do PR #104
-
-- [x] Criar branch filha do #104 e fixar a API upstream em llama.cpp v1.0.0.
-- [x] Implementar cliente Rust WebSocket, autenticação/headers, intents transcription/conversation e validação de input audio.
-- [x] Limitar mensagens e fila; enviar chunks PCM16 e commits; preservar eventos e fechar/cancelar a sessão.
-- [x] Fixture Rust para handshake, auth, rate override, PCM16, commit e transcrição.
-- [x] Expor envio/recepção em bindings Python e TypeScript; `cargo check` passou.
-- [x] Build NAPI release, TypeScript typecheck e Node: 41 passaram, 11 skips de serviços opcionais.
-- [x] Maturin develop e pytest Python: 55 passaram, 1 skip.
-- [x] Workspace Rust: 205 testes lib + 3 fixtures + teste do binding Python passaram; Clippy `-D warnings` passou após correção.
-- [x] Hooks executados; SVGO/Prettier alteraram arquivos preexistentes fora do escopo e foram restaurados. Clippy corrigido e validado separadamente.
-- [x] Publicar [PR #105](https://github.com/vectora-company/engine/pull/105) filho do #104; head `e97925b`, `OPEN`/`MERGEABLE`.
-- [ ] Testar com llama-server v1.0.0 e modelo real; batch STT segue endpoint separado.
-
-## Streaming TTS — branch ativa filha do PR #105
-
-- [x] Implementar rotas `/v1/audio/speech` e `/tts` com iteração binária incremental no core Rust.
-- [x] Expor iteradores async equivalentes nos bindings Python e TypeScript, incluindo cancelamento.
-- [x] Cobrir metadados, limites, chunks limitados, resposta incremental e desconexão parcial.
-- [x] Workspace Rust: 208 testes, 3 fixtures e teste nativo Python passaram; Clippy `-D warnings` passou.
-- [x] Build NAPI/TypeScript, suíte Node (42 pass/11 skips) e pytest (56 pass/1 skip). Publicar PR [#106](https://github.com/vectora-company/engine/pull/106), filho do #105; `OPEN`/`MERGEABLE`.
-- [ ] Integração opt-in com `llama-server` v1.0.0/modelo TTS real.
-
-## Ollama chat nativo — PR #107, filho do PR #106
-
-- [x] Confirmar contrato oficial `/api/chat` JSON/NDJSON e diferenças em relação ao subconjunto OpenAI-compatible.
-- [x] Implementar tradução do contrato de chat, `options`, extensões nativas, imagens inline, tools, reasoning e usage no core Rust.
-- [x] Suportar api_key opcional no endpoint nativo local e Bearer quando configurada.
-- [x] Testes de payload/resposta no Rust e fixtures HTTP Python/TypeScript.
-- [x] Suites completas e hooks: Rust 210 + 3 fixtures + teste nativo Python; pytest 57 pass/1 skip; Node 43 pass/11 skips; NAPI/typecheck, Clippy, Ruff/format/ty.
-- [x] Atualizar docs e publicar o PR [#107](https://github.com/vectora-company/engine/pull/107), empilhado sobre #106; `OPEN`/`MERGEABLE`.
-- [ ] Verificar com daemon/modelo Ollama real quando serviço estiver disponível; não bloqueia a implementação fixture-based.
-
-## Perfil OpenRouter Chat Completions — PR #108, filho do PR #107
-
-- [x] Confirmar contrato oficial de Chat Completions, attribution headers e provider routing.
-- [x] Criar perfil OpenRouter com URL padrão/customizada, API key obrigatória e attribution headers opcionais.
-- [x] Preservar as opções `provider`, `models`, `route`, `user` e `plugins` como extensions por request.
-- [x] Adicionar cobertura Rust e fixtures de HTTP Python/TypeScript.
-- [x] Suites completas: workspace Rust 212 + 3 fixtures + 1 binding Python nativo; pytest 58/1 skip; Node 44/11 skips; typecheck, Clippy, Ruff/format/ty e Prettier passaram.
-- [x] Hooks completos passaram; publicar o PR [#108](https://github.com/vectora-company/engine/pull/108) empilhado sobre #107; GitHub confirma `OPEN`/`MERGEABLE`.
-- [ ] Integração com OpenRouter real exige endpoint externo e credencial; fixtures locais passaram.
-
-## OpenAI Responses API — branch ativa filha do PR #108
-
-- [x] Conferir documentação oficial de Responses, SSE, tools e imagem; delimitar protocolo e `store: false` default.
-- [x] Implementar adapter não-streaming e streaming no core Rust; preservar o perfil Chat Completions.
-- [x] Expor perfil por bindings Python/TypeScript e cobrir histórico, ferramentas, imagem, usage e SSE com fixtures.
-- [x] Rust workspace (215 testes), Clippy workspace `-D warnings`, build NAPI/TypeScript, Node (45 pass/11 skips), pytest completo e fixture Python focada passaram.
-- [x] Ruff/format/ty, Prettier e hooks passaram; revisar diff, commitar e abrir PR [#109](https://github.com/vectora-company/engine/pull/109) empilhado sobre #108.
-- [ ] Integração OpenAI real requer credencial; fixtures exercitam o protocolo sem rede externa.
-
-## Próxima etapa — perfil OpenAI Chat Completions, filha do PR #109
-
-- [ ] Adicionar perfil nomeado com endpoint oficial padrão, chave obrigatória e `base_url` configurável.
-- [ ] Preservar o perfil genérico e o perfil OpenRouter; validar auth, headers e rota em Rust/Python/TypeScript.
-- [ ] Verificar suites e hooks, registrar limites por API/modalidade, publicar PR filho do #109 e iniciar a próxima etapa sem aguardar CI.
-
-## Embeddings texto llama-server v1.0.0 — PR #114, filho do #113
-
-- [x] Adicionar `/v1/embeddings` ao cliente Rust e bindings Python/TypeScript usando o contrato existente de embeddings.
-- [x] Cobrir auth, rota, ordem de resposta, índices duplicados, finitude, dimensões e usage com fixtures.
-- [x] `scons tests`: Rust 230 + 3 fixtures + 1 teste fronteira Python; pytest 96 passed/1 skipped; Node 49 passed/11 skips.
-- [x] `scons lint` e hooks: format, Clippy, rustdoc, Ruff, ty, Bandit, Oxlint, TypeScript e pre-commit passaram.
-- [x] Publicado e empilhado como PR [#114](https://github.com/vectora-company/engine/pull/114), filho do #113.
-
-## Embeddings multimodais llama-server v1.0.0 — branch `feat/llama-server-multimodal-embeddings-assets`
-
-- [x] Implementar core Rust efêmero por asset map, com capability consultada em `/v1/models`.
-- [x] Serializar imagem como data URL e áudio/vídeo como payload base64 da API v1.0.0; rejeitar URLs, paths, `ImageUrl` do caller e `Inline`.
-- [x] Validar digest, MIME e tamanho nos limites globais e específicos de provider/modelo.
-- [x] Expor a operação efêmera nos bindings Python e TypeScript, encaminhando ao core Rust.
-- [x] Fixtures Rust cobrem as três modalidades, URL remota e fail-closed sem POST se o modelo não declara imagem; Python e Node cobrem asset map de imagem e request wire.
-- [x] `scons tests` antes da fixture fail-closed mais recente: Rust 234 + 3 fixtures + 1 fronteira Python; pytest 97/1 skip; Node 50/11 skips.
-- [x] `scons lint` e pre-commit passaram; a primeira execução identificou e corrigiu declaração Python duplicada.
-- [x] Reexecutar `scons tests`: Rust 234 + 3 fixtures + 1 fronteira Python; pytest 97/1 skip; Node 50/11 skips.
-- [x] Publicar embeddings multimodais como PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114.
-
-## Rerank textual llama-server v1.0.0 — branch `feat/llama-server-rerank`
-
-- [x] Adicionar perfil `llama_server` ao contrato compartilhado de rerank.
-- [x] Usar formato Jina `/rerank`, mapear `top_n`, preservar ordem/índices, score e usage.
-- [x] Bearer opcional, endpoint raiz ou prefixo `/v1`; opções de truncamento são recusadas antes da rede.
-- [x] Fixtures Rust/Python/TypeScript cobrem request, auth, response e validação de score `[0,1]`.
-- [x] `scons tests`: Rust 236; 3 fixtures de conformidade + 1 fronteira Python; pytest 98 passed/1 skipped; Node 51 passed/11 skips opcionais.
-- [x] `scons lint` passou; pre-commit completo passou após ajuste automático de formatação Markdown.
-- [x] Publicar rerank textual em [#116](https://github.com/vectora-company/engine/pull/116), filho de #115; seguir sem aguardar CI remoto.
-
-## Rerank multimodal efêmero llama-server — `feat/llama-server-multimodal-rerank`
-
-- [x] Core Rust recebe texto e asset refs de imagem em query e documents; valida capability de modelo, materializa Jina e limita a score/usage válidos.
-- [x] Testes Rust cobrem envio Jina de asset e rejeição de URL sem POST.
-- [x] Fixtures Python e TypeScript exercitam a API efêmera e asset map.
-- [x] `scons tests`: Rust 238; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
-- [x] `scons lint` passou; pre-commit integral passou após formatação automática de Markdown.
-- [ ] Publicar PR empilhado sobre [#116](https://github.com/vectora-company/engine/pull/116).
-
-## Testes negativos de rerank multimodal — `test/llama-rerank-negative-cases`
-
-- [x] Caso de modelo sem capability de imagem falha fechado antes do POST.
-- [x] Resposta com score fora de `[0,1]` é rejeitada.
-- [x] Resposta com índices duplicados é rejeitada.
-- [x] Quatro testes Rust focados de rerank multimodal passam.
-- [x] `scons tests`: Rust 240; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
-- [x] `scons lint` passou.
-- [x] Pre-commit integral passou.
-- [ ] Publicar PR filho de [#117](https://github.com/vectora-company/engine/pull/117).
-
-## Guardas de asset map no rerank — `test/llama-rerank-assets-guards`
-
-- [x] Digest divergente falha fechado sem enviar o asset ao endpoint de rerank.
-- [x] Asset acima do limite configurado falha fechado.
-- [x] Cinco testes Rust focados de rerank multimodal passam.
-- [x] `scons tests`: Rust 241; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
-- [x] `scons lint` passou.
-- [x] Pre-commit passou.
-- [ ] Publicar PR filho de [#118](https://github.com/vectora-company/engine/pull/118).
-
-## Contrato de resposta de rerank — `test/llama-rerank-response-contract`
-
-- [x] Índice fora dos documentos enviados é rejeitado.
-- [x] Resposta com mais itens do que `top_n` é rejeitada.
-- [x] Resposta sem `results` é rejeitada.
-- [x] Seis testes Rust focados passam.
-- [x] `scons tests`: Rust 242; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
-- [x] `scons lint`.
-- [ ] Pre-commit e publicar PR filho de [#119](https://github.com/vectora-company/engine/pull/119).
+Acompanhe por capability, fase e critério de aceite. PR, commit e SHA podem ser
+registrados no checklist específico como evidência, mas não devem criar seções
+ou ordenar este checklist geral. Ao adicionar uma capability, atualize
+[`docs/README.md`](../README.md),
+[`docs/plans/00-prompt-loop-goal.md`](../plans/00-prompt-loop-goal.md),
+[`docs/goal-loop/README.md`](../goal-loop/README.md) e os documentos gerais
+que a referenciam.

@@ -69,3 +69,4 @@ plano ativo. Ao terminar uma etapa, selecione a próxima pendente e empilhe o
 PR seguinte sobre o anterior. Em storage, aplique a equivalência por par:
 implemente nos dois lados do par e só especialize o que for incompatível. Pare somente
 nas condições do documento de [encerramento](04-criterios-de-encerramento.md).
+Artefatos específicos desta etapa: `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.

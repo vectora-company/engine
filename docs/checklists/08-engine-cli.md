@@ -1,0 +1,21 @@
+# Checklist — engine-cli
+
+- [x] Crate `engine-cli` membro do workspace; rustyline 19.0.0, termimad 0.35.5 e indicatif 0.18.6 foram fixadas no lockfile como stable compatível com MSRV 1.95.
+- [x] Config `init/show/validate/set`, com caminho configurável e referência de segredo por environment variable; smoke manual de init/set/validate/show passou.
+- [x] Wizard na primeira execução e `setup` para provider/modelo/endpoint; entrada de chave mascarada, `secrets.json` separado modo 0600 no Unix e precedência para env exportada.
+- [x] OpenAI Chat/Responses, OpenRouter, Ollama, Anthropic, Google Gemini, Cohere, llama.cpp e endpoint compatível customizado (9router/OmniRouter por URL).
+- [x] Wizard também configura o Decision Model com Laya standalone ou llama.cpp/Laya-GGUF.
+- [x] Cliente de chat reaproveita `LlamaServerClient`, `OpenAiCompatibleClient` ou `NativeChatClient` (Anthropic, Google, Cohere, Ollama e OpenAI Responses).
+- [x] Loop ReAct preserva mensagens e tool call IDs, limita iterações e executa somente ferramenta local allowlisted (`calculator`).
+- [x] Evaluator da calculator rejeita código, sintaxe inválida, divisão por zero e resultado não finito; testes validam precedência e rejeições.
+- [x] Decision Model configura separadamente `LayaClient` (`laya-serve`) e `LlamaServerClient` (`/v1/systemone`, llama.cpp/Laya-GGUF); teste valida seleção de ambos os transportes.
+- [x] Interface utiliza rustyline, termimad e indicatif; EOF/interrupção termina a conversa.
+- [x] `cargo test -p engine-cli --locked`: 8 testes passaram, incluindo perfis e permissões de secrets.
+- [x] Baseline anterior: `scons tests` cobriu 242 testes Engine, 5 testes CLI, 3 fixtures, 1 fronteira Python; pytest 99/1 skip e Node 52/11 skips. A extensão atual passou 8 testes específicos.
+- [x] `scons lint`.
+- [x] Pre-commit da atualização atual passou (checks Rust e docs).
+- [x] `scons build` e `scons build-core` concluíram; `command -v engine-cli` aponta `~/.cargo/bin/engine-cli`; `--help` e chat sem argumentos abriram.
+- [x] `scons install` chama o mesmo helper de compilação/registro; execução isolada não realizada porque também instala sidecars, imagens de serviços e dependências de desenvolvimento.
+- [x] Spec, plano, análise, checklist, índices e documentos do goal-loop referenciam a capability.
+- [x] Wizard smoke salvou OpenRouter, modelo, chave modo 0600 e Decision Model llama.cpp/Laya-GGUF.
+- [x] Commit, push e PR empilhado publicados; conferir a base corrente diretamente no GitHub ao retomar.

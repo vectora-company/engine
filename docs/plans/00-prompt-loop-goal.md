@@ -1,40 +1,39 @@
-# Goal loop
+# Goal loop contínuo da Engine
 
-Siga [`AGENTS.md`](../../AGENTS.md) e o [guia do loop](../goal-loop/README.md).
-Antes de escolher o trabalho, confira `git branch --show-current`, `git status`,
-`gh pr list --repo vectora-company/engine` e, em storage, `podman ps -a`; o PR
-aberto no topo da stack é o trabalho ativo. Faça commit, push para o remoto
-GitHub e PR obrigatoriamente. Cada PR novo usa a branch do PR anterior como
-base; abra a próxima etapa sem esperar aprovação nem CI. Decisões vitais são
-perguntadas a brunosrz aqui no chat, sem marcar no GitHub.
-Leia o [plano operacional](../goal-loop/01-plano-operacional.md), o
-[checklist](../goal-loop/02-checklist-do-loop.md), as
-[regras de evidência](../goal-loop/03-fontes-e-evidencias.md) e os
-[critérios de encerramento](../goal-loop/04-criterios-de-encerramento.md).
-Aplique [`docs/plans/05-loop-de-desenvolvimento.md`](05-loop-de-desenvolvimento.md),
+Desenvolva a Vectora Engine fase a fase até cumprir a EPIC da primeira release
+completa. A EPIC e suas fases vivem em
+[`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md); organize o
+trabalho por capacidades, dependências e critérios de aceite, nunca por número
+ou posição de PR.
+
+Siga [`AGENTS.md`](../../AGENTS.md), o processo em
+[`docs/plans/05-loop-de-desenvolvimento.md`](05-loop-de-desenvolvimento.md),
 [`docs/checklists/00-checklist-de-implementacao.md`](../checklists/00-checklist-de-implementacao.md)
 e [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
-Use também o [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md) como inventário transversal de capacidades, gaps, issues e documentos; revalide sua fotografia antes de atualizá-lo.
-Retome a próxima etapa do plano ativo e leia sua spec, análise e checklist.
-Estado atualizado em 16/11/2026: PR #113 integra cliente Laya; #114 adiciona embeddings textuais; [#115](https://github.com/vectora-company/engine/pull/115) adiciona embeddings multimodais; [#116](https://github.com/vectora-company/engine/pull/116) adiciona rerank textual. PR #117, filho do #116, implementa rerank multimodal efêmero via asset map. PR [#118](https://github.com/vectora-company/engine/pull/118), filho do #117, cobre capability ausente, score inválido e índice duplicado. PR [#119](https://github.com/vectora-company/engine/pull/119), filho do #118, testa digest e limite de bytes. Branch ativa `test/llama-rerank-response-contract`, filha do #119, testa validade estrutural dos resultados. `scons tests` passou (Rust 242; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips), assim como `scons lint`. PRs #117–#119 estão publicados; a etapa #120 passou os gates locais. Concluir pre-commit e publicar PR #120 sem esperar CI remoto. Leia spec, plano, análise e checklist específicos vinculados neste goal; continue a stack sem esperar CI remoto.
+Para a próxima capability incompleta, leia também sua spec, plano, checklist e
+análise específicos, indexados em [`docs/README.md`](../README.md) e
+[`docs/goal-loop/README.md`](../goal-loop/README.md).
 
-A primeira release deve ser ampla e completa, não um MVP; mantenha os gaps do charter em [`docs/plans/03-plano-continuidade.md`](03-plano-continuidade.md) explícitos. Implemente, verifique localmente e atualize os documentos da etapa.
-Leia também a [sabatina do ecossistema](../analyses/04-sabatina-engine-ecossistema.md).
-Desenvolva a Engine e o GH Bot conjuntamente: consulte o [guia de integração do
-GH Bot](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md)
-e exercite as capabilities no Bot como ambiente experimental controlado, usando
-uma conta GitHub nova e repositórios de teste. Durante o desenvolvimento, o Bot
-deve consumir localmente `bindings/typescript` do checkout ativo da Engine; não
-espere nem exija publicação ou versionamento npm. Quando faltar uma capability,
-implemente-a no core Rust, exponha-a pelos bindings necessários, teste-a e
-integre-a ao Bot na mesma stack, sem duplicar o runtime em TypeScript. Mantenha
-credenciais e repositórios de produção fora desse ambiente.
-Mantenha suas respostas sempre atuais: após cada mudança de código, contrato,
-teste, plano, referência ou snapshot de consumidor, revise e atualize as Q&As
-afetadas, cite evidências e marque claramente implementação, parcialidade,
-planejamento, decisão ou ausência. Antes de encerrar cada ciclo, confira o SHA,
-a data e se nenhuma resposta confunde spec/roadmap com comportamento verificado.
+No início de cada sessão, confirme checkout, branch, alterações locais e remote;
+consulte no GitHub os PRs abertos e as respectivas bases atuais. A stack muda ao
+longo do trabalho: descubra a base vigente naquele momento e empilhe a próxima
+etapa sobre o PR anterior aberto, sem gravar número de PR ou branch neste
+prompt. Preserve mudanças locais alheias ao escopo.
 
-**Encerre somente** quando o plano ativo estiver concluído, uma decisão vital
-estiver documentada e aguardando `brunosrz`, ou um bloqueio externo impedir todo
-avanço independente. Nos dois últimos casos, registre o que falta e aguarde.
+Implemente incrementalmente, começando pelos contratos e pelo core Rust; exponha
+os bindings e consumidores necessários conforme a capability. Verifique cada
+etapa, atualize o plano, checklist, análise, spec e demais referências afetadas
+com o estado observado, e registre lacunas sem converter planejamento em
+capacidade implementada. Organize documentação por domínio e capability; PRs
+são apenas evidência de entrega no histórico.
+
+Commit, push e abertura do PR empilhado são obrigatórios. Comece a etapa
+seguinte sem esperar CI ou aprovação do PR anterior. Não aprove PRs nem crie
+issues sem pedido. Pergunte decisões vitais a brunosrz neste chat, nunca o
+mencione para decidir em GitHub.
+
+Continue enquanto houver trabalho independente no plano. Encerre somente
+quando a EPIC estiver concluída, quando uma decisão vital bloquear todo avanço
+independente ou quando um bloqueio externo impedir qualquer trabalho útil.
+Registre o motivo nos documentos de estado e, para decisão vital, pergunte no
+chat e aguarde a resposta.

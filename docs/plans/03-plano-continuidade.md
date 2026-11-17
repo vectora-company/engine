@@ -1,6 +1,6 @@
 # Plano de continuidade da Vectora Engine
 
-**Estado verificado:** 16 de novembro de 2026. A `main` local consultada estava em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; PRs até [#112](https://github.com/vectora-company/engine/pull/112) estão integrados. Cliente Laya e embeddings textuais/multimodais estão nos PRs #113–#115. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, adiciona rerank textual Jina. O PR #117, filho do #116, entrega rerank multimodal efêmero. A etapa ativa `test/llama-rerank-negative-cases`, filha do #117, valida capability ausente, scores e índices inválidos. `scons tests` passou (Rust 241; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips); `scons lint` e pre-commit passaram. PR #118 publicado; PR #119 pendente. O plano de providers/modalidades segue a referência normativa ao `llama.cpp` v1.0.0; veja [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md) e os artefatos em [`docs/README.md`](../README.md).
+**Objetivo ativo:** concluir a EPIC da primeira release completa por fases e capabilities, guiado por critérios de aceite e dependências. O estado de implementação deve ser verificado no código e nos testes; o estado de PR deve ser consultado dinamicamente no GitHub e não determina a organização deste plano. O CLI independente tem contratos e critérios em [`docs/specs/20-engine-cli.md`](../specs/20-engine-cli.md), [`docs/plans/08-plano-engine-cli.md`](08-plano-engine-cli.md), [`docs/checklists/08-engine-cli.md`](../checklists/08-engine-cli.md) e [`docs/analyses/08-auditoria-engine-cli.md`](../analyses/08-auditoria-engine-cli.md). Providers e modalidades baseados em llama.cpp v1.0.0 estão em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md).
 
 **Objetivo de produto:** a primeira release deve ser ampla e completa, não um
 MVP. A proposta de escopo e os gates ainda precisam ser consolidados neste
@@ -109,45 +109,23 @@ indicada. Não as reabra sem pedido dele.
    `notify-keyspace-events` no watch do Redis e as ausências reais das filas e
    do vetorial (filtros, índice, quantização).
 
-### Fase 1 — spec 17, mídia no chat
+### Fase 1 — mídia e conteúdo multimodal
 
-Origem: [spec 17](../specs/17-midia-no-chat.md),
-[issue #58](https://github.com/vectora-company/engine/issues/58) e evidência do
-consumidor [Vectora #479–#502](https://github.com/vectora-company/vectora/pulls),
-todos integrados em stack em 2026-11-13. A Engine mantém implementação Rust e
-contratos compartilháveis; UI, STT local, previews e empacotamento permanecem no
-Vectora consumidor.
+Origem: [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md),
+comportamento observado nos consumidores e checklist
+[`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+A Engine oferece tipos de conteúdo multimodal, preparo explícito por asset map,
+contexto efêmero por chamada e por cliente, limites, retry seguro e resultados
+multimodais de tools. O host mantém bytes fora de requests persistíveis; MIME e
+modalidade são verificados na reidratação. A cobertura varia por protocolo e
+precisa ser marcada por feature no checklist específico.
 
-1. **Payload nativo:** PR #79 sobre #77 implementou Anthropic, Gemini e OpenAI
-   Chat Completions.
-2. **Decisão resolvida no PR #80:** oferecer preparo manual, contexto efêmero por
-   chamada e contexto padrão por cliente; chamada explícita prevalece sobre o
-   padrão. `MediaStore` é async e `ChatRequest` não carrega bytes persistidos.
-3. **Core Rust — entregue no PR #81:** branch filha do #80 integra o contexto aos
-   clients OpenAI-compatible, native e fallback. Limita cada asset a 20 MiB por
-   padrão (configurável), prepara apenas a mensagem do usuário atual e resultados
-   de tools posteriores, e reporta decisões sem bytes na completion e no stream.
-   Entregue no PR #81. Verificações: 49 testes `chat::`, testes Rust do workspace
-   e docs no hook, fmt, Clippy e typecheck TS passaram.
-4. **Bindings — implementados e integrados no PR #82:** `prepare_chat_content`/
-   `prepareChatContent`, contexto efêmero e contexto padrão em Python/TypeScript.
-   O host passa um mapa temporário `asset_id → bytes` após leitura autorizada no
-   AssetStore; bytes não entram em `ChatRequest`. Evidência local registrada
-   nesta stack: Rust 158 testes + 3 fixtures, Python 51 e Node 37 passaram; 10
-   testes Node dependentes de serviços foram ignorados sem URLs configuradas.
-   Essas contagens descrevem a execução registrada, não CI remoto nem `main`.
-5. **Limites por provider/modelo/modalidade — implementados e integrados no PR #84, filho do #83:**
-   `provider_limits` explícito combina-se com o teto global por asset; o menor
-   limite vale e ausência de dado não inventa limites do provider. O core e os bindings Python/TS têm cobertura local direcionada: 18 testes Rust,
-   1 teste Python e 1 teste Node passaram; maturin e `pnpm build` passaram. Ver
-   [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md) e
-   a análise de referências. Catálogo/metadado automático,
-   endpoint/protocolo, limites agregados, MIME/digest e histórico (Vectora #481/#494) permanecem etapas posteriores.
-6. **Retry textual único — PR [#85](https://github.com/vectora-company/engine/pull/85), filho do #84 e integrado:** somente `MultimodalIncompatible` após rejeição HTTP 400 reconhecida; no mesmo provider/modelo, uma vez, inclusive no fallback. Streams só repetem antes de devolver o stream ao consumidor; erros de autenticação/rede e erros após início do stream não são convertidos em retry. Os 51 testes `chat::` passaram; os hooks completos (Clippy, suíte Rust do workspace e rustdoc), fmt, Prettier e `git diff --check` passaram no commit `0767636ee88567b19ddce93f1e8d0b15cace396f`. Origem: Vectora #481.
-7. **Partes tipadas em `ToolResult` — PR [#86](https://github.com/vectora-company/engine/pull/86), filho do #85:** brunosrz decidiu substituir `output: String` diretamente sem manter v1. A branch `feat/chat-tool-result-parts` implementa `parts` com texto/imagem, conversão central Rust e payloads por protocolo; loop v2→v3 e resultado v1→v2, sem compatibilidade antiga. Hooks completos, suíte Rust (163 testes + 3 fixtures), Clippy, check, rustdoc, Python e Node passaram localmente no SHA `b188a94`; Node teve 37 testes aprovados e 10 dependentes de serviços ignorados sem endpoints.
-8. **Fronteira de conteúdo inline — decisão implementada no PR #90, filho do #89:** brunosrz escolheu request persistível separado de envelope efêmero. Requests persistíveis rejeitam `Inline`/`data:`; APIs efêmeras complete/stream existem para OpenAI-compatible, adapters nativos e fallback nos bindings Python/TS. O teto padrão é 20 MiB, com redução por contexto, e tipo/MIME são validados pelos bytes. O preparo manual, contexto por chamada e contexto padrão permanecem disponíveis. Verificação local concluída: 171 testes Rust + 3 fixtures passaram (incluindo serviços reais), Clippy do workspace sem warnings, 52 testes Python e 38 testes Node passaram; 10 testes Node sem endpoints foram ignorados. Ver [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md), [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md) e análise de referências.
-9. **Reclassificação MIME na reidratação — PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87:** usa a assinatura dos bytes, envia o MIME real quando a modalidade coincide e rebaixa para texto/referência quando os bytes indicam outra modalidade. 22 testes `chat::media::tests` e hooks completos passaram no head `18c2eca`.
-10. OpenAI Responses API não existe na Engine; não aplicável até haver adapter.
+Critérios ainda pendentes: catálogo atualizado de suporte e limites por
+provider/modelo/protocolo; cobertura equivalente de todos os protocolos que
+aceitam a mesma forma de mídia; limite agregado de request, contagem de partes,
+duração e resolução; adapter OpenAI Responses para mídia; testes de consumo e
+replay de assets em fluxos reais. A matriz de implementação e evidências está
+no checklist da capability, não nesta cronologia de entregas.
 
 ### Fase 2 — storage: base equivalente
 
@@ -168,7 +146,14 @@ Origem: [plano de storage](04-plano-storage-ledger.md) e
    segredos (adapter, duração, retry, correlação). **[D]** biblioteca de
    tracing/métricas.
 6. **`flush_outbox` e `pending_count` nos bindings — implementado e integrado no PR [#91](https://github.com/vectora-company/engine/pull/91), filho do #90.** Python expõe inteiro; TypeScript expõe `bigint`; limite 1–1000 validado mesmo sem PostgreSQL. Sem URL, flush válido retorna 0 e preserva a outbox SQLite. Verificações locais registradas na análise; fixtures comuns de KV, filas e vetores nos três níveis continuam pendentes.
-7. **Projeção PostgreSQL — parcial nos PRs empilhados #92/#93.** O PR [#92](https://github.com/vectora-company/engine/pull/92), filho do #91, projeta eventos + checkpoints dos stores lifecycle/loop/policy; o PR [#93](https://github.com/vectora-company/engine/pull/93) acrescenta outbox de reservas standalone, vínculo admission e APIs de leitura PostgreSQL; testes service-real passaram em PostgreSQL 18.6. Decisão respondida no chat: `pg_dump`/backup gerenciado mais verify/rebuild da projeção pelo SQLite. O PR #94 implementa replay idempotente e conferência de contagens por scope, com writers pausados; o teste service-real simula perda de uma scope. A perda simulada restaura eventos, checkpoint, reservations/admissions e reserva standalone. O PR [#95](https://github.com/vectora-company/engine/pull/95) foi integrado e adiciona testes service-real para linhas extras e conteúdo divergente. O PR [#96](https://github.com/vectora-company/engine/pull/96) valida concorrência entre instâncias independentes de projetor; migrations versionadas com rollback seguem pendentes.
+7. **Projeção PostgreSQL — parcial.** SQLite permanece autoridade local; a
+   outbox e o rebuild idempotente projetam eventos, checkpoints, reservations e
+   admissions. Verificação contra divergência e concorrência de projetores têm
+   cobertura; migrations versionadas com rollback ainda faltam. O contrato de
+   desastre usa backup gerenciado (`pg_dump`) e verificação/rebuild da projeção
+   pelo SQLite. Evidências e limites service-real ficam em
+   [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
+
 8. Interface SQL genérica tipada e limitada em SQLite e PostgreSQL. **[D]**
    segurança e escopo.
 9. Migração de dados (fase 6 da spec 02): contagens, hashes e rollback.
@@ -208,13 +193,20 @@ documento, chunk e proveniência; Context Planner determinístico; compactação
 que preserva unidades; indexação com falha visível e RAG opt-in (lexical,
 híbrido, rerank). **[D]** dados e segurança. Depende das fases 2 e 3.
 
-### Capability storage de grafos FalkorDB — implementação #102; follow-up filho do #110
+### Storage de grafos FalkorDB
 
 Adicionar graph storage à Engine, mantendo fora do escopo a ingestão/extração de
 GraphRAG e sem alterar os pares SQL, vector, KV, queue ou pubsub. O estado
 verificado e as lacunas constam em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
 
-`brunosrz` escolheu no chat as duas camadas: contrato property graph portátil e extensão Cypher específica de FalkorDB. Também aprovou `falkordb` 0.11.2 e Rust 1.95. A implementação inicial foi entregue no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101. Auditoria posterior encontrou que os bindings descartavam timeouts/limites do core e que o client não tinha deadlines explícitos para conexão/resposta. A correção está na branch `feat/falkordb-binding-timeouts`, publicada como PR [#111](https://github.com/vectora-company/engine/pull/111), filho do #110 e baseado em `feat/openai-chat-profile`. Rust, Python e Node foram exercitados com FalkorDB 6.0.3 e opções customizadas; roundtrip e limite de linhas passaram. Defaults: connect 10 s, query server-side 10 s, response client-side 30 s, 1.000 rows e 4 MiB. Hooks completos e `scons tests` passaram; GitHub reportou `MERGEABLE` ao criar o PR. A branch filha `test/falkordb-tls-integration` corrigiu panic Rustls e passou TLS real em Rust/Python/Node; interrupção do comando remoto ao cancelar a future continua sem comprovação; client timeout não é prova de rollback. Os artefatos da capability: [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
+`brunosrz` escolheu duas camadas: contrato property graph portátil e extensão
+Cypher específica de FalkorDB; também aprovou o client `falkordb` 0.11.2 e Rust
+1.95. A implementação expõe configuração de timeouts e limites no core e nos
+bindings. Testes com FalkorDB 6.0.3 cobrem roundtrip, limites e TLS real em
+Rust/Python/Node. Defaults: conexão 10 s, query server-side 10 s, resposta
+client-side 30 s, 1.000 linhas e 4 MiB. O client oficial não comprova
+cancelamento remoto nem rollback após timeout. Estado, critérios e evidências
+por capacidade estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md), [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md), [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](../analyses/07-auditoria-storage-grafos-falkordb.md) e [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
 
 ### Fase 6 — adoção, distribuição e medição
 
@@ -253,9 +245,12 @@ Nenhuma capability está declarada estável. Código em PR aberto ou testes
 isolados não satisfazem, por si só, o gate de release; consulte a matriz de
 conformidade para o estado e a cobertura de cada capability.
 
-## Próxima etapa
+## Seleção da próxima capability
 
-As revisões Markdown #83 e #87 são etapas históricas. Esta etapa fecha uma cobertura adicional de concorrência na Fase 2 de storage: PRs #92 e #93 projetam eventos, checkpoints, reservations e admissions no PostgreSQL com SQLite como autoridade. O contrato de backup/verify foi respondido por brunosrz no chat e está implementado no PR #94. O PR #95 está integrado e cobre linhas extras e conflitos de conteúdo com testes service-real. O PR [#96](https://github.com/vectora-company/engine/pull/96) cobre concorrência entre instâncias independentes; migrations versionadas com rollback continuam no backlog. O charter de primeira release completa continua no backlog, depois das lacunas anteriores de storage.
+Escolha no backlog por fases a capability incompleta com dependências satisfeitas.
+Registre seu estado e evidências nos artefatos específicos; consulte o GitHub
+separadamente para identificar a base atual da stack. PRs não definem a ordem
+conceitual das fases.
 
 ## Desvios registrados
 

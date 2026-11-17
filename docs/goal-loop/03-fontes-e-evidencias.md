@@ -56,3 +56,4 @@ Ao revisitar um finding, classifique-o como `confirmado`, `corrigido`, `não
 reproduzido` ou `ainda não verificado`, com caminhos de código/teste que
 sustentem a classificação. Se a evidência mudar, atualize análise, checklist e
 plano juntos.
+Artefatos específicos desta etapa: `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.

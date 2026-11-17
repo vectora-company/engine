@@ -3,14 +3,35 @@
 Use este índice para navegar da orientação geral às especificações de uma
 capability. `AGENTS.md` continua sendo a autoridade para as regras do repositório.
 
-## Capability ativa
+## EPIC e capabilities
 
-Estado em 16/11/2026: PRs até [#112](https://github.com/vectora-company/engine/pull/112) foram integrados em `main` (`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). O cliente standalone Laya está no PR [#113](https://github.com/vectora-company/engine/pull/113), `MERGEABLE` sobre `main`. O PR [#114](https://github.com/vectora-company/engine/pull/114), filho do #113, adiciona embeddings texto llama-server. O PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, implementa embeddings multimodais efêmeros por asset map; suites do PR #115 passaram com Rust 234 + 3 fixtures + 1 fronteira Python, pytest 97/1 skip e Node 50/11 skips. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, implementa rerank textual Jina. O PR [#117](https://github.com/vectora-company/engine/pull/117), filho do #116, implementa rerank multimodal efêmero conforme o endpoint v1.0.0. A branch ativa `test/llama-rerank-negative-cases`, filha do #117, adiciona casos negativos; `scons tests` passou (Rust 240; pytest 99/1 skip; Node 52/11 skips) e `scons lint` passou. Pre-commit e publicação do #118 pendentes. O estado e o contrato ficam nos quatro documentos ligados abaixo. Smoke real Laya continua pendente. O instalador de duas modalidades está em [`laya-install.sh`](../laya-install.sh).
+O plano da primeira release completa e seu backlog por fases estão em
+[`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md). O
+estado atual de implementação deve ser confirmado nos códigos, testes e
+artefatos específicos. A posição da stack e a base do próximo PR são dinâmicas;
+consulte GitHub no início de cada sessão. Este índice não mantém uma lista
+cronológica de PRs.
 
-Histórico das etapas anteriores: Decision Model no [PR #103](https://github.com/vectora-company/engine/pull/103), TTS bufferizado no [#104](https://github.com/vectora-company/engine/pull/104), sessão realtime no [#105](https://github.com/vectora-company/engine/pull/105) e streaming TTS no [#106](https://github.com/vectora-company/engine/pull/106). Consulte [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
-
-O plano ativo é [`docs/plans/03-plano-continuidade.md`](plans/03-plano-continuidade.md),
-com o charter de primeira release completa e o backlog por fases. O PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrado; `main` está em `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`. A revisão documental está no PR [#97](https://github.com/vectora-company/engine/pull/97), head `616f558`; o perfil Rust está no PR filho [#98](https://github.com/vectora-company/engine/pull/98), head `5a463bc`. Os bindings Python/TypeScript estão no PR filho [#100](https://github.com/vectora-company/engine/pull/100). A etapa FalkorDB está registrada no PR documental [#101](https://github.com/vectora-company/engine/pull/101), filho do #100; a implementação foi publicada no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101; integração service-real concluída. Atualização real Cargo/uv concluída no branch; pnpm já estava atualizado, e `scons lint`/`scons tests` passaram. Os artefatos estão em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
+- Providers e modalidades de IA: spec
+  [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](specs/18-providers-e-modalidades-llama-cpp-v1.md),
+  plano [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
+  checklist [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md)
+  e análise [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md).
+- Storage de grafos: spec
+  [`docs/specs/19-storage-de-grafos-falkordb.md`](specs/19-storage-de-grafos-falkordb.md),
+  plano [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md),
+  checklist [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md)
+  e análise [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md).
+- CLI e harness local: spec
+  [`docs/specs/20-engine-cli.md`](specs/20-engine-cli.md),
+  plano [`docs/plans/08-plano-engine-cli.md`](plans/08-plano-engine-cli.md),
+  checklist [`docs/checklists/08-engine-cli.md`](checklists/08-engine-cli.md)
+  e análise [`docs/analyses/08-auditoria-engine-cli.md`](analyses/08-auditoria-engine-cli.md).
+- Mídia no chat: [`docs/specs/17-midia-no-chat.md`](specs/17-midia-no-chat.md)
+  e [`docs/checklists/04-midia-no-chat.md`](checklists/04-midia-no-chat.md).
+- Storage e ledger: [`docs/specs/02-storage-memoria-contexto-rag.md`](specs/02-storage-memoria-contexto-rag.md),
+  [`docs/plans/04-plano-storage-ledger.md`](plans/04-plano-storage-ledger.md)
+  e [`docs/analyses/05-auditoria-storage-s0-s5.md`](analyses/05-auditoria-storage-s0-s5.md).
 
 ## Operação de desenvolvimento
 
@@ -57,9 +78,9 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
   itens feitos e pendentes da capability de storage.
 - [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](checklists/05-providers-e-modalidades-llama-cpp-v1.md):
   matriz de capacidade e gates para providers/modalidades.
-- [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md): contrato, estado e aceite de FalkorDB; follow-up de opções de timeout/limites nos bindings no PR #111 e TLS Rustls no #112, empilhados sobre #110.
+- [`docs/checklists/06-storage-grafos-falkordb.md`](checklists/06-storage-grafos-falkordb.md): contrato, estado, aceite, timeouts, limites e TLS do FalkorDB.
 - [`docs/analyses/06-auditoria-providers-modalidades.md`](analyses/06-auditoria-providers-modalidades.md): evidências do inventário e leitura da API `llama-server` v1.0.0.
-- [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md): auditoria de integração FalkorDB 6.0.3 e da paridade das configurações nos bindings; PR #112 cobre TLS real, enquanto o cancelamento remoto não é exposto pelo client oficial.
+- [`docs/analyses/07-auditoria-storage-grafos-falkordb.md`](analyses/07-auditoria-storage-grafos-falkordb.md): auditoria de integração FalkorDB 6.0.3, paridade dos bindings, TLS real e limites de cancelamento remoto do client oficial.
 - [`docs/checklists/04-midia-no-chat.md`](checklists/04-midia-no-chat.md): contrato,
   payloads nativos e verificações da etapa de mídia.
 
@@ -71,7 +92,7 @@ com o charter de primeira release completa e o backlog por fases. O PR [#96](htt
 - [Storage e ledger](plans/04-plano-storage-ledger.md)
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
 - [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md): plano ativo de providers e modalidades com referência llama.cpp v1.0.0.
-- [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md): capability graph do PR #102 e follow-up da configuração nos bindings no PR #111, filho do #110; registra conformidade real e limites de TLS/cancelamento.
+- [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md): plano da capability graph, conformidade observada e limites de TLS/cancelamento.
 
 ## Documentação pública
 

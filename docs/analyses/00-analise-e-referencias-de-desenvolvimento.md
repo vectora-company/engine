@@ -6,15 +6,15 @@ Sua fotografia foi conferida contra o `main` em 15/11/2026; os registros
 datados abaixo continuam sendo histórico e precisam ser revalidados antes de
 servirem como estado corrente.
 
-## Estado verificado em 16/11/2026
+## Estado corrente e evidências
 
-`main` remota está em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`. PR #113
-inclui cliente Laya; PR [#114](https://github.com/vectora-company/engine/pull/114),
-filho do #113, adiciona embeddings textuais; PR [#115](https://github.com/vectora-company/engine/pull/115),
-filho do #114, adiciona embeddings multimodais por asset map. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, implementa rerank textual Jina. O PR [#117](https://github.com/vectora-company/engine/pull/117), filho do #116, implementa rerank multimodal efêmero por asset map. O PR [#118](https://github.com/vectora-company/engine/pull/118), filho do #117, cobre capability ausente, score inválido e índice duplicado. O PR [#119](https://github.com/vectora-company/engine/pull/119), filho do #118, cobre digest e tamanho. A branch ativa `test/llama-rerank-response-contract`, filha do #119, cobre índice inexistente, limite top_n e results ausente. Gates integrados passam: Rust 242; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips opcionais; `scons lint`. PRs #117–#119 estão publicados; a etapa #120 passou `scons tests` e `scons lint`; pre-commit e publicação seguem pendentes. A referência é a API fixada do llama.cpp v1.0.0. Estado e
-lacunas ficam na análise específica
-[`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md)
-e nos artefatos ligados em [`docs/README.md`](../README.md).
+Este arquivo define o método e reúne decisões transversais. A fotografia de
+implementação não deve ser copiada aqui de PR em PR: confira o código, os testes,
+o inventário em [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md)
+e os artefatos da capability. Consulte GitHub dinamicamente para branches,
+bases e estado de PR. O marco normativo dos contratos llama.cpp é a release
+v1.0.0; sua cobertura está no plano, spec, checklist e análise específicos,
+indexados em [`docs/README.md`](../README.md).
 
 Este documento define como investigar uma capability da Engine antes de
 implementar ou alterar seus contratos. Ele complementa `AGENTS.md`; não substitui
@@ -37,7 +37,7 @@ as regras específicas de uma spec ou de um plano.
    que diretórios irmãos de qualquer checkout tenham o consumidor.
 7. Documentação primária das bibliotecas e protocolos externos citados.
 
-## Revalidação de sessão e PR stack
+## Revalidação do checkout e da stack dinâmica
 
 Antes de escolher escopo, liste os PRs abertos com `gh pr list`; o PR no topo é
 o trabalho ativo e base do próximo PR.
@@ -120,7 +120,7 @@ da raiz do repositório no texto do link e um destino relativo válido.
 Para a etapa ativa de mídia, o checklist específico é
 [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 
-## Registro inicial da etapa multimodal sobre o PR #77 — 2026-11-13
+## Conteúdo multimodal no chat
 
 O código-base do PR #77 (`fix/storage-vector-collection-dimensions`) declara
 PDF como suportado para `openai` em `chat/media.rs::known_provider`, embora o
@@ -216,7 +216,7 @@ decisão de `brunosrz` aqui no chat. Conclua primeiro o trabalho independente e
 encerre o loop somente se não houver outra etapa independente aprovada. Não
 transforme uma preferência presumida em decisão arquitetural.
 
-## Revisão documental completa — 2026-11-13
+## Integridade e consistência documental
 
 Revisados os 55 arquivos Markdown versionados do repositório. Snapshots de auditorias,
 matrizes e planos antigos foram preservados como históricos quando identificam
@@ -314,7 +314,7 @@ verificação e resultados finais estão registrados no plano de continuidade e 
 PR [#90](https://github.com/vectora-company/engine/pull/90), filho do
 [#89](https://github.com/vectora-company/engine/pull/89). O PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89, foi integrado; o commit de implementação é `d56e864286153b6bee1f8cc67e1ffda4c1ba2afb`; os checks remotos ainda não apareceram.
 
-## Diagnóstico da outbox SQLite-first nas bindings — PR #91
+## Outbox SQLite-first nas bindings
 
 A Fase 2, item 6 do plano ativo foi implementada na branch
 `feat/storage-outbox-bindings`, PR [#91](https://github.com/vectora-company/engine/pull/91),
@@ -331,7 +331,7 @@ disponível para os testes direcionados do ledger. Restam fixtures comuns de
 conformidade para KV/filas/vetores e as etapas posteriores de equivalência
 PostgreSQL descritas em `docs/plans/03-plano-continuidade.md`.
 
-## Checkpoints dos stores SQLite na projeção PostgreSQL — PR #92
+## Checkpoints SQLite na projeção PostgreSQL
 
 A branch `feat/postgres-lifecycle-projection`, PR
 [#92](https://github.com/vectora-company/engine/pull/92), filha do #91, inclui
@@ -385,7 +385,7 @@ v2; formatos antigos são rejeitados.
 Verificação local: 163 testes Rust da lib passaram, incluindo rejeição do
 contrato antigo e conversão para mensagem; `cargo clippy --workspace
 --all-targets --all-features --locked -- -D warnings` e `cargo check --workspace
---all-targets --all-features --locked` passaram; build, typecheck e 37 testes Node
+--all-targets --all-features --locked` passaram; build, typecheck e 38 testes Node
 passaram (10 testes de serviços foram ignorados sem endpoints); a suíte Python
 passou. Todos os hooks de pre-commit passaram, incluindo ty após atualizar os stubs de `_native.pyi`. O PR #86 foi aberto com head `b188a94`.
 
@@ -394,7 +394,7 @@ referência); os bytes da imagem ficam no store do host e obedecem aos limites d
 reidratação do contexto de mídia. A implementação não adiciona store persistente
 à Engine.
 
-## Reservation/admission na projeção PostgreSQL — branch filha #93
+## Reservation e admission na projeção PostgreSQL
 
 A branch `feat/postgres-admission-projection`, filha do PR #92, adiciona schema
 SQLite v8, outbox dedicada para reservation standalone, metadados de admission
@@ -434,7 +434,7 @@ O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, int
 
 O PR [#96](https://github.com/vectora-company/engine/pull/96), integrado em `main` (`f4a8cf9d7e30d9fb667a7f443f6572067e536d81`), registra 16 rodadas service-real com dois handles de `ResilientLedger` independentes processando a mesma outbox de duas sequências de um agregado. Nenhum evento foi duplicado, ambas as operações terminaram sem erro e não restaram pendências. Isso não equivale ainda a concorrência entre processos independentes; essa cobertura e admissions concorrentes seguem pendentes.
 
-## Providers e modalidades — fotografia após o PR #96
+## Providers e modalidades de IA
 
 Artefatos ativos: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
@@ -446,21 +446,21 @@ A auditoria específica [`docs/analyses/06-auditoria-providers-modalidades.md`](
 
 Na etapa seguinte, a branch `feat/llama-server-decision-model` (filha do PR #102) implementa `/v1/systemone` conforme llama.cpp v1.0.0. O contrato no core Rust distingue perguntas tipadas `choice`/`score`/`noul`, mantém probabilidades, limita mídia a data URLs base64 e valida respostas/IDs. Fixtures Rust/Python/TypeScript passaram; o Node registrou 40 testes passados e 11 skips de serviços não configurados. `scons build`, Clippy da lib, Ruff/ty e TypeScript typecheck passaram. A integração real llama-server segue pendente. O endpoint é não-streaming. Estado detalhado nos documentos linkados no `docs/README.md`.
 
-## Estado da stack llama.cpp — 15 de novembro de 2026
+## Cobertura do servidor llama.cpp
 
 PR #102 (FalkorDB) teve conflito resolvido e o build TS passou a usar o store pnpm local do checkout. PR #103 adiciona Decision Model como filha do #102. O PR [#104](https://github.com/vectora-company/engine/pull/104), head `8763968`, `MERGEABLE`, é filha do #103 e implementa síntese TTS bufferizada nas APIs `/v1/audio/speech` e `/tts`, preservando formatos binários, Content-Type/sample rate e fronteira efêmera para áudio de speaker-reference. Rust fixtures 8/8, `cargo check` dos três crates, typecheck TS e Node (41 pass, 11 skips) passaram; pytest passou (50 testes, 1 skipped); integração contra servidor/modelo real ainda precisa ser confirmada. A próxima branch empilhada sobre #104 cobre streaming TTS e realtime ASR. Consulte o estado detalhado em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md) e artefatos referenciados em [`docs/README.md`](../README.md).
 
-## Estado da capability realtime — 15 de novembro de 2026
+## Áudio em tempo real
 
 A branch atual é filha do PR #104 e implementa sessão `/v1/realtime` conforme a tag llama.cpp v1.0.0. O contrato acomoda transcription e conversa; áudio PCM16 mono usa sample rate do modelo por padrão, ou override documentado. Há controle via commit/evento e fechamento cancelável; eventos JSON são preservados. Rust fixture passou e os crates de bindings compilam. Builds, fixtures de binding e hooks ainda estão em execução; não há teste com servidor/modelo real. Consulte [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), que aponta spec, checklist e análise da capability.
 
-## Estado verificado — sessão realtime llama-server, 15 de novembro de 2026
+### Sessão realtime no servidor llama.cpp
 
 A branch `feat/llama-server-realtime-audio` implementa `/v1/realtime` como filha de #104. O teste local não foi limitado ao core: workspace Rust passou com 205 testes da lib, 3 fixtures e teste do binding nativo Python; Clippy passou após corrigir uma lint; `maturin develop` + pytest passaram (55 + 1 skip); NAPI release, TypeScript typecheck e Node passaram (41 + 11 skips opcionais). Ruff, `ty` e format passaram. O PR #102 está `MERGEABLE`; a captura de conflito não reflete o status remoto atual. O `node_modules` usado está em `/home/brunosrz/Área de trabalho/engine/bindings/typescript/node_modules`; nenhum build foi rodado no checkout de `/media`. A alteração local do usuário em `bindings/typescript/native/index.d.ts` foi preservada e fica fora do stage.
 
 Permanecem sem comprovação interoperabilidade com modelos reais e batch STT. O streaming TTS foi implementado e publicado no PR #106, filho do #105; os gaps de integração real não bloqueiam iniciar a etapa de providers/gateways. Estado da capability e links completos nos documentos relacionados: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
-## Etapa ativa empilhada — OpenAI Responses API (15/11/2026)
+## OpenAI Responses API
 
 O PR [#108](https://github.com/vectora-company/engine/pull/108), filho do #107, implementa perfil OpenRouter Chat Completions e permanece `OPEN`/`MERGEABLE`. Branch ativa `feat/openai-responses-profile`, filha do #108, prepara o adapter OpenAI Responses em separado do transporte Chat Completions. O contrato e a sequência estão em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md), [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md). Fontes oficiais: [Responses overview](https://developers.openai.com/api/reference/responses/overview), [Create](https://developers.openai.com/api/reference/resources/responses/methods/create), [streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events), [function calling](https://developers.openai.com/api/docs/guides/function-calling) e [image inputs](https://developers.openai.com/api/docs/guides/images-vision). A implementação de código ainda não começou.
 
@@ -468,7 +468,7 @@ Atualização de implementação: o PR #109 publicou OpenAI Responses sobre #108
 
 Estado da auditoria FalkorDB em 15/11/2026: PR [#112](https://github.com/vectora-company/engine/pull/112), filho de #111, resolve o panic Rustls para `falkors://`; TLS real com CA confiável passou nos bindings Rust, Python e Node. O client oficial `falkordb` 0.11.2 não expõe uma API de cancelamento remoto; esse limite foi verificado e documentado, e o timeout server-side foi testado. #111 e #112 foram publicados em sequência e estavam `MERGEABLE` na abertura. A capability está concluída para o escopo documentado; a alteração do usuário em `bindings/typescript/native/index.d.ts` e o arquivo não rastreado `bindings/python/uv.lock` permanecem locais e fora dos PRs.
 
-## Etapa ativa empilhada — streaming TTS (15/11/2026)
+## Streaming de TTS
 
 A branch local `feat/llama-server-streaming-tts`, filha do PR #105, implementa
 streaming binário para `/v1/audio/speech` (`stream_format: audio`) e `/tts`
@@ -490,3 +490,4 @@ Limites: não foi executado um modelo TTS real. O PR [#106](https://github.com/v
 [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md).
 
 O PR [#105](https://github.com/vectora-company/engine/pull/105) foi publicado e verificado `OPEN`/`MERGEABLE` sobre o PR #104. A revisão da API oficial llama.cpp v1.0.0 confirmou que `/v1/audio/speech` envia stream binário com `stream_format: "audio"`, enquanto `/tts` usa `stream: true`; o modo SSE é rejeitado e WAV pode chegar com tamanho desconhecido no header. O trabalho seguinte já está especificado em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md): iterador assíncrono de bytes nos dois bindings, backpressure, cancelamento, limites, headers e fixture de falha/truncamento.
+Artefatos específicos desta etapa: `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.
