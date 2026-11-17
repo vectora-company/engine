@@ -14,11 +14,10 @@ Para a próxima capability incompleta, leia também sua spec, plano, checklist e
 análise específicos, indexados em [`docs/README.md`](../README.md) e
 [`docs/goal-loop/README.md`](../goal-loop/README.md).
 
-No início de cada sessão, confirme checkout, branch, alterações locais e remote;
-consulte no GitHub os PRs abertos e as respectivas bases atuais. A stack muda ao
-longo do trabalho: descubra a base vigente naquele momento e empilhe a próxima
-etapa sobre o PR anterior aberto, sem gravar número de PR ou branch neste
-prompt. Preserve mudanças locais alheias ao escopo.
+No início de cada sessão, confirme checkout, branch, alterações locais e
+remote. Preserve mudanças locais alheias ao escopo. Ao entregar cada etapa,
+siga o fluxo vigente em `AGENTS.md` e determine naquele momento a branch e a
+base apropriadas; estado de GitHub não pertence a este prompt nem ao roadmap.
 
 Implemente incrementalmente, começando pelos contratos e pelo core Rust; exponha
 os bindings e consumidores necessários conforme a capability. Verifique cada
