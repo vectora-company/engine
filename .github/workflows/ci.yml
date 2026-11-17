@@ -2,15 +2,26 @@ name: CI
 
 on:
   pull_request:
+    branches: [main]
     types: [opened, reopened, synchronize, edited]
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      checkout_ref:
+        type: string
+        required: false
+        default: ""
+      pr_title:
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ inputs.checkout_ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -24,6 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -53,6 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-uv
         with:
@@ -88,6 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
@@ -114,7 +128,7 @@ jobs:
         run: pnpm --dir bindings/typescript test
 
   pull-request-metadata:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || inputs.pr_title != ''
     name: Pull request metadata
     runs-on: ubuntu-24.04
     permissions:
@@ -122,6 +136,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
@@ -133,4 +148,4 @@ jobs:
           printf '%s\n' 'module.exports = { extends: ["@commitlint/config-conventional"] };' > .commitlintrc.cjs
           printf '%s\n' "$PR_TITLE" | npx commitlint --verbose
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_TITLE: ${{ inputs.pr_title || github.event.pull_request.title }}
