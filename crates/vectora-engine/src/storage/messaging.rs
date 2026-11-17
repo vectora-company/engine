@@ -2413,6 +2413,284 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn nats_queue_preserves_operator_options_and_rejects_wrong_subjects() {
+        use async_nats::jetstream::stream::{Config, RetentionPolicy, StorageType};
+        let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let name = format!("preserve_{}", unique_suffix());
+        let adapter = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint: url.clone(),
+            namespace: name.clone(),
+            visibility_timeout_seconds: 1,
+            max_messages: 10,
+            max_attempts: 5,
+        })
+        .await
+        .unwrap();
+        let QueueAdapter::Nats { queue } = &adapter else {
+            unreachable!()
+        };
+        let client = async_nats::connect(&url).await.unwrap();
+        let jetstream = async_nats::jetstream::new(client);
+        jetstream
+            .get_or_create_stream(Config {
+                name: queue.stream.clone(),
+                subjects: vec![queue.subject.clone()],
+                max_messages: 50,
+                max_bytes: 1_048_576,
+                max_age: Duration::from_secs(300),
+                retention: RetentionPolicy::Limits,
+                storage: StorageType::Memory,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        adapter.enqueue(b"preserved".to_vec()).await.unwrap();
+        let config = queue
+            .ensure_stream()
+            .await
+            .unwrap()
+            .get_info()
+            .await
+            .unwrap()
+            .config;
+        assert_eq!(config.max_messages, 10);
+        assert_eq!(config.max_bytes, 1_048_576);
+        assert_eq!(config.max_age, Duration::from_secs(300));
+        assert_eq!(config.retention, RetentionPolicy::Limits);
+        assert_eq!(config.storage, StorageType::Memory);
+        assert_eq!(config.subjects.len(), 1);
+        assert_eq!(config.subjects[0], queue.subject);
+
+        let incompatible_name = format!("wrong_{}", unique_suffix());
+        let incompatible = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint: url,
+            namespace: incompatible_name.clone(),
+            visibility_timeout_seconds: 1,
+            max_messages: 10,
+            max_attempts: 5,
+        })
+        .await
+        .unwrap();
+        let QueueAdapter::Nats {
+            queue: incompatible_queue,
+        } = &incompatible
+        else {
+            unreachable!()
+        };
+        let original_subjects = vec![format!("operator.owned.{incompatible_name}")];
+        jetstream
+            .get_or_create_stream(Config {
+                name: incompatible_queue.stream.clone(),
+                subjects: original_subjects.clone(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            incompatible.enqueue(b"must-not-publish".to_vec()).await,
+            Err(MessagingError::Storage)
+        ));
+        let after = jetstream
+            .get_stream(&incompatible_queue.stream)
+            .await
+            .unwrap()
+            .get_info()
+            .await
+            .unwrap();
+        assert_eq!(after.config.subjects, original_subjects);
+    }
+
+    #[tokio::test]
+    async fn nats_receive_reserves_one_message_and_idle_pull_expires() {
+        let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint: url,
+            namespace: format!("one_pull_{}", unique_suffix()),
+            visibility_timeout_seconds: 1,
+            max_messages: 10,
+            max_attempts: 5,
+        })
+        .await
+        .unwrap();
+        for payload in [b"first".to_vec(), b"second".to_vec()] {
+            queue.enqueue(payload).await.unwrap();
+        }
+        let first = queue
+            .receive("worker", "workers", Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.payload(), b"first");
+        first.ack().await.unwrap();
+        let second = queue
+            .receive("worker", "workers", Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.payload(), b"second");
+        second.ack().await.unwrap();
+        let started = tokio::time::Instant::now();
+        assert!(
+            queue
+                .receive("worker", "workers", Duration::from_millis(200))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[tokio::test]
+    async fn nats_dlq_transfer_retries_after_target_stream_is_repaired() {
+        use async_nats::jetstream::stream::Config;
+        let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint: url.clone(),
+            namespace: format!("dlq_retry_{}", unique_suffix()),
+            visibility_timeout_seconds: 1,
+            max_messages: 10,
+            max_attempts: 1,
+        })
+        .await
+        .unwrap();
+        let QueueAdapter::Nats { queue: nats_queue } = &queue else {
+            unreachable!()
+        };
+        let client = async_nats::connect(&url).await.unwrap();
+        let jetstream = async_nats::jetstream::new(client);
+        jetstream
+            .get_or_create_stream(Config {
+                name: nats_queue.dead_stream.clone(),
+                subjects: vec!["operator.incompatible".into()],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        queue.enqueue(b"retry-me".to_vec()).await.unwrap();
+        let first = queue
+            .receive("worker", "workers", Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        drop(first);
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        assert!(matches!(
+            queue
+                .receive("worker", "workers", Duration::from_secs(2))
+                .await,
+            Err(MessagingError::Storage)
+        ));
+
+        jetstream
+            .delete_stream(&nats_queue.dead_stream)
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        assert!(
+            queue
+                .receive("worker", "workers", Duration::from_secs(2))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let dead = queue
+            .receive_dead_letter("operator", "recovery", Duration::from_secs(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(dead.payload(), b"retry-me");
+        dead.ack().await.unwrap();
+        assert!(
+            queue
+                .receive_dead_letter("operator", "recovery", Duration::from_millis(200))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn redis_ack_racing_dead_letter_transfer_has_one_terminal_outcome() {
+        let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint: url,
+            namespace: format!("dlq_race_{}", unique_suffix()),
+            visibility_timeout_seconds: 1,
+            max_messages: 10,
+            max_attempts: 1,
+        })
+        .await
+        .unwrap();
+        let QueueAdapter::Redis {
+            queue: redis_queue,
+            name,
+            ..
+        } = &queue
+        else {
+            unreachable!()
+        };
+        queue.enqueue(b"race".to_vec()).await.unwrap();
+        let first = queue
+            .receive("worker", "workers", Duration::from_secs(1))
+            .await
+            .unwrap()
+            .unwrap();
+        let QueueDelivery::Redis(first) = first else {
+            unreachable!()
+        };
+        let message_id = first.id.clone();
+        drop(first);
+        let key = redis_queue.stream_key(name).unwrap();
+        let group = "workers";
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        let ack = async {
+            let mut connection = redis_queue.store.connection().await.unwrap();
+            redis::cmd("XACK")
+                .arg(&key)
+                .arg(group)
+                .arg(&message_id)
+                .query_async::<u64>(&mut connection)
+                .await
+                .unwrap()
+        };
+        let transfer = queue.receive("worker", group, Duration::from_millis(200));
+        let (acknowledged, transfer_result) = tokio::join!(ack, transfer);
+        assert!(transfer_result.is_ok());
+        let dead = queue
+            .receive_dead_letter("operator", "recovery", Duration::from_millis(300))
+            .await
+            .unwrap();
+        match (acknowledged, dead) {
+            (1, None) => {}
+            (0, Some(dead)) => {
+                assert_eq!(dead.payload(), b"race");
+                dead.ack().await.unwrap();
+                assert!(
+                    queue
+                        .receive_dead_letter("operator", "recovery", Duration::from_millis(100))
+                        .await
+                        .unwrap()
+                        .is_none()
+                );
+            }
+            _ => panic!("ACK/DLQ race must have exactly one terminal outcome"),
+        }
+    }
+
+    #[tokio::test]
     async fn redis_moves_exhausted_jobs_to_a_consumable_dead_letter_stream() {
         let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") else {
             return;
