@@ -41,6 +41,21 @@ opt-in por `VECTORA_TEST_LAYA_URL`, `VECTORA_TEST_LAYA_API_KEY` e
 Fontes primárias: [API HTTP do Laya](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md)
 e [README upstream](https://github.com/NandhaKishorM/laya).
 
+### Atualização — embeddings multimodais llama-server v1.0.0 (16/11/2026)
+
+A próxima etapa em `feat/llama-server-multimodal-embeddings`, filha do PR #113,
+parte da API fixada em
+[`tools/server/README.md` v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#L1920-L1932).
+`/v1/embeddings` aceita inputs como texto e objetos com partes tipadas de
+texto/imagem/áudio/vídeo; um objeto retorna um vetor. A API exige pooling que
+não seja `none` e normaliza por norma Euclidiana. Vídeo exige suporte do modelo
+e FFmpeg; áudio exige formato/modelo compatível. A rota não divulga de modo
+confiável se um modelo carregado tem pooling de embeddings, então o contrato
+não deve inferir compatibilidade apenas pelo model ID ou copiar
+`input_modalities` de chat. A implementação enviará bytes somente a partir do
+asset map do consumidor, conferindo refs, MIME, digest e limite, sem buscar URLs
+remotas ou caminhos locais. Testes e resultados ficam pendentes da etapa.
+
 | Área           | Implementado                                                                                                                                                                               | Não inferir                                                                                                                        |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Chat           | OpenAI Chat Completions nomeado em implementação; OpenAI Responses; OpenRouter Chat Completions; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; fallback; `LlamaServerClient` | O novo perfil OpenAI está em validação local; 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação. |
@@ -236,3 +251,7 @@ executar hooks completos e publicar o PR. Na revisão, os headers opcionais de
 atribuição foram restringidos ao perfil OpenRouter; as fixtures Python/Node
 validam que `app_url` e `app_title` não vazam para OpenAI. Integração real
 OpenAI requer credencial; nenhum segredo foi lido.
+
+## Embeddings llama-server — etapa incremental (16/11/2026)
+
+O endpoint `/v1/embeddings` agora tem implementação de texto no core Rust e bindings. O código ordena pela posição `index`, exige cardinalidade exata, índices únicos/contíguos, dimensão uniforme e valores finitos; usage é convertido em tokens de entrada. A API genérica `EmbeddingRequest` foi reutilizada sem alterar seu schema. Fixtures Rust/Python/Node cobrem rota, auth, resposta, ordem, cardinalidade e validação de índice/dimensão/finitude; lotes vazios não abrem rede. `scons tests` e `scons lint` passaram. Embeddings multimodais com asset map efêmero seguem pendentes; o teto de resposta se aplica ao body JSON, enquanto um limite específico de payload total de entrada requer refinamento. Consulte [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).

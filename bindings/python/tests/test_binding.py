@@ -39,6 +39,7 @@ from vectora_engine import (
     llama_server_chat_stream,
     llama_server_decide,
     llama_server_decide_ephemeral,
+    llama_server_embed,
     llama_server_health,
     llama_server_models,
     llama_server_synthesize,
@@ -879,8 +880,53 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
         ]
     finally:
         server.shutdown()
-        server.server_close()
         thread.join(timeout=2)
+        server.server_close()
+
+
+def test_llama_server_embeddings_use_v1_route_and_normalize_usage() -> None:
+    captured: dict[str, Any] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            captured["path"] = self.path
+            captured["authorization"] = self.headers.get("authorization")
+            captured["body"] = json.loads(
+                self.rfile.read(int(self.headers["content-length"]))
+            )
+            body = b'{"data":[{"index":0,"embedding":[0.2,0.8]}],"usage":{"prompt_tokens":3}}'
+            self.send_response(200)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        response = asyncio.run(
+            llama_server_embed(
+                {
+                    "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                    "api_key": "fixture",
+                },
+                {
+                    "contract_version": 1,
+                    "model": "embed-model",
+                    "input_type": "document",
+                    "texts": ["hello"],
+                },
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["path"] == "/v1/embeddings"
+    assert captured["authorization"] == "Bearer fixture"
+    assert captured["body"]["input"] == ["hello"]
+    assert response["embeddings"] == [[0.2, 0.8]]
+    assert response["usage"]["input_tokens"] == 3
 
 
 def test_laya_binding_uses_native_systemone_protocol_and_accepts_server_metadata() -> (

@@ -1,21 +1,19 @@
 # Goal loop da Engine
 
-## Estado atual — cliente standalone Laya (16/11/2026)
+## Estado atual — embeddings llama-server v1.0.0 (16/11/2026)
 
 `main` está em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; PRs até #112 foram
-integrados. A branch `feat/laya-decision-model-client`
-implementa o cliente `laya-serve` no core Rust e bindings. `scons tests` e
-`scons lint` passaram (Rust 227 + 3 fixtures, pytest 95/1 skip, Node 48/11
-skips); a etapa está publicada no PR [#113](https://github.com/vectora-company/engine/pull/113),
-aberto e `MERGEABLE` sobre `main`. Smoke opt-in permanece pendente por depender
-de servidor/checkpoint Laya real. O
-instalador [laya-install.sh](../../laya-install.sh) oferece o servidor Python
-Laya ou `llama.cpp` com `ggml-org/Laya-GGUF:Q8_0`; instalação/modelo real ainda
-não foi executado nesta etapa. O plano, spec, checklist e análise são
+integrados. O PR [#113](https://github.com/vectora-company/engine/pull/113),
+filho de `main`, implementa cliente Laya standalone no core Rust e bindings;
+`scons tests`, `scons lint` e hooks passaram. Etapa ativa em `feat/llama-server-multimodal-embeddings`, filha do #113: implementar `/v1/embeddings` texto nos três runtimes; subetapa multimodal fica explicitamente pendente. O core tem fixtures de ordenação, duplicidade e finitude; binding Node tem fixture de rota/auth/usage. O plano, spec, checklist
+e análise são
 [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
 [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e
-[`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md).
+[`docs/analyses/06-auditoria-providers-modalidades.md`](../analyses/06-auditoria-providers-modalidades.md). O
+instalador [laya-install.sh](../../laya-install.sh) oferece servidor Python Laya
+e `llama.cpp` com `ggml-org/Laya-GGUF:Q8_0`; instalação/modelo real ainda não
+foi executado.
 
 ## Histórico — follow-up de configuração FalkorDB (15/11/2026)
 

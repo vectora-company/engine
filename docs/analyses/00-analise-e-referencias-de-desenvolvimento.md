@@ -9,12 +9,14 @@ servirem como estado corrente.
 ## Estado verificado em 16/11/2026
 
 `main` remota está em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; PRs até #112
-estão integrados e não há PR aberto. A implementação ativa acrescenta perfil
-independente para `laya-serve`: a API oficial expõe `/health` e
-`/v1/systemone`, sem `/v1/models`, e não aceita mídia na rota HTTP documentada.
-O perfil existente `LlamaServerClient` não pode ser usado diretamente com esse
-servidor, pois exige discovery e valida metadata própria do `llama-server`.
-Estado e lacunas ficam na análise específica
+estão integrados e não há PR aberto. A branch ativa `feat/llama-server-multimodal-embeddings`, filha do PR #113,
+adiciona embeddings texto pelo `/v1/embeddings` ao perfil llama-server em Rust e
+nos bindings Python/TypeScript. `scons tests` passou (Rust 230 + 3 fixtures + 1
+teste de fronteira Python; pytest 96 passed/1 skipped; Node 49 passed/11 skips)
+e `scons lint` passou. Embeddings multimodais e fixture Python dedicada ainda
+ficam pendentes. O PR #113 implementa cliente independente para `laya-serve`;
+a API oficial expõe `/health` e `/v1/systemone`, sem `/v1/models`. Estado e
+lacunas ficam na análise específica
 [`docs/analyses/06-auditoria-providers-modalidades.md`](06-auditoria-providers-modalidades.md)
 e nos artefatos ligados em [`docs/README.md`](../README.md).
 

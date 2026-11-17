@@ -1995,6 +1995,23 @@ fn llama_server_health<'py>(py: Python<'py>, settings_json: String) -> PyResult<
 }
 
 #[pyfunction]
+fn llama_server_embed<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let settings: LlamaServerSettings = serde_json::from_str(&settings_json)
+            .map_err(|_| py_error("invalid llama-server settings"))?;
+        let request: EmbeddingRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid embedding request"))?;
+        let client = LlamaServerClient::new(settings).map_err(py_error)?;
+        let response = client.embed(request).await.map_err(py_error)?;
+        encode_json(&response)
+    })
+}
+
+#[pyfunction]
 fn llama_server_models<'py>(py: Python<'py>, settings_json: String) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
         let (client, _, _) =
@@ -2889,6 +2906,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(chat_complete, module)?)?;
     module.add_function(wrap_pyfunction!(chat_complete_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_health, module)?)?;
+    module.add_function(wrap_pyfunction!(llama_server_embed, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_models, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide_ephemeral, module)?)?;
