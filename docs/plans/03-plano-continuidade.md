@@ -106,10 +106,12 @@ indicada. Não as reabra sem pedido dele.
    reais. Falta integrar a execução dessa matriz
    ao runner geral e fechar os cenários de fila/DLQ abaixo. Evidências estão em
    [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
-5. **Validação real de fila/DLQ.** Transferência para a DLQ no NATS e corrida
-   ACK×transferência no Redis; uma entrega por leitura e expiração no JetStream;
-   preservação de configuração e recusa de subjects incompatíveis. Origem:
-   [checklist de storage](../checklists/03-auditoria-storage-s0-s5.md).
+5. **Validação real de fila/DLQ — implementada nesta etapa.** Testes service-real
+   cobrem retentativa após DLQ NATS incompatível ser reparada, corrida ACK×DLQ
+   Redis com um único resultado terminal, uma entrega por pull, expiração de pull
+   ocioso, preservação das opções configuráveis e recusa sem mutação de subjects
+   incompatíveis. Evidências em
+   [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
 6. **`capabilities()` incompleto.** Declarar backup no SQLite, a dependência de
    `notify-keyspace-events` no watch do Redis e as ausências reais das filas e
    do vetorial (filtros, índice, quantização).

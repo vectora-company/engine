@@ -261,6 +261,28 @@ Dois testes PostgreSQL reais verificam que `rebuild_projection` falha com `Proje
 
 Teste service-real em 16 rodadas abre dois `ResilientLedger` independentes sobre o mesmo arquivo SQLite e drena em paralelo dois eventos sequenciais na mesma scope/agregado. Cada evento aparece uma vez no PostgreSQL, não há erro nem outbox restante. Isso cobre handles/conexões independentes no mesmo processo; concorrência entre processos e admissions disputadas ainda não foram medidas. Clippy passou.
 
+## Conformidade service-real de filas e DLQ — 2026-11-17
+
+Quatro testes Rust novos foram executados contra Redis 8.10.3 e NATS JetStream
+2.15.3 reais:
+
+- NATS: ao manter a mensagem pendente e provocar falha ao publicar na DLQ com
+  um stream de destino incompatível, a entrega é retomada depois da correção do
+  destino e chega uma única vez à DLQ consumível.
+- Redis: ACK concorrente com transferência para DLQ resulta em exatamente um
+  estado terminal (ACK confirmado sem DLQ ou job transferido uma vez para a DLQ).
+- JetStream: duas mensagens são recebidas uma por chamada; um pull sem mensagem
+  expira em aproximadamente 200 ms em vez de permanecer aberto.
+- Configuração JetStream: atualizar o limite de mensagens preserva
+  `max_bytes`, `max_age`, `retention`, `storage` e subjects do operador; stream
+  com subject incompatível é recusado sem ser reconfigurado.
+
+A suíte `cargo test -p vectora-engine --lib storage::messaging::tests --locked`
+passou 19/19 com os quatro casos novos; Clippy `-D warnings` e `cargo fmt
+--check` também passaram. Limite:
+essa execução usa serviços locais temporários; não valida crash entre o publish
+da DLQ NATS e o ACK, nem shutdown gracioso do consumer.
+
 ## Exposição de credenciais na configuração vetorial
 
 `VectorStoreConfig` continha `api_key` e derivava `Debug`, o que expunha a
