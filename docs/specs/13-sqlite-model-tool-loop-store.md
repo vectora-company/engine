@@ -67,3 +67,14 @@ backends.
   `sqliteModelToolLoopAcceptModelTurn`,
   `sqliteModelToolLoopSubmitToolResult`, `sqliteModelToolLoopRecover` e
   `sqliteModelToolLoopReconcileToolResult`, `sqliteModelToolLoopVerify`.
+
+## Cobertura verificada no core
+
+Os testes de storage confirmam que `submit_tool_result` grava o estado antes de
+retornar, permite replay idempotente da mesma operação e sobrevive ao reopen do
+arquivo; `recover` persiste `recovery_required` sem reexecutar a tool; e
+`reconcile_tool_result` grava um resultado externo confirmado e permite
+continuar o loop após reopen. A execução focada
+`cargo test -p vectora-engine --lib storage::sqlite_loop::tests --locked`
+passou com 9 testes. Essa cobertura é do core Rust; não afirma novos testes de
+binding nem exactly-once para efeitos externos.

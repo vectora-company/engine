@@ -67,6 +67,9 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    durável e o host recebe os IDs pendentes para interromper e reconciliar; isso
    não comprova término dos processos. Recovery nunca repete silenciosamente
    um efeito de resultado incerto.
+   Testes Rust do store também exercitam `submit_tool_result` idempotente após
+   reopen, `recover` durável sem replay da tool e `reconcile_tool_result`
+   seguido da continuação do loop após reopen; a suíte focada passou 9/9.
 6. **Verificação e conformidade** — o contrato de resultados e vereditos está
    em `docs/specs/15-verification-gates.md`. `SqliteRunLifecycleStore` grava
    report, policy, avaliação e transição terminal no mesmo evento/checkpoint;
