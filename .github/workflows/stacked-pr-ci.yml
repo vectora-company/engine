@@ -1,0 +1,58 @@
+name: Stacked PR CI
+
+# This workflow is loaded from the default branch. Keep it free of PR checkouts
+# and commands; the reusable CI runs PR code with contents:read only.
+on:
+  pull_request_target:
+    branches-ignore: [main]
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+concurrency:
+  group: stacked-pr-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Run trusted CI against PR head
+    uses: ./.github/workflows/ci.yml
+    with:
+      checkout_ref: ${{ github.event.pull_request.head.sha }}
+      pr_title: ${{ github.event.pull_request.title }}
+    permissions:
+      contents: read
+
+  publish-result:
+    name: Publish result on PR commit
+    needs: ci
+    if: always() && needs.ci.result != 'skipped'
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write
+    steps:
+      - name: Create check on the PR head SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RESULT: ${{ needs.ci.result }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          case "$CI_RESULT" in
+            success|failure|cancelled) ;;
+            *) CI_RESULT=failure ;;
+          esac
+          payload=$(jq -n \
+            --arg name "Stack CI" \
+            --arg head_sha "$PR_HEAD_SHA" \
+            --arg conclusion "$CI_RESULT" \
+            --arg details_url "$DETAILS_URL" \
+            --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{name:$name,head_sha:$head_sha,status:"completed",conclusion:$conclusion,details_url:$details_url,completed_at:$completed_at,output:{title:"Stack PR CI",summary:"Trusted Engine CI workflow completed for this PR head."}}')
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "$payload" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/check-runs"
