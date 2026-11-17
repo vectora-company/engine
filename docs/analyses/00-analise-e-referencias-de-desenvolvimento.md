@@ -163,8 +163,9 @@ títulos e bases de PR no estado dinâmico do GitHub.
   [checklist](../checklists/conversation-events.md) e
   [análise](conversation-events.md). O envelope Rust v1 e validadores nos dois
   bindings usam uma fixture compartilhada; os testes ainda não foram executados
-  nesta etapa. Persistência, admission, replay e confirmação de conformidade
-  permanecem pendentes.
+  nesta etapa. Persistência e replay permanecem pendentes; a admission aguarda
+  decisão vital de contrato sobre saturação/fila, limite e semântica de
+  `blocked`, registrada na análise específica.
 
 ## Estado da revisão documental
 
