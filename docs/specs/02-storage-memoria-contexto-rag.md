@@ -232,7 +232,7 @@ redrive atômico, filtros vetoriais e health (veja o
 
 ## Observabilidade e degradação
 
-Cada operação deve permitir registrar adapter/capability escolhida, versão/config sem segredo, duração, resultado, timeout/retry e correlação com run/turno. Health distingue configuração inválida, indisponível, degradado, read-only, não requerido e funcional. Fallbacks indicam exatamente o backend efetivo e as garantias reduzidas.
+Cada operação deve permitir registrar adapter/capability escolhida, versão/config sem segredo, duração, resultado, timeout/retry e correlação com run/turno. Debug, erros e logs de configuração também devem redigir credenciais e endpoints que possam conter autenticação. Health distingue configuração inválida, indisponível, degradado, read-only, não requerido e funcional. Fallbacks indicam exatamente o backend efetivo e as garantias reduzidas.
 
 ## Fases de implementação
 
