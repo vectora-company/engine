@@ -352,3 +352,14 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] `scons tests`: Rust 238; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
 - [x] `scons lint` passou; pre-commit integral passou após formatação automática de Markdown.
 - [ ] Publicar PR empilhado sobre [#116](https://github.com/vectora-company/engine/pull/116).
+
+## Testes negativos de rerank multimodal — `test/llama-rerank-negative-cases`
+
+- [x] Caso de modelo sem capability de imagem falha fechado antes do POST.
+- [x] Resposta com score fora de `[0,1]` é rejeitada.
+- [x] Resposta com índices duplicados é rejeitada.
+- [x] Quatro testes Rust focados de rerank multimodal passam.
+- [x] `scons tests`: Rust 240; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
+- [x] `scons lint` passou.
+- [x] Pre-commit integral passou.
+- [ ] Publicar PR filho de [#117](https://github.com/vectora-company/engine/pull/117).
