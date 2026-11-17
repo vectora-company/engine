@@ -635,6 +635,15 @@ export declare function vectorStoreSearch(
   limit: number,
 ): Promise<string>;
 
+export declare function vectorStoreSearchFiltered(
+  configJson: string,
+  collection: string,
+  scope: string,
+  vector: Array<number>,
+  limit: number,
+  filterJson?: string | undefined | null,
+): Promise<string>;
+
 export declare function vectorStoreUpsert(
   configJson: string,
   collection: string,

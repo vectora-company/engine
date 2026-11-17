@@ -44,6 +44,14 @@ async def vector_store_upsert(
 async def vector_store_search(
     config_json: str, collection: str, scope: str, vector: list[float], limit: int
 ) -> str: ...
+async def vector_store_search_filtered(
+    config_json: str,
+    collection: str,
+    scope: str,
+    vector: list[float],
+    limit: int,
+    filter_json: str | None,
+) -> str: ...
 async def vector_store_delete(
     config_json: str, collection: str, scope: str, record_id: int
 ) -> None: ...

@@ -1064,6 +1064,38 @@ pub async fn vector_store_search(
 }
 
 #[napi]
+pub async fn vector_store_search_filtered(
+    config_json: String,
+    collection: String,
+    scope: String,
+    vector: Vec<f64>,
+    limit: u32,
+    filter_json: Option<String>,
+) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid vector-store config"))?;
+    let filter = filter_json
+        .map(|json| {
+            serde_json::from_str(&json).map_err(|_| Error::from_reason("invalid metadata filter"))
+        })
+        .transpose()?;
+    let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    let hits = store
+        .search_filtered(
+            &collection,
+            &scope,
+            vector.into_iter().map(|value| value as f32).collect(),
+            limit,
+            filter,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&hits)
+}
+
+#[napi]
 pub async fn vector_store_delete(
     config_json: String,
     collection: String,

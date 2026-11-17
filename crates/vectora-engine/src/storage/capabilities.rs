@@ -131,9 +131,8 @@ impl StorageSelection {
             Some(VectorBackend::LanceDb) => backends.push(entry(
                 "vector",
                 "lance_db",
-                &["vector_store"],
+                &["vector_store", "metadata_filter"],
                 &[
-                    "metadata_filter",
                     "configurable_ann_index",
                     "quantization",
                     "lexical_search",
@@ -144,15 +143,15 @@ impl StorageSelection {
                 None,
                 &[
                     "Cosine similarity is normalized to [-1, 1]; higher is closer.",
-                    "Metadata filters, configurable ANN index parameters and quantization are not exposed by the adapter.",
+                    "Metadata filters are pushed into the vector search before top-k selection.",
+                    "Configurable ANN index parameters and quantization are not exposed by the adapter.",
                 ],
             )),
             Some(VectorBackend::Qdrant) => backends.push(entry(
                 "vector",
                 "qdrant",
-                &["vector_store"],
+                &["vector_store", "metadata_filter"],
                 &[
-                    "metadata_filter",
                     "configurable_ann_index",
                     "quantization",
                     "lexical_search",
@@ -163,7 +162,8 @@ impl StorageSelection {
                 None,
                 &[
                     "Cosine similarity is in [-1, 1]; higher is closer.",
-                    "Metadata filters, configurable ANN index parameters and quantization are not exposed by the adapter.",
+                    "Metadata filters are pushed into the vector search before top-k selection.",
+                    "Configurable ANN index parameters and quantization are not exposed by the adapter.",
                 ],
             )),
             None => {}
@@ -376,6 +376,30 @@ mod tests {
     }
 
     #[test]
+    fn reports_metadata_filters_as_a_shared_vector_capability() {
+        for (backend, selection_json) in [
+            ("lance_db", r#"{"contract_version":1,"vector":"lance_db"}"#),
+            ("qdrant", r#"{"contract_version":1,"vector":"qdrant"}"#),
+        ] {
+            let report = selection(selection_json).capabilities();
+            let vector = report.backends.first().unwrap();
+            assert_eq!(vector.backend, backend);
+            assert!(
+                vector
+                    .implemented
+                    .iter()
+                    .any(|item| item == "metadata_filter")
+            );
+            assert!(
+                !vector
+                    .not_implemented
+                    .iter()
+                    .any(|item| item == "metadata_filter")
+            );
+        }
+    }
+
+    #[test]
     fn reports_common_pubsub_pattern_subscriptions() {
         for backend in ["redis", "nats_core"] {
             let report = selection(&format!(r#"{{"contract_version":1,"pubsub":"{backend}"}}"#))
@@ -437,7 +461,13 @@ mod tests {
             assert!(sql.implemented.iter().any(|item| item == capability));
         }
         let vector = &report.backends[1];
-        for capability in ["metadata_filter", "configurable_ann_index", "quantization"] {
+        assert!(
+            vector
+                .implemented
+                .iter()
+                .any(|item| item == "metadata_filter")
+        );
+        for capability in ["configurable_ann_index", "quantization"] {
             assert!(vector.not_implemented.iter().any(|item| item == capability));
         }
         let kv = &report.backends[2];

@@ -711,6 +711,14 @@ interface NativeBinding {
     vector: number[],
     limit: number,
   ): Promise<string>;
+  vectorStoreSearchFiltered(
+    configJson: string,
+    collection: string,
+    scope: string,
+    vector: number[],
+    limit: number,
+    filterJson: string | null,
+  ): Promise<string>;
   kvStorePut(
     configJson: string,
     key: string,
@@ -1170,6 +1178,13 @@ export interface VectorHit {
   metadata: JsonValue;
 }
 
+export type MetadataFilter =
+  | { op: "eq"; path: string; value: JsonValue }
+  | { op: "gt" | "gte" | "lt" | "lte"; path: string; value: number }
+  | { op: "in"; path: string; values: JsonValue[] }
+  | { op: "and" | "or"; filters: MetadataFilter[] }
+  | { op: "not"; filter: MetadataFilter };
+
 export async function vectorStoreUpsert(
   config: VectorStoreConfig,
   collection: string,
@@ -1195,6 +1210,25 @@ export async function vectorStoreSearch(
       scope,
       vector,
       limit,
+    ),
+  ) as VectorHit[];
+}
+export async function vectorStoreSearchFiltered(
+  config: VectorStoreConfig,
+  collection: string,
+  scope: string,
+  vector: number[],
+  filter: MetadataFilter | undefined,
+  limit = 10,
+): Promise<VectorHit[]> {
+  return JSON.parse(
+    await native.vectorStoreSearchFiltered(
+      JSON.stringify(config),
+      collection,
+      scope,
+      vector,
+      limit,
+      filter === undefined ? null : JSON.stringify(filter),
     ),
   ) as VectorHit[];
 }

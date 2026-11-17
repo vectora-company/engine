@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -114,6 +115,8 @@ from vectora_engine import (
     tool_result_to_chat_message,
     transition_run,
     validate_storage_selection,
+    vector_store_search_filtered,
+    vector_store_upsert,
 )
 
 
@@ -147,7 +150,7 @@ def test_storage_capabilities_state_backend_differences() -> None:
     assert "ledger_backup_verify" in sql["implemented"]
     assert "ledger_restore" in sql["implemented"]
     assert vector["score_direction"] == "higher_is_closer"
-    assert "metadata_filter" in vector["not_implemented"]
+    assert "metadata_filter" in vector["implemented"]
     assert "configurable_ann_index" in vector["not_implemented"]
     assert "quantization" in vector["not_implemented"]
     assert kv["ttl"] is True
@@ -461,6 +464,105 @@ def test_pubsub_pattern_against_real_services(backend: str, variable: str) -> No
             assert await pubsub_receive(subscription, 100) is None
         finally:
             pubsub_unsubscribe(subscription)
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable"),
+    [("lance_db", None), ("qdrant", "VECTORA_TEST_QDRANT_URL")],
+)
+def test_vector_metadata_filters_match_across_backends(
+    backend: str, variable: str | None, tmp_path: Path
+) -> None:
+    endpoint = (
+        str(tmp_path / "vectors.lance")
+        if variable is None
+        else os.environ.get(variable)
+    )
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {"backend": backend, "endpoint": endpoint}
+        collection = f"python_vector_filter_{os.getpid()}_{time.time_ns()}"
+        try:
+            for record_id, category, score in (
+                (1, "guide", 0.9),
+                (2, "draft", 0.8),
+                (3, "guide", 0.4),
+                (4, ["guide"], 0.95),
+            ):
+                await vector_store_upsert(
+                    config,
+                    collection,
+                    {
+                        "id": record_id,
+                        "scope": "team",
+                        "vector": [1.0, 0.0, 0.0],
+                        "metadata": {
+                            "category": category,
+                            "score": score,
+                            "nested": {"language": "pt"},
+                        },
+                    },
+                )
+            await vector_store_upsert(
+                config,
+                collection,
+                {
+                    "id": 5,
+                    "scope": "team",
+                    "vector": [1.0, 0.0, 0.0],
+                    "metadata": {"score": 0.2},
+                },
+            )
+            filter_value = {
+                "op": "and",
+                "filters": [
+                    {"op": "eq", "path": "category", "value": "guide"},
+                    {"op": "gte", "path": "score", "value": 0.5},
+                    {"op": "eq", "path": "nested.language", "value": "pt"},
+                ],
+            }
+            hits = await vector_store_search_filtered(
+                config, collection, "team", [1.0, 0.0, 0.0], filter_value
+            )
+            assert [hit["id"] for hit in hits] == [1]
+            excluded = await vector_store_search_filtered(
+                config,
+                collection,
+                "team",
+                [1.0, 0.0, 0.0],
+                {
+                    "op": "not",
+                    "filter": {"op": "eq", "path": "category", "value": "guide"},
+                },
+            )
+            assert sorted(hit["id"] for hit in excluded) == [2, 4, 5]
+            either = await vector_store_search_filtered(
+                config,
+                collection,
+                "team",
+                [1.0, 0.0, 0.0],
+                {
+                    "op": "or",
+                    "filters": [
+                        {"op": "eq", "path": "category", "value": "draft"},
+                        {"op": "in", "path": "score", "values": [0.4]},
+                    ],
+                },
+            )
+            assert sorted(hit["id"] for hit in either) == [2, 3]
+        finally:
+            if backend == "qdrant":
+                request = urllib.request.Request(  # noqa: S310
+                    f"{endpoint.rstrip('/')}/collections/{collection}", method="DELETE"
+                )
+                response = await asyncio.to_thread(
+                    urllib.request.urlopen, request, timeout=5
+                )
+                response.close()
 
     asyncio.run(exercise())
 

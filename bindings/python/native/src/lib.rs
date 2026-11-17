@@ -1091,6 +1091,35 @@ fn vector_store_search<'py>(
 }
 
 #[pyfunction]
+fn vector_store_search_filtered<'py>(
+    py: Python<'py>,
+    config_json: String,
+    collection: String,
+    scope: String,
+    vector: Vec<f32>,
+    limit: u32,
+    filter_json: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config = serde_json::from_str(&config_json)
+            .map_err(|_| py_error("invalid vector-store config"))?;
+        let filter = filter_json
+            .map(|json| {
+                serde_json::from_str(&json).map_err(|_| py_error("invalid metadata filter"))
+            })
+            .transpose()?;
+        let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        let hits = store
+            .search_filtered(&collection, &scope, vector, limit, filter)
+            .await
+            .map_err(py_error)?;
+        encode_json(&hits)
+    })
+}
+
+#[pyfunction]
 fn vector_store_delete<'py>(
     py: Python<'py>,
     config_json: String,
@@ -2978,6 +3007,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sqlite_ledger_restore, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_upsert, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_search, module)?)?;
+    module.add_function(wrap_pyfunction!(vector_store_search_filtered, module)?)?;
     module.add_function(wrap_pyfunction!(vector_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_put, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_get, module)?)?;

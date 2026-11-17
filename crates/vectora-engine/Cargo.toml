@@ -21,6 +21,7 @@ futures-util.workspace = true
 falkordb = { version = "=0.11.2", default-features = false, features = ["tokio", "serde", "tokio-rustls"] }
 jsonschema.workspace = true
 lancedb = { version = "0.22", default-features = false }
+lance-arrow = "=0.39.0"
 redis = { version = "0.27", features = ["tokio-comp"] }
 reqwest.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

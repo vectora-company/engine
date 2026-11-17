@@ -119,6 +119,27 @@ async def vector_store_search(
     )
 
 
+async def vector_store_search_filtered(
+    config: JsonObject,
+    collection: str,
+    scope: str,
+    vector: Sequence[float],
+    metadata_filter: JsonObject | None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Search within scope using the portable metadata-filter expression."""
+    return json.loads(
+        await _native.vector_store_search_filtered(
+            json.dumps(config),
+            collection,
+            scope,
+            list(vector),
+            limit,
+            None if metadata_filter is None else json.dumps(metadata_filter),
+        )
+    )
+
+
 async def vector_store_delete(
     config: JsonObject, collection: str, scope: str, record_id: int
 ) -> None:
@@ -1557,5 +1578,6 @@ __all__ = [
     "validate_storage_selection",
     "vector_store_delete",
     "vector_store_search",
+    "vector_store_search_filtered",
     "vector_store_upsert",
 ]

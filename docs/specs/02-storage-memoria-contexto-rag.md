@@ -86,17 +86,21 @@ Só depois de a base ser equivalente cada backend se especializa no que o outro
   lados puderem sustentar continuam na base.
 
 Exemplos de **base a implementar e verificar** (não afirmação de que já estejam
-disponíveis nos adapters): busca vetorial com filtros por metadado, ANN
-configurável, quantização e busca híbrida; o consumidor pode compor qualquer
-adapter conforme para RAG e contexto do agente. A implementação de filtros
-exige formato JSON consultável no LanceDB; a migração de coleções já gravadas
-está pendente de decisão registrada no
-[plano de storage](../plans/04-plano-storage-ledger.md). LanceDB 0.22.3, versão da
-dependência Rust desta branch, contém builders IVF-HNSW-PQ e IVF-HNSW-SQ; isso
-não significa que o adapter já configure índices. O contêiner Qdrant em execução
-é 1.12.4; `SConstruct` provisiona 1.15.5, e Qdrant usa HNSW como índice denso
-padrão. Os tipos de índice e seus
-parâmetros precisam de um mapeamento comum testado, não só de nomes parecidos.
+disponíveis nos adapters): ANN configurável, quantização e busca híbrida; o
+consumidor pode compor qualquer adapter conforme para RAG e contexto do agente.
+Busca por metadados está implementada nos dois adapters. `VECTOR_CONTRACT_VERSION=3`
+define filtros escalares portáveis por caminho (`eq`, `gt`, `gte`, `lt`, `lte`,
+`in`, `and`, `or`, `not`), avaliados pelo backend antes do limite top-k. Cada
+segmento de caminho começa com letra ASCII ou `_` e continua com caracteres
+ASCII alfanuméricos ou `_`; filtros têm limites de
+profundidade e quantidade. Valores armazenados como arrays não participam da
+busca filtrada, para manter a mesma semântica nos dois backends. LanceDB grava
+metadata no tipo JSON consultável nativo; coleções criadas com o schema antigo
+`Utf8` precisam ser recriadas antes de usar filtros e upserts no novo contrato.
+Ainda não há migração automática de coleções locais anteriores. LanceDB 0.22.3
+contém builders IVF-HNSW-PQ e IVF-HNSW-SQ; isso não significa que o adapter já
+configure índices. Tipos de índice e parâmetros precisam de mapeamento comum
+testado, não só de nomes parecidos.
 No SQL, a base inclui transações, migrações, backup/restore e JSON. No KV,
 TTL, escrita condicional por revisão, incremento atômico, listagem por prefixo
 e observação de mudanças. Nas filas, ACK/NACK, redelivery com teto, DLQ,

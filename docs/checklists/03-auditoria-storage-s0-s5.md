@@ -70,7 +70,10 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 - [x] Verificar CAS com serviços reais nos dois backends: duas escritas concorrentes com a mesma revisão, invalidação após escrita comum, remoção/recriação, TTL e ausência da chave interna na listagem.
 - [x] Verificar incremento em Redis e NATS reais: criação concorrente, delta negativo, limite numérico, valor incompatível, TTL e recriação após remoção.
 - [x] Verificar watch KV em Redis e NATS reais: mudanças futuras, filtro de prefixo, isolamento, remoção, expiração e cancelamento da leitura.
-- [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends. Antes da migração do schema LanceDB `Utf8` para JSON consultável, obter decisão sobre migração automática, operação explícita ou recriação de coleção.
+- [x] Vetorial: filtros escalares JSON (`eq`, comparações numéricas, `in`, `and`, `or`, `not`) nos dois backends, aplicados antes do top-k; cobertura real confirma escopo, caminhos aninhados e arrays excluídos do espaço filtrável.
+- [x] Contrato vetorial 3: LanceDB usa coluna JSON tipada; coleções do schema `Utf8` anterior são incompatíveis e devem ser recriadas pelo operador. Não há migração automática.
+- [x] Conformidade de filtros vetoriais (17/11/2026): Rust 12/12 com Qdrant 1.20.2 real e LanceDB local; Python 2/2 backends; Node 56 passaram e 16 testes de outros serviços foram ignorados. Rust fmt/Clippy, Ruff e TypeScript typecheck passaram.
+- [ ] Vetorial: parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
 - [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens atualizadas.
 - [x] Filas: teto de tentativas e DLQ consumível nos dois brokers.
 - [x] Filas: NACK com reentrega atrasada em Redis Streams e NATS JetStream, limitada ao visibility timeout; teste real verifica atraso e incremento de attempts em ambos.
