@@ -47,7 +47,10 @@ limite universal do provider. Estado e precedência:
   registra a decisão. Ela não executa STT, OCR, renderização de PDF nem
   extração de quadros de vídeo: essas conversões são capacidades do consumidor, que
   devolve a forma textual ou as imagens derivadas já prontas.
-- STT, TTS e geração de imagem ou vídeo continuam fora deste contrato.
+- STT, TTS e geração de imagem/vídeo não fazem parte do payload de chat deste
+  contrato. Geração básica de imagem é uma operação separada descrita na
+  [spec de providers](18-providers-e-modalidades-llama-cpp-v1.md); edição e
+  geração de vídeo seguem fora das operações implementadas.
 
 ## Parte de conteúdo com mídia
 

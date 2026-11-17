@@ -371,6 +371,41 @@ export interface TranscriptionResponse {
   [key: string]: unknown;
 }
 
+export type ImageGenerationProtocol =
+  "open_ai" | "open_ai_compatible" | "open_router";
+export type ImageOutputMode = "return_bytes" | "store_in_media_context";
+export interface ImageGenerationSettings {
+  protocol: ImageGenerationProtocol;
+  settings: ProviderHttpSettings;
+  media_context?: MediaExecutionContext;
+}
+export interface ImageGenerationRequest {
+  contract_version?: number;
+  model: string;
+  prompt: string;
+  count?: number;
+  size?: string;
+  quality?: string;
+  output_format?: "png" | "jpeg" | "webp";
+  /** Defaults to return_bytes. */
+  output_mode?: ImageOutputMode;
+  max_image_bytes?: number;
+}
+export interface GeneratedImage {
+  sha256: string;
+  mime_type: string;
+  size_bytes: number;
+  revised_prompt?: string;
+  /** Present by default; omitted when stored in the consumer media context. */
+  bytes?: Uint8Array;
+  media_ref?: MediaRef;
+}
+export interface ImageGenerationResponse {
+  contract_version: number;
+  images: GeneratedImage[];
+  usage?: JsonValue;
+}
+
 export interface EmbeddingRequest {
   contract_version: number;
   model: string;
@@ -1068,6 +1103,7 @@ interface NativeBinding {
   embeddingContractVersion(): number;
   rerankContractVersion(): number;
   transcriptionContractVersion(): number;
+  imageGenerationContractVersion(): number;
   embed(settingsJson: string, requestJson: string): Promise<string>;
   fallbackEmbed(settingsJson: string, requestJson: string): Promise<string>;
   rerank(settingsJson: string, requestJson: string): Promise<string>;
@@ -1076,6 +1112,7 @@ interface NativeBinding {
     settingsJson: string,
     requestJson: string,
   ): Promise<string>;
+  generateImage(settingsJson: string, requestJson: string): Promise<string>;
   chatContractVersion(): number;
   chatAssembleTurn(settingsJson: string, eventsJson: string): string;
   chatPrepareContent(
@@ -2419,6 +2456,55 @@ export async function fallbackRerank(
 /** Version of the shared Rust batch transcription contract. */
 export const transcriptionContractVersion = (): number =>
   native.transcriptionContractVersion();
+
+export const imageGenerationContractVersion = (): number =>
+  native.imageGenerationContractVersion();
+
+/** Generate images; transient bytes are returned by default. */
+export async function generateImage(
+  settings: ImageGenerationSettings,
+  request: ImageGenerationRequest,
+  mediaContext?: MediaExecutionContext,
+): Promise<ImageGenerationResponse> {
+  const context = mediaContext ?? settings.media_context;
+  if (request.output_mode === "store_in_media_context") {
+    if (!context)
+      throw new Error("store_in_media_context requires a media context");
+    if (!Object.isExtensible(context.assets)) {
+      throw new Error("store_in_media_context requires a mutable assets map");
+    }
+  }
+  const { media_context: _ignored, ...providerSettings } = settings;
+  const raw = JSON.parse(
+    await native.generateImage(
+      encodeMediaSettings(providerSettings, context),
+      JSON.stringify({
+        ...request,
+        contract_version:
+          request.contract_version ?? imageGenerationContractVersion(),
+      }),
+    ),
+  ) as {
+    response: Omit<ImageGenerationResponse, "images"> & {
+      images: Array<Omit<GeneratedImage, "bytes"> & { bytes?: number[] }>;
+    };
+    stored_assets: Array<{ asset_id: string; bytes_base64: string }>;
+  };
+  for (const asset of raw.stored_assets) {
+    if (!context)
+      throw new Error("generated assets returned without a media context");
+    context.assets[asset.asset_id] = Uint8Array.from(
+      Buffer.from(asset.bytes_base64, "base64"),
+    );
+  }
+  return {
+    ...raw.response,
+    images: raw.response.images.map(({ bytes, ...image }) => ({
+      ...image,
+      ...(bytes === undefined ? {} : { bytes: Uint8Array.from(bytes) }),
+    })),
+  };
+}
 
 /** Transcribe a temporary asset using the consumer-owned asset map. */
 export async function transcribeEphemeral(

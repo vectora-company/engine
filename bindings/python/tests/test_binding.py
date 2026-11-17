@@ -10,6 +10,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -33,7 +34,9 @@ from vectora_engine import (
     fallback_chat_stream,
     fallback_embed,
     fallback_rerank,
+    generate_image,
     graph_store_operation,
+    image_generation_contract_version,
     kv_store_compare_and_set,
     kv_store_delete,
     kv_store_get,
@@ -1814,6 +1817,82 @@ def test_batch_transcription_binding_sends_ephemeral_asset() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_image_generation_returns_bytes_and_can_write_consumer_asset_map() -> None:
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Vb8AAAAASUVORK5CYII="
+    )
+    captured: dict[str, Any] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            captured["path"] = self.path
+            captured["body"] = self.rfile.read(int(self.headers["Content-Length"]))
+            body = json.dumps(
+                {"data": [{"b64_json": base64.b64encode(image).decode()}]}
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    settings = {
+        "protocol": "open_ai_compatible",
+        "settings": {"base_url": f"http://127.0.0.1:{server.server_port}/v1"},
+    }
+    request = {"contract_version": 1, "model": "fixture", "prompt": "red panda"}
+    try:
+        assert image_generation_contract_version() == 1
+        returned = asyncio.run(generate_image(settings, request))
+        assert captured["path"] == "/v1/images/generations"
+        assert returned["images"][0]["bytes"] == image
+        assert "media_ref" not in returned["images"][0]
+
+        context = {"assets": {}}
+        stored = asyncio.run(
+            generate_image(
+                settings,
+                {**request, "output_mode": "store_in_media_context"},
+                media_context=context,
+            )
+        )
+        media_ref = stored["images"][0]["media_ref"]
+        assert "bytes" not in stored["images"][0]
+        assert context["assets"][media_ref["asset_id"]] == image
+        assert (
+            hashlib.sha256(context["assets"][media_ref["asset_id"]]).hexdigest()
+            == media_ref["sha256"]
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_image_generation_rejects_read_only_asset_map_before_provider_call() -> None:
+    with pytest.raises(TypeError, match="mutable assets mapping"):
+        asyncio.run(
+            generate_image(
+                {
+                    "protocol": "open_ai_compatible",
+                    "settings": {"base_url": "http://127.0.0.1:1/v1"},
+                },
+                {
+                    "model": "fixture",
+                    "prompt": "red panda",
+                    "output_mode": "store_in_media_context",
+                },
+                media_context={"assets": MappingProxyType({})},
+            )
+        )
 
 
 def test_run_lifecycle_contract_is_exposed_through_python_binding() -> None:

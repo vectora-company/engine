@@ -29,16 +29,16 @@ substitui serviço real.
 
 ## Routing e operações
 
-| Estado   | Capacidade                                    | Notas                                                                                                                                                                          |
-| -------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| parcial  | Chat multimodal por protocolo                 | Anthropic, Gemini e OpenAI Chat Completions/Responses têm mapeamentos próprios; Responses cobre imagem e áudio WAV/MP3. Conferir suporte por modelo antes de rotear.           |
-| parcial  | Imagens em resultados de tools                | Partes tipadas disponíveis; conversão depende do protocolo e da capability.                                                                                                    |
-| parcial  | PDF, áudio e vídeo                            | Tipos e algumas rotas nativas existem; conversão de arquivos e STT local são responsabilidade do consumidor.                                                                   |
-| parcial  | Embeddings/rerank multimodais                 | llama-server suporta entradas efêmeras documentadas e protegidas; não generalizar para outros providers.                                                                       |
-| parcial  | Áudio em OpenAI Responses                     | WAV/MP3 são serializados como `input_audio`; a capability depende de metadata por modelo ou override nos dois perfis. Falta smoke real.                                        |
-| parcial  | Catálogo de capability/limites por modelo     | Metadata de `/v1/models` pode ser convertida explicitamente e vence o perfil genérico; discovery/cache, catálogo por operação e limites completos não existem.                 |
-| feito    | Limites agregados                             | Tetos configuráveis de bytes totais e assets materializados cobrem chat, Decision Model efêmero, embeddings e rerank multimodais do llama-server; duração/resolução pendentes. |
-| pendente | Geração de imagem e operações gerais de vídeo | Requerem contratos e adapters dedicados.                                                                                                                                       |
+| Estado  | Capacidade                                            | Notas                                                                                                                                                                          |
+| ------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| parcial | Chat multimodal por protocolo                         | Anthropic, Gemini e OpenAI Chat Completions/Responses têm mapeamentos próprios; Responses cobre imagem e áudio WAV/MP3. Conferir suporte por modelo antes de rotear.           |
+| parcial | Imagens em resultados de tools                        | Partes tipadas disponíveis; conversão depende do protocolo e da capability.                                                                                                    |
+| parcial | PDF, áudio e vídeo                                    | Tipos e algumas rotas nativas existem; conversão de arquivos e STT local são responsabilidade do consumidor.                                                                   |
+| parcial | Embeddings/rerank multimodais                         | llama-server suporta entradas efêmeras documentadas e protegidas; não generalizar para outros providers.                                                                       |
+| parcial | Áudio em OpenAI Responses                             | WAV/MP3 são serializados como `input_audio`; a capability depende de metadata por modelo ou override nos dois perfis. Falta smoke real.                                        |
+| parcial | Catálogo de capability/limites por modelo             | Metadata de `/v1/models` pode ser convertida explicitamente e vence o perfil genérico; discovery/cache, catálogo por operação e limites completos não existem.                 |
+| feito   | Limites agregados                                     | Tetos configuráveis de bytes totais e assets materializados cobrem chat, Decision Model efêmero, embeddings e rerank multimodais do llama-server; duração/resolução pendentes. |
+| parcial | Geração de imagem; pendente operações gerais de vídeo | A geração tem API separada no contrato de providers, com bytes efêmeros ou gravação opcional no store do host; operações gerais de vídeo requerem contrato/adapters próprios.  |
 
 ## Testes e critérios de conclusão
 

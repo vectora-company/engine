@@ -102,6 +102,13 @@ export declare function fallbackRerank(
   requestJson: string,
 ): Promise<string>;
 
+export declare function generateImage(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function imageGenerationContractVersion(): number;
+
 export declare function graphStoreOperation(
   configJson: string,
   operationJson: string,

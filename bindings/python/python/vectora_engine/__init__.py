@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Self
 
@@ -909,6 +909,64 @@ def rerank_contract_version() -> int:
 def transcription_contract_version() -> int:
     """Return the version of the shared batch transcription contract."""
     return _native.transcription_contract_version()
+
+
+def image_generation_contract_version() -> int:
+    """Return the version of the shared image generation contract."""
+    return _native.image_generation_contract_version()
+
+
+async def generate_image(
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Generate images; return ephemeral bytes by default.
+
+    ``store_in_media_context`` writes assets into the caller-owned mutable map.
+    """
+    payload = dict(settings)
+    configured_context = payload.pop("media_context", None)
+    context: Any = media_context if media_context is not None else configured_context
+    if request.get("output_mode", "return_bytes") == "store_in_media_context":
+        if context is None:
+            raise ValueError("store_in_media_context requires a media context")
+        assets = (
+            context.assets
+            if isinstance(context, MediaExecutionContext)
+            else context.get("assets")
+        )
+        if not isinstance(assets, MutableMapping):
+            raise TypeError("store_in_media_context requires a mutable assets mapping")
+    if context is not None:
+        payload["media_context"] = context
+    result = await _native.generate_image(
+        _media_settings(payload, None),
+        json.dumps(
+            {"contract_version": image_generation_contract_version(), **request},
+            separators=(",", ":"),
+        ),
+    )
+    envelope = json.loads(result)
+    for asset in envelope["stored_assets"]:
+        if context is None:
+            raise RuntimeError("generated assets returned without a media context")
+        assets = (
+            context.assets
+            if isinstance(context, MediaExecutionContext)
+            else context["assets"]
+        )
+        if not isinstance(assets, MutableMapping):
+            raise TypeError("store_in_media_context requires a mutable assets mapping")
+        assets[asset["asset_id"]] = base64.b64decode(
+            asset["bytes_base64"], validate=True
+        )
+    response = envelope["response"]
+    for image in response["images"]:
+        if "bytes" in image:
+            image["bytes"] = bytes(image["bytes"])
+    return response
 
 
 async def embed(settings: JsonObject, request: JsonObject) -> dict[str, Any]:

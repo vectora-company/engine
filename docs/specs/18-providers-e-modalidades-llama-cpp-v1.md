@@ -11,16 +11,17 @@ Rust segue como implementação canônica. Python e TypeScript encaminham para o
 
 ## Inventário observado na Engine
 
-| Provider/protocolo              | Estado no código                                                                                                        | Limites                                                                                                                                            |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OpenAI-compatible               | Chat/stream e embeddings genéricos por endpoint                                                                         | 9router, OmniRouter e Kimi precisam de validação específica de serviço/rota/auth/erro antes de perfil dedicado.                                    |
-| OpenAI                          | Chat Completions, Responses e embeddings compatíveis                                                                    | Não implica tools hospedadas, TTS/STT, vídeo ou geração de imagem.                                                                                 |
-| OpenRouter                      | Perfil dedicado para chat, endpoint, Bearer, atribuição e extensões de roteamento; embeddings/rerank disponíveis        | Modalidades e políticas variam por modelo e request.                                                                                               |
-| Anthropic, Gemini e Cohere      | Chat nativo; Cohere também embeddings/rerank                                                                            | A cobertura multimodal e de stream é por operação e protocolo.                                                                                     |
-| Ollama                          | Chat nativo `/api/chat`, chat compatível e embeddings                                                                   | Fixtures cobrem JSON/NDJSON; serviço real não foi exercitado nesta execução.                                                                       |
-| llama.cpp `llama-server` v1.0.0 | Health/discovery, chat, Decision Model, TTS, realtime, embeddings e rerank, inclusive operações de mídia cobertas       | Discovery preserva declarações do servidor, não prova capacidade efetiva do modelo; smoke real permanece opt-in.                                   |
-| Laya `laya-serve`               | Cliente standalone para health e Decision Model via SystemOne; checkpoints Laya como `multilingual` e `typed-decisions` | `model` pode ser omitido para roteamento do servidor; Jev é um modelo, não o nome da API nem um checkpoint Laya. Serviço real não foi configurado. |
-| Voyage                          | Embeddings e rerank                                                                                                     | Confirmar detalhes de score, dimensões e erros na matriz da operação.                                                                              |
+| Provider/protocolo              | Estado no código                                                                                                         | Limites                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenAI-compatible               | Chat/stream e embeddings genéricos por endpoint                                                                          | 9router, OmniRouter e Kimi precisam de validação específica de serviço/rota/auth/erro antes de perfil dedicado.                                    |
+| OpenAI                          | Chat Completions, Responses, embeddings e geração de imagem `/v1/images/generations`                                     | Geração retorna PNG/JPEG/WebP validados; edição, vídeo e outras modalidades não são implicadas.                                                    |
+| OpenAI-compatible images        | Endpoint configurável para `/images/generations`                                                                         | Um perfil compatível não garante suporte de todos os gateways; verificar sua documentação e modelo.                                                |
+| OpenRouter                      | Perfil dedicado para chat, endpoint, Bearer, atribuição e extensões de roteamento; embeddings/rerank e geração `/images` | Modalidades e políticas variam por modelo e request; fixtures não provam disponibilidade ou preço reais.                                           |
+| Anthropic, Gemini e Cohere      | Chat nativo; Cohere também embeddings/rerank                                                                             | A cobertura multimodal e de stream é por operação e protocolo.                                                                                     |
+| Ollama                          | Chat nativo `/api/chat`, chat compatível e embeddings                                                                    | Fixtures cobrem JSON/NDJSON; serviço real não foi exercitado nesta execução.                                                                       |
+| llama.cpp `llama-server` v1.0.0 | Health/discovery, chat, Decision Model, TTS, realtime, embeddings e rerank, inclusive operações de mídia cobertas        | Discovery preserva declarações do servidor, não prova capacidade efetiva do modelo; smoke real permanece opt-in.                                   |
+| Laya `laya-serve`               | Cliente standalone para health e Decision Model via SystemOne; checkpoints Laya como `multilingual` e `typed-decisions`  | `model` pode ser omitido para roteamento do servidor; Jev é um modelo, não o nome da API nem um checkpoint Laya. Serviço real não foi configurado. |
+| Voyage                          | Embeddings e rerank                                                                                                      | Confirmar detalhes de score, dimensões e erros na matriz da operação.                                                                              |
 
 O perfil OpenAI Chat Completions, OpenAI Responses e OpenRouter mantém protocolos selecionáveis separados. OpenAI Responses cobre apenas conteúdo e eventos mapeáveis pelo contrato comum; built-in tools e modalidades não implementadas permanecem fora do adapter.
 
@@ -75,7 +76,8 @@ for WAV/MP3, Responses envia somente a nota textual da referência, alinhada ao
 fallback seguro de Chat Completions; bytes do formato incompatível não saem.
 Built-in tools,
 TTS/STT como operações dedicadas, vídeo e geração de imagem continuam fora do
-adapter até possuírem contratos próprios. Referências oficiais: [Responses
+adapter Responses. A geração de imagem tem contrato/provider separado descrito
+abaixo. Referências oficiais: [Responses
 API overview](https://developers.openai.com/api/reference/responses/overview),
 [create response](https://developers.openai.com/api/reference/resources/responses/methods/create),
 [Responses input types](https://developers.openai.com/api/reference/typescript/resources/responses),
@@ -121,6 +123,33 @@ perfil chamado apenas `omnirouter` até brunosrz confirmar qual serviço pretend
 O inventário é baseado em `crates/vectora-engine/src/chat/`,
 `crates/vectora-engine/src/llm/` e nos dois bindings na revisão do SHA pai desta
 spec. Deve ser atualizado junto com cada implementação e fixture.
+
+## Geração de imagem
+
+Geração de imagem é uma operação de saída independente de chat/visão e não é
+atribuída ao `llama-server` v1.0.0. O contrato versionado
+`ImageGenerationRequest`/`ImageGenerationResponse` implementa no core Rust:
+
+- OpenAI Images em `/v1/images/generations`, com endpoint oficial por padrão;
+- OpenAI-compatible no mesmo caminho, com endpoint e headers configuráveis;
+- OpenRouter em `/api/v1/images`, com autenticação via perfil HTTP;
+- saída PNG, JPEG ou WebP, conferida pela assinatura dos bytes mesmo quando o
+  provider omite `media_type`; rejeita MIME divergente, base64 malformado,
+  resposta vazia e imagem acima do limite configurado (20 MiB padrão, máximo
+  configurável de 100 MiB);
+- `return_bytes` é o padrão e mantém os bytes efêmeros na resposta tipada,
+  acompanhados de MIME, tamanho e SHA-256. `store_in_media_context` é alternativa
+  opt-in: a Engine chama `MediaStore::write_generated`, devolve `MediaRef` e os
+  bindings colocam os bytes no mapa de assets mutável do host. Stores somente de
+  leitura podem rejeitar a gravação;
+- nenhuma URL de imagem da resposta é buscada automaticamente. Não há retry,
+  streaming, edição/inpainting, geração de vídeo ou garantia de disponibilidade
+  por modelo nesta versão.
+
+Fixtures locais verificam payloads e ambas as formas de entrega em Rust, Python
+e Node. Isso não comprova credenciais, cotas, modelo ou integração remota.
+Referências: [OpenAI Images API](https://developers.openai.com/api/reference/resources/images/methods/generate)
+e [OpenRouter image generation](https://openrouter.ai/docs/api/api-reference/images/generate-an-image).
 
 ## Capacidades que não podem ser confundidas
 
@@ -274,7 +303,7 @@ Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama
 - **Llama-server v1.0.0:** health/discovery, chat, Decision Model, embeddings, rerank, TTS bufferizado/streaming e realtime. A lista de modalidades devolvida pelo servidor é metadata, não garantia de suporte do modelo. A Engine oferece conversor explícito para o resolver multimodal; não consulta nem atualiza esse catálogo automaticamente.
 - **Laya standalone:** SystemOne para health/Decision Model de texto, com checkpoints Laya próprios ou roteamento do servidor; distinto do runtime llama-server. Smoke real requer serviço/checkpoint configurados.
 - **Mídia:** requests persistíveis e efêmeros separados; bytes resolvidos pelo asset map. Ver [spec de mídia](17-midia-no-chat.md) para ownership, MIME, digest e limites.
-- **Ausente ou incompleto:** geração de imagem, STT dedicado para outros providers, operações gerais de vídeo, catálogo confiável de modalidades/limites e matriz de smoke tests reais.
+- **Ausente ou incompleto:** edição de imagem, STT dedicado para outros providers, operações gerais de vídeo, catálogo confiável de modalidades/limites e matriz de smoke tests reais. A geração básica está implementada como operação separada, ainda experimental e sem smoke remoto.
 
 ## Ordem por dependência
 
