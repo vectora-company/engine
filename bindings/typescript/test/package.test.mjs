@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1552,6 +1552,51 @@ test("OpenAI Responses profile maps a non-stream response and semantic SSE event
   );
   assert.deepEqual(events.map((event) => event.type), ["text_delta", "usage", "completed"]);
   assert.equal(events[1].usage.total_tokens, 3);
+});
+
+test("OpenAI Responses audio is rehydrated from the asset map with model metadata", async () => {
+  const audio = Buffer.from("RIFF\0\0\0\0WAVE", "binary");
+  const request = {
+    contract_version: 1,
+    model: "audio-model",
+    messages: [{
+      role: "user",
+      content: [{
+        type: "audio",
+        media_ref: {
+          asset_id: "voice-audio",
+          sha256: createHash("sha256").update(audio).digest("hex"),
+          mime_type: "audio/wav",
+          size_bytes: audio.length,
+          name: "voice.wav",
+        },
+      }],
+    }],
+  };
+  const result = await withFixtureServer(JSON.stringify({
+    id: "resp_audio",
+    status: "completed",
+    output: [{ type: "message", content: [{ type: "output_text", text: "heard" }] }],
+  }), "application/json", async (baseUrl, captured) => {
+    const completion = await nativeChatComplete(
+      { provider: "openai_responses", base_url: baseUrl, api_key: "fixture-secret" },
+      request,
+      {
+        assets: { "voice-audio": audio },
+        gateway_metadata: [{
+          provider: "openai_responses",
+          model: "audio-model",
+          capabilities: { audio_input: "supported" },
+        }],
+      },
+    );
+    assert.deepEqual(captured.body.input[0].content[0], {
+      type: "input_audio",
+      input_audio: { data: audio.toString("base64"), format: "wav" },
+    });
+    return completion;
+  });
+  assert.equal(result.content, "heard");
 });
 
 test("OpenAI Chat Completions profile uses official auth and supports an endpoint override", async () => {

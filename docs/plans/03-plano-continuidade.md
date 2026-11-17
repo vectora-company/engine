@@ -150,7 +150,8 @@ provider/modelo/protocolo; cobertura equivalente de todos os protocolos que
 aceitam a mesma forma de mídia; limites de duração e resolução; mídia de saída
 no adapter Responses; testes de consumo e replay de assets em fluxos reais.
 OpenAI Responses serializa áudio WAV/MP3, mas a capability permanece
-desconhecida sem metadata/override por modelo. A matriz de implementação
+desconhecida sem metadata/override por modelo; testes Rust, Python e Node
+confirmam materialização do asset autorizado e wire payload. A matriz de implementação
 e evidências está no checklist da
 capability.
 

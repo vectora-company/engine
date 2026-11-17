@@ -3524,6 +3524,71 @@ def test_openai_responses_profile_maps_chat_and_semantic_sse() -> None:
     assert [event["type"] for event in events] == ["text_delta", "usage", "completed"]
 
 
+def test_openai_responses_audio_uses_asset_map_and_model_capability() -> None:
+    audio = b"RIFF\x00\x00\x00\x00WAVE"
+    media_ref = {
+        "asset_id": "voice-audio",
+        "sha256": hashlib.sha256(audio).hexdigest(),
+        "mime_type": "audio/wav",
+        "size_bytes": len(audio),
+        "name": "voice.wav",
+    }
+    request = {
+        **REQUEST,
+        "model": "audio-model",
+        "messages": [
+            {"role": "user", "content": [{"type": "audio", "media_ref": media_ref}]}
+        ],
+    }
+    body = json.dumps(
+        {
+            "id": "resp_audio",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": "heard"}],
+                }
+            ],
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {
+        "provider": "openai_responses",
+        "base_url": endpoint(server),
+        "api_key": "fixture-secret",
+    }
+    media_context = MediaExecutionContext(
+        {"voice-audio": audio},
+        gateway_metadata=[
+            {
+                "provider": "openai_responses",
+                "model": "audio-model",
+                "capabilities": {"audio_input": "supported"},
+            }
+        ],
+    )
+    try:
+        result = asyncio.run(
+            native_chat_complete(settings, request, media_context=media_context)
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    audio_input = captured["body"]["input"][0]["content"][0]
+    assert result["media_decisions"][0]["mode"] == "native", result["media_decisions"]
+    assert audio_input == {
+        "type": "input_audio",
+        "input_audio": {
+            "data": base64.b64encode(audio).decode("ascii"),
+            "format": "wav",
+        },
+    }
+    assert result["content"] == "heard"
+
+
 def test_fallback_uses_explicit_order_and_returns_selected_model() -> None:
     rejected, rejected_thread, first = serve(
         b'{"error":{"message":"rate limited"}}', "application/json", status=429

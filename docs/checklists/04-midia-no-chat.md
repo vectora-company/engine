@@ -44,6 +44,8 @@ substitui serviço real.
 
 - [x] Fixtures cobrem serializers e adapters Rust e bindings para modalidades
       implementadas.
+- [x] Fixtures Python e Node confirmam a reidratação do asset WAV e o payload
+      `input_audio` no adapter OpenAI Responses usando metadata por modelo.
 - [x] Testes negativos cobrem MIME divergente, bytes inválidos, limite,
       capability ausente e envelope persistível.
 - [ ] Fixtures compartilhadas para a mesma matriz de conteúdo nos três
