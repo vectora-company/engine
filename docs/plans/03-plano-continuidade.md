@@ -57,7 +57,7 @@ trabalho independente.
 | Relatório estático de capabilities por backend                                                    | Implementada                                                                                                                                                                                                                                                                                 | `storage/capabilities.rs`                                                                                                      |
 | Snapshot de contratos para hosts TypeScript                                                       | Implementada                                                                                                                                                                                                                                                                                 | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                                  |
 | Providers/modalidades: chat, Decision Model, embeddings, rerank, áudio, bindings                  | Implementado parcialmente; llama-server v1.0.0, Laya e perfis selecionados; faltam APIs/modelos reais e operações como geração de imagem/batch STT                                                                                                                                           | spec 18, plano 06, checklist 05                                                                                                |
-| Mídia no chat: tipos, preparação, contexto e serialização por protocolo                           | Implementada parcialmente nos três níveis; requests persistíveis/efêmeros, asset map, limites por asset e retry multimodal; catálogo e limites agregados pendentes                                                                                                                           | `chat/media.rs`, adapters OpenAI/native/fallback; helper e contexto Python/TS; checklist `docs/checklists/04-midia-no-chat.md` |
+| Mídia no chat: tipos, preparação, contexto e serialização por protocolo                           | Implementada parcialmente nos três níveis; requests persistíveis/efêmeros, asset map, limites por asset e agregados em chat, retry multimodal; catálogo e limites de duração/resolução pendentes                                                                                             | `chat/media.rs`, adapters OpenAI/native/fallback; helper e contexto Python/TS; checklist `docs/checklists/04-midia-no-chat.md` |
 
 Os testes service-real (Redis, NATS, Qdrant, PostgreSQL) são condicionais às
 variáveis `VECTORA_TEST_*`; sem elas contam como não executados. Evidências e
@@ -103,7 +103,7 @@ transversais restantes; números/títulos de PR não são índice do plano.
 1. **Mídia nativa e integração do preparo — implementadas no checkout.**
    Payloads nativos, preparo manual, contexto efêmero por chamada e contexto
    padrão estão disponíveis. Retry textual único para rejeição
-   multimodal classificada e `ToolResult` tipado também estão disponíveis; OpenAI Responses possui adapter próprio. Catálogo automático permanece pendente.
+   multimodal classificada e `ToolResult` tipado também estão disponíveis; OpenAI Responses possui adapter próprio. Catálogo automático e limites agregados às demais operações continuam pendentes nesta etapa.
    Evidências e critérios: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 2. **Mídia: imagens de resultado de tool — implementado nesta etapa.** `ToolResult` usa partes tipadas; Anthropic, Gemini e OpenAI Chat Completions mapeiam imagens conforme a spec 17. Cohere mantém representação textual porque o protocolo não declara suporte a imagem no resultado. Evidência e testes estão registrados na spec 17 e checklist de mídia.
 3. **Segredos em `Debug` — corrigido nesta etapa.** `VectorStoreConfig` agora
@@ -142,12 +142,14 @@ multimodais de tools. O host mantém bytes fora de requests persistíveis; MIME 
 modalidade são verificados na reidratação. A cobertura varia por protocolo e
 precisa ser marcada por feature no checklist específico.
 
-Critérios ainda pendentes: catálogo atualizado de suporte e limites por
-provider/modelo/protocolo; cobertura equivalente de todos os protocolos que
-aceitam a mesma forma de mídia; limite agregado de request, contagem de partes,
-duração e resolução; revisão da entrada multimodal no adapter Responses; testes
-de consumo e replay de assets em fluxos reais. A matriz de implementação e evidências está
-no checklist da capability, não nesta cronologia de entregas.
+Limites agregados opcionais de bytes e contagem de assets estão implementados
+no preparo de chat e em requests efêmeros inline, com testes nos bindings
+Python e TypeScript. Critérios ainda pendentes: catálogo atualizado de suporte
+e limites por provider/modelo/protocolo; cobertura equivalente de todos os
+protocolos que aceitam a mesma forma de mídia; estender orçamento a Decision
+Model, embeddings e rerank; limites de duração e resolução; revisão da entrada
+multimodal no adapter Responses; testes de consumo e replay de assets em fluxos
+reais. A matriz de implementação e evidências está no checklist da capability.
 
 ### Fase 2 — storage: base equivalente
 

@@ -19,6 +19,8 @@ substitui serviço real.
       pelo consumidor; autorização e storage persistente pertencem ao host.
 - [x] Validar digest, assinatura/MIME, modalidade e limite por asset antes do
       envio; padrão 20 MiB por asset, configurável.
+- [x] Limitar bytes totais/quantidade de assets do turno de chat e rejeitar
+      requests inline efêmeros acima do orçamento configurado.
 - [x] Reidratar somente o turno atual e resultados de tools subsequentes;
       registrar evidência sem bytes.
 - [x] Retry único de texto somente em rejeição multimodal classificada, antes
@@ -34,7 +36,7 @@ substitui serviço real.
 | parcial  | PDF, áudio e vídeo                                   | Tipos e algumas rotas nativas existem; conversão de arquivos e STT local são responsabilidade do consumidor.                                              |
 | parcial  | Embeddings/rerank multimodais                        | llama-server suporta entradas efêmeras documentadas e protegidas; não generalizar para outros providers.                                                  |
 | pendente | Catálogo automático de capability/limites por modelo | Overrides explícitos existem; descoberta confiável ligada a endpoint/modelo ainda não existe.                                                             |
-| pendente | Limites agregados                                    | Falta teto comum de request total, número de partes, duração e resolução.                                                                                 |
+| parcial  | Limites agregados                                    | Esta etapa adiciona tetos configuráveis de bytes totais e assets materializados por request; duração e resolução ainda precisam de contrato.              |
 | pendente | Geração de imagem e operações gerais de vídeo        | Requerem contratos e adapters dedicados.                                                                                                                  |
 
 ## Testes e critérios de conclusão
@@ -45,8 +47,8 @@ substitui serviço real.
       capability ausente e envelope persistível.
 - [ ] Fixtures compartilhadas para a mesma matriz de conteúdo nos três
       bindings e em todos os adapters que alegam equivalência.
-- [ ] Limites agregados e catálogo cobertos com dados ausentes, conflitantes
-      e desatualizados.
+- [x] Limites agregados de bytes e contagem cobertos em Rust/Python/TypeScript no preparo de chat; requests efêmeros inline são rejeitados antes da rede.
+- [ ] Aplicar orçamento agregado a Decision Model, embeddings e rerank; catálogo coberto com dados ausentes, conflitantes e desatualizados.
 - [ ] Smoke tests opt-in com modelos reais para cada operação multimodal; não
       considerar teste ignorado por falta de endpoint como sucesso.
 - [ ] Atualizar spec, análise e checklist provider × operação sempre que um

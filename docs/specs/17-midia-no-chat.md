@@ -10,7 +10,7 @@ Este documento define como a Engine representa imagem, áudio, vídeo, documento
 - `ToolResult` contém partes tipadas; adapters convertem as modalidades que o protocolo do provider suporta.
 - O preparo existe nos três modos dos bindings: manual, contexto por chamada e contexto padrão do cliente. O mapa temporário `asset_id → bytes` é fornecido pelo host.
 - O contexto valida digest, MIME, limite por asset e escopo de reidratação. O limite padrão é 20 MiB por asset; overrides por provider/modelo/modalidade não excedem o teto global.
-- Catálogo automático confiável, limites agregados do request, quantidade de partes e limites de duração/resolução ainda não estão implementados.
+- Limites agregados opcionais de bytes e assets já são aplicados no preparo de chat e requests efêmeros inline. Catálogo automático confiável, limites de duração/resolução e integração com outras operações ainda seguem pendentes.
 - A Engine não faz STT local, OCR, renderização de PDF, extração de frames ou gestão de assets persistentes; o consumidor mantém essas responsabilidades.
 
 ## Integração com o envio
@@ -26,8 +26,15 @@ de usuário atual e resultados posteriores de tools são reidratados. Completion
 e stream reportam decisões sem bytes. `provider_limits` aceita entradas com
 `provider`, `model` e `limits` (`image_bytes`, `audio_bytes`, `video_bytes`,
 `document_bytes`, `file_bytes`). O menor valor entre o limite da modalidade e
-`max_media_bytes` governa cada asset; ausência de override usa só o teto global
-e não presume limite universal do provider. Estado e precedência:
+`max_media_bytes` governa cada asset. O contexto também pode impor tetos
+opcionais `max_total_media_bytes` e `max_media_parts` por envio. Na reidratação
+do asset map, os tetos são compartilhados por todas as mensagens processadas no
+turno atual e resultados de tools; contam bytes brutos lidos e assets tentados,
+não o tamanho codificado do request HTTP. Exceder um teto agregado converte a
+parte excedente em texto/referência sem ler seus bytes. Para bytes já inline em
+`EphemeralChatRequest`, exceder os tetos falha antes da chamada ao provider.
+Ausência de override por modalidade usa só o teto por asset e não presume
+limite universal do provider. Estado e precedência:
 [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 
 ## Responsabilidades

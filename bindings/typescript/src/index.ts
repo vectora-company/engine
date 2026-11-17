@@ -194,6 +194,10 @@ export interface ProviderMediaLimits {
 export interface MediaExecutionContext {
   assets: Record<string, Uint8Array>;
   max_media_bytes?: number;
+  /** Maximum raw media bytes materialized for one request. */
+  max_total_media_bytes?: number;
+  /** Maximum number of media assets materialized for one request. */
+  max_media_parts?: number;
   provider_limits?: ProviderMediaLimits[];
 }
 
@@ -2360,6 +2364,12 @@ function encodeMediaSettings(
       ...(context.max_media_bytes === undefined
         ? {}
         : { max_media_bytes: context.max_media_bytes }),
+      ...(context.max_total_media_bytes === undefined
+        ? {}
+        : { max_total_media_bytes: context.max_total_media_bytes }),
+      ...(context.max_media_parts === undefined
+        ? {}
+        : { max_media_parts: context.max_media_parts }),
       ...(context.provider_limits === undefined
         ? {}
         : { provider_limits: context.provider_limits }),

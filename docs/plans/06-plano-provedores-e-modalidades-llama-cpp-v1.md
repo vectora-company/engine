@@ -55,8 +55,9 @@ Documentar diferenças entre extensão upstream e superfície comum da Engine.
 Manter bytes fora de requests persistíveis. Assets são resolvidos pelo mapa
 efêmero do consumidor com digest, MIME e limites verificados. Rejeitar URLs,
 paths e bytes inline nas APIs persistíveis. Aplicar limites por
-provider/modelo/modalidade e acrescentar limites agregados quando forem
-definidos pelo contrato comum.
+provider/modelo/modalidade e aplicar os limites agregados configuráveis de
+bytes/assets ao chat. Estender o mesmo contrato às operações restantes após
+definir suas semânticas de entrada.
 
 ### 4. Conformidade e instalação
 
@@ -88,7 +89,10 @@ de workbench pertencem aos consumidores, salvo contratos genéricos aprovados.
 ## Dependências e próximo trabalho
 
 A ordem deve seguir dependências dos contratos e gaps verificados, não a
-numeração de entregas. A próxima etapa desta capability é completar a matriz
-provider × operação e resolver limites agregados/catálogo confiável de mídia;
+numeração de entregas. A etapa atual aplica limites agregados opcionais de bytes brutos e assets
+materializados ao turno de chat multimodal e expõe as opções nos bindings. O
+próximo trabalho desta capability é estender o orçamento às operações de
+Decision Model, embeddings e rerank, completar a matriz provider × operação e o
+catálogo confiável de mídia;
 em paralelo, o plano geral da EPIC pode avançar em storage, runtime e
 distribuição.
