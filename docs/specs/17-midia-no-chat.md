@@ -10,7 +10,7 @@ Este documento define como a Engine representa imagem, áudio, vídeo, documento
 - `ToolResult` contém partes tipadas; adapters convertem as modalidades que o protocolo do provider suporta.
 - O preparo existe nos três modos dos bindings: manual, contexto por chamada e contexto padrão do cliente. O mapa temporário `asset_id → bytes` é fornecido pelo host.
 - O contexto valida digest, MIME, limite por asset e escopo de reidratação. O limite padrão é 20 MiB por asset; overrides por provider/modelo/modalidade não excedem o teto global.
-- Limites agregados opcionais de bytes e assets já são aplicados no preparo de chat e requests efêmeros inline. Catálogo automático confiável, limites de duração/resolução e integração com outras operações ainda seguem pendentes.
+- Limites agregados opcionais de bytes/assets cobrem chat e requests efêmeros inline. Decision Model, embeddings e rerank de llama-server usam limites de operação conforme a [spec 18](18-providers-e-modalidades-llama-cpp-v1.md). Catálogo automático confiável e limites de duração/resolução seguem pendentes.
 - A Engine não faz STT local, OCR, renderização de PDF, extração de frames ou gestão de assets persistentes; o consumidor mantém essas responsabilidades.
 
 ## Integração com o envio

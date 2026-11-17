@@ -21,9 +21,9 @@ use super::{
     CapabilityState, ChatCompletion, ChatError, ChatRequest, ChatStream, ContentPart, ContentSite,
     DecisionRequest, DecisionResponse, EphemeralDecisionRequest, EphemeralNativeSpeechRequest,
     MediaExecutionContext, MediaKind, MediaMode, ModalityCapabilities, NativeSpeechRequest,
-    OpenAiCompatibleClient, OpenAiCompatibleConfig, RealtimeIntent, RealtimeSession,
-    RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse, SpeechStreamInfo,
-    prepare_content_with_limits,
+    OpenAiCompatibleClient, OpenAiCompatibleConfig, PreparedContent, RealtimeIntent,
+    RealtimeSession, RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse,
+    SpeechStreamInfo,
 };
 use crate::llm::embeddings::{EmbeddingRequest, EmbeddingResponse, LlmUsage};
 use crate::llm::rerank::{RERANK_CONTRACT_VERSION, RerankResponse, RerankResult};
@@ -407,8 +407,21 @@ impl LlamaServerClient {
         &self,
         request: EphemeralDecisionRequest,
     ) -> Result<DecisionResponse, ChatError> {
+        self.decide_ephemeral_with_limits(request, None, None).await
+    }
+
+    /// Sends a transient decision request under request-wide media limits.
+    pub async fn decide_ephemeral_with_limits(
+        &self,
+        request: EphemeralDecisionRequest,
+        max_total_media_bytes: Option<u64>,
+        max_media_parts: Option<usize>,
+    ) -> Result<DecisionResponse, ChatError> {
+        let max_total_media_bytes = max_total_media_bytes.map_or(self.max_media_bytes, |limit| {
+            limit.min(self.max_media_bytes)
+        });
         request
-            .validate(self.max_media_bytes)
+            .validate_with_limits(max_total_media_bytes, max_media_parts)
             .map_err(ChatError::InvalidRequest)?;
         let models = self.models().await?;
         let selected = models
@@ -613,20 +626,22 @@ impl LlamaServerClient {
             },
             tool_result_images: CapabilityState::Unsupported,
         };
-        let mut inputs = Vec::with_capacity(request.inputs.len());
-        for input in request.inputs {
-            let prepared = prepare_content_with_limits(
-                input.content,
-                &capabilities,
-                context.store.as_ref(),
+        let prepared_inputs = context
+            .prepare_contents_with_capabilities(
+                "llama_cpp",
                 &request.model,
+                request
+                    .inputs
+                    .into_iter()
+                    .map(|input| input.content)
+                    .collect(),
                 ContentSite::UserMessage,
-                context.max_media_bytes.min(self.max_media_bytes),
-                context
-                    .resolver
-                    .media_limits_for("llama_cpp", &request.model),
+                self.max_media_bytes,
+                capabilities,
             )
             .await;
+        let mut inputs = Vec::with_capacity(prepared_inputs.len());
+        for prepared in prepared_inputs {
             if prepared
                 .decisions
                 .iter()
@@ -667,12 +682,40 @@ impl LlamaServerClient {
                 "rerank query and documents must not be empty",
             ));
         }
+        let EphemeralLlamaServerRerankRequest {
+            model,
+            query,
+            documents,
+            top_n,
+            ..
+        } = request;
+        let mut content = Vec::with_capacity(documents.len() + 1);
+        content.push(query);
+        content.extend(documents.into_iter().map(|document| document.content));
+        if content.iter().any(|parts| {
+            parts.is_empty()
+                || parts.iter().any(|part| {
+                    matches!(
+                        part,
+                        ContentPart::ImageUrl { .. }
+                            | ContentPart::Inline(_)
+                            | ContentPart::Audio(_)
+                            | ContentPart::Video(_)
+                            | ContentPart::Document(_)
+                            | ContentPart::File(_)
+                    )
+                })
+        }) {
+            return Err(ChatError::InvalidRequest(
+                "rerank accepts text and consumer image assets only",
+            ));
+        }
         let model = self
             .models()
             .await?
             .data
             .into_iter()
-            .find(|candidate| candidate.id == request.model)
+            .find(|candidate| candidate.id == model)
             .ok_or(ChatError::ModelCapabilityUnsupported)?;
         let modalities = model
             .architecture
@@ -691,25 +734,25 @@ impl LlamaServerClient {
             video_input: CapabilityState::Unsupported,
             tool_result_images: CapabilityState::Unsupported,
         };
-        let document_count = request.documents.len();
-        let query = self
-            .materialize_rerank_item(request.query, &request.model, &capabilities, context)
-            .await?;
-        let mut documents = Vec::with_capacity(request.documents.len());
-        for document in request.documents {
-            documents.push(
-                self.materialize_rerank_item(
-                    document.content,
-                    &request.model,
-                    &capabilities,
-                    context,
-                )
-                .await?,
-            );
-        }
+        let document_count = content.len() - 1;
+        let mut prepared = context
+            .prepare_contents_with_capabilities(
+                "llama_cpp",
+                &model.id,
+                content,
+                ContentSite::UserMessage,
+                self.max_media_bytes,
+                capabilities,
+            )
+            .await
+            .into_iter();
+        let query = Self::materialize_rerank_item(prepared.next().expect("query is present"))?;
+        let documents = prepared
+            .map(Self::materialize_rerank_item)
+            .collect::<Result<Vec<_>, _>>()?;
         let mut payload =
-            serde_json::json!({"model": request.model, "query": query, "documents": documents});
-        if let Some(top_n) = request.top_n {
+            serde_json::json!({"model": model.id, "query": query, "documents": documents});
+        if let Some(top_n) = top_n {
             payload["top_n"] = serde_json::json!(top_n);
         }
         let mut endpoint = self.root_url.clone();
@@ -765,7 +808,7 @@ impl LlamaServerClient {
                 relevance_score: score,
             });
         }
-        if request.top_n.is_some_and(|n| results.len() > n as usize) {
+        if top_n.is_some_and(|n| results.len() > n as usize) {
             return Err(ChatError::InvalidResponse);
         }
         let usage = value
@@ -785,40 +828,7 @@ impl LlamaServerClient {
         })
     }
 
-    async fn materialize_rerank_item(
-        &self,
-        parts: Vec<ContentPart>,
-        model: &str,
-        capabilities: &ModalityCapabilities,
-        context: &MediaExecutionContext,
-    ) -> Result<serde_json::Value, ChatError> {
-        if parts.is_empty()
-            || parts.iter().any(|part| {
-                matches!(
-                    part,
-                    ContentPart::ImageUrl { .. }
-                        | ContentPart::Inline(_)
-                        | ContentPart::Audio(_)
-                        | ContentPart::Video(_)
-                        | ContentPart::Document(_)
-                        | ContentPart::File(_)
-                )
-            })
-        {
-            return Err(ChatError::InvalidRequest(
-                "rerank accepts text and consumer image assets only",
-            ));
-        }
-        let prepared = prepare_content_with_limits(
-            parts,
-            capabilities,
-            context.store.as_ref(),
-            model,
-            ContentSite::UserMessage,
-            context.max_media_bytes.min(self.max_media_bytes),
-            context.resolver.media_limits_for("llama_cpp", model),
-        )
-        .await;
+    fn materialize_rerank_item(prepared: PreparedContent) -> Result<serde_json::Value, ChatError> {
         if prepared
             .decisions
             .iter()
@@ -1812,23 +1822,7 @@ mod tests {
         use super::super::{CapabilityResolver, MediaExecutionContext};
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut buffer = vec![0; 4096];
-            let n = stream.read(&mut buffer).await.unwrap();
-            assert!(String::from_utf8_lossy(&buffer[..n]).starts_with("GET /v1/models "));
-            let body = r#"{"data":[{"id":"vision-ranker","architecture":{"input_modalities":["text","image"]}}]}"#;
-            stream
-                .write_all(
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                        body.len()
-                    )
-                    .as_bytes(),
-                )
-                .await
-                .unwrap();
-        });
+        drop(listener);
         let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
         let context = MediaExecutionContext::new(
             CapabilityResolver::default(),
@@ -1856,7 +1850,6 @@ mod tests {
             )
             .await;
         assert!(matches!(result, Err(ChatError::InvalidRequest(_))));
-        server.await.unwrap();
     }
 
     #[tokio::test]

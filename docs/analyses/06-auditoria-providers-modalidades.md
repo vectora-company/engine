@@ -68,8 +68,10 @@ ambiente ou configuração. O processo reutilizável está no
 
 - Construir e manter uma tabela verificável provider × endpoint × operação ×
   modalidade × modelo, incluindo auth, erros, limites, stream e status real.
-- Estender limites agregados às demais operações e completar catálogo/metadata confiáveis; ausência de
-  dado precisa continuar como `unknown` e falhar de modo conservador.
+- Orçamento agregado configurável de bytes/assets cobre chat, Decision Model
+  efêmero, embeddings e rerank multimodais. Completar catálogo/metadata
+  confiáveis e definir limites de duração/resolução; ausência de dado precisa
+  continuar como `unknown` e falhar de modo conservador.
 - Definir contratos antes de adicionar geração de imagem, batch STT e operações
   gerais de vídeo; especificar suporte concreto, custos, streaming e bytes.
 - Executar smokes locais opt-in com versões fixadas de llama-server, Ollama e

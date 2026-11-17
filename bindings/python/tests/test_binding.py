@@ -1209,6 +1209,43 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
             )
         )
         assert ephemeral["answers"]["route"]["choice"] == "billing"
+        before_limited_decision = len(captured)
+        limited_request = {
+            "request": {
+                "model": "fixture",
+                "state": {"ticket": "charged twice"},
+                "questions": {
+                    "route": {
+                        "type": "choice",
+                        "instructions": "Which team?",
+                        "criteria": {"billing": None, "shipping": None},
+                    }
+                },
+            },
+            "files": [
+                "data:image/png;base64,aGVsbG8=",
+                "data:audio/wav;base64,aGVsbG8=",
+            ],
+        }
+        with pytest.raises(RuntimeError, match="decision media exceeds"):
+            asyncio.run(
+                llama_server_decide_ephemeral(
+                    settings,
+                    limited_request,
+                    media_context=MediaExecutionContext(
+                        {}, max_total_media_bytes=9, max_media_parts=2
+                    ),
+                )
+            )
+        with pytest.raises(RuntimeError, match="configured asset limit"):
+            asyncio.run(
+                llama_server_decide_ephemeral(
+                    settings,
+                    limited_request,
+                    media_context=MediaExecutionContext({}, max_media_parts=1),
+                )
+            )
+        assert len(captured) == before_limited_decision
         result = asyncio.run(llama_server_chat_complete(settings, REQUEST))
         assert result["content"] == "hello"
         events = asyncio.run(collect_llama_server_stream(settings, REQUEST))
@@ -1325,6 +1362,26 @@ def test_llama_server_multimodal_embeddings_materialize_only_consumer_assets() -
         ],
     }
     try:
+        over_budget_request = {
+            **request,
+            "inputs": [request["inputs"][0], request["inputs"][0]],
+        }
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                llama_server_embed_ephemeral(
+                    {
+                        "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                        "api_key": "fixture",
+                    },
+                    over_budget_request,
+                    media_context=MediaExecutionContext(
+                        {"embedding-image": image},
+                        max_total_media_bytes=len(image),
+                        max_media_parts=2,
+                    ),
+                )
+            )
+        assert captured == {}
         response = asyncio.run(
             llama_server_embed_ephemeral(
                 {
@@ -1393,6 +1450,33 @@ def test_llama_server_multimodal_rerank_uses_consumer_assets() -> None:
         "top_n": 1,
     }
     try:
+        over_budget_request = {
+            **request,
+            "documents": [
+                {
+                    "content": [
+                        {"type": "text", "text": "candidate"},
+                        {"type": "image", "media_ref": image_ref},
+                    ]
+                }
+            ],
+        }
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                llama_server_rerank_ephemeral(
+                    {
+                        "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                        "api_key": "fixture",
+                    },
+                    over_budget_request,
+                    media_context=MediaExecutionContext(
+                        {"rerank-image": image},
+                        max_total_media_bytes=len(image),
+                        max_media_parts=2,
+                    ),
+                )
+            )
+        assert captured == {}
         response = asyncio.run(
             llama_server_rerank_ephemeral(
                 {

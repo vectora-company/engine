@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import {
@@ -8,8 +9,10 @@ import {
   llamaServerChatStream,
   llamaServerDecide,
   llamaServerDecideEphemeral,
+  llamaServerEmbedEphemeral,
   llamaServerHealth,
   llamaServerModels,
+  llamaServerRerankEphemeral,
   llamaServerSynthesize,
   llamaServerSynthesizeNativeStreamEphemeral,
   llamaServerSynthesizeStream,
@@ -259,6 +262,38 @@ test("llama-server binding uses health, models and shared chat routes", async ()
       files: ["data:image/png;base64,aGVsbG8="],
     });
     assert.equal(ephemeralDecision.answers.route.choice, "billing");
+    const beforeLimitedDecision = paths.length;
+    const limitedDecision = {
+      request: {
+        model: "fixture",
+        state: { ticket: "charged twice" },
+        questions: { route: {
+          type: "choice",
+          instructions: "Which team?",
+          criteria: { billing: null, shipping: null },
+        } },
+      },
+      files: [
+        "data:image/png;base64,aGVsbG8=",
+        "data:audio/wav;base64,aGVsbG8=",
+      ],
+    };
+    await assert.rejects(
+      llamaServerDecideEphemeral(settings, limitedDecision, {
+        assets: {},
+        max_total_media_bytes: 9,
+        max_media_parts: 2,
+      }),
+      /decision media exceeds/,
+    );
+    await assert.rejects(
+      llamaServerDecideEphemeral(settings, limitedDecision, {
+        assets: {},
+        max_media_parts: 1,
+      }),
+      /configured asset limit/,
+    );
+    assert.equal(paths.length, beforeLimitedDecision);
     const completion = await llamaServerChatComplete(settings, {
       contract_version: 1,
       model: "fixture",
@@ -289,6 +324,66 @@ test("llama-server binding uses health, models and shared chat routes", async ()
   } finally {
     await new Promise((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test("multimodal embeddings and rerank share the request media budget", async () => {
+  const image = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  const ref = {
+    asset_id: "shared-image",
+    sha256: createHash("sha256").update(image).digest("hex"),
+    mime_type: "image/png",
+    size_bytes: image.length,
+    name: "image.png",
+  };
+  const posted = [];
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    if (request.method === "GET") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ data: [{
+        id: "vision-model",
+        architecture: { input_modalities: ["text", "image"] },
+      }] }));
+      return;
+    }
+    posted.push(request.url);
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(request.url === "/v1/embeddings"
+      ? JSON.stringify({ data: [{ index: 0, embedding: [0.2, 0.8] }] })
+      : JSON.stringify({ results: [{ index: 0, relevance_score: 0.8 }] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const settings = { base_url: `http://127.0.0.1:${server.address().port}/v1` };
+  const mediaContext = {
+    assets: { "shared-image": image },
+    max_total_media_bytes: image.length,
+    max_media_parts: 2,
+  };
+  try {
+    await assert.rejects(llamaServerEmbedEphemeral(settings, {
+      contract_version: 1,
+      model: "vision-model",
+      inputs: [
+        { content: [{ type: "image", media_ref: ref }] },
+        { content: [{ type: "image", media_ref: ref }] },
+      ],
+    }, mediaContext));
+    await assert.rejects(llamaServerRerankEphemeral(settings, {
+      contract_version: 1,
+      model: "vision-model",
+      query: [{ type: "image", media_ref: ref }],
+      documents: [{ content: [{ type: "image", media_ref: ref }] }],
+    }, mediaContext));
+    assert.deepEqual(posted, []);
+  } finally {
+    await new Promise((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
     );
   }
 });
