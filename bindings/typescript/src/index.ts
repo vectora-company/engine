@@ -316,6 +316,13 @@ export interface EmbeddingResponse {
   model_switches: { from_model_id: string; to_model_id: string }[];
 }
 
+/** Runtime-only typed content used with the consumer-owned asset map. */
+export interface EphemeralLlamaServerEmbeddingRequest {
+  contract_version: number;
+  model: string;
+  inputs: { content: JsonValue[] }[];
+}
+
 export interface RerankRequest {
   contract_version: number;
   model: string;
@@ -978,6 +985,10 @@ interface NativeBinding {
   ): Promise<string>;
   llamaServerHealth(settingsJson: string): Promise<string>;
   llamaServerEmbed(settingsJson: string, requestJson: string): Promise<string>;
+  llamaServerEmbedEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   llamaServerModels(settingsJson: string): Promise<string>;
   llamaServerDecide(settingsJson: string, requestJson: string): Promise<string>;
   llamaServerDecideEphemeral(
@@ -2355,6 +2366,20 @@ export async function llamaServerEmbed(
   return JSON.parse(
     await native.llamaServerEmbed(
       JSON.stringify(settings),
+      JSON.stringify(request),
+    ),
+  ) as EmbeddingResponse;
+}
+
+/** Create transient multimodal embeddings from consumer-owned media assets. */
+export async function llamaServerEmbedEphemeral(
+  settings: LlamaServerSettings,
+  request: EphemeralLlamaServerEmbeddingRequest,
+  mediaContext: MediaExecutionContext,
+): Promise<EmbeddingResponse> {
+  return JSON.parse(
+    await native.llamaServerEmbedEphemeral(
+      encodeMediaSettings(settings, mediaContext),
       JSON.stringify(request),
     ),
   ) as EmbeddingResponse;

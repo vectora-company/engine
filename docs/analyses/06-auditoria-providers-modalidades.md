@@ -1,6 +1,6 @@
 # Auditoria de providers e modalidades (referência llama.cpp v1.0.0)
 
-**Estado atual:** 16 de novembro de 2026. Checkout `/home/brunosrz/Área de trabalho/engine`, branch `feat/laya-decision-model-client`, base `main` `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`. Os registros datados mais antigos abaixo são histórico; revalide-os antes de tratá-los como estado corrente.
+**Estado atual:** 16 de novembro de 2026. Checkout `/home/brunosrz/Área de trabalho/engine`, branch `feat/llama-server-multimodal-embeddings-assets`, filha do PR [#114](https://github.com/vectora-company/engine/pull/114). Estado de `main` e checks remotos devem ser revalidados antes de qualquer conclusão sobre merge.
 
 ## Fontes consultadas
 
@@ -43,8 +43,16 @@ e [README upstream](https://github.com/NandhaKishorM/laya).
 
 ### Atualização — embeddings multimodais llama-server v1.0.0 (16/11/2026)
 
-A próxima etapa em `feat/llama-server-multimodal-embeddings`, filha do PR #113,
-parte da API fixada em
+O PR [#114](https://github.com/vectora-company/engine/pull/114), filho do #113,
+adicionou embeddings textuais por `/v1/embeddings` nos três runtimes. A etapa
+ativa, `feat/llama-server-multimodal-embeddings-assets`, filha do #114, estende
+esse endpoint com requests efêmeros multimodais e assets fornecidos pelo
+consumidor. Quatro testes focados Rust cobrem imagem, áudio/vídeo, URL remota e
+fail-closed quando falta a modalidade; fixtures Python e TypeScript cobrem a
+materialização por asset map. Suíte final: Rust 234 + 3 fixtures + 1 fronteira
+Python; pytest 97/1 skip; Node 50/11 skips. `scons lint` e hooks passaram.
+
+O contrato parte da API fixada em
 [`tools/server/README.md` v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#L1920-L1932).
 `/v1/embeddings` aceita inputs como texto e objetos com partes tipadas de
 texto/imagem/áudio/vídeo; um objeto retorna um vetor. A API exige pooling que
@@ -52,9 +60,12 @@ não seja `none` e normaliza por norma Euclidiana. Vídeo exige suporte do model
 e FFmpeg; áudio exige formato/modelo compatível. A rota não divulga de modo
 confiável se um modelo carregado tem pooling de embeddings, então o contrato
 não deve inferir compatibilidade apenas pelo model ID ou copiar
-`input_modalities` de chat. A implementação enviará bytes somente a partir do
-asset map do consumidor, conferindo refs, MIME, digest e limite, sem buscar URLs
-remotas ou caminhos locais. Testes e resultados ficam pendentes da etapa.
+`input_modalities` de chat. O core materializa bytes somente a partir do asset
+map do consumidor, confere refs, MIME, digest e limite, e não busca URLs remotas
+nem caminhos locais. Imagens seguem como data URL; áudio e vídeo seguem como
+base64 nos campos tipados previstos pelo server. A aprovação de embedding é
+validada separadamente pelo próprio endpoint e permanece sujeita ao modelo e
+pooling configurados no server.
 
 | Área           | Implementado                                                                                                                                                                               | Não inferir                                                                                                                        |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |

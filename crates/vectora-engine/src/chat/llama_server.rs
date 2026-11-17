@@ -18,11 +18,12 @@ use url::Url;
 
 use super::decision_model::answer_matches;
 use super::{
-    ChatCompletion, ChatError, ChatRequest, ChatStream, DecisionRequest, DecisionResponse,
-    EphemeralDecisionRequest, EphemeralNativeSpeechRequest, MediaExecutionContext,
-    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleConfig, RealtimeIntent,
-    RealtimeSession, RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse,
-    SpeechStreamInfo,
+    CapabilityState, ChatCompletion, ChatError, ChatRequest, ChatStream, ContentPart, ContentSite,
+    DecisionRequest, DecisionResponse, EphemeralDecisionRequest, EphemeralNativeSpeechRequest,
+    MediaExecutionContext, MediaKind, MediaMode, ModalityCapabilities, NativeSpeechRequest,
+    OpenAiCompatibleClient, OpenAiCompatibleConfig, RealtimeIntent, RealtimeSession,
+    RealtimeSessionRequest, SpeechFormat, SpeechRequest, SpeechResponse, SpeechStreamInfo,
+    prepare_content_with_limits,
 };
 use crate::llm::embeddings::{EmbeddingRequest, EmbeddingResponse, LlmUsage};
 
@@ -198,6 +199,23 @@ pub struct LlamaServerModelList {
     pub data: Vec<LlamaServerModel>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+/// One ordered embedding item. Assets are referenced, never inlined in a
+/// persistable request.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct LlamaServerEmbeddingInput {
+    pub content: Vec<ContentPart>,
+}
+
+/// Transient multimodal embedding request, materialized only for one call.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct EphemeralLlamaServerEmbeddingRequest {
+    pub contract_version: u16,
+    pub model: String,
+    pub inputs: Vec<LlamaServerEmbeddingInput>,
 }
 
 /// Result of a successful `GET /health` probe.
@@ -489,8 +507,7 @@ impl LlamaServerClient {
     }
 
     /// Creates text embeddings through llama-server v1.0.0 `/v1/embeddings`.
-    /// Multimodal inputs are exposed separately once their ephemeral asset
-    /// contract is implemented; this method never serializes media into history.
+    /// Multimodal input uses [`Self::embed_ephemeral`] and a consumer-owned asset store.
     pub async fn embed(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse, ChatError> {
         if request.contract_version != crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION
             || request.model.trim().is_empty()
@@ -498,7 +515,127 @@ impl LlamaServerClient {
         {
             return Err(ChatError::InvalidRequest("invalid embedding request"));
         }
-        if request.texts.is_empty() {
+        self.post_embeddings(
+            request.model,
+            serde_json::json!(request.texts),
+            request.texts.len(),
+        )
+        .await
+    }
+
+    /// Creates multimodal embeddings from short-lived, consumer-owned assets.
+    /// Only data already present in the supplied `MediaExecutionContext` is
+    /// materialized; remote URLs, paths, and inline base64 are rejected.
+    pub async fn embed_ephemeral(
+        &self,
+        request: EphemeralLlamaServerEmbeddingRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<EmbeddingResponse, ChatError> {
+        if request.contract_version != crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION
+            || request.model.trim().is_empty()
+        {
+            return Err(ChatError::InvalidRequest(
+                "invalid ephemeral embedding request",
+            ));
+        }
+        if request.inputs.is_empty() {
+            return self
+                .post_embeddings(request.model, serde_json::json!([]), 0)
+                .await;
+        }
+        let expected_count = request.inputs.len();
+        if request.inputs.iter().any(|input| {
+            input.content.is_empty()
+                || input.content.iter().any(|part| {
+                    matches!(
+                        part,
+                        ContentPart::ImageUrl { .. }
+                            | ContentPart::Inline(_)
+                            | ContentPart::Document(_)
+                            | ContentPart::File(_)
+                    )
+                })
+        }) {
+            return Err(ChatError::InvalidRequest(
+                "embedding inputs require text or consumer asset references",
+            ));
+        }
+        let model = self
+            .models()
+            .await?
+            .data
+            .into_iter()
+            .find(|candidate| candidate.id == request.model)
+            .ok_or(ChatError::ModelCapabilityUnsupported)?;
+        let modalities = model
+            .architecture
+            .as_ref()
+            .and_then(|architecture| architecture.input_modalities.as_ref());
+        let supports =
+            |kind: &str| modalities.is_some_and(|items| items.iter().any(|item| item == kind));
+        let capabilities = ModalityCapabilities {
+            vision: if supports("image") {
+                CapabilityState::Supported
+            } else {
+                CapabilityState::Unsupported
+            },
+            pdf: CapabilityState::Unsupported,
+            audio_input: if supports("audio") {
+                CapabilityState::Supported
+            } else {
+                CapabilityState::Unsupported
+            },
+            video_input: if supports("video") {
+                CapabilityState::Supported
+            } else {
+                CapabilityState::Unsupported
+            },
+            tool_result_images: CapabilityState::Unsupported,
+        };
+        let mut inputs = Vec::with_capacity(request.inputs.len());
+        for input in request.inputs {
+            let prepared = prepare_content_with_limits(
+                input.content,
+                &capabilities,
+                context.store.as_ref(),
+                &request.model,
+                ContentSite::UserMessage,
+                context.max_media_bytes.min(self.max_media_bytes),
+                context
+                    .resolver
+                    .media_limits_for("llama_cpp", &request.model),
+            )
+            .await;
+            if prepared
+                .decisions
+                .iter()
+                .any(|decision| decision.mode != MediaMode::Native)
+            {
+                return Err(ChatError::ModelCapabilityUnsupported);
+            }
+            let mut content = Vec::with_capacity(prepared.parts.len());
+            for part in prepared.parts {
+                match part {
+                    ContentPart::Text { text } if !text.trim().is_empty() => content.push(serde_json::json!({"type":"text","text":text})),
+                    ContentPart::ImageUrl { image_url } if image_url.url.starts_with("data:image/") => content.push(serde_json::json!({"type":"image_url","image_url":{"url":image_url.url}})),
+                    ContentPart::Inline(media) if media.kind == MediaKind::Audio => content.push(serde_json::json!({"type":"input_audio","input_audio":{"data":media.data_base64}})),
+                    ContentPart::Inline(media) if media.kind == MediaKind::Video => content.push(serde_json::json!({"type":"input_video","input_video":{"data":media.data_base64}})),
+                    _ => return Err(ChatError::InvalidRequest("unsupported or empty embedding content part")),
+                }
+            }
+            inputs.push(serde_json::json!({"content":content}));
+        }
+        self.post_embeddings(request.model, serde_json::json!(inputs), expected_count)
+            .await
+    }
+
+    async fn post_embeddings(
+        &self,
+        model: String,
+        input: serde_json::Value,
+        expected_count: usize,
+    ) -> Result<EmbeddingResponse, ChatError> {
+        if expected_count == 0 {
             return Ok(EmbeddingResponse {
                 contract_version: crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION,
                 embeddings: Vec::new(),
@@ -513,11 +650,9 @@ impl LlamaServerClient {
             "{}/embeddings",
             endpoint.path().trim_end_matches('/')
         ));
-        let body = serde_json::to_vec(&serde_json::json!({
-            "model": request.model,
-            "input": request.texts,
-            "encoding_format": "float",
-        }))
+        let body = serde_json::to_vec(
+            &serde_json::json!({"model":model,"input":input,"encoding_format":"float"}),
+        )
         .map_err(|_| ChatError::InvalidRequest("embedding request could not be encoded"))?;
         if body.len() > self.max_response_bytes {
             return Err(ChatError::ResponseTooLarge);
@@ -565,10 +700,10 @@ impl LlamaServerClient {
             usage: Option<Usage>,
         }
         let raw: Raw = serde_json::from_slice(&bytes).map_err(|_| ChatError::InvalidResponse)?;
-        if raw.data.len() != request.texts.len() {
+        if raw.data.len() != expected_count {
             return Err(ChatError::InvalidResponse);
         }
-        let mut vectors = vec![None; request.texts.len()];
+        let mut vectors = vec![None; expected_count];
         let mut dimensions = None;
         for item in raw.data {
             if item.index >= vectors.len()
@@ -594,7 +729,7 @@ impl LlamaServerClient {
                 input_tokens: usage.prompt_tokens,
                 cost: None,
             }),
-            selected_model_id: Some(request.model),
+            selected_model_id: Some(model),
             model_switches: Vec::new(),
         })
     }
@@ -1350,6 +1485,260 @@ mod tests {
         assert_eq!(response.dimensions, 2);
         assert_eq!(response.usage.unwrap().input_tokens, 7);
         server.await.unwrap();
+    }
+
+    struct EmbeddingAssetStore(std::collections::HashMap<String, Vec<u8>>);
+
+    #[async_trait::async_trait]
+    impl super::super::MediaStore for EmbeddingAssetStore {
+        async fn read(
+            &self,
+            media_ref: &super::super::MediaRef,
+        ) -> Result<Vec<u8>, super::super::MediaError> {
+            self.0
+                .get(&media_ref.asset_id)
+                .cloned()
+                .ok_or(super::super::MediaError::Unavailable)
+        }
+    }
+
+    fn png_ref(bytes: &[u8]) -> super::super::MediaRef {
+        super::super::MediaRef {
+            asset_id: "image-1".into(),
+            sha256: super::super::sha256_hex(bytes),
+            mime_type: "image/png".into(),
+            size_bytes: bytes.len() as u64,
+            name: "fixture.png".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn multimodal_embeddings_resolve_and_materialize_only_consumer_assets() {
+        use super::super::{CapabilityResolver, MediaExecutionContext, MediaPart};
+        let bytes = b"\x89PNG\r\n\x1a\nfixture".to_vec();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 16 * 1024];
+                let n = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..n]);
+                assert!(
+                    request
+                        .to_ascii_lowercase()
+                        .contains("authorization: bearer test-key")
+                );
+                let (status, body) = if request.starts_with("GET /v1/models ") {
+                    (
+                        "200 OK",
+                        r#"{"data":[{"id":"vision-embed","architecture":{"input_modalities":["text","image"]}}]}"#,
+                    )
+                } else {
+                    assert!(request.starts_with("POST /v1/embeddings "));
+                    assert!(request.contains("data:image/png;base64,"));
+                    assert!(!request.contains("file://"));
+                    ("200 OK", r#"{"data":[{"index":0,"embedding":[0.1,0.9]}]}"#)
+                };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::default(),
+            std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::from([(
+                "image-1".to_owned(),
+                bytes.clone(),
+            )]))),
+        );
+        let response = client
+            .embed_ephemeral(
+                EphemeralLlamaServerEmbeddingRequest {
+                    contract_version: crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION,
+                    model: "vision-embed".into(),
+                    inputs: vec![LlamaServerEmbeddingInput {
+                        content: vec![
+                            ContentPart::Text {
+                                text: "describe".into(),
+                            },
+                            ContentPart::Image(MediaPart {
+                                media_ref: png_ref(&bytes),
+                                text: None,
+                                previews: vec![],
+                            }),
+                        ],
+                    }],
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.embeddings, vec![vec![0.1, 0.9]]);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn multimodal_embeddings_encode_audio_and_video_as_native_data_parts() {
+        use super::super::{
+            CapabilityResolver, MediaExecutionContext, MediaPart, MediaRef, sha256_hex,
+        };
+        let audio = b"RIFF\x04\x00\x00\x00WAVE".to_vec();
+        let mut video = vec![0; 16];
+        video[4..8].copy_from_slice(b"ftyp");
+        video[8..12].copy_from_slice(b"isom");
+        let reference = |id: &str, bytes: &[u8], mime: &str, name: &str| MediaRef {
+            asset_id: id.into(),
+            sha256: sha256_hex(bytes),
+            mime_type: mime.into(),
+            size_bytes: bytes.len() as u64,
+            name: name.into(),
+        };
+        let store = EmbeddingAssetStore(std::collections::HashMap::from([
+            ("audio-1".into(), audio.clone()),
+            ("video-1".into(), video.clone()),
+        ]));
+        let audio_base64 = base64::engine::general_purpose::STANDARD.encode(&audio);
+        let video_base64 = base64::engine::general_purpose::STANDARD.encode(&video);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 16 * 1024];
+                let n = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..n]);
+                let body = if request.starts_with("GET /v1/models ") {
+                    r#"{"data":[{"id":"av-embed","architecture":{"input_modalities":["text","audio","video"]}}]}"#
+                } else {
+                    assert!(request.contains("\"type\":\"input_audio\""));
+                    assert!(request.contains("\"type\":\"input_video\""));
+                    assert!(request.contains(&audio_base64));
+                    assert!(request.contains(&video_base64));
+                    r#"{"data":[{"index":0,"embedding":[0.3]},{"index":1,"embedding":[0.4]}]}"#
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let context =
+            MediaExecutionContext::new(CapabilityResolver::default(), std::sync::Arc::new(store));
+        let response = client
+            .embed_ephemeral(
+                EphemeralLlamaServerEmbeddingRequest {
+                    contract_version: crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION,
+                    model: "av-embed".into(),
+                    inputs: vec![
+                        LlamaServerEmbeddingInput {
+                            content: vec![ContentPart::Audio(MediaPart {
+                                media_ref: reference("audio-1", &audio, "audio/wav", "sound.wav"),
+                                text: None,
+                                previews: vec![],
+                            })],
+                        },
+                        LlamaServerEmbeddingInput {
+                            content: vec![ContentPart::Video(MediaPart {
+                                media_ref: reference("video-1", &video, "video/mp4", "clip.mp4"),
+                                text: None,
+                                previews: vec![],
+                            })],
+                        },
+                    ],
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.embeddings, vec![vec![0.3], vec![0.4]]);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn multimodal_embeddings_reject_remote_urls_and_undeclared_modalities() {
+        use super::super::{CapabilityResolver, ImageUrl, MediaExecutionContext};
+        let client = LlamaServerClient::new(settings("http://127.0.0.1:1".into())).unwrap();
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::default(),
+            std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::new())),
+        );
+        let request = EphemeralLlamaServerEmbeddingRequest {
+            contract_version: crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION,
+            model: "embed-model".into(),
+            inputs: vec![LlamaServerEmbeddingInput {
+                content: vec![ContentPart::ImageUrl {
+                    image_url: ImageUrl {
+                        url: "https://example.invalid/image.png".into(),
+                        detail: None,
+                    },
+                }],
+            }],
+        };
+        assert!(matches!(
+            client.embed_ephemeral(request, &context).await,
+            Err(ChatError::InvalidRequest(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn multimodal_embeddings_fail_closed_when_model_does_not_declare_image() {
+        use super::super::{CapabilityResolver, MediaExecutionContext, MediaPart};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let bytes = b"\x89PNG\r\n\x1a\nfixture".to_vec();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let request_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let server_request_count = request_count.clone();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let n = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..n]);
+            assert!(request.starts_with("GET /v1/models "));
+            server_request_count.fetch_add(1, Ordering::SeqCst);
+            let body =
+                r#"{"data":[{"id":"text-only","architecture":{"input_modalities":["text"]}}]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::default(),
+            std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::from([(
+                "image-1".to_owned(),
+                bytes.clone(),
+            )]))),
+        );
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let result = client
+            .embed_ephemeral(
+                EphemeralLlamaServerEmbeddingRequest {
+                    contract_version: crate::llm::embeddings::EMBEDDING_CONTRACT_VERSION,
+                    model: "text-only".into(),
+                    inputs: vec![LlamaServerEmbeddingInput {
+                        content: vec![ContentPart::Image(MediaPart {
+                            media_ref: png_ref(&bytes),
+                            text: None,
+                            previews: vec![],
+                        })],
+                    }],
+                },
+                &context,
+            )
+            .await;
+
+        assert!(matches!(result, Err(ChatError::ModelCapabilityUnsupported)));
+        server.await.unwrap();
+        assert_eq!(request_count.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

@@ -13,7 +13,7 @@ O pacote operacional atualizado do goal está indexado em
 do loop e os critérios sucintos de encerramento.
 
 Estado corrente em 16/11/2026: PRs até #112 estão integrados em `main`
-(`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). O cliente direto `laya-serve` foi publicado no PR [#113](https://github.com/vectora-company/engine/pull/113). A branch ativa `feat/llama-server-multimodal-embeddings`, filha do #113, implementa embeddings de texto llama-server; mídia multimodal permanece pendente. `scons tests` passou (Rust 230 + 3 fixtures + 1 teste fronteira Python; pytest 96/1 skip; Node 49/11 skips) e `scons lint` passou. Atualize plano, spec,
+(`4140ddeffa646c4dfd2f0e6a7402a1b00e337099`). O cliente direto `laya-serve` foi publicado no PR [#113](https://github.com/vectora-company/engine/pull/113). A branch ativa `feat/llama-server-multimodal-embeddings-assets`, filha do PR #114, implementa embeddings multimodais llama-server com asset map efêmero. Rust (234 + 3 fixtures + teste fronteira Python), pytest (97/1 skip), Node (50/11 skips), `scons lint` e hooks passaram; fixture fail-closed passou na suíte integrada final. Atualize plano, spec,
 checklist e análise específicos e este índice a cada etapa. O
 estado verificável fica em
 [`docs/goal-loop/README.md`](../goal-loop/README.md).
