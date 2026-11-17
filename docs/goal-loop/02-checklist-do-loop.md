@@ -7,6 +7,11 @@ Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Todo
 item bloqueado ou não aplicável precisa de uma justificativa curta.
 
 O inventário transversal das capabilities está em [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md). Consulte o estado específico do domínio antes de retomar; este checklist não guarda o topo da stack.
+Para eventos versionados, conversas e replay, use
+[`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md),
+[`docs/plans/conversation-events.md`](../plans/conversation-events.md),
+[`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
+e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 Para o panorama de todas as capabilities e issues, consulte o [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md); o estado corrente deve ser revalidado contra o checkout e o GitHub.
 
 ## Preparação

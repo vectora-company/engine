@@ -219,9 +219,17 @@ Origem: [plano de storage](04-plano-storage-ledger.md) e
 ### Fase 3 — eventos, conversas e replay
 
 Origem: [spec 04](../specs/04-conversas-streaming-e-threads.md) e spec 02.
+O plano, checklist e análise específicos estão em
+[`docs/plans/conversation-events.md`](conversation-events.md),
+[`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
+e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
-1. Envelope público de evento (event_id, sequência/cursor, versão de schema,
-   IDs correlacionados, timestamp) e classes mínimas. **[D]** dados.
+1. **Parcial:** envelope Rust v1 (`ConversationEvent`) com event/conversation/
+   turn/run/step IDs, sequência, timestamp, origem e payloads tipados; validação
+   estrutural e testes unitários adicionados. Os testes não foram executados
+   localmente nesta etapa por solicitação do mantenedor. Faltam exposição pelos
+   bindings, sequência atribuída pela store, persistência e fixtures entre
+   linguagens. Evidência: `crates/vectora-engine/src/harness/events.rs`.
 2. Gaps representáveis e replay por cursor com reconexão sem duplicação.
 3. API de conversa/sessão, histórico paginado e projeções; admissão com
    `queued`, `blocked` e `rejected` e concorrência por conversa. **[D]**.

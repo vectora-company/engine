@@ -75,6 +75,11 @@ artefatos específicos próximos do domínio e ligados entre si:
   [`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](../plans/09-plano-runtime-tools-identidade-e-isolamento.md),
   [`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](../checklists/09-runtime-tools-identidade-e-isolamento.md)
   e [`docs/analyses/09-runtime-tools-vectora.md`](../analyses/09-runtime-tools-vectora.md).
+- Eventos versionados, conversas e replay:
+  [`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md),
+  [`docs/plans/conversation-events.md`](../plans/conversation-events.md),
+  [`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
+  e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
 Ao abrir uma nova capability, inclua seus caminhos completos no índice
 [`docs/README.md`](../README.md), em

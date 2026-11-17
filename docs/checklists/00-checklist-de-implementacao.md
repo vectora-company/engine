@@ -15,6 +15,10 @@ Use os seguintes checklists por domínio:
 - CLI: [`docs/checklists/08-engine-cli.md`](08-engine-cli.md).
 - Harness, identidade host, tools, sandbox, memória, subagentes e deep search:
   [`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](09-runtime-tools-identidade-e-isolamento.md).
+- Eventos versionados, conversas e replay: [`docs/checklists/conversation-events.md`](conversation-events.md),
+  plano [`docs/plans/conversation-events.md`](../plans/conversation-events.md),
+  spec [`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md)
+  e análise [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Não
 marque um item como feito sem evidência local identificável.
@@ -97,6 +101,10 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
   controla autenticação, revogação e chamada imediatamente antes do adapter.
 - [parcial] Tool output schema opcional e validador existem no core Rust e nos
   bindings; o host precisa chamar o validador antes de persistir/expor resultados.
+- [parcial] Envelope versionado de eventos de conversa e payloads tipados
+  adicionados ao core Rust; testes escritos, sem execução local nesta etapa.
+  Bindings, persistência, admission e replay estão pendentes. Evidência e
+  critérios: [`docs/checklists/conversation-events.md`](conversation-events.md).
 
 ## Contratos e desenho
 

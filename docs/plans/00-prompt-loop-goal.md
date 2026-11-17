@@ -18,6 +18,11 @@ navegação, use também [`docs/specs/21-harness-tools-identidade-e-isolamento.m
 [`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](09-plano-runtime-tools-identidade-e-isolamento.md),
 [`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](../checklists/09-runtime-tools-identidade-e-isolamento.md)
 e [`docs/analyses/09-runtime-tools-vectora.md`](../analyses/09-runtime-tools-vectora.md).
+Para eventos versionados, conversas e replay, leia
+[`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md),
+[`docs/plans/conversation-events.md`](conversation-events.md),
+[`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
+e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
 No início de cada sessão, confirme checkout, branch, alterações locais e
 remote. Preserve mudanças locais alheias ao escopo. Ao entregar cada etapa,
