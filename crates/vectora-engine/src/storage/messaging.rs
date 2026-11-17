@@ -7,6 +7,7 @@ use thiserror::Error;
 
 pub const MESSAGING_CONTRACT_VERSION: u16 = 1;
 const DEFAULT_QUEUE_DEDUPLICATION_WINDOW_SECONDS: u64 = 120;
+const MAX_QUEUE_REPLAY_PAGE_SIZE: u32 = 1_000;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -69,6 +70,8 @@ pub enum MessagingError {
     Unsupported,
     #[error("concurrent KV updates exhausted the retry limit")]
     Contention,
+    #[error("queue replay cursor expired because retention removed its position")]
+    ReplayCursorExpired,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -107,6 +110,32 @@ pub trait KvStore: Send + Sync {
 pub struct QueueJob {
     pub id: String,
     pub payload: Vec<u8>,
+}
+
+/// Opaque checkpoint for read-only replay of retained queue history.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct QueueCursor {
+    pub contract_version: u16,
+    pub backend: super::QueueBackend,
+    pub namespace: String,
+    /// Redis stream ID (`milliseconds-sequence`) or JetStream sequence.
+    pub position: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct QueueReplayRecord {
+    pub cursor: QueueCursor,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct QueueReplayPage {
+    pub records: Vec<QueueReplayRecord>,
+    /// Cursor of the last scanned stream position, or the input cursor if none.
+    pub next_cursor: Option<QueueCursor>,
 }
 
 enum RedisWriteCondition<'a> {
@@ -218,6 +247,80 @@ fn validate_key_listing(prefix: &str, limit: u32) -> Result<(), MessagingError> 
     }
     if !prefix.is_empty() {
         validate_key(prefix)?;
+    }
+    Ok(())
+}
+
+fn validate_replay_limit(limit: u32) -> Result<(), MessagingError> {
+    if limit == 0 || limit > MAX_QUEUE_REPLAY_PAGE_SIZE {
+        Err(MessagingError::InvalidInput)
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_redis_stream_id(id: &str) -> Result<(u64, u64), MessagingError> {
+    let (milliseconds, sequence) = id.split_once('-').ok_or(MessagingError::InvalidInput)?;
+    if milliseconds.is_empty() || sequence.is_empty() {
+        return Err(MessagingError::InvalidInput);
+    }
+    Ok((
+        milliseconds
+            .parse()
+            .map_err(|_| MessagingError::InvalidInput)?,
+        sequence.parse().map_err(|_| MessagingError::InvalidInput)?,
+    ))
+}
+
+fn compare_redis_stream_ids(left: &str, right: &str) -> Result<std::cmp::Ordering, MessagingError> {
+    Ok(validate_redis_stream_id(left)?.cmp(&validate_redis_stream_id(right)?))
+}
+
+fn replay_payload(
+    id: String,
+    fields: std::collections::HashMap<String, redis::Value>,
+) -> Result<(String, Vec<u8>), MessagingError> {
+    let value = fields.get("payload").ok_or(MessagingError::Storage)?;
+    let payload = redis::from_redis_value::<Vec<u8>>(value).map_err(|_| MessagingError::Storage)?;
+    Ok((id, payload))
+}
+
+fn replay_cursor(backend: super::QueueBackend, namespace: &str, position: String) -> QueueCursor {
+    QueueCursor {
+        contract_version: MESSAGING_CONTRACT_VERSION,
+        backend,
+        namespace: namespace.to_owned(),
+        position,
+    }
+}
+
+fn validate_queue_cursor(
+    cursor: Option<&QueueCursor>,
+    backend: super::QueueBackend,
+    namespace: &str,
+) -> Result<(), MessagingError> {
+    let Some(cursor) = cursor else {
+        return Ok(());
+    };
+    if cursor.contract_version != MESSAGING_CONTRACT_VERSION
+        || cursor.backend != backend
+        || cursor.namespace != namespace
+    {
+        return Err(MessagingError::InvalidInput);
+    }
+    match backend {
+        super::QueueBackend::RedisStreams => {
+            validate_redis_stream_id(&cursor.position)?;
+        }
+        super::QueueBackend::NatsJetstream => {
+            if cursor
+                .position
+                .parse::<u64>()
+                .map_or(true, |sequence| sequence == 0)
+            {
+                return Err(MessagingError::InvalidInput);
+            }
+        }
     }
     Ok(())
 }
@@ -411,6 +514,12 @@ impl NatsCorePubSub {
         self.client
             .publish(self.subject(topic)?, payload.into())
             .await
+            .map_err(|_| MessagingError::Storage)?;
+        // Bindings may drop this short-lived adapter as soon as the call
+        // returns. Flush so the queued publish reaches the server first.
+        self.client
+            .flush()
+            .await
             .map_err(|_| MessagingError::Storage)
     }
 
@@ -418,6 +527,27 @@ impl NatsCorePubSub {
         let subscriber = self
             .client
             .subscribe(self.subject(topic)?)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        self.client
+            .flush()
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        Ok(NatsSubscription { subscriber })
+    }
+
+    pub async fn subscribe_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<NatsSubscription, MessagingError> {
+        validate_subject_pattern(pattern)?;
+        let subscriber = self
+            .client
+            .subscribe(format!("{}.{}", self.prefix, pattern))
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        self.client
+            .flush()
             .await
             .map_err(|_| MessagingError::Storage)?;
         Ok(NatsSubscription { subscriber })
@@ -994,6 +1124,59 @@ fn validate_subject(subject: &str) -> Result<(), MessagingError> {
     }
 }
 
+fn validate_subject_pattern(pattern: &str) -> Result<(), MessagingError> {
+    if pattern.is_empty() || pattern.len() > 512 {
+        return Err(MessagingError::InvalidInput);
+    }
+    let parts: Vec<_> = pattern.split('.').collect();
+    for (index, part) in parts.iter().enumerate() {
+        if part.is_empty()
+            || part.contains('#')
+            || (part.contains(['*', '>'])
+                && *part != "*"
+                && !(*part == ">" && index + 1 == parts.len()))
+            || (*part == ">" && index + 1 != parts.len())
+        {
+            return Err(MessagingError::InvalidInput);
+        }
+    }
+    Ok(())
+}
+
+fn subject_matches_pattern(pattern: &str, subject: &str) -> bool {
+    let pattern: Vec<_> = pattern.split('.').collect();
+    let subject: Vec<_> = subject.split('.').collect();
+    for (index, part) in pattern.iter().enumerate() {
+        match *part {
+            ">" => return subject.len() > index,
+            "*" if subject.get(index).is_some_and(|part| !part.is_empty()) => {}
+            literal if subject.get(index) == Some(&literal) => {}
+            _ => return false,
+        }
+    }
+    pattern.len() == subject.len()
+}
+
+fn redis_subject_glob(prefix: &str, pattern: &str) -> String {
+    let mut glob = format!("{prefix}:");
+    for (index, part) in pattern.split('.').enumerate() {
+        if index > 0 {
+            glob.push('.');
+        }
+        if part == "*" || part == ">" {
+            glob.push('*');
+        } else {
+            for character in part.chars() {
+                if matches!(character, '*' | '?' | '[' | ']' | '\\') {
+                    glob.push('\\');
+                }
+                glob.push(character);
+            }
+        }
+    }
+    glob
+}
+
 pub struct RedisPubSub {
     store: RedisStore,
 }
@@ -1024,7 +1207,31 @@ impl RedisPubSub {
             .subscribe(format!("{}:{channel}", self.store.prefix))
             .await
             .map_err(|_| MessagingError::Storage)?;
-        Ok(RedisSubscription { pubsub })
+        Ok(RedisSubscription {
+            pubsub,
+            filter: None,
+        })
+    }
+
+    pub async fn subscribe_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<RedisSubscription, MessagingError> {
+        validate_subject_pattern(pattern)?;
+        let mut pubsub = self
+            .store
+            .client
+            .get_async_pubsub()
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        pubsub
+            .psubscribe(redis_subject_glob(&self.store.prefix, pattern))
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        Ok(RedisSubscription {
+            pubsub,
+            filter: Some((format!("{}:", self.store.prefix), pattern.to_owned())),
+        })
     }
 }
 
@@ -1089,6 +1296,87 @@ impl RedisStreamQueue {
             .await
             .map_err(|_| MessagingError::Storage)
     }
+
+    pub async fn replay_after(
+        &self,
+        queue: &str,
+        after: Option<&str>,
+        limit: u32,
+    ) -> Result<(Vec<(String, Vec<u8>)>, Option<String>), MessagingError> {
+        use redis::streams::StreamRangeReply;
+
+        validate_replay_limit(limit)?;
+        let key = self.stream_key(queue)?;
+        let mut conn = self.store.connection().await?;
+        let bounds: StreamRangeReply = redis::cmd("XRANGE")
+            .arg(&key)
+            .arg("-")
+            .arg("+")
+            .arg("COUNT")
+            .arg(1)
+            .query_async(&mut conn)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        let first = bounds.ids.first().map(|entry| entry.id.as_str());
+        if let Some(cursor) = after {
+            validate_redis_stream_id(cursor)?;
+            let info: redis::streams::StreamInfoStreamReply = redis::cmd("XINFO")
+                .arg("STREAM")
+                .arg(&key)
+                .query_async(&mut conn)
+                .await
+                .map_err(|_| MessagingError::Storage)?;
+            if compare_redis_stream_ids(cursor, &info.last_generated_id)?
+                == std::cmp::Ordering::Greater
+            {
+                return Err(MessagingError::InvalidInput);
+            }
+            if let Some(first) = first {
+                if compare_redis_stream_ids(cursor, first)? == std::cmp::Ordering::Less {
+                    return Err(MessagingError::ReplayCursorExpired);
+                }
+            } else {
+                return Err(MessagingError::ReplayCursorExpired);
+            }
+        }
+        let Some(after) = after else {
+            let rows: StreamRangeReply = redis::cmd("XRANGE")
+                .arg(&key)
+                .arg("-")
+                .arg("+")
+                .arg("COUNT")
+                .arg(limit)
+                .query_async(&mut conn)
+                .await
+                .map_err(|_| MessagingError::Storage)?;
+            let last = rows.ids.last().map(|entry| entry.id.clone());
+            let records = rows
+                .ids
+                .into_iter()
+                .map(|entry| replay_payload(entry.id, entry.map))
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok((records, last));
+        };
+        validate_redis_stream_id(after)?;
+        let exclusive = format!("({after}");
+        let rows: StreamRangeReply = redis::cmd("XRANGE")
+            .arg(&key)
+            .arg(exclusive)
+            .arg("+")
+            .arg("COUNT")
+            .arg(limit)
+            .query_async(&mut conn)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        let last = rows.ids.last().map(|entry| entry.id.clone());
+        let records = rows
+            .ids
+            .into_iter()
+            .map(|entry| replay_payload(entry.id, entry.map))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((records, last))
+    }
+
     pub async fn receive(
         &self,
         queue: &str,
@@ -1311,6 +1599,15 @@ pub struct NatsStreamQueue {
 }
 
 impl NatsStreamQueue {
+    fn namespace(&self) -> String {
+        self.subject
+            .strip_prefix("vectora.queue.")
+            .unwrap_or(&self.subject)
+            .to_owned()
+    }
+}
+
+impl NatsStreamQueue {
     pub async fn connect(
         url: &str,
         name: &str,
@@ -1452,6 +1749,60 @@ impl NatsStreamQueue {
             .map(|ack| ack.sequence)
             .map_err(|_| MessagingError::Storage)
     }
+
+    pub async fn replay_after(
+        &self,
+        after: Option<u64>,
+        limit: u32,
+    ) -> Result<(Vec<(String, Vec<u8>)>, Option<u64>), MessagingError> {
+        validate_replay_limit(limit)?;
+        let mut stream = self.ensure_stream().await?;
+        let state = stream
+            .info()
+            .await
+            .map_err(|_| MessagingError::Storage)?
+            .state
+            .clone();
+        if let Some(cursor) = after {
+            if cursor > state.last_sequence {
+                return Err(MessagingError::InvalidInput);
+            }
+            if cursor < state.first_sequence {
+                return Err(MessagingError::ReplayCursorExpired);
+            }
+        }
+        if state.messages == 0 {
+            return Ok((Vec::new(), None));
+        }
+        let mut records = Vec::new();
+        let mut sequence = after
+            .map(|cursor| cursor.saturating_add(1))
+            .unwrap_or(state.first_sequence);
+        let mut scanned = 0;
+        while sequence <= state.last_sequence && scanned < limit {
+            match stream.get_raw_message(sequence).await {
+                Ok(message) if message.subject.as_str() == self.subject => {
+                    records.push((sequence.to_string(), message.payload.to_vec()));
+                }
+                Ok(_) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        async_nats::jetstream::stream::RawMessageErrorKind::NoMessageFound
+                    ) => {}
+                Err(_) => return Err(MessagingError::Storage),
+            }
+            sequence = sequence.saturating_add(1);
+            scanned += 1;
+        }
+        let scanned_position = if scanned == 0 {
+            None
+        } else {
+            Some(sequence.saturating_sub(1).min(state.last_sequence))
+        };
+        Ok((records, scanned_position))
+    }
+
     pub async fn receive(
         &self,
         group: &str,
@@ -1606,6 +1957,11 @@ pub trait DurableQueue: Send + Sync {
         payload: Vec<u8>,
         idempotency_key: &str,
     ) -> Result<String, MessagingError>;
+    async fn replay_after(
+        &self,
+        cursor: Option<&QueueCursor>,
+        limit: u32,
+    ) -> Result<QueueReplayPage, MessagingError>;
     async fn receive(
         &self,
         consumer: &str,
@@ -1735,6 +2091,79 @@ impl QueueAdapter {
         }
     }
 
+    /// Reads retained queue history without creating or advancing a consumer.
+    pub async fn replay_after(
+        &self,
+        cursor: Option<&QueueCursor>,
+        limit: u32,
+    ) -> Result<QueueReplayPage, MessagingError> {
+        validate_replay_limit(limit)?;
+        match self {
+            Self::Redis { queue, name, .. } => {
+                validate_queue_cursor(cursor, super::QueueBackend::RedisStreams, name)?;
+                let (entries, scanned_position) = queue
+                    .replay_after(name, cursor.map(|cursor| cursor.position.as_str()), limit)
+                    .await?;
+                let records: Vec<_> = entries
+                    .into_iter()
+                    .map(|(position, payload)| QueueReplayRecord {
+                        cursor: replay_cursor(super::QueueBackend::RedisStreams, name, position),
+                        payload,
+                    })
+                    .collect();
+                let next_cursor = scanned_position
+                    .map(|position| {
+                        replay_cursor(super::QueueBackend::RedisStreams, name, position)
+                    })
+                    .or_else(|| cursor.cloned());
+                Ok(QueueReplayPage {
+                    records,
+                    next_cursor,
+                })
+            }
+            Self::Nats { queue } => {
+                validate_queue_cursor(
+                    cursor,
+                    super::QueueBackend::NatsJetstream,
+                    &queue.namespace(),
+                )?;
+                let (entries, scanned_position) = queue
+                    .replay_after(
+                        cursor
+                            .map(|cursor| cursor.position.parse::<u64>())
+                            .transpose()
+                            .map_err(|_| MessagingError::InvalidInput)?,
+                        limit,
+                    )
+                    .await?;
+                let records: Vec<_> = entries
+                    .into_iter()
+                    .map(|(position, payload)| QueueReplayRecord {
+                        cursor: replay_cursor(
+                            super::QueueBackend::NatsJetstream,
+                            &queue.namespace(),
+                            position,
+                        ),
+                        payload,
+                    })
+                    .collect();
+                let next_cursor = scanned_position
+                    .map(|position| {
+                        replay_cursor(
+                            super::QueueBackend::NatsJetstream,
+                            &queue.namespace(),
+                            position.to_string(),
+                        )
+                    })
+                    .or_else(|| cursor.cloned());
+                Ok(QueueReplayPage {
+                    records,
+                    next_cursor,
+                })
+            }
+        }
+    }
+
     pub async fn receive(
         &self,
         consumer: &str,
@@ -1817,6 +2246,14 @@ impl DurableQueue for QueueAdapter {
         QueueAdapter::enqueue_idempotent(self, payload, idempotency_key).await
     }
 
+    async fn replay_after(
+        &self,
+        cursor: Option<&QueueCursor>,
+        limit: u32,
+    ) -> Result<QueueReplayPage, MessagingError> {
+        QueueAdapter::replay_after(self, cursor, limit).await
+    }
+
     async fn receive(
         &self,
         consumer: &str,
@@ -1845,6 +2282,7 @@ pub enum PubSubAdapter {
 pub trait EphemeralPubSub: Send + Sync {
     async fn publish(&self, topic: &str, payload: Vec<u8>) -> Result<(), MessagingError>;
     async fn subscribe(&self, topic: &str) -> Result<PubSubSubscription, MessagingError>;
+    async fn subscribe_pattern(&self, pattern: &str) -> Result<PubSubSubscription, MessagingError>;
 }
 
 #[async_trait]
@@ -1881,6 +2319,22 @@ impl PubSubAdapter {
             Self::Nats(adapter) => adapter.subscribe(topic).await.map(PubSubSubscription::Nats),
         }
     }
+
+    pub async fn subscribe_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<PubSubSubscription, MessagingError> {
+        match self {
+            Self::Redis(adapter) => adapter
+                .subscribe_pattern(pattern)
+                .await
+                .map(PubSubSubscription::Redis),
+            Self::Nats(adapter) => adapter
+                .subscribe_pattern(pattern)
+                .await
+                .map(PubSubSubscription::Nats),
+        }
+    }
 }
 
 pub enum PubSubSubscription {
@@ -1906,6 +2360,10 @@ impl EphemeralPubSub for PubSubAdapter {
     async fn subscribe(&self, topic: &str) -> Result<PubSubSubscription, MessagingError> {
         PubSubAdapter::subscribe(self, topic).await
     }
+
+    async fn subscribe_pattern(&self, pattern: &str) -> Result<PubSubSubscription, MessagingError> {
+        PubSubAdapter::subscribe_pattern(self, pattern).await
+    }
 }
 
 #[async_trait]
@@ -1917,17 +2375,36 @@ impl PubSubReceiver for PubSubSubscription {
 
 pub struct RedisSubscription {
     pubsub: redis::aio::PubSub,
+    filter: Option<(String, String)>,
 }
 
 impl RedisSubscription {
     pub async fn receive(&mut self, timeout: Duration) -> Result<Option<Vec<u8>>, MessagingError> {
         use futures_util::StreamExt;
-        match tokio::time::timeout(timeout, self.pubsub.on_message().next()).await {
-            Ok(Some(message)) => message
-                .get_payload()
-                .map(Some)
-                .map_err(|_| MessagingError::Storage),
-            Ok(None) | Err(_) => Ok(None),
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Ok(None);
+            }
+            match tokio::time::timeout(remaining, self.pubsub.on_message().next()).await {
+                Ok(Some(message)) => {
+                    if let Some((namespace, pattern)) = &self.filter {
+                        let channel = message.get_channel_name();
+                        let Some(topic) = channel.strip_prefix(namespace) else {
+                            continue;
+                        };
+                        if !subject_matches_pattern(pattern, topic) {
+                            continue;
+                        }
+                    }
+                    return message
+                        .get_payload()
+                        .map(Some)
+                        .map_err(|_| MessagingError::Storage);
+                }
+                Ok(None) | Err(_) => return Ok(None),
+            }
         }
     }
 }
@@ -1948,6 +2425,107 @@ mod tests {
         assert_eq!(config.deduplication_window_seconds, 120);
     }
 
+    #[test]
+    fn pubsub_patterns_use_shared_nats_segment_semantics() {
+        for pattern in ["jobs.*", "jobs.>", "*", "jobs.*.created"] {
+            assert!(validate_subject_pattern(pattern).is_ok());
+        }
+        for pattern in [
+            "",
+            "jobs.",
+            "jobs.**",
+            "jobs.>.created",
+            "jobs.foo*",
+            "jobs.#",
+        ] {
+            assert!(matches!(
+                validate_subject_pattern(pattern),
+                Err(MessagingError::InvalidInput)
+            ));
+        }
+        assert!(subject_matches_pattern("jobs.*", "jobs.created"));
+        assert!(!subject_matches_pattern("jobs.*", "jobs.deep.created"));
+        assert!(subject_matches_pattern("jobs.>", "jobs.created"));
+        assert!(subject_matches_pattern("jobs.>", "jobs.deep.created"));
+        assert!(!subject_matches_pattern("jobs.>", "jobs"));
+    }
+
+    #[tokio::test]
+    async fn redis_pubsub_pattern_matches_one_segment_against_real_service() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let config = PubSubConfig {
+            backend: super::super::PubSubBackend::Redis,
+            endpoint,
+            namespace: format!("pattern_{}", unique_suffix()),
+        };
+        let pubsub = PubSubAdapter::connect(config).await.unwrap();
+        let mut subscription = pubsub.subscribe_pattern("jobs.*").await.unwrap();
+        pubsub.publish("jobs.one", b"first".to_vec()).await.unwrap();
+        pubsub
+            .publish("jobs.deep.two", b"ignored".to_vec())
+            .await
+            .unwrap();
+        pubsub
+            .publish("jobs.three", b"last".to_vec())
+            .await
+            .unwrap();
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"first".to_vec())
+        );
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"last".to_vec())
+        );
+        assert!(
+            subscription
+                .receive(Duration::from_millis(100))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn nats_pubsub_pattern_matches_one_segment_against_real_service() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let config = PubSubConfig {
+            backend: super::super::PubSubBackend::NatsCore,
+            endpoint,
+            namespace: format!("pattern_{}", unique_suffix()),
+        };
+        let pubsub = PubSubAdapter::connect(config).await.unwrap();
+        let mut subscription = pubsub.subscribe_pattern("jobs.*").await.unwrap();
+        pubsub.publish("jobs.one", b"first".to_vec()).await.unwrap();
+        pubsub
+            .publish("jobs.deep.two", b"ignored".to_vec())
+            .await
+            .unwrap();
+        pubsub
+            .publish("jobs.three", b"last".to_vec())
+            .await
+            .unwrap();
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"first".to_vec())
+        );
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"last".to_vec())
+        );
+        assert!(
+            subscription
+                .receive(Duration::from_millis(100))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
     #[tokio::test]
     async fn queue_rejects_a_zero_deduplication_window_before_connecting() {
         let result = QueueAdapter::connect(QueueConfig {
@@ -1961,6 +2539,335 @@ mod tests {
         })
         .await;
         assert!(matches!(result, Err(MessagingError::InvalidInput)));
+    }
+
+    #[test]
+    fn queue_replay_rejects_invalid_limits_and_cross_queue_cursors() {
+        assert!(matches!(
+            validate_replay_limit(0),
+            Err(MessagingError::InvalidInput)
+        ));
+        assert!(matches!(
+            validate_replay_limit(1_001),
+            Err(MessagingError::InvalidInput)
+        ));
+        let cursor = QueueCursor {
+            contract_version: MESSAGING_CONTRACT_VERSION,
+            backend: super::super::QueueBackend::RedisStreams,
+            namespace: "queue_a".into(),
+            position: "1-0".into(),
+        };
+        assert!(matches!(
+            validate_queue_cursor(
+                Some(&cursor),
+                super::super::QueueBackend::RedisStreams,
+                "queue_b"
+            ),
+            Err(MessagingError::InvalidInput)
+        ));
+    }
+
+    #[tokio::test]
+    async fn redis_queue_replay_pages_retained_history_without_consuming() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let namespace = format!("replay_{}", unique_suffix());
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint,
+            namespace,
+            visibility_timeout_seconds: 2,
+            max_messages: 10,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        for payload in [b"one".to_vec(), b"two".to_vec(), b"three".to_vec()] {
+            queue.enqueue(payload).await.unwrap();
+        }
+        let first = queue.replay_after(None, 2).await.unwrap();
+        assert_eq!(
+            first
+                .records
+                .iter()
+                .map(|r| r.payload.as_slice())
+                .collect::<Vec<_>>(),
+            [b"one", b"two"]
+        );
+        let second = queue
+            .replay_after(first.next_cursor.as_ref(), 2)
+            .await
+            .unwrap();
+        assert_eq!(second.records.len(), 1);
+        assert_eq!(second.records[0].payload, b"three");
+        let replay = queue.replay_after(None, 10).await.unwrap();
+        assert_eq!(replay.records.len(), 3);
+        for expected in [b"one".as_slice(), b"two", b"three"] {
+            let delivery = queue
+                .receive("worker", "workers", Duration::from_secs(1))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(delivery.payload(), expected);
+            delivery.ack().await.unwrap();
+        }
+        assert!(
+            queue
+                .receive("worker", "workers", Duration::from_millis(100))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn nats_queue_replay_pages_retained_history_without_consuming() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let namespace = format!("replay_{}", unique_suffix());
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint,
+            namespace,
+            visibility_timeout_seconds: 2,
+            max_messages: 10,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        for payload in [b"one".to_vec(), b"two".to_vec(), b"three".to_vec()] {
+            queue.enqueue(payload).await.unwrap();
+        }
+        let first = queue.replay_after(None, 2).await.unwrap();
+        assert_eq!(
+            first
+                .records
+                .iter()
+                .map(|r| r.payload.as_slice())
+                .collect::<Vec<_>>(),
+            [b"one", b"two"]
+        );
+        let second = queue
+            .replay_after(first.next_cursor.as_ref(), 2)
+            .await
+            .unwrap();
+        assert_eq!(second.records.len(), 1);
+        assert_eq!(second.records[0].payload, b"three");
+        let replay = queue.replay_after(None, 10).await.unwrap();
+        assert_eq!(replay.records.len(), 3);
+        for expected in [b"one".as_slice(), b"two", b"three"] {
+            let delivery = queue
+                .receive("worker", "workers", Duration::from_secs(2))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(delivery.payload(), expected);
+            delivery.ack().await.unwrap();
+        }
+        assert!(
+            queue
+                .receive("worker", "workers", Duration::from_millis(100))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn redis_queue_replay_rejects_cursor_removed_by_retention() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint: endpoint.clone(),
+            namespace: format!("replay_trim_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 2,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        queue.enqueue(b"one".to_vec()).await.unwrap();
+        queue.enqueue(b"two".to_vec()).await.unwrap();
+        let cursor = queue
+            .replay_after(None, 1)
+            .await
+            .unwrap()
+            .next_cursor
+            .unwrap();
+        queue.enqueue(b"three".to_vec()).await.unwrap();
+        assert!(matches!(
+            queue.replay_after(Some(&cursor), 10).await,
+            Err(MessagingError::ReplayCursorExpired)
+        ));
+
+        let empty_queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint,
+            namespace: format!("replay_empty_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 2,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        empty_queue.enqueue(b"removed".to_vec()).await.unwrap();
+        let empty_cursor = empty_queue
+            .replay_after(None, 1)
+            .await
+            .unwrap()
+            .next_cursor
+            .unwrap();
+        if let QueueAdapter::Redis { queue, name, .. } = &empty_queue {
+            let key = queue.stream_key(name).unwrap();
+            let mut connection = queue.store.connection().await.unwrap();
+            redis::cmd("XDEL")
+                .arg(key)
+                .arg(&empty_cursor.position)
+                .query_async::<u64>(&mut connection)
+                .await
+                .unwrap();
+        }
+        assert!(matches!(
+            empty_queue.replay_after(Some(&empty_cursor), 10).await,
+            Err(MessagingError::ReplayCursorExpired)
+        ));
+    }
+
+    #[tokio::test]
+    async fn nats_queue_replay_rejects_cursor_removed_by_retention() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint,
+            namespace: format!("replay_trim_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 2,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        queue.enqueue(b"one".to_vec()).await.unwrap();
+        queue.enqueue(b"two".to_vec()).await.unwrap();
+        let cursor = queue
+            .replay_after(None, 1)
+            .await
+            .unwrap()
+            .next_cursor
+            .unwrap();
+        queue.enqueue(b"three".to_vec()).await.unwrap();
+        assert!(matches!(
+            queue.replay_after(Some(&cursor), 10).await,
+            Err(MessagingError::ReplayCursorExpired)
+        ));
+    }
+
+    #[tokio::test]
+    async fn redis_queue_replay_is_ordered_and_complete_after_concurrent_producers() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint,
+            namespace: format!("replay_concurrent_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 100,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        let writes = (0..32).map(|n| {
+            let queue = &queue;
+            async move {
+                queue
+                    .enqueue(format!("job-{n}").into_bytes())
+                    .await
+                    .unwrap()
+            }
+        });
+        futures_util::future::join_all(writes).await;
+
+        let mut cursor = None;
+        let mut positions = Vec::new();
+        let mut payloads = std::collections::BTreeSet::new();
+        loop {
+            let page = queue.replay_after(cursor.as_ref(), 7).await.unwrap();
+            let empty = page.records.is_empty();
+            let next_cursor = page.next_cursor;
+            for record in page.records {
+                positions.push(record.cursor.position);
+                payloads.insert(record.payload);
+            }
+            if empty || next_cursor == cursor {
+                break;
+            }
+            cursor = next_cursor;
+        }
+        assert_eq!(positions.len(), 32);
+        assert!(positions.windows(2).all(|ids| {
+            compare_redis_stream_ids(&ids[0], &ids[1]).unwrap() == std::cmp::Ordering::Less
+        }));
+        assert_eq!(payloads.len(), 32);
+    }
+
+    #[tokio::test]
+    async fn nats_queue_replay_is_ordered_and_complete_after_concurrent_producers() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint,
+            namespace: format!("replay_concurrent_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 100,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        let writes = (0..32).map(|n| {
+            let queue = &queue;
+            async move {
+                queue
+                    .enqueue(format!("job-{n}").into_bytes())
+                    .await
+                    .unwrap()
+            }
+        });
+        futures_util::future::join_all(writes).await;
+
+        let mut cursor = None;
+        let mut positions = Vec::new();
+        let mut payloads = std::collections::BTreeSet::new();
+        loop {
+            let page = queue.replay_after(cursor.as_ref(), 7).await.unwrap();
+            let empty = page.records.is_empty();
+            let next_cursor = page.next_cursor;
+            for record in page.records {
+                positions.push(record.cursor.position.parse::<u64>().unwrap());
+                payloads.insert(record.payload);
+            }
+            if empty || next_cursor == cursor {
+                break;
+            }
+            cursor = next_cursor;
+        }
+        assert_eq!(positions.len(), 32);
+        assert!(positions.windows(2).all(|ids| ids[0] < ids[1]));
+        assert_eq!(payloads.len(), 32);
     }
 
     #[tokio::test]

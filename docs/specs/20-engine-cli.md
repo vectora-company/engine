@@ -13,7 +13,7 @@ Oferecer um executável pequeno para configurar endpoints e exercitar os contrat
 - Providers nativos usam os clientes/protocolos implementados no core; OpenAI/OpenRouter têm perfis OpenAI-compatible; routers e gateways adicionais usam URL customizada quando compatíveis.
 - Chat interativo via rustyline. O loop ReAct chama o cliente de chat da Engine e executa somente a ferramenta local `calculator`, com expressão aritmética limitada; máximo de chamadas configurável e limitado a 32.
 - `chat.backend=llama_server` atende llama.cpp, inclusive modelos Laya-GGUF carregados pelo operador. `openai_compatible` exercita OpenAI, OpenRouter, Ollama e gateways que seguem esse contrato.
-- `decision.backend=laya_server` usa o protocolo Jev de `laya-serve`; `llama_server` usa `/v1/systemone` de llama.cpp v1.0.0, incluindo Laya-GGUF quando servido por esse runtime. São protocolos distintos e permanecem selecionáveis.
+- Decision Model é a categoria de uso; Jev é um modelo específico; SystemOne é a API/protocolo. `decision.backend=laya_server` seleciona o runtime Laya, que implementa SystemOne; `llama_server` seleciona llama.cpp v1.0.0 em `/v1/systemone`, inclusive para Laya-GGUF carregado nesse runtime. São adapters para runtimes distintos, e Laya não é alias de Jev. No CLI, Laya aceita seletor opcional de checkpoint (vazio deixa o servidor rotear); llama-server exige model id para descoberta de capabilities.
 - `decide <prompt>` envia uma pergunta tipada pelo cliente existente; não transforma Decision Model em geração de texto ou em chat.
 - Interface de terminal usa rustyline, termimad para Markdown e indicatif para progresso. Interromper/EOF termina o chat. Erros não devem expor corpo HTTP, segredo ou configuração sensível.
 

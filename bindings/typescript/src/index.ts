@@ -104,7 +104,8 @@ export interface DecisionQuestion {
   criteria?: JsonValue;
 }
 export interface DecisionRequest {
-  model: string;
+  /** Optional SystemOne selector; required by adapters that need model discovery. */
+  model?: string;
   state: JsonValue;
   questions: Record<string, DecisionQuestion>;
 }
@@ -138,6 +139,18 @@ export interface LlamaServerModelList {
   object?: string;
   data: LlamaServerModel[];
   [key: string]: JsonValue | LlamaServerModel[] | undefined;
+}
+
+export interface LlamaServerModelMediaCapabilities {
+  provider: string;
+  model: string;
+  capabilities: {
+    vision?: "supported" | "unsupported" | "unknown" | null;
+    pdf?: "supported" | "unsupported" | "unknown" | null;
+    audio_input?: "supported" | "unsupported" | "unknown" | null;
+    video_input?: "supported" | "unsupported" | "unknown" | null;
+    tool_result_images?: "supported" | "unsupported" | "unknown" | null;
+  };
 }
 
 export interface LlamaServerHealth {
@@ -194,7 +207,12 @@ export interface ProviderMediaLimits {
 export interface MediaExecutionContext {
   assets: Record<string, Uint8Array>;
   max_media_bytes?: number;
+  /** Maximum raw media bytes materialized for one request. */
+  max_total_media_bytes?: number;
+  /** Maximum number of media assets materialized for one request. */
+  max_media_parts?: number;
   provider_limits?: ProviderMediaLimits[];
+  gateway_metadata?: LlamaServerModelMediaCapabilities[];
 }
 
 export interface PreparedContent {
@@ -711,6 +729,14 @@ interface NativeBinding {
     vector: number[],
     limit: number,
   ): Promise<string>;
+  vectorStoreSearchFiltered(
+    configJson: string,
+    collection: string,
+    scope: string,
+    vector: number[],
+    limit: number,
+    filterJson: string | null,
+  ): Promise<string>;
   kvStorePut(
     configJson: string,
     key: string,
@@ -747,6 +773,11 @@ interface NativeBinding {
     payloadJson: string,
     idempotencyKey: string,
   ): Promise<string>;
+  queueReplayAfter(
+    configJson: string,
+    cursorJson: string,
+    limit: number,
+  ): Promise<string>;
   queueReceive(
     configJson: string,
     consumer: string,
@@ -768,6 +799,7 @@ interface NativeBinding {
     payloadJson: string,
   ): Promise<void>;
   pubsubSubscribe(configJson: string, topic: string): Promise<string>;
+  pubsubSubscribePattern(configJson: string, pattern: string): Promise<string>;
   pubsubReceive(subscriptionId: string, timeoutMs: number): Promise<string>;
   pubsubUnsubscribe(subscriptionId: string): void;
   sqliteLedgerAppend(path: string, draftJson: string): Promise<string>;
@@ -1005,6 +1037,7 @@ interface NativeBinding {
     requestJson: string,
   ): Promise<string>;
   llamaServerModels(settingsJson: string): Promise<string>;
+  llamaServerModelMediaCapabilities(modelJson: string): string;
   llamaServerDecide(settingsJson: string, requestJson: string): Promise<string>;
   llamaServerDecideEphemeral(
     settingsJson: string,
@@ -1164,6 +1197,13 @@ export interface VectorHit {
   metadata: JsonValue;
 }
 
+export type MetadataFilter =
+  | { op: "eq"; path: string; value: JsonValue }
+  | { op: "gt" | "gte" | "lt" | "lte"; path: string; value: number }
+  | { op: "in"; path: string; values: JsonValue[] }
+  | { op: "and" | "or"; filters: MetadataFilter[] }
+  | { op: "not"; filter: MetadataFilter };
+
 export async function vectorStoreUpsert(
   config: VectorStoreConfig,
   collection: string,
@@ -1189,6 +1229,25 @@ export async function vectorStoreSearch(
       scope,
       vector,
       limit,
+    ),
+  ) as VectorHit[];
+}
+export async function vectorStoreSearchFiltered(
+  config: VectorStoreConfig,
+  collection: string,
+  scope: string,
+  vector: number[],
+  filter: MetadataFilter | undefined,
+  limit = 10,
+): Promise<VectorHit[]> {
+  return JSON.parse(
+    await native.vectorStoreSearchFiltered(
+      JSON.stringify(config),
+      collection,
+      scope,
+      vector,
+      limit,
+      filter === undefined ? null : JSON.stringify(filter),
     ),
   ) as VectorHit[];
 }
@@ -1319,6 +1378,20 @@ export interface QueueDelivery {
   payload: Uint8Array;
   attempts: number;
 }
+export interface QueueCursor {
+  contract_version: number;
+  backend: QueueConfig["backend"];
+  namespace: string;
+  position: string;
+}
+export interface QueueReplayRecord {
+  cursor: QueueCursor;
+  payload: Uint8Array;
+}
+export interface QueueReplayPage {
+  records: QueueReplayRecord[];
+  next_cursor: QueueCursor | null;
+}
 export async function queueEnqueue(
   config: QueueConfig,
   payload: Uint8Array,
@@ -1339,6 +1412,30 @@ export async function queueEnqueueIdempotent(
     JSON.stringify(Array.from(payload)),
     idempotencyKey,
   );
+}
+/** Read up to 1000 retained jobs after a cursor without changing consumer offsets. */
+export async function queueReplayAfter(
+  config: QueueConfig,
+  cursor: QueueCursor | null = null,
+  limit = 100,
+): Promise<QueueReplayPage> {
+  const page = JSON.parse(
+    await native.queueReplayAfter(
+      JSON.stringify(config),
+      JSON.stringify(cursor),
+      limit,
+    ),
+  ) as {
+    records: { cursor: QueueCursor; payload: number[] }[];
+    next_cursor: QueueCursor | null;
+  };
+  return {
+    records: page.records.map((record) => ({
+      cursor: record.cursor,
+      payload: Uint8Array.from(record.payload),
+    })),
+    next_cursor: page.next_cursor,
+  };
 }
 export async function queueReceive(
   config: QueueConfig,
@@ -1414,6 +1511,14 @@ export async function pubsubSubscribe(
   topic: string,
 ): Promise<string> {
   return native.pubsubSubscribe(JSON.stringify(config), topic);
+}
+
+/** Subscribe with NATS-style `*` (one segment) and final `>` (one or more). */
+export async function pubsubSubscribePattern(
+  config: PubSubConfig,
+  pattern: string,
+): Promise<string> {
+  return native.pubsubSubscribePattern(JSON.stringify(config), pattern);
 }
 export async function pubsubReceive(
   subscriptionId: string,
@@ -2274,9 +2379,18 @@ function encodeMediaSettings(
       ...(context.max_media_bytes === undefined
         ? {}
         : { max_media_bytes: context.max_media_bytes }),
+      ...(context.max_total_media_bytes === undefined
+        ? {}
+        : { max_total_media_bytes: context.max_total_media_bytes }),
+      ...(context.max_media_parts === undefined
+        ? {}
+        : { max_media_parts: context.max_media_parts }),
       ...(context.provider_limits === undefined
         ? {}
         : { provider_limits: context.provider_limits }),
+      ...(context.gateway_metadata === undefined
+        ? {}
+        : { gateway_metadata: context.gateway_metadata }),
     },
   });
 }
@@ -2450,6 +2564,15 @@ export async function llamaServerModels(
   ) as LlamaServerModelList;
 }
 
+/** Convert `/v1/models` metadata into the resolver's model-specific layer. */
+export function llamaServerModelMediaCapabilities(
+  model: LlamaServerModel,
+): LlamaServerModelMediaCapabilities {
+  return JSON.parse(
+    native.llamaServerModelMediaCapabilities(JSON.stringify(model)),
+  ) as LlamaServerModelMediaCapabilities;
+}
+
 /** Answer typed questions through llama-server's non-streaming `/v1/systemone`. */
 export async function llamaServerDecide(
   settings: LlamaServerSettings,
@@ -2484,10 +2607,11 @@ export async function layaDecide(
 export async function llamaServerDecideEphemeral(
   settings: LlamaServerSettings,
   request: EphemeralDecisionRequest,
+  mediaContext?: MediaExecutionContext,
 ): Promise<DecisionResponse> {
   return JSON.parse(
     await native.llamaServerDecideEphemeral(
-      JSON.stringify(settings),
+      encodeMediaSettings(settings, mediaContext),
       JSON.stringify(request),
     ),
   ) as DecisionResponse;

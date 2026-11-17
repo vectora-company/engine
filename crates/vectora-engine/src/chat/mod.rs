@@ -26,8 +26,8 @@ pub use laya::{LayaClient, LayaHealth, LayaSettings};
 pub use llama_server::{
     EphemeralLlamaServerEmbeddingRequest, EphemeralLlamaServerRerankRequest,
     LlamaServerArchitecture, LlamaServerClient, LlamaServerEmbeddingInput, LlamaServerHealth,
-    LlamaServerModel, LlamaServerModelList, LlamaServerProperties, LlamaServerRerankInput,
-    LlamaServerSettings, SpeechStream,
+    LlamaServerModel, LlamaServerModelCapabilities, LlamaServerModelList, LlamaServerProperties,
+    LlamaServerRerankInput, LlamaServerSettings, SpeechStream,
 };
 pub use media::{
     CapabilityResolver, CapabilityState, Classified, ContentSite, DEFAULT_MAX_MEDIA_BYTES,

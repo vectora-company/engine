@@ -51,7 +51,7 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Executar testes Rust de storage e runtime Python/Node com addons nativos atualizados (resultados e SHAs na análise; reinício PostgreSQL apenas isolado).
 - [x] Revisar alterações, staged list e ausência de arquivos ignorados/artefatos nas etapas concluídas.
 - [x] Registrar resultados dos checks concluídos e testes pendentes na auditoria.
-- [x] Publicar as etapas de storage em branches empilhadas; conteúdo integrado em `main`.
+- [x] Entregar as capabilities de storage pelo fluxo de contribuição; posição e estado da stack são transitórios e consultados no GitHub, enquanto este checklist acompanha capacidades e evidências.
 
 Os testes/limites restantes estão descritos na análise vinculada. A antiga nota
 de interrupção de testes e addons desatualizados pertencia à etapa inicial e foi
@@ -70,13 +70,21 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 - [x] Verificar CAS com serviços reais nos dois backends: duas escritas concorrentes com a mesma revisão, invalidação após escrita comum, remoção/recriação, TTL e ausência da chave interna na listagem.
 - [x] Verificar incremento em Redis e NATS reais: criação concorrente, delta negativo, limite numérico, valor incompatível, TTL e recriação após remoção.
 - [x] Verificar watch KV em Redis e NATS reais: mudanças futuras, filtro de prefixo, isolamento, remoção, expiração e cancelamento da leitura.
-- [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends. Antes da migração do schema LanceDB `Utf8` para JSON consultável, obter decisão sobre migração automática, operação explícita ou recriação de coleção.
+- [x] Vetorial: filtros escalares JSON (`eq`, comparações numéricas, `in`, `and`, `or`, `not`) nos dois backends, aplicados antes do top-k; cobertura real confirma escopo, caminhos aninhados e arrays excluídos do espaço filtrável.
+- [x] Contrato vetorial 3: LanceDB usa coluna JSON tipada; coleções do schema `Utf8` anterior são incompatíveis e devem ser recriadas pelo operador. Não há migração automática.
+- [x] Conformidade de filtros vetoriais (17/11/2026): Rust 12/12 com Qdrant 1.20.2 real e LanceDB local; Python 2/2 backends; Node 56 passaram e 16 testes de outros serviços foram ignorados. Rust fmt/Clippy, Ruff e TypeScript typecheck passaram.
+- [ ] Vetorial: parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
 - [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens atualizadas.
 - [x] Filas: teto de tentativas e DLQ consumível nos dois brokers.
 - [x] Filas: NACK com reentrega atrasada em Redis Streams e NATS JetStream, limitada ao visibility timeout; teste real verifica atraso e incremento de attempts em ambos.
 - [x] Filas: enqueue idempotente por chave em Redis Streams e NATS JetStream, com retorno do ID original e janela configurável por contrato; cobertura real Rust/Python/TypeScript.
-- [ ] Filas: replay e ordenação com contrato, shutdown gracioso e redrive atômico nas duas.
-- [ ] Pub/sub: reconexão observável e assinatura por padrão/curinga nos dois.
+- [x] Filas: replay paginado por cursor serializável em Redis Streams e JetStream; testes reais Rust, Python e Node confirmam ordem, paginação e que consumers continuam recebendo os jobs.
+- [x] Filas: validar limite 1–1000 e rejeitar cursor incompatível com versão/backend/namespace; erro tipado para posição removida pela retenção.
+- [x] Filas: testar expiração do cursor após trim explícito em Redis Streams e JetStream reais; ambos retornam `ReplayCursorExpired`.
+- [x] Filas: testar 32 produtores concorrentes e replay paginado em ordem estrita sem perdas/duplicatas nos dois brokers reais.
+- [ ] Filas: shutdown gracioso dos consumers e redrive atômico da DLQ nas duas.
+- [x] Pub/sub: assinatura por padrão comum nos dois brokers (`*` um segmento, `>` final vários segmentos); Rust e bindings exercitados em serviços reais.
+- [ ] Pub/sub: reconexão observável nos dois.
 - [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL como projeção, com a mesma suíte do SQLite; testes concorrentes com serviço real.
 - [ ] SQL: interface transacional genérica tipada e limitada nos dois (decisão do mantenedor pendente).
 - [x] Decisão do mantenedor: SQLite permanece cópia local obrigatória e autoridade de recovery para ledger e estado crítico interno; PostgreSQL recebe projeções/replicação retomável. Credenciais e autenticação/RBAC do produto ficam no host.

@@ -17,11 +17,11 @@ use vectora_engine::chat::{
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
     EphemeralDecisionRequest, EphemeralLlamaServerEmbeddingRequest,
     EphemeralLlamaServerRerankRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
-    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerSettings,
-    MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
-    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
-    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
+    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerModel,
+    LlamaServerModelCapabilities, LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef,
+    MediaStore, NativeChatClient, NativeChatSettings, NativeSpeechRequest, OpenAiCompatibleClient,
+    OpenAiCompatibleSettings, PersistableChatRequest, ProviderMediaLimits, RealtimeSession,
+    RealtimeSessionRequest, SpeechRequest, SpeechStream, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -107,7 +107,13 @@ struct BindingMediaContext {
     #[serde(default)]
     max_media_bytes: Option<u64>,
     #[serde(default)]
+    max_total_media_bytes: Option<u64>,
+    #[serde(default)]
+    max_media_parts: Option<usize>,
+    #[serde(default)]
     provider_limits: Vec<ProviderMediaLimits>,
+    #[serde(default)]
+    gateway_metadata: Vec<LlamaServerModelCapabilities>,
 }
 
 struct BindingMediaStore(HashMap<String, Vec<u8>>);
@@ -135,15 +141,32 @@ fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionConte
                 .map_err(|_| Error::from_reason("invalid base64 media asset"))
         })
         .collect::<Result<HashMap<_, _>>>()?;
+    let resolver =
+        settings
+            .gateway_metadata
+            .iter()
+            .fold(CapabilityResolver::new(), |resolver, metadata| {
+                resolver.with_gateway_metadata(
+                    &metadata.provider,
+                    &metadata.model,
+                    metadata.capabilities,
+                )
+            });
     let resolver = settings
         .provider_limits
         .iter()
-        .fold(CapabilityResolver::new(), |resolver, entry| {
+        .fold(resolver, |resolver, entry| {
             resolver.with_media_limits(&entry.provider, &entry.model, entry.limits)
         });
     let mut context = MediaExecutionContext::new(resolver, Arc::new(BindingMediaStore(assets)));
     if let Some(limit) = settings.max_media_bytes {
         context = context.with_max_media_bytes(limit);
+    }
+    if let Some(limit) = settings.max_total_media_bytes {
+        context = context.with_max_total_media_bytes(limit);
+    }
+    if let Some(limit) = settings.max_media_parts {
+        context = context.with_max_media_parts(limit);
     }
     Ok(context)
 }
@@ -161,21 +184,45 @@ fn split_media_context(
     Ok((settings, context))
 }
 
-fn request_media_limit(settings_json: &str) -> Result<u64> {
+fn request_media_limits(settings_json: &str) -> Result<(u64, Option<u64>, Option<usize>)> {
     let value: serde_json::Value = serde_json::from_str(settings_json)
         .map_err(|_| Error::from_reason("invalid client settings"))?;
-    Ok(value
+    let context = value
         .get("media_context")
-        .and_then(|context| context.get("max_media_bytes"))
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(DEFAULT_MAX_MEDIA_BYTES))
+        .unwrap_or(&serde_json::Value::Null);
+    let optional_u64 = |key| -> Result<Option<u64>> {
+        context
+            .get(key)
+            .map(|value| {
+                value.as_u64().ok_or_else(|| {
+                    Error::from_reason(format!("invalid media context field: {key}"))
+                })
+            })
+            .transpose()
+    };
+    let max_bytes = optional_u64("max_media_bytes")?.unwrap_or(DEFAULT_MAX_MEDIA_BYTES);
+    let max_total_bytes = optional_u64("max_total_media_bytes")?;
+    let max_parts = optional_u64("max_media_parts")?
+        .map(|value| {
+            usize::try_from(value).map_err(|_| Error::from_reason("invalid media part limit"))
+        })
+        .transpose()?;
+    Ok((max_bytes, max_total_bytes, max_parts))
 }
 
-fn parse_chat_request(request_json: &str, ephemeral: bool, max_bytes: u64) -> Result<ChatRequest> {
+fn parse_chat_request(
+    request_json: &str,
+    ephemeral: bool,
+    max_bytes: u64,
+    max_total_bytes: Option<u64>,
+    max_media_parts: Option<usize>,
+) -> Result<ChatRequest> {
     if ephemeral {
         let mut request: EphemeralChatRequest = serde_json::from_str(request_json)
             .map_err(|_| Error::from_reason("invalid ephemeral chat request"))?;
-        request.validate(max_bytes).map_err(Error::from_reason)?;
+        request
+            .validate_with_limits(max_bytes, max_total_bytes, max_media_parts)
+            .map_err(Error::from_reason)?;
         Ok(request.into_inner())
     } else {
         let request: PersistableChatRequest = serde_json::from_str(request_json)
@@ -197,17 +244,9 @@ pub async fn chat_prepare_content(
         serde_json::from_str(&media_context_json)
             .map_err(|_| Error::from_reason("invalid media context"))?,
     )?;
-    let capabilities = context.resolver.resolve(&provider, &model);
-    let prepared = prepare_content_with_limits(
-        parts,
-        &capabilities,
-        context.store.as_ref(),
-        &model,
-        ContentSite::UserMessage,
-        context.max_media_bytes,
-        context.resolver.media_limits_for(&provider, &model),
-    )
-    .await;
+    let prepared = context
+        .prepare_content(&provider, &model, parts, ContentSite::UserMessage)
+        .await;
     serde_json::to_string(&serde_json::json!({
         "parts": prepared.parts,
         "decisions": prepared.decisions,
@@ -220,12 +259,12 @@ fn parse_inputs(
     request_json: &str,
     ephemeral: bool,
 ) -> Result<(OpenAiCompatibleClient, ChatRequest)> {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: OpenAiCompatibleSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid client settings"))?;
     let media_provider = settings.media_provider();
-    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
+    let request = parse_chat_request(request_json, ephemeral, limits.0, limits.1, limits.2)?;
     let mut config = settings.into_config();
     if let Some(context) = media_context {
         config = config.media_context(media_provider, context);
@@ -244,14 +283,14 @@ fn parse_llama_server_inputs(
     Option<ChatRequest>,
     Option<MediaExecutionContext>,
 )> {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: LlamaServerSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid llama-server settings"))?;
     let client =
         LlamaServerClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
     let request = request_json
-        .map(|json| parse_chat_request(json, ephemeral, max_bytes))
+        .map(|json| parse_chat_request(json, ephemeral, limits.0, limits.1, limits.2))
         .transpose()?;
     Ok((client, request, media_context))
 }
@@ -261,11 +300,11 @@ fn parse_native_inputs(
     request_json: &str,
     ephemeral: bool,
 ) -> Result<(NativeChatClient, ChatRequest)> {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: NativeChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid native provider settings"))?;
-    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
+    let request = parse_chat_request(request_json, ephemeral, limits.0, limits.1, limits.2)?;
     let mut client =
         NativeChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
     if let Some(context) = media_context {
@@ -279,11 +318,11 @@ fn parse_fallback_inputs(
     request_json: &str,
     ephemeral: bool,
 ) -> Result<(FallbackChatClient, ChatRequest)> {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: FallbackChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| Error::from_reason("invalid fallback settings"))?;
-    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
+    let request = parse_chat_request(request_json, ephemeral, limits.0, limits.1, limits.2)?;
     let mut client =
         FallbackChatClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
     if let Some(context) = media_context {
@@ -1064,6 +1103,38 @@ pub async fn vector_store_search(
 }
 
 #[napi]
+pub async fn vector_store_search_filtered(
+    config_json: String,
+    collection: String,
+    scope: String,
+    vector: Vec<f64>,
+    limit: u32,
+    filter_json: Option<String>,
+) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid vector-store config"))?;
+    let filter = filter_json
+        .map(|json| {
+            serde_json::from_str(&json).map_err(|_| Error::from_reason("invalid metadata filter"))
+        })
+        .transpose()?;
+    let store = vectora_engine::storage::vector::VectorStoreAdapter::connect(config)
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    let hits = store
+        .search_filtered(
+            &collection,
+            &scope,
+            vector.into_iter().map(|value| value as f32).collect(),
+            limit,
+            filter,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+    encode_json(&hits)
+}
+
+#[napi]
 pub async fn vector_store_delete(
     config_json: String,
     collection: String,
@@ -1313,6 +1384,28 @@ pub async fn queue_enqueue_idempotent(
 }
 
 #[napi]
+pub async fn queue_replay_after(
+    config_json: String,
+    cursor_json: String,
+    limit: u32,
+) -> Result<String> {
+    use vectora_engine::storage::messaging::{QueueAdapter, QueueCursor};
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid queue config"))?;
+    let cursor: Option<QueueCursor> = serde_json::from_str(&cursor_json)
+        .map_err(|_| Error::from_reason("invalid queue cursor"))?;
+    let queue = QueueAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let page = queue
+        .replay_after(cursor.as_ref(), limit)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    serde_json::to_string(&page)
+        .map_err(|_| Error::from_reason("failed to encode queue replay page"))
+}
+
+#[napi]
 pub async fn queue_receive(
     config_json: String,
     consumer: String,
@@ -1453,6 +1546,30 @@ pub async fn pubsub_subscribe(config_json: String, topic: String) -> Result<Stri
     let subscription = Arc::new(tokio::sync::Mutex::new(
         pubsub
             .subscribe(&topic)
+            .await
+            .map_err(|error| Error::from_reason(error.to_string()))?,
+    ));
+    let handle = format!(
+        "pubsub-{}",
+        STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    pubsub_subscriptions()
+        .lock()
+        .map_err(|_| Error::from_reason("pub/sub handle lock failed"))?
+        .insert(handle.clone(), subscription);
+    Ok(handle)
+}
+
+#[napi]
+pub async fn pubsub_subscribe_pattern(config_json: String, pattern: String) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid pub/sub config"))?;
+    let pubsub = vectora_engine::storage::messaging::PubSubAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let subscription = Arc::new(tokio::sync::Mutex::new(
+        pubsub
+            .subscribe_pattern(&pattern)
             .await
             .map_err(|error| Error::from_reason(error.to_string()))?,
     ));
@@ -1972,6 +2089,14 @@ pub async fn llama_server_models(settings_json: String) -> Result<String> {
 }
 
 #[napi]
+pub fn llama_server_model_media_capabilities(model_json: String) -> Result<String> {
+    let model: LlamaServerModel = serde_json::from_str(&model_json)
+        .map_err(|_| Error::from_reason("invalid llama-server model"))?;
+    serde_json::to_string(&model.gateway_media_metadata())
+        .map_err(|_| Error::from_reason("could not encode llama-server model capabilities"))
+}
+
+#[napi]
 pub async fn llama_server_decide(settings_json: String, request_json: String) -> Result<String> {
     let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
     let request: DecisionRequest = serde_json::from_str(&request_json)
@@ -1988,13 +2113,14 @@ pub async fn llama_server_decide_ephemeral(
     settings_json: String,
     request_json: String,
 ) -> Result<String> {
-    let (client, _, _) = parse_llama_server_inputs(&settings_json, None, false)?;
+    let (client, _, context) = parse_llama_server_inputs(&settings_json, None, false)?;
     let request: EphemeralDecisionRequest = serde_json::from_str(&request_json)
         .map_err(|_| Error::from_reason("invalid ephemeral decision request"))?;
-    let response = client
-        .decide_ephemeral(request)
-        .await
-        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let response = match context.as_ref() {
+        Some(context) => client.decide_ephemeral_with_context(request, context).await,
+        None => client.decide_ephemeral(request).await,
+    }
+    .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&response)
 }
 

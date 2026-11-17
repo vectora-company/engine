@@ -30,7 +30,7 @@ fn choice_request(option_count: usize) -> DecisionRequest {
         })
         .collect::<serde_json::Map<_, _>>();
     DecisionRequest {
-        model: "multilingual".into(),
+        model: Some("multilingual".into()),
         state: serde_json::json!({"ticket": "Cobrança duplicada"}),
         questions: BTreeMap::from([(
             "route".into(),
@@ -137,7 +137,6 @@ async fn posts_native_laya_payload_without_openai_model_discovery_and_accepts_fu
         .map(|index| (format!("option-{index}"), serde_json::json!(0.0156)))
         .collect::<serde_json::Map<_, _>>();
     let response = serde_json::json!({
-        "model": "laya-systemone",
         "answers": {"route": {
             "type": "choice", "choice": "option-0", "probabilities": probabilities,
             "confidence": 0.02, "answer_confidence": 0.0156, "action": {"act_probability": 1.0}
@@ -156,12 +155,26 @@ async fn posts_native_laya_payload_without_openai_model_discovery_and_accepts_fu
 }
 
 #[tokio::test]
+async fn allows_laya_server_to_route_without_a_model_selector() {
+    let response = r#"{"answers":{"route":{"type":"choice","choice":"option-0","probabilities":{"option-0":1.0},"confidence":1.0}}}"#;
+    let (url, server) = server_once("200 OK", response).await;
+    let client = LayaClient::new(settings(url)).unwrap();
+    let mut request = choice_request(1);
+    request.model = None;
+    client.decide(request).await.unwrap();
+    let sent = String::from_utf8_lossy(&server.await.unwrap()).into_owned();
+    let body = sent.split_once("\r\n\r\n").unwrap().1;
+    let body: serde_json::Value = serde_json::from_str(body).unwrap();
+    assert!(body.get("model").is_none());
+}
+
+#[tokio::test]
 async fn accepts_laya_score_probabilities_and_legend_as_keyed_objects() {
     let response = r#"{"model":"laya","answers":{"urgency":{"type":"score","score":1.4,"legend":{"0":"calm","1":"firm","2":"angry"},"probabilities":{"0":0.1,"1":0.5,"2":0.4},"confidence":0.2}},"usage":{"input_tokens":8,"output_tokens":0},"routing":{}}"#;
     let (url, server) = server_once("200 OK", response).await;
     let client = LayaClient::new(settings(url)).unwrap();
     let request = DecisionRequest {
-        model: "typed-decisions".into(),
+        model: Some("typed-decisions".into()),
         state: serde_json::json!("The customer sounds firm."),
         questions: BTreeMap::from([(
             "urgency".into(),
@@ -185,7 +198,7 @@ async fn accepts_noul_answer_and_preserves_server_fields() {
     let (url, server) = server_once("200 OK", response).await;
     let client = LayaClient::new(settings(url)).unwrap();
     let request = DecisionRequest {
-        model: "typed-decisions".into(),
+        model: Some("typed-decisions".into()),
         state: serde_json::json!("A payment may be fraudulent."),
         questions: BTreeMap::from([(
             "risk".into(),
@@ -319,7 +332,8 @@ async fn optional_real_laya_server_smoke() {
     let client = LayaClient::new(config).unwrap();
     assert_eq!(client.health().await.unwrap().status, "ok");
     let mut request = choice_request(2);
-    request.model = std::env::var("VECTORA_TEST_LAYA_MODEL").unwrap_or_else(|_| "jev-1".into());
+    request.model =
+        Some(std::env::var("VECTORA_TEST_LAYA_MODEL").unwrap_or_else(|_| "multilingual".into()));
     let response = client.decide(request.clone()).await.unwrap();
     assert!(laya_answer_matches(
         request.questions.get("route").unwrap(),

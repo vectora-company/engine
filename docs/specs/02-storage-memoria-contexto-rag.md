@@ -38,6 +38,7 @@ O fato de o Vectora usar hoje determinadas tabelas ou diretórios não os torna 
 | SQL durável     | SQLite, PostgreSQL            | Transações, consultas tipadas/limitadas, migrações, paginação, health e fechamento de pool.                                                | Locks, concorrência, JSON, precisão/datas, isolamento, conflitos, constraints e comportamento de migration. |
 | Vector store    | LanceDB, Qdrant               | Coleções, upsert/delete idempotente, busca cosseno, score de similaridade em `[-1, 1]` (maior é melhor), filtros/metadata, top-k e health. | Operadores/filtros suportados, lexical/hybrid search, consistência, limites de payload e criação de índice. |
 | KV/cache        | NATS JetStream KV, Redis      | get/set/delete, TTL, namespace e operação atômica quando suportada. TTL por mensagem no NATS requer Server 2.11+ e `AllowMsgTTL`.          | Durabilidade, atomicidade, eviction, TTL e escopo multi-processo.                                           |
+| Pub/sub efêmero | NATS Core, Redis Pub/Sub      | Publicar, assinar tópico e padrão de tópicos; entrega descartável e timeout.                                                               | Correspondência de padrões e descarte sem assinantes.                                                       |
 | Event bus/queue | NATS JetStream, Redis Streams | Envelope versionado, idempotency/task ID, publish/consume, timeout, cancelamento, estado de entrega e health.                              | ACK, consumer/group, redelivery, retenção, replay, ordenação, DLQ, deduplicação e semântica de shutdown.    |
 
 Um adapter não simula em silêncio uma capacidade ausente e não substitui automaticamente uma store durável por memória.
@@ -85,17 +86,21 @@ Só depois de a base ser equivalente cada backend se especializa no que o outro
   lados puderem sustentar continuam na base.
 
 Exemplos de **base a implementar e verificar** (não afirmação de que já estejam
-disponíveis nos adapters): busca vetorial com filtros por metadado, ANN
-configurável, quantização e busca híbrida; o consumidor pode compor qualquer
-adapter conforme para RAG e contexto do agente. A implementação de filtros
-exige formato JSON consultável no LanceDB; a migração de coleções já gravadas
-está pendente de decisão registrada no
-[plano de storage](../plans/04-plano-storage-ledger.md). LanceDB 0.22.3, versão da
-dependência Rust desta branch, contém builders IVF-HNSW-PQ e IVF-HNSW-SQ; isso
-não significa que o adapter já configure índices. O contêiner Qdrant em execução
-é 1.12.4; `SConstruct` provisiona 1.15.5, e Qdrant usa HNSW como índice denso
-padrão. Os tipos de índice e seus
-parâmetros precisam de um mapeamento comum testado, não só de nomes parecidos.
+disponíveis nos adapters): ANN configurável, quantização e busca híbrida; o
+consumidor pode compor qualquer adapter conforme para RAG e contexto do agente.
+Busca por metadados está implementada nos dois adapters. `VECTOR_CONTRACT_VERSION=3`
+define filtros escalares portáveis por caminho (`eq`, `gt`, `gte`, `lt`, `lte`,
+`in`, `and`, `or`, `not`), avaliados pelo backend antes do limite top-k. Cada
+segmento de caminho começa com letra ASCII ou `_` e continua com caracteres
+ASCII alfanuméricos ou `_`; filtros têm limites de
+profundidade e quantidade. Valores armazenados como arrays não participam da
+busca filtrada, para manter a mesma semântica nos dois backends. LanceDB grava
+metadata no tipo JSON consultável nativo; coleções criadas com o schema antigo
+`Utf8` precisam ser recriadas antes de usar filtros e upserts no novo contrato.
+Ainda não há migração automática de coleções locais anteriores. LanceDB 0.22.3
+contém builders IVF-HNSW-PQ e IVF-HNSW-SQ; isso não significa que o adapter já
+configure índices. Tipos de índice e parâmetros precisam de mapeamento comum
+testado, não só de nomes parecidos.
 No SQL, a base inclui transações, migrações, backup/restore e JSON. No KV,
 TTL, escrita condicional por revisão, incremento atômico, listagem por prefixo
 e observação de mudanças. Nas filas, ACK/NACK, redelivery com teto, DLQ,
@@ -103,8 +108,17 @@ deduplicação e replay. NACK pode agendar redelivery até o visibility timeout
 configurado, limite comum aos brokers. `enqueue_idempotent` recebe chave
 restrita a ASCII alfanumérico, `_` ou `-`, retorna o ID original e preserva o
 primeiro payload em repetições dentro de `deduplication_window_seconds` (padrão
-120 segundos). A janela deve ser maior que zero e é comum aos brokers. A
-disponibilidade nativa ou emulada de cada item ainda deve ser confirmada por
+120 segundos). A janela deve ser maior que zero e é comum aos brokers.
+`replay_after(cursor, limit)` lê o histórico retido sem criar nem avançar grupos,
+ACKs ou offsets de consumers. Sem cursor, começa na mensagem retida mais antiga;
+com cursor, retorna posições posteriores em ordem. O limite aceita 1–1000 e o
+cursor serializável contém versão do contrato, backend, namespace e posição do
+stream, impedindo seu uso em outra fila/backend. Retenção que removeu a posição
+retorna `ReplayCursorExpired`; cursores futuros ou incompatíveis são inválidos.
+`next_cursor` aponta à última posição examinada, inclusive quando JetStream tem
+sequências sem mensagem. Páginas seguem as posições imutáveis atribuídas pelo
+broker, mas não representam snapshot: mensagens publicadas durante o replay
+podem aparecer em páginas posteriores. A disponibilidade nativa ou emulada de cada item ainda deve ser confirmada por
 versão e registrada na matriz do plano.
 
 No JetStream KV, a chave tem até 512 bytes e usa letras ASCII, números,
@@ -195,6 +209,15 @@ serviços reais dependem das variáveis `VECTORA_TEST_*`; consulte os registros 
 execução para saber quais cenários foram realmente executados. A presença de
 adapters não prova equivalência operacional. Ainda faltam, entre outras lacunas,
 shutdown gracioso e redrive atômico de filas, filtros vetoriais e health.
+
+Pub/sub expõe `subscribe_pattern` nos dois adapters com sintaxe comum de
+segmentos separados por ponto: `*` corresponde a exatamente um segmento e `>`
+final corresponde a um ou mais segmentos restantes. Wildcards precisam ocupar
+um segmento inteiro; padrão malformado é rejeitado antes de assinar. Redis
+`PSUBSCRIBE` pode fazer correspondência mais ampla que NATS por tratar `*` como
+texto arbitrário, por isso o adapter filtra cada canal recebido com a semântica
+de segmentos compartilhada. Essa operação continua efêmera e não acrescenta
+reconexão automática/observável.
 
 Não há ainda APIs de Memory, Context Planner, compactação/context engineering,
 indexação documental ou RAG. Os bindings de ledger exigem arquivo SQLite

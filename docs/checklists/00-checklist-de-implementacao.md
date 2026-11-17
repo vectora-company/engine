@@ -1,9 +1,10 @@
 # Checklist geral de implementação
 
 Este arquivo define gates reutilizáveis por etapa; não é um diário de PRs nem
-um inventário cronológico. O estado das capabilities está no plano da EPIC,
+um inventário cronológico. O estado das capabilities está no plano da EPIC e no inventário transversal,
 [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md), e
-nos checklists específicos. Confirme a stack ao vivo no GitHub em cada sessão.
+nos checklists específicos. O checklist transversal é
+[`docs/checklists/07-checklist-completo-da-engine.md`](07-checklist-completo-da-engine.md). Confirme a stack ao vivo no GitHub em cada sessão.
 
 Use os seguintes checklists por domínio:
 
@@ -43,10 +44,41 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [ ] Para storage, consultar a matriz por pares: implementar a base viável nos
       dois adapters; registrar como especialização apenas incompatibilidade
       técnica comprovada.
-- [x] NACK agendado e enqueue idempotente estão implementados no core e expostos
-      pelas bindings Python e TypeScript; o estado por domínio está em
+- [x] NACK agendado, enqueue idempotente e replay read-only paginado por cursor
+      estão implementados no core e expostos pelas bindings Python e TypeScript;
+      testes reais dos dois brokers confirmam paginação sem alterar consumers. O estado por domínio está em
       `docs/checklists/03-auditoria-storage-s0-s5.md` e as evidências em
       `docs/analyses/05-auditoria-storage-s0-s5.md`.
+- [x] Pub/sub Redis/NATS oferece assinatura por padrão com semântica comum
+      (`*` para um segmento, `>` terminal para vários); os testes reais Rust,
+      Python e Node confirmam filtragem e publicação entregue antes do retorno.
+      Reconexão observável permanece pendente.
+- [x] LanceDB e Qdrant oferecem filtros de metadados escalares equivalentes
+      antes do top-k, expostos em Python e TypeScript. O contrato vetorial 3
+      registra a incompatibilidade com coleções LanceDB legadas em `Utf8`.
+- [x] Chat multimodal aceita limites agregados opcionais de bytes/assets no
+      asset map e em requests efêmeros inline, compartilhados pelo turno e
+      validados antes da leitura/envio; testes direcionados em Rust, Python e
+      TypeScript. O checklist específico registra o estado por operação.
+- [x] Decision Model efêmero limita bytes totais e quantidade de arquivos; as
+      entradas multimodais de embeddings e rerank no llama-server compartilham
+      orçamento entre todos os inputs. Rust/Python/TypeScript cobertos; detalhes
+      e lacunas no checklist de providers.
+- [x] Resolução de mídia usa override do consumidor > metadata específica do
+      modelo/gateway > perfil genérico > desconhecido. Metadata de `/v1/models`
+      pode ser convertida explicitamente nos bindings; discovery/cache
+      automático permanece pendente.
+- [x] OpenAI Responses serializa input audio WAV/MP3; capability fica
+      desconhecida sem metadata/override por modelo nos perfis OpenAI. Para
+      MIME incompatível, Responses inclui apenas referência textual e não envia
+      bytes. Ver os checklists de mídia e providers para limites por modelo e
+      smoke real pendente.
+- [x] Gating da etapa multimodal local: `scons lint` e `scons tests` passaram;
+      contagens e limitações específicas estão em
+      `docs/analyses/06-auditoria-providers-modalidades.md`.
+- [x] Testes Python e Node exercitam o asset map efêmero no OpenAI Responses;
+      a extensão Python foi rebuildada no checkout antes do teste para evitar
+      validar um binário local antigo.
 
 ## Contratos e desenho
 

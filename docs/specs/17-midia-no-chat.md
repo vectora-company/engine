@@ -1,46 +1,17 @@
 # Contrato de mídia no chat
 
-**Estado:** parcialmente implementada na stack aberta #79–#90; reclassificação de MIME está no PR [#88](https://github.com/vectora-company/engine/pull/88), filho do #87; a fronteira persistível/efêmera está no PR [#90](https://github.com/vectora-company/engine/pull/90), filho do #89. A substituição
-direta de `ToolResult` está no PR #86, filho do #85; não há compatibilidade v1. O PR #90 implementa o envelope persistível/efêmero e é filho do #89. Nada
-desta stack está integrado em `main`. Tipos, classificação por bytes, capabilities,
-decisões por parte, payloads nativos e preparo Rust estão implementados para os
-protocolos descritos abaixo. Retry textual único em incompatibilidade multimodal
-está no PR aberto [#85](https://github.com/vectora-company/engine/pull/85), filho
-do #84. A substituição de `ToolResult.output: String` por partes tipadas está no
-PR aberto [#86](https://github.com/vectora-company/engine/pull/86), filho do #85. O PR #82
-expõe preparo manual, contexto por chamada e contexto padrão nos bindings Python e TypeScript. O mapa temporário é
-`asset_id → bytes`; autorização e persistência dos assets continuam sob
-responsabilidade do host. O limite global padrão é 20 MiB por asset e pode ser
-configurado; a preparação atual cobre o turno de usuário mais recente e os
-resultados subsequentes de tools, e devolve evidências sem bytes. Overrides de limites por provider/modelo/modalidade já são aceitos no contexto
-de execução e limitados pelo teto global por asset; descoberta automática dos
-limites e limites agregados de request seguem pendentes; resultados de tool
-estão tipados no PR #86. A stack [#479–#502](https://github.com/vectora-company/vectora/pulls)
-do Vectora foi integrada em 19 PRs, mas não prova paridade da Engine. UI, STT
-local, prévias e empacotamento permanecem no Vectora. Veja o estado e os critérios
-em [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
+**Estado:** contrato de conteúdo multimodal para chat e tools. Implementação e gaps são classificados por protocolo no [checklist de mídia](../checklists/04-midia-no-chat.md); não inferir integração total a partir dos tipos do contrato. O Vectora tem capacidades de produto próprias (STT local, conversão de arquivos, UI e empacotamento) que não fazem parte desta API.
 
-Este documento define como o chat da Engine representa mídia (imagem, áudio,
-vídeo, documento e arquivo genérico) em mensagens e em resultados de tools, como
-decide o que cada provider recebe e o que o ledger guarda. Ele não migra o chat do
-Vectora para a Engine: a adoção é capability por capability, com fallback e
-rollback.
+Este documento define como a Engine representa imagem, áudio, vídeo, documento e arquivo genérico em mensagens/resultados de tools, decide o payload para cada provider e separa conteúdo persistível de envio efêmero. A adoção por consumidores permanece incremental.
 
 ## Situação atual da Engine
 
-- `ContentPart` (`crates/vectora-engine/src/chat/types.rs`) inclui texto,
-  imagem por URL, mídia por referência e mídia inline na cópia do request.
-- O resultado de uma tool é uma `String`; os adapters nativos achatam o resultado
-  em texto. O contrato atual não representa imagens de tool como partes tipadas;
-  esse suporte segue pendente em todos os adapters.
-- O core resolve modalidades por provider e aceita overrides de limites de bytes
-  por provider/modelo/modalidade. Ainda não consulta catálogo automático nem
-  aplica limites totais de request, duração ou resolução.
-- `MediaStore` assíncrono e `MediaExecutionContext` existem no core. Os bindings
-  recebem um mapa efêmero de bytes indexado por `asset_id`; no Vectora o host
-  alimenta esse mapa após `AssetStore.read` validar usuário/workspace/thread.
-  `VerificationEvidence.artifact_ref` atende a outro contrato e não substitui
-  o store de mídia do consumidor.
+- `ContentPart` representa texto, imagem, áudio, vídeo, documento e arquivo por referência; bytes inline são restritos ao envelope efêmero.
+- `ToolResult` contém partes tipadas; adapters convertem as modalidades que o protocolo do provider suporta.
+- O preparo existe nos três modos dos bindings: manual, contexto por chamada e contexto padrão do cliente. O mapa temporário `asset_id → bytes` é fornecido pelo host.
+- O contexto valida digest, MIME, limite por asset e escopo de reidratação. O limite padrão é 20 MiB por asset; overrides por provider/modelo/modalidade não excedem o teto global.
+- Limites agregados opcionais de bytes/assets cobrem chat, requests efêmeros inline, Decision Model, embeddings e rerank multimodais do llama-server conforme a [spec 18](18-providers-e-modalidades-llama-cpp-v1.md). Catálogo automático confiável e limites de duração/resolução seguem pendentes.
+- A Engine não faz STT local, OCR, renderização de PDF, extração de frames ou gestão de assets persistentes; o consumidor mantém essas responsabilidades.
 
 ## Integração com o envio
 
@@ -55,8 +26,15 @@ de usuário atual e resultados posteriores de tools são reidratados. Completion
 e stream reportam decisões sem bytes. `provider_limits` aceita entradas com
 `provider`, `model` e `limits` (`image_bytes`, `audio_bytes`, `video_bytes`,
 `document_bytes`, `file_bytes`). O menor valor entre o limite da modalidade e
-`max_media_bytes` governa cada asset; ausência de override usa só o teto global
-e não presume limite universal do provider. Estado e precedência:
+`max_media_bytes` governa cada asset. O contexto também pode impor tetos
+opcionais `max_total_media_bytes` e `max_media_parts` por envio. Na reidratação
+do asset map, os tetos são compartilhados por todas as mensagens processadas no
+turno atual e resultados de tools; contam bytes brutos lidos e assets tentados,
+não o tamanho codificado do request HTTP. Exceder um teto agregado converte a
+parte excedente em texto/referência sem ler seus bytes. Para bytes já inline em
+`EphemeralChatRequest`, exceder os tetos falha antes da chamada ao provider.
+Ausência de override por modalidade usa só o teto por asset e não presume
+limite universal do provider. Estado e precedência:
 [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/00-analise-e-referencias-de-desenvolvimento.md).
 
 ## Responsabilidades
@@ -139,9 +117,9 @@ para adapter OpenAI-compatible, adapters nativos e fallback. Requests normais
 continuam aceitando referências e são seguros para persistência. O contrato
 público Chat v1 não mudou: o envelope efêmero tem versão independente.
 
-A escolha da opção 3 foi dada por brunosrz no chat. A implementação está no PR
-[#90](https://github.com/vectora-company/engine/pull/90), filho do PR
-[#89](https://github.com/vectora-company/engine/pull/89).
+A escolha de contrato aprovada por brunosrz separa o request persistível do
+envelope efêmero de envio; os três modos de integração usam essa mesma
+fronteira.
 
 ## Resultado de tool com partes
 
@@ -170,13 +148,13 @@ primeira release da Engine.
 
 Mapeamento por provider:
 
-| Provider / protocolo                                        | Texto do resultado                    | Imagem do resultado                                                               |
-| ----------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------- |
-| Anthropic Messages                                          | `tool_result` com `content` em partes | Bloco `image` dentro do `tool_result`.                                            |
-| Google Gemini                                               | `functionResponse`                    | Parte inline (`inlineData`) no mesmo turno do `functionResponse`.                 |
-| OpenAI Responses (sem adapter Engine)                       | Não aplicável                         | Não implementado.                                                                 |
-| OpenAI Chat Completions e compatíveis (OpenRouter, 9router) | mensagem `tool`                       | Mensagem de `user` seguinte com a imagem, pois a mensagem `tool` aceita só texto. |
-| Cohere Chat v2                                              | mensagem `tool`                       | Sem imagem em resultado de tool: a imagem vira forma textual com a referência.    |
+| Provider / protocolo                                        | Texto do resultado                    | Imagem do resultado                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Anthropic Messages                                          | `tool_result` com `content` em partes | Bloco `image` dentro do `tool_result`.                                                               |
+| Google Gemini                                               | `functionResponse`                    | Parte inline (`inlineData`) no mesmo turno do `functionResponse`.                                    |
+| OpenAI Responses                                            | `function_call_output`                | Conteúdo de imagem é encaminhado somente quando representável pelo protocolo e capability declarada. |
+| OpenAI Chat Completions e compatíveis (OpenRouter, 9router) | mensagem `tool`                       | Mensagem de `user` seguinte com a imagem, pois a mensagem `tool` aceita só texto.                    |
+| Cohere Chat v2                                              | mensagem `tool`                       | Sem imagem em resultado de tool: a imagem vira forma textual com a referência.                       |
 
 Quando o modelo não declara `tool_result_images`, a imagem do resultado vira a
 forma textual com a referência, e a decisão é registrada.
@@ -187,18 +165,27 @@ Cada modelo resolve um conjunto de capabilities: `vision`, `pdf`, `audio_input`,
 `video_input` e `tool_result_images`, cada uma `suportado`, `não suportado` ou
 `desconhecido`. A resolução é em camadas, da mais específica para a mais geral:
 
-1. override do consumidor para o modelo;
-2. tabela de modelos e protocolos conhecidos;
-3. metadado de modalidades do gateway (OpenRouter, 9router), quando o consumidor
-   o fornece;
-4. padrão conservador: só `vision` quando o provider é conhecido por aceitar
-   imagem; todo o resto `desconhecido`.
+1. override explícito do consumidor para o modelo;
+2. metadado específico do modelo/gateway fornecido pelo consumidor, incluindo
+   conversão de `architecture.input_modalities` do llama-server;
+3. perfil genérico conhecido do provider;
+4. padrão conservador: capacidades não declaradas permanecem `desconhecido`.
+
+Um perfil genérico nunca pode elevar uma modalidade que a metadata específica
+do modelo declara como não suportada. `llamaServerModelMediaCapabilities` e
+`llama_server_model_media_capabilities` convertem um registro de `/v1/models`
+para `gateway_metadata` nos bindings. A conversão é explícita e não faz
+discovery, cache ou atualização automática; metadata ausente permanece
+desconhecida, e `tool_result_images` não é inferido de suporte a visão.
+O Decision Model efêmero de llama-server também usa as modalidades descobertas
+para validar imagens/áudio antes de `/v1/systemone`; overrides explícitos do
+consumidor seguem a precedência comum.
 
 `desconhecido` é tratado como não suportado para efeito de envio nativo, e o
 consumidor pode sobrescrever. A capability precisa corresponder ao protocolo
 real do adapter: OpenAI Chat Completions usa `file.file_data` para PDF e
-`input_audio` para WAV/MP3; OpenAI Responses API ainda não tem adapter na
-Engine.
+`input_audio` para WAV/MP3. OpenAI Responses tem adapter próprio; cada parte só
+é enviada nos formatos mapeados pelo código e pelas fixtures.
 
 ## Decisão por parte
 

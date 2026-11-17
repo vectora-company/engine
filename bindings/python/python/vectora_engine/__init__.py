@@ -19,7 +19,10 @@ class MediaExecutionContext:
 
     assets: Mapping[str, bytes]
     max_media_bytes: int | None = None
+    max_total_media_bytes: int | None = None
+    max_media_parts: int | None = None
     provider_limits: Sequence[Mapping[str, Any]] = ()
+    gateway_metadata: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +62,16 @@ def _media_settings(
             if isinstance(context, MediaExecutionContext)
             else context.get("max_media_bytes")
         )
+        total_limit = (
+            context.max_total_media_bytes
+            if isinstance(context, MediaExecutionContext)
+            else context.get("max_total_media_bytes")
+        )
+        parts_limit = (
+            context.max_media_parts
+            if isinstance(context, MediaExecutionContext)
+            else context.get("max_media_parts")
+        )
         encoded: dict[str, str] = {}
         for asset_id, data in assets.items():
             if not isinstance(data, (bytes, bytearray, memoryview)):
@@ -72,8 +85,19 @@ def _media_settings(
         )
         if provider_limits:
             media_payload["provider_limits"] = list(provider_limits)
+        gateway_metadata = (
+            context.gateway_metadata
+            if isinstance(context, MediaExecutionContext)
+            else context.get("gateway_metadata", ())
+        )
+        if gateway_metadata:
+            media_payload["gateway_metadata"] = list(gateway_metadata)
         if limit is not None:
             media_payload["max_media_bytes"] = limit
+        if total_limit is not None:
+            media_payload["max_total_media_bytes"] = total_limit
+        if parts_limit is not None:
+            media_payload["max_media_parts"] = parts_limit
         payload["media_context"] = media_payload
     return json.dumps(payload, separators=(",", ":"))
 
@@ -115,6 +139,27 @@ async def vector_store_search(
     return json.loads(
         await _native.vector_store_search(
             json.dumps(config), collection, scope, list(vector), limit
+        )
+    )
+
+
+async def vector_store_search_filtered(
+    config: JsonObject,
+    collection: str,
+    scope: str,
+    vector: Sequence[float],
+    metadata_filter: JsonObject | None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Search within scope using the portable metadata-filter expression."""
+    return json.loads(
+        await _native.vector_store_search_filtered(
+            json.dumps(config),
+            collection,
+            scope,
+            list(vector),
+            limit,
+            None if metadata_filter is None else json.dumps(metadata_filter),
         )
     )
 
@@ -208,6 +253,18 @@ async def queue_enqueue_idempotent(
     )
 
 
+async def queue_replay_after(
+    config: JsonObject, cursor: dict[str, Any] | None = None, limit: int = 100
+) -> dict[str, Any]:
+    """Read retained queue history without changing consumer offsets."""
+    result = json.loads(
+        await _native.queue_replay_after(json.dumps(config), json.dumps(cursor), limit)
+    )
+    for record in result["records"]:
+        record["payload"] = bytes(record["payload"])
+    return result
+
+
 async def queue_receive(
     config: JsonObject, consumer: str, group: str, timeout_ms: int = 30_000
 ) -> dict[str, Any] | None:
@@ -257,6 +314,11 @@ async def pubsub_publish(config: JsonObject, topic: str, payload: bytes) -> None
 async def pubsub_subscribe(config: JsonObject, topic: str) -> str:
     """Create a process-local subscription and return its handle."""
     return await _native.pubsub_subscribe(json.dumps(config), topic)
+
+
+async def pubsub_subscribe_pattern(config: JsonObject, pattern: str) -> str:
+    """Subscribe using `*` for one dot-delimited segment and final `>` for many."""
+    return await _native.pubsub_subscribe_pattern(json.dumps(config), pattern)
 
 
 async def pubsub_receive(
@@ -963,6 +1025,15 @@ async def llama_server_models(settings: JsonObject) -> dict[str, Any]:
     )
 
 
+def llama_server_model_media_capabilities(model: JsonObject) -> dict[str, Any]:
+    """Map one `/v1/models` entry into media context gateway metadata."""
+    return json.loads(
+        _native.llama_server_model_media_capabilities(
+            json.dumps(model, separators=(",", ":"))
+        )
+    )
+
+
 async def llama_server_decide(
     settings: JsonObject, request: JsonObject
 ) -> dict[str, Any]:
@@ -975,12 +1046,16 @@ async def llama_server_decide(
 
 
 async def llama_server_decide_ephemeral(
-    settings: JsonObject, request: JsonObject
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
 ) -> dict[str, Any]:
     """Send a transient decision request with image/audio data URLs."""
     return json.loads(
         await _native.llama_server_decide_ephemeral(
-            _media_settings(settings, None), json.dumps(request, separators=(",", ":"))
+            _media_settings(settings, media_context),
+            json.dumps(request, separators=(",", ":")),
         )
     )
 
@@ -1261,7 +1336,7 @@ async def native_chat_complete(
     *,
     media_context: MediaExecutionContext | None = None,
 ) -> dict[str, Any]:
-    """Call Anthropic Messages, Google Gemini, or Cohere Chat through Rust."""
+    """Call Anthropic, Gemini, Cohere, Ollama, or OpenAI Responses through Rust."""
     result = await _native.native_chat_complete(
         _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
@@ -1462,6 +1537,7 @@ __all__ = [
     "llama_server_embed",
     "llama_server_embed_ephemeral",
     "llama_server_health",
+    "llama_server_model_media_capabilities",
     "llama_server_models",
     "llama_server_realtime_start",
     "llama_server_rerank_ephemeral",
@@ -1481,6 +1557,7 @@ __all__ = [
     "pubsub_publish",
     "pubsub_receive",
     "pubsub_subscribe",
+    "pubsub_subscribe_pattern",
     "pubsub_unsubscribe",
     "queue_ack",
     "queue_enqueue",
@@ -1489,6 +1566,7 @@ __all__ = [
     "queue_receive",
     "queue_receive_dead_letter",
     "queue_release",
+    "queue_replay_after",
     "reconcile_tool_result",
     "recover_model_tool_loop",
     "rerank",
@@ -1538,5 +1616,6 @@ __all__ = [
     "validate_storage_selection",
     "vector_store_delete",
     "vector_store_search",
+    "vector_store_search_filtered",
     "vector_store_upsert",
 ]

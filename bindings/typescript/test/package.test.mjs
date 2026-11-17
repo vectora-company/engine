@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,8 +42,13 @@ import {
   queueReceiveDeadLetter,
   queueNack,
   queueEnqueueIdempotent,
+  queueReplayAfter,
   queueReceive,
   queueAck,
+  pubsubPublish,
+  pubsubSubscribePattern,
+  pubsubReceive,
+  pubsubUnsubscribe,
   runContractVersion,
   transitionRun,
   toolContractVersion,
@@ -303,7 +308,7 @@ test("storage capabilities state backend differences from Rust", () => {
   assert.ok(sql.implemented.includes("ledger_backup_verify"));
   assert.ok(sql.implemented.includes("ledger_restore"));
   assert.equal(vector.score_direction, "higher_is_closer");
-  assert.ok(vector.not_implemented.includes("metadata_filter"));
+  assert.ok(vector.implemented.includes("metadata_filter"));
   assert.ok(vector.not_implemented.includes("configurable_ann_index"));
   assert.ok(vector.not_implemented.includes("quantization"));
   assert.equal(kv.ttl, true);
@@ -1549,6 +1554,51 @@ test("OpenAI Responses profile maps a non-stream response and semantic SSE event
   assert.equal(events[1].usage.total_tokens, 3);
 });
 
+test("OpenAI Responses audio is rehydrated from the asset map with model metadata", async () => {
+  const audio = Buffer.from("RIFF\0\0\0\0WAVE", "binary");
+  const request = {
+    contract_version: 1,
+    model: "audio-model",
+    messages: [{
+      role: "user",
+      content: [{
+        type: "audio",
+        media_ref: {
+          asset_id: "voice-audio",
+          sha256: createHash("sha256").update(audio).digest("hex"),
+          mime_type: "audio/wav",
+          size_bytes: audio.length,
+          name: "voice.wav",
+        },
+      }],
+    }],
+  };
+  const result = await withFixtureServer(JSON.stringify({
+    id: "resp_audio",
+    status: "completed",
+    output: [{ type: "message", content: [{ type: "output_text", text: "heard" }] }],
+  }), "application/json", async (baseUrl, captured) => {
+    const completion = await nativeChatComplete(
+      { provider: "openai_responses", base_url: baseUrl, api_key: "fixture-secret" },
+      request,
+      {
+        assets: { "voice-audio": audio },
+        gateway_metadata: [{
+          provider: "openai_responses",
+          model: "audio-model",
+          capabilities: { audio_input: "supported" },
+        }],
+      },
+    );
+    assert.deepEqual(captured.body.input[0].content[0], {
+      type: "input_audio",
+      input_audio: { data: audio.toString("base64"), format: "wav" },
+    });
+    return completion;
+  });
+  assert.equal(result.content, "heard");
+});
+
 test("OpenAI Chat Completions profile uses official auth and supports an endpoint override", async () => {
   const completion = await withFixtureServer(JSON.stringify({
     choices: [{ message: { content: "OpenAI chat" }, finish_reason: "stop" }],
@@ -1726,6 +1776,23 @@ for (const [backend, endpoint] of [
     await queueAck(delivery.delivery_id);
     assert.equal(await queueReceive(config, "worker", "workers", 100), null);
   });
+
+  test(`queue replay preserves consumer availability in ${backend}`, { skip: !endpoint }, async () => {
+    const config = { backend, endpoint, namespace: `node_replay_${randomUUID()}` };
+    for (const value of ["one", "two", "three"]) {
+      await queueEnqueueIdempotent(config, new TextEncoder().encode(value), value);
+    }
+    const first = await queueReplayAfter(config, null, 2);
+    assert.deepEqual(first.records.map((record) => new TextDecoder().decode(record.payload)), ["one", "two"]);
+    const second = await queueReplayAfter(config, first.next_cursor, 2);
+    assert.deepEqual(second.records.map((record) => new TextDecoder().decode(record.payload)), ["three"]);
+    for (const expected of ["one", "two", "three"]) {
+      const delivery = await queueReceive(config, "worker", "workers", 2_000);
+      assert.ok(delivery);
+      assert.equal(new TextDecoder().decode(delivery.payload), expected);
+      await queueAck(delivery.delivery_id);
+    }
+  });
 }
 
 test("JetStream KV validates keys with and without TTL", { skip: !process.env.VECTORA_TEST_NATS_URL }, async () => {
@@ -1749,6 +1816,26 @@ test("JetStream KV validates keys with and without TTL", { skip: !process.env.VE
     await kvStoreDelete(config, key);
   }
 });
+
+for (const [backend, endpoint] of [
+  ["redis", process.env.VECTORA_TEST_REDIS_URL],
+  ["nats_core", process.env.VECTORA_TEST_NATS_URL],
+]) {
+  test(`pub/sub pattern uses single-segment wildcard in ${backend}`, { skip: !endpoint }, async () => {
+    const config = { backend, endpoint, namespace: `pattern_${randomUUID()}` };
+    const subscription = await pubsubSubscribePattern(config, "jobs.*");
+    try {
+      await pubsubPublish(config, "jobs.one", new TextEncoder().encode("first"));
+      await pubsubPublish(config, "jobs.deep.two", new TextEncoder().encode("ignored"));
+      await pubsubPublish(config, "jobs.three", new TextEncoder().encode("last"));
+      assert.equal(new TextDecoder().decode(await pubsubReceive(subscription, 2_000)), "first");
+      assert.equal(new TextDecoder().decode(await pubsubReceive(subscription, 2_000)), "last");
+      assert.equal(await pubsubReceive(subscription, 100), null);
+    } finally {
+      pubsubUnsubscribe(subscription);
+    }
+  });
+}
 
 for (const [backend, endpoint] of [
   ["redis", process.env.VECTORA_TEST_REDIS_URL],

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -52,6 +53,7 @@ from vectora_engine import (
     llama_server_embed,
     llama_server_embed_ephemeral,
     llama_server_health,
+    llama_server_model_media_capabilities,
     llama_server_models,
     llama_server_rerank_ephemeral,
     llama_server_synthesize,
@@ -63,11 +65,16 @@ from vectora_engine import (
     native_chat_stream,
     prepare_chat_content,
     prepare_tool_dispatch,
+    pubsub_publish,
+    pubsub_receive,
+    pubsub_subscribe_pattern,
+    pubsub_unsubscribe,
     queue_ack,
     queue_enqueue_idempotent,
     queue_nack,
     queue_receive,
     queue_receive_dead_letter,
+    queue_replay_after,
     rerank,
     rerank_contract_version,
     resilient_ledger_append,
@@ -109,6 +116,8 @@ from vectora_engine import (
     tool_result_to_chat_message,
     transition_run,
     validate_storage_selection,
+    vector_store_search_filtered,
+    vector_store_upsert,
 )
 
 
@@ -142,7 +151,7 @@ def test_storage_capabilities_state_backend_differences() -> None:
     assert "ledger_backup_verify" in sql["implemented"]
     assert "ledger_restore" in sql["implemented"]
     assert vector["score_direction"] == "higher_is_closer"
-    assert "metadata_filter" in vector["not_implemented"]
+    assert "metadata_filter" in vector["implemented"]
     assert "configurable_ann_index" in vector["not_implemented"]
     assert "quantization" in vector["not_implemented"]
     assert kv["ttl"] is True
@@ -393,6 +402,168 @@ def test_queue_idempotent_enqueue_against_real_services(
         assert delivery["payload"] == b"original"
         await queue_ack(delivery["delivery_id"])
         assert await queue_receive(config, "worker", "workers", 100) is None
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable"),
+    [
+        ("redis_streams", "VECTORA_TEST_REDIS_URL"),
+        ("nats_jetstream", "VECTORA_TEST_NATS_URL"),
+    ],
+)
+def test_queue_replay_against_real_services(backend: str, variable: str) -> None:
+    endpoint = os.environ.get(variable)
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {
+            "backend": backend,
+            "endpoint": endpoint,
+            "namespace": f"python_replay_{os.getpid()}_{time.time_ns()}",
+        }
+        for value in (b"one", b"two", b"three"):
+            await queue_enqueue_idempotent(config, value, value.decode())
+        page = await queue_replay_after(config, limit=2)
+        assert [entry["payload"] for entry in page["records"]] == [b"one", b"two"]
+        next_page = await queue_replay_after(config, page["next_cursor"], 2)
+        assert [entry["payload"] for entry in next_page["records"]] == [b"three"]
+        # Replay is observational; all jobs remain available to normal consumers.
+        for expected in (b"one", b"two", b"three"):
+            delivery = await queue_receive(config, "worker", "workers", 2000)
+            assert delivery is not None
+            assert delivery["payload"] == expected
+            await queue_ack(delivery["delivery_id"])
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable"),
+    [("redis", "VECTORA_TEST_REDIS_URL"), ("nats_core", "VECTORA_TEST_NATS_URL")],
+)
+def test_pubsub_pattern_against_real_services(backend: str, variable: str) -> None:
+    endpoint = os.environ.get(variable)
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {
+            "backend": backend,
+            "endpoint": endpoint,
+            "namespace": f"pattern_{os.getpid()}_{time.time_ns()}",
+        }
+        subscription = await pubsub_subscribe_pattern(config, "jobs.*")
+        try:
+            await pubsub_publish(config, "jobs.one", b"first")
+            await pubsub_publish(config, "jobs.deep.two", b"ignored")
+            await pubsub_publish(config, "jobs.three", b"last")
+            assert await pubsub_receive(subscription, 2000) == b"first"
+            assert await pubsub_receive(subscription, 2000) == b"last"
+            assert await pubsub_receive(subscription, 100) is None
+        finally:
+            pubsub_unsubscribe(subscription)
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable"),
+    [("lance_db", None), ("qdrant", "VECTORA_TEST_QDRANT_URL")],
+)
+def test_vector_metadata_filters_match_across_backends(
+    backend: str, variable: str | None, tmp_path: Path
+) -> None:
+    endpoint = (
+        str(tmp_path / "vectors.lance")
+        if variable is None
+        else os.environ.get(variable)
+    )
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {"backend": backend, "endpoint": endpoint}
+        collection = f"python_vector_filter_{os.getpid()}_{time.time_ns()}"
+        try:
+            for record_id, category, score in (
+                (1, "guide", 0.9),
+                (2, "draft", 0.8),
+                (3, "guide", 0.4),
+                (4, ["guide"], 0.95),
+            ):
+                await vector_store_upsert(
+                    config,
+                    collection,
+                    {
+                        "id": record_id,
+                        "scope": "team",
+                        "vector": [1.0, 0.0, 0.0],
+                        "metadata": {
+                            "category": category,
+                            "score": score,
+                            "nested": {"language": "pt"},
+                        },
+                    },
+                )
+            await vector_store_upsert(
+                config,
+                collection,
+                {
+                    "id": 5,
+                    "scope": "team",
+                    "vector": [1.0, 0.0, 0.0],
+                    "metadata": {"score": 0.2},
+                },
+            )
+            filter_value = {
+                "op": "and",
+                "filters": [
+                    {"op": "eq", "path": "category", "value": "guide"},
+                    {"op": "gte", "path": "score", "value": 0.5},
+                    {"op": "eq", "path": "nested.language", "value": "pt"},
+                ],
+            }
+            hits = await vector_store_search_filtered(
+                config, collection, "team", [1.0, 0.0, 0.0], filter_value
+            )
+            assert [hit["id"] for hit in hits] == [1]
+            excluded = await vector_store_search_filtered(
+                config,
+                collection,
+                "team",
+                [1.0, 0.0, 0.0],
+                {
+                    "op": "not",
+                    "filter": {"op": "eq", "path": "category", "value": "guide"},
+                },
+            )
+            assert sorted(hit["id"] for hit in excluded) == [2, 4, 5]
+            either = await vector_store_search_filtered(
+                config,
+                collection,
+                "team",
+                [1.0, 0.0, 0.0],
+                {
+                    "op": "or",
+                    "filters": [
+                        {"op": "eq", "path": "category", "value": "draft"},
+                        {"op": "in", "path": "score", "values": [0.4]},
+                    ],
+                },
+            )
+            assert sorted(hit["id"] for hit in either) == [2, 3]
+        finally:
+            if backend == "qdrant":
+                request = urllib.request.Request(  # noqa: S310
+                    f"{endpoint.rstrip('/')}/collections/{collection}", method="DELETE"
+                )
+                response = await asyncio.to_thread(
+                    urllib.request.urlopen, request, timeout=5
+                )
+                response.close()
 
     asyncio.run(exercise())
 
@@ -1039,6 +1210,43 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
             )
         )
         assert ephemeral["answers"]["route"]["choice"] == "billing"
+        before_limited_decision = len(captured)
+        limited_request = {
+            "request": {
+                "model": "fixture",
+                "state": {"ticket": "charged twice"},
+                "questions": {
+                    "route": {
+                        "type": "choice",
+                        "instructions": "Which team?",
+                        "criteria": {"billing": None, "shipping": None},
+                    }
+                },
+            },
+            "files": [
+                "data:image/png;base64,aGVsbG8=",
+                "data:audio/wav;base64,aGVsbG8=",
+            ],
+        }
+        with pytest.raises(RuntimeError, match="decision media exceeds"):
+            asyncio.run(
+                llama_server_decide_ephemeral(
+                    settings,
+                    limited_request,
+                    media_context=MediaExecutionContext(
+                        {}, max_total_media_bytes=9, max_media_parts=2
+                    ),
+                )
+            )
+        with pytest.raises(RuntimeError, match="configured asset limit"):
+            asyncio.run(
+                llama_server_decide_ephemeral(
+                    settings,
+                    limited_request,
+                    media_context=MediaExecutionContext({}, max_media_parts=1),
+                )
+            )
+        assert len(captured) == before_limited_decision
         result = asyncio.run(llama_server_chat_complete(settings, REQUEST))
         assert result["content"] == "hello"
         events = asyncio.run(collect_llama_server_stream(settings, REQUEST))
@@ -1155,6 +1363,26 @@ def test_llama_server_multimodal_embeddings_materialize_only_consumer_assets() -
         ],
     }
     try:
+        over_budget_request = {
+            **request,
+            "inputs": [request["inputs"][0], request["inputs"][0]],
+        }
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                llama_server_embed_ephemeral(
+                    {
+                        "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                        "api_key": "fixture",
+                    },
+                    over_budget_request,
+                    media_context=MediaExecutionContext(
+                        {"embedding-image": image},
+                        max_total_media_bytes=len(image),
+                        max_media_parts=2,
+                    ),
+                )
+            )
+        assert captured == {}
         response = asyncio.run(
             llama_server_embed_ephemeral(
                 {
@@ -1223,6 +1451,33 @@ def test_llama_server_multimodal_rerank_uses_consumer_assets() -> None:
         "top_n": 1,
     }
     try:
+        over_budget_request = {
+            **request,
+            "documents": [
+                {
+                    "content": [
+                        {"type": "text", "text": "candidate"},
+                        {"type": "image", "media_ref": image_ref},
+                    ]
+                }
+            ],
+        }
+        with pytest.raises(RuntimeError):
+            asyncio.run(
+                llama_server_rerank_ephemeral(
+                    {
+                        "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                        "api_key": "fixture",
+                    },
+                    over_budget_request,
+                    media_context=MediaExecutionContext(
+                        {"rerank-image": image},
+                        max_total_media_bytes=len(image),
+                        max_media_parts=2,
+                    ),
+                )
+            )
+        assert captured == {}
         response = asyncio.run(
             llama_server_rerank_ephemeral(
                 {
@@ -1264,7 +1519,6 @@ def test_laya_binding_uses_native_systemone_protocol_and_accepts_server_metadata
             captured.append((self.command, self.path, body))
             assert self.headers.get("Authorization") == "Bearer laya-test-key"
             payload = {
-                "model": "laya-systemone",
                 "answers": {
                     "route": {
                         "type": "choice",
@@ -2745,6 +2999,67 @@ def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
     assert limited_result["decisions"][0]["mode"] == "reference"
     assert "limite" in limited_result["decisions"][0]["reason"]
 
+    model_metadata = llama_server_model_media_capabilities(
+        {"id": "text-only", "architecture": {"input_modalities": ["text"]}}
+    )
+    assert model_metadata["provider"] == "llama_cpp"
+    assert model_metadata["capabilities"]["vision"] == "unsupported"
+    assert model_metadata["capabilities"]["tool_result_images"] is None
+
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII="
+    )
+    image_parts = []
+    for asset_id in ("image-one", "image-two"):
+        image_ref = {
+            "asset_id": asset_id,
+            "sha256": hashlib.sha256(png).hexdigest(),
+            "mime_type": "image/png",
+            "size_bytes": len(png),
+            "name": f"{asset_id}.png",
+        }
+        image_parts.append({"type": "image", "media_ref": image_ref})
+    text_only_context = MediaExecutionContext(
+        {"image-one": png}, gateway_metadata=[model_metadata]
+    )
+    text_only_result = asyncio.run(
+        prepare_chat_content(
+            "llama_cpp", "text-only", [image_parts[0]], text_only_context
+        )
+    )
+    assert text_only_result["decisions"][0]["mode"] == "reference"
+    aggregate = asyncio.run(
+        prepare_chat_content(
+            "openai",
+            "fixture-model",
+            image_parts,
+            MediaExecutionContext(
+                {"image-one": png, "image-two": png},
+                max_total_media_bytes=len(png),
+            ),
+        )
+    )
+    assert [item["mode"] for item in aggregate["decisions"]] == [
+        "native",
+        "reference",
+    ]
+    assert "agregado de bytes" in aggregate["decisions"][1]["reason"]
+    count_limited = asyncio.run(
+        prepare_chat_content(
+            "openai",
+            "fixture-model",
+            image_parts,
+            MediaExecutionContext(
+                {"image-one": png, "image-two": png}, max_media_parts=1
+            ),
+        )
+    )
+    assert [item["mode"] for item in count_limited["decisions"]] == [
+        "native",
+        "reference",
+    ]
+    assert "agregado de assets" in count_limited["decisions"][1]["reason"]
+
     response = json.dumps(
         {"choices": [{"message": {"content": "answer"}, "finish_reason": "stop"}]}
     ).encode()
@@ -3206,6 +3521,71 @@ def test_openai_responses_profile_maps_chat_and_semantic_sse() -> None:
         server.server_close()
     assert captured["body"]["stream"] is True
     assert [event["type"] for event in events] == ["text_delta", "usage", "completed"]
+
+
+def test_openai_responses_audio_uses_asset_map_and_model_capability() -> None:
+    audio = b"RIFF\x00\x00\x00\x00WAVE"
+    media_ref = {
+        "asset_id": "voice-audio",
+        "sha256": hashlib.sha256(audio).hexdigest(),
+        "mime_type": "audio/wav",
+        "size_bytes": len(audio),
+        "name": "voice.wav",
+    }
+    request = {
+        **REQUEST,
+        "model": "audio-model",
+        "messages": [
+            {"role": "user", "content": [{"type": "audio", "media_ref": media_ref}]}
+        ],
+    }
+    body = json.dumps(
+        {
+            "id": "resp_audio",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": "heard"}],
+                }
+            ],
+        }
+    ).encode()
+    server, thread, captured = serve(body, "application/json")
+    settings = {
+        "provider": "openai_responses",
+        "base_url": endpoint(server),
+        "api_key": "fixture-secret",
+    }
+    media_context = MediaExecutionContext(
+        {"voice-audio": audio},
+        gateway_metadata=[
+            {
+                "provider": "openai_responses",
+                "model": "audio-model",
+                "capabilities": {"audio_input": "supported"},
+            }
+        ],
+    )
+    try:
+        result = asyncio.run(
+            native_chat_complete(settings, request, media_context=media_context)
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+
+    audio_input = captured["body"]["input"][0]["content"][0]
+    assert result["media_decisions"][0]["mode"] == "native", result["media_decisions"]
+    assert audio_input == {
+        "type": "input_audio",
+        "input_audio": {
+            "data": base64.b64encode(audio).decode("ascii"),
+            "format": "wav",
+        },
+    }
+    assert result["content"] == "heard"
 
 
 def test_fallback_uses_explicit_order_and_returns_selected_model() -> None:

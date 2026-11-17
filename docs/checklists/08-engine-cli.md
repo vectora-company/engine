@@ -4,11 +4,11 @@
 - [x] Config `init/show/validate/set`, com caminho configurável e referência de segredo por environment variable; smoke manual de init/set/validate/show passou.
 - [x] Wizard na primeira execução e `setup` para provider/modelo/endpoint; entrada de chave mascarada, `secrets.json` separado modo 0600 no Unix e precedência para env exportada.
 - [x] OpenAI Chat/Responses, OpenRouter, Ollama, Anthropic, Google Gemini, Cohere, llama.cpp e endpoint compatível customizado (9router/OmniRouter por URL).
-- [x] Wizard também configura o Decision Model com Laya standalone ou llama.cpp/Laya-GGUF.
+- [x] Wizard também configura Decision Model com Laya standalone ou llama.cpp/Laya-GGUF; no runtime Laya, checkpoint é opcional e Jev não é usado como default.
 - [x] Cliente de chat reaproveita `LlamaServerClient`, `OpenAiCompatibleClient` ou `NativeChatClient` (Anthropic, Google, Cohere, Ollama e OpenAI Responses).
 - [x] Loop ReAct preserva mensagens e tool call IDs, limita iterações e executa somente ferramenta local allowlisted (`calculator`).
 - [x] Evaluator da calculator rejeita código, sintaxe inválida, divisão por zero e resultado não finito; testes validam precedência e rejeições.
-- [x] Decision Model configura separadamente `LayaClient` (`laya-serve`) e `LlamaServerClient` (`/v1/systemone`, llama.cpp/Laya-GGUF); teste valida seleção de ambos os transportes.
+- [x] Decision Model configura adapters separados para Laya standalone e llama-server, ambos sobre SystemOne; Jev permanece um modelo específico, e Laya permite checkpoint opcional/roteamento.
 - [x] Interface utiliza rustyline, termimad e indicatif; EOF/interrupção termina a conversa.
 - [x] `cargo test -p engine-cli --locked`: 8 testes passaram, incluindo perfis e permissões de secrets.
 - [x] Baseline anterior: `scons tests` cobriu 242 testes Engine, 5 testes CLI, 3 fixtures, 1 fronteira Python; pytest 99/1 skip e Node 52/11 skips. A extensão atual passou 8 testes específicos.

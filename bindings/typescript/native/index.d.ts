@@ -217,6 +217,10 @@ export declare function llamaServerModels(
   settingsJson: string,
 ): Promise<string>;
 
+export declare function llamaServerModelMediaCapabilities(
+  modelJson: string,
+): string;
+
 export declare function llamaServerRealtimeSend(
   sessionId: string,
   commandJson: string,
@@ -328,6 +332,11 @@ export declare function pubsubSubscribe(
   topic: string,
 ): Promise<string>;
 
+export declare function pubsubSubscribePattern(
+  configJson: string,
+  pattern: string,
+): Promise<string>;
+
 export declare function pubsubUnsubscribe(subscriptionId: string): void;
 
 export declare function queueAck(deliveryId: string): Promise<void>;
@@ -346,6 +355,12 @@ export declare function queueEnqueueIdempotent(
   configJson: string,
   payloadJson: string,
   idempotencyKey: string,
+): Promise<string>;
+
+export declare function queueReplayAfter(
+  configJson: string,
+  cursorJson: string,
+  limit: number,
 ): Promise<string>;
 
 export declare function queueReceive(
@@ -622,6 +637,15 @@ export declare function vectorStoreSearch(
   scope: string,
   vector: Array<number>,
   limit: number,
+): Promise<string>;
+
+export declare function vectorStoreSearchFiltered(
+  configJson: string,
+  collection: string,
+  scope: string,
+  vector: Array<number>,
+  limit: number,
+  filterJson?: string | undefined | null,
 ): Promise<string>;
 
 export declare function vectorStoreUpsert(

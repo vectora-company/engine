@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct DecisionRequest {
-    /// Local target identifier; llama-server serves its loaded decision model
-    /// and the TypeSafe-compatible wire request has no `model` field.
-    #[serde(skip_serializing)]
-    pub model: String,
+    /// Optional target/model selector. It is local metadata for llama-server
+    /// discovery and may be omitted when a SystemOne endpoint routes requests.
+    #[serde(default, skip_serializing)]
+    pub model: Option<String>,
     pub state: serde_json::Value,
     pub questions: BTreeMap<String, DecisionQuestion>,
 }
@@ -67,8 +67,15 @@ pub struct DecisionUsage {
 
 impl DecisionRequest {
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
-        if self.model.trim().is_empty() || self.questions.is_empty() {
-            return Err("model and at least one question are required");
+        if self
+            .model
+            .as_deref()
+            .is_some_and(|model| model.trim().is_empty())
+        {
+            return Err("model must not be empty when provided");
+        }
+        if self.questions.is_empty() {
+            return Err("at least one question is required");
         }
         fn contains_state_media(value: &serde_json::Value) -> bool {
             match value {
@@ -116,9 +123,14 @@ impl DecisionRequest {
 }
 
 impl EphemeralDecisionRequest {
-    pub(crate) fn validate(&self, max_media_bytes: u64) -> Result<(), &'static str> {
+    pub(crate) fn validate_with_limits(
+        &self,
+        max_media_bytes: u64,
+        max_media_parts: Option<usize>,
+    ) -> Result<(), &'static str> {
         self.request.validate()?;
         let mut total = 0u64;
+        let mut parts = 0usize;
         for file in &self.files {
             let Some((metadata, encoded)) = file.split_once(',') else {
                 return Err("decision files must be data URLs");
@@ -129,12 +141,28 @@ impl EphemeralDecisionRequest {
             if !metadata.ends_with(";base64") {
                 return Err("decision file data URLs must use base64");
             }
+            if max_media_parts.is_some_and(|limit| parts >= limit) {
+                return Err("decision media exceeds the configured asset limit");
+            }
+            let remaining_bytes = max_media_bytes.saturating_sub(total);
+            let max_encoded_bytes = ((remaining_bytes.saturating_add(2)) / 3).saturating_mul(4);
+            if u64::try_from(encoded.len()).unwrap_or(u64::MAX) > max_encoded_bytes {
+                return Err("decision media exceeds the configured limit");
+            }
             let decoded = STANDARD
                 .decode(encoded)
                 .map_err(|_| "decision file contains invalid base64")?;
-            total = total.saturating_add(decoded.len() as u64);
+            total = total
+                .checked_add(decoded.len() as u64)
+                .ok_or("decision media exceeds the configured limit")?;
             if total > max_media_bytes {
                 return Err("decision media exceeds the configured limit");
+            }
+            parts = parts
+                .checked_add(1)
+                .ok_or("decision media exceeds the configured asset limit")?;
+            if max_media_parts.is_some_and(|limit| parts > limit) {
+                return Err("decision media exceeds the configured asset limit");
             }
         }
         Ok(())
@@ -228,7 +256,7 @@ mod tests {
     fn request(file: &str) -> EphemeralDecisionRequest {
         EphemeralDecisionRequest {
             request: DecisionRequest {
-                model: "decision".into(),
+                model: Some("decision".into()),
                 state: serde_json::json!({"case": "example"}),
                 questions: BTreeMap::from([(
                     "route".into(),
@@ -247,30 +275,46 @@ mod tests {
     fn media_requires_base64_data_url_and_obeys_decoded_byte_limit() {
         assert!(
             request("data:image/png;base64,aGVsbG8=")
-                .validate(5)
+                .validate_with_limits(5, None)
                 .is_ok()
         );
         assert_eq!(
-            request("https://example.invalid/image.png").validate(100),
+            request("https://example.invalid/image.png").validate_with_limits(100, None),
             Err("decision files must be data URLs")
         );
         assert_eq!(
-            request("data:image/png;base64,***").validate(100),
+            request("data:image/png;base64,***").validate_with_limits(100, None),
             Err("decision file contains invalid base64")
         );
         assert_eq!(
-            request("data:image/png;base64,aGVsbG8=").validate(4),
+            request("data:image/png;base64,aGVsbG8=").validate_with_limits(4, None),
             Err("decision media exceeds the configured limit")
         );
     }
 
     #[test]
+    fn decision_files_share_aggregate_byte_and_asset_limits() {
+        let mut request = request("data:image/png;base64,aGVsbG8=");
+        request.files.push("data:audio/wav;base64,aGVsbG8=".into());
+        assert_eq!(
+            request.validate_with_limits(9, None),
+            Err("decision media exceeds the configured limit")
+        );
+        assert_eq!(
+            request.validate_with_limits(20, Some(1)),
+            Err("decision media exceeds the configured asset limit")
+        );
+        assert!(request.validate_with_limits(10, Some(2)).is_ok());
+    }
+
+    #[test]
     fn images_is_an_input_alias_for_files() {
         let request: EphemeralDecisionRequest = serde_json::from_value(serde_json::json!({
-            "request": {"model": "decision", "state": null, "questions": {"visible": {"type": "noul"}}},
+            "request": {"state": null, "questions": {"visible": {"type": "noul"}}},
             "images": ["data:image/png;base64,aGVsbG8="]
         }))
         .unwrap();
+        assert_eq!(request.request.model, None);
         assert_eq!(request.files, ["data:image/png;base64,aGVsbG8="]);
         let envelope = serde_json::to_value(request).unwrap();
         assert_eq!(envelope["files"][0], "data:image/png;base64,aGVsbG8=");
@@ -307,7 +351,7 @@ mod tests {
     #[test]
     fn persistent_decision_state_rejects_inline_media_fields() {
         let request = DecisionRequest {
-            model: "decision".into(),
+            model: Some("decision".into()),
             state: serde_json::json!({"messages": [{"image_url": "data:image/png;base64,aGVsbG8="}]}),
             questions: BTreeMap::from([(
                 "visible".into(),

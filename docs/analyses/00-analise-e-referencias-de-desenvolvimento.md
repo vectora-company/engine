@@ -99,14 +99,33 @@ títulos e bases de PR no estado dinâmico do GitHub.
 - [Storage, ledger, memória e RAG](../specs/02-storage-memoria-contexto-rag.md),
   [plano de storage](../plans/04-plano-storage-ledger.md) e
   [auditoria de storage](05-auditoria-storage-s0-s5.md). A conformance recente
-  cobre NACK agendado nos dois brokers e enqueue idempotente pela janela configurada;
-  lacunas restantes estão marcadas no plano e checklist.
+  cobre NACK agendado, enqueue idempotente pela janela configurada e replay
+  read-only por cursor em Redis/NATS reais, com wrappers Python e TypeScript.
+  Pub/sub agora também tem padrão segmentado equivalente nos dois brokers e
+  bindings. Gaps remanescentes e resultados por execução estão registrados no
+  plano e checklist específicos.
 - [Mídia no chat](../specs/17-midia-no-chat.md) e
-  [checklist de mídia](../checklists/04-midia-no-chat.md).
+  [checklist de mídia](../checklists/04-midia-no-chat.md). Limites opcionais
+  agregados de bytes/assets cobrem chat, Decision Model efêmero, embeddings e
+  rerank multimodais do llama-server. Metadata específica do modelo pode ser
+  convertida nos bindings e vence perfis genéricos. O Decision Model também
+  valida imagem/áudio com essas declarações e aceita override explícito.
+  Discovery/cache automático, catálogo completo e limites de duração/resolução
+  permanecem em aberto.
 - [Providers e modalidades](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
   [plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
   [checklist](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e
-  [análise](06-auditoria-providers-modalidades.md).
+  [análise](06-auditoria-providers-modalidades.md). Decision Model é a
+  categoria, Jev é um modelo específico, SystemOne é a API/protocolo e Laya é
+  um runtime independente que implementa essa API. O llama-server tem adapter
+  próprio para `/v1/systemone`; os runtimes mantêm discovery e capacidades
+  próprias. Seletor Laya opcional permite checkpoint Laya ou
+  roteamento do servidor. OpenAI Responses mapeia input audio WAV/MP3; a
+  capability fica desconhecida sem metadata/override do modelo, também no Chat
+  Completions.
+  A fixture Rust exercita WAV/MP3 e fallback textual sem envio de bytes para
+  formatos não suportados; smoke
+  real por modelo permanece pendente.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
   [checklist](../checklists/06-storage-grafos-falkordb.md) e
@@ -114,6 +133,18 @@ títulos e bases de PR no estado dinâmico do GitHub.
 - [Engine CLI](../specs/20-engine-cli.md), [plano](../plans/08-plano-engine-cli.md),
   [checklist](../checklists/08-engine-cli.md) e
   [análise](08-auditoria-engine-cli.md).
+
+## Estado da revisão documental
+
+A auditoria do checkout de 17/11/2026 identificou documentos de provider,
+mídia e FalkorDB cuja organização seguia uma sequência de PRs e cujo texto
+contradizia o código (incluindo OpenAI Responses e filtro vetorial). Planos,
+specs, checklists e análises dessas capabilities foram atualizados por domínio
+ou operação. O inventário de 60 Markdown, a comparação com as três issues
+abertas e os documentos ainda pendentes de revisão estão em
+[`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md).
+Não registrar topo, número ou branch de PR no prompt reutilizável nem como
+estrutura de roadmap; o GitHub é fonte dinâmica de entrega.
 
 ## Encerramento por decisão vital
 

@@ -1,24 +1,17 @@
 # Checklist completo do estado da Engine
 
-**Fotografia:** 15 de novembro de 2026. **Branch:** `main`.
-**SHA conferido:** `bbfdfede188a71e87c8235bdd89e5099ac677cda` (merge do PR #112).
-**PRs:** 100 registros consultados; todos merged. Nenhum PR aberto na consulta.
-**Issues:** 3 abertas (#2, #20 e #58); títulos, corpos e estado foram lidos.
+**Auditoria documental e de código:** 17 de novembro de 2026, checkout da área de trabalho. O inventário cobre 60 Markdown em `docs/`, documentação de raiz, implementação e testes disponíveis. Issues abertas são consultadas no GitHub como fontes de requisitos, não como estrutura deste checklist. As issues abertas atuais são #2, #20 e #58; seus corpos foram comparados com os contratos/código e há requisitos desatualizados em #58. Este estado descreve o checkout auditado, que pode conter capacidades ainda não integradas à branch principal.
 
-Este inventário cruza documentação versionada, código existente e os requisitos
-das issues abertas. O status descreve o que está no checkout e a evidência
-registrada; não representa aprovação de release, adoção por produto, paridade
-com SDKs/serviços ou garantia de produção. Itens de uma proposta sem aprovação
-continuam sendo backlog, não compromisso aprovado.
+O status não representa aprovação de release, adoção por produto, paridade total com SDKs/serviços ou garantia de produção. Propostas sem aprovação permanecem sugestões.
 
 ## Legenda
 
 | Símbolo | Status                        | Interpretação                                                                                                          |
 | ------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| ☑️      | Implementado                  | A capacidade está no `main` para o escopo descrito.                                                                    |
+| ☑️      | Implementado                  | A capacidade está implementada no checkout auditado para o escopo descrito.                                            |
 | 🟨      | Parcialmente implementado     | Há uma parte funcional, mas faltam operações, paridade ou critérios declarados.                                        |
 | 🔍      | Implementado; precisa revisão | O código existe, porém documentação contraditória, integração real, cobertura ou limites impedem fechar a verificação. |
-| ☐       | Não implementado              | Não há implementação identificada no `main`, ou a proposta ainda não foi aprovada.                                     |
+| ☐       | Não implementado              | Não há implementação identificada no checkout, ou a proposta ainda não foi aprovada.                                   |
 
 ## 1. Núcleo, API e harness
 
@@ -36,26 +29,26 @@ continuam sendo backlog, não compromisso aprovado.
 | 🟨     | Resume/recovery ponta a ponta de run                                         | Persistência e APIs existem, mas retomada de efeitos externos exige reconciliação explícita pelo host; não há exactly-once.                                                             |
 | 🟨     | Extensibilidade uniforme de tools nativas, runtime e externas                | Há contratos de tool/dispatch; registro dinâmico completo, isolamento e adapters externos uniformes não estão fechados.                                                                 |
 | ☐      | Execução de tools isolada/sandbox, RBAC e identidade de aprovador            | Permanecem no consumidor/infraestrutura e não são fornecidos pelo núcleo.                                                                                                               |
-| ☐      | Subagents, scheduler geral de workflows e Hooks/Skills como runtime completo | Não encontrados como capacidades gerais implementadas no código da `main`.                                                                                                              |
+| ☐      | Subagents, scheduler geral de workflows e Hooks/Skills como runtime completo | Não encontrados como capacidades gerais implementadas no checkout auditado.                                                                                                             |
 | ☐      | Garantia de correção de resultado por verificação automática                 | Gate tipado existe; a semântica e a evidência confiável da verificação pertencem ao host.                                                                                               |
 
 ## 2. Chat, providers e inferência
 
 ### Chat e protocolos
 
-| Status | Capacidade / verificação                                            | Estado e evidência                                                                                                                                                 |
-| ------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ☑️     | Transporte OpenAI-compatible                                        | Completion, streaming SSE, erros, limites, timeout e cancelamento do stream em Rust.                                                                               |
-| ☑️     | Perfis OpenAI Chat Completions e OpenAI Responses                   | Perfis separados existem no core e bindings; diferenças de formato não são achatadas numa promessa de equivalência total.                                          |
-| ☑️     | OpenRouter Chat Completions                                         | Perfil nomeado, endpoint/autenticação e fixtures locais.                                                                                                           |
-| ☑️     | Anthropic Messages, Google Gemini e Cohere Chat v2                  | Adapters nativos com conversão de mensagens, tools, eventos de streaming e usage nos casos cobertos.                                                               |
-| ☑️     | Ollama `/api/chat`                                                  | Perfil nativo, JSON/NDJSON, tools, imagens, `think`, `format`, `keep_alive`, `options` e autenticação opcional conforme contrato implementado.                     |
-| 🔍     | llama-server v1.0.0: health, models, chat e streaming               | Perfil versionado com fixtures e bindings. Integração real contra servidor/modelo não está demonstrada para todos os cenários.                                     |
-| 🔍     | Paridade de streaming, erros e extensões em todos os providers      | Casos cobertos por fixtures, mas não existe prova de paridade integral com todos os SDKs, endpoints, modelos e gateways.                                           |
-| 🟨     | 9Router, OmniRouter e Kimi                                          | Podem usar endpoint OpenAI-compatible quando compatível; não há perfil nominal nem conformidade própria por rota/provedor.                                         |
-| 🔍     | Descoberta de modalidades e limites por modelo                      | Discovery e overrides são suportados em parte; metadados do servidor não provam capacidade efetiva, e não há catálogo completo e autoritativo por modelo/endpoint. |
-| ☑️     | Fallback de chat configurado pelo consumidor                        | Tenta candidatos elegíveis em ordem; evita replay após conteúdo parcial e expõe troca de modelo. Não escolhe credenciais/candidatos automaticamente.               |
-| 🟨     | Fallback e compatibilidade multimodal em toda a matriz de providers | Retry textual e classificação existem nos fluxos cobertos; catálogo completo e casos de erro de cada protocolo seguem incompletos.                                 |
+| Status | Capacidade / verificação                                                    | Estado e evidência                                                                                                                                                                                                                        |
+| ------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ☑️     | Transporte OpenAI-compatible                                                | Completion, streaming SSE, erros, limites, timeout e cancelamento do stream em Rust.                                                                                                                                                      |
+| ☑️     | Perfis OpenAI Chat Completions e OpenAI Responses                           | Perfis separados existem no core e bindings; diferenças de formato não são achatadas numa promessa de equivalência total.                                                                                                                 |
+| ☑️     | OpenRouter Chat Completions                                                 | Perfil nomeado, endpoint/autenticação e fixtures locais.                                                                                                                                                                                  |
+| ☑️     | Anthropic Messages, Google Gemini e Cohere Chat v2                          | Adapters nativos com conversão de mensagens, tools, eventos de streaming e usage nos casos cobertos.                                                                                                                                      |
+| ☑️     | Ollama `/api/chat`                                                          | Perfil nativo, JSON/NDJSON, tools, imagens, `think`, `format`, `keep_alive`, `options` e autenticação opcional conforme contrato implementado.                                                                                            |
+| 🔍     | llama-server v1.0.0: chat, Decision Model, embeddings, rerank, TTS/realtime | Endpoints implementados em Rust/bindings; fixtures cobrem contratos, mas smoke com servidor/modelo real não está demonstrado para todos os cenários.                                                                                      |
+| 🔍     | Paridade de streaming, erros e extensões em todos os providers              | Casos cobertos por fixtures, mas não existe prova de paridade integral com todos os SDKs, endpoints, modelos e gateways.                                                                                                                  |
+| 🟨     | 9Router, OmniRouter e Kimi                                                  | Podem usar endpoint OpenAI-compatible quando compatível; não há perfil nominal nem conformidade própria por rota/provedor.                                                                                                                |
+| 🟨     | Descoberta de modalidades e limites por modelo                              | Metadata do modelo/gateway e override têm precedência correta sobre perfil genérico; `/v1/models` pode ser convertido explicitamente pelos bindings. Não há discovery/cache automático nem catálogo completo e autoritativo por operação. |
+| ☑️     | Fallback de chat configurado pelo consumidor                                | Tenta candidatos elegíveis em ordem; evita replay após conteúdo parcial e expõe troca de modelo. Não escolhe credenciais/candidatos automaticamente.                                                                                      |
+| 🟨     | Fallback e compatibilidade multimodal em toda a matriz de providers         | Retry textual e classificação existem nos fluxos cobertos; catálogo completo e casos de erro de cada protocolo seguem incompletos.                                                                                                        |
 
 ### Decision Models, áudio, imagem e vídeo
 
@@ -74,28 +67,28 @@ continuam sendo backlog, não compromisso aprovado.
 
 ### Embeddings e reranking
 
-| Status | Capacidade / verificação                                               | Estado e evidência                                                                                           |
-| ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| ☑️     | Embeddings OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama      | Clientes no núcleo Rust, com validação de dimensão/ordem e usage quando fornecido.                           |
-| ☑️     | Rerank Cohere, Voyage e OpenRouter                                     | Clientes no núcleo Rust, índices e scores mantidos no resultado.                                             |
-| ☑️     | Fallback explícito de embeddings/rerank                                | Fallback opt-in nos casos de quota definidos; reexecuta a operação inteira, sem persistir resultado parcial. |
-| 🔍     | Conformidade completa de erros, limites e modelos de embeddings/rerank | Contratos e fixtures cobrem os casos declarados, não todas as versões/endpoints/modelos dos providers.       |
+| Status | Capacidade / verificação                                                        | Estado e evidência                                                                                           |
+| ------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| ☑️     | Embeddings OpenAI-compatible, OpenRouter, Cohere, Voyage, Ollama e llama-server | Clientes no núcleo Rust; llama-server também oferece entrada multimodal via asset map.                       |
+| ☑️     | Rerank Cohere, Voyage, OpenRouter e llama-server                                | Clientes no núcleo Rust; llama-server cobre texto e imagem efêmera com validação de resposta.                |
+| ☑️     | Fallback explícito de embeddings/rerank                                         | Fallback opt-in nos casos de quota definidos; reexecuta a operação inteira, sem persistir resultado parcial. |
+| 🔍     | Conformidade completa de erros, limites e modelos de embeddings/rerank          | Contratos e fixtures cobrem os casos declarados, não todas as versões/endpoints/modelos dos providers.       |
 
 ## 3. Mídia e requests
 
-| Status | Capacidade / verificação                                       | Estado e evidência                                                                                                                                     |
-| ------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ☑️     | Partes de conteúdo tipadas                                     | Image, Audio, Video, Document e File aparecem no contrato da Engine.                                                                                   |
-| ☑️     | Mapa temporário de assets nos bindings                         | Assets efêmeros são referenciados por ID/hash e encaminhados ao mesmo núcleo Rust.                                                                     |
-| ☑️     | Request persistível separado do envio efêmero                  | Bytes inline e URLs `data:` não entram nos requests persistíveis; validação/hash/MIME/limite ocorrem no envio.                                         |
-| ☑️     | Três modos de integrar assets                                  | Preparação manual, mídia efêmera por request e contexto padrão, disponíveis na superfície implementada.                                                |
-| ☑️     | Resultado de tool multimodal                                   | `ToolResult` usa partes tipadas; serialização de imagem coberta nos providers suportados e fallback textual conforme contrato.                         |
-| ☑️     | Reclassificação de MIME por bytes                              | Bytes reidratados são validados antes de montar payload; PDF e previews seguem regras de assinatura/tipo.                                              |
-| ☑️     | Limite global e overrides por provider/modelo/modalidade       | Há teto global e configuração específica; limite global continua máximo absoluto.                                                                      |
-| 🟨     | Catálogo automático de capabilities/limites multimodais        | Overrides e parte do discovery existem; limites oficiais por modelo/endpoint, limites agregados, duração/resolução/contagem total não estão completos. |
-| 🔍     | Matriz de serialização de mídia por provider                   | Adapters cobrem modos selecionados; issue #58 permanece aberta e pede cobertura de conformidade Rust/Python/TypeScript e matriz completa.              |
-| 🟨     | Recuperação textual após rejeição de payload multimodal        | Retry textual limitado aos erros e fluxos classificados; não substitui conversão de PDF/vídeo nem processamento local de mídia.                        |
-| ☐      | Extração/transcrição local de PDF/áudio/vídeo dentro da Engine | Não faz parte das APIs de geração/inferência atuais; não confundir com passagem de mídia a um provider.                                                |
+| Status | Capacidade / verificação                                       | Estado e evidência                                                                                                                                                                                                                                                                             |
+| ------ | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ☑️     | Partes de conteúdo tipadas                                     | Image, Audio, Video, Document e File aparecem no contrato da Engine.                                                                                                                                                                                                                           |
+| ☑️     | Mapa temporário de assets nos bindings                         | Assets efêmeros são referenciados por ID/hash e encaminhados ao mesmo núcleo Rust.                                                                                                                                                                                                             |
+| ☑️     | Request persistível separado do envio efêmero                  | Bytes inline e URLs `data:` não entram nos requests persistíveis; validação/hash/MIME/limite ocorrem no envio.                                                                                                                                                                                 |
+| ☑️     | Três modos de integrar assets                                  | Preparação manual, mídia efêmera por request e contexto padrão, disponíveis na superfície implementada.                                                                                                                                                                                        |
+| ☑️     | Resultado de tool multimodal                                   | `ToolResult` usa partes tipadas; serialização de imagem coberta nos providers suportados e fallback textual conforme contrato.                                                                                                                                                                 |
+| ☑️     | Reclassificação de MIME por bytes                              | Bytes reidratados são validados antes de montar payload; PDF e previews seguem regras de assinatura/tipo.                                                                                                                                                                                      |
+| ☑️     | Limite global e overrides por provider/modelo/modalidade       | Há teto global e configuração específica; limite global continua máximo absoluto.                                                                                                                                                                                                              |
+| 🟨     | Catálogo automático de capabilities/limites multimodais        | Metadata do modelo vence perfil genérico e pode ser convertida de `/v1/models` nos bindings; sem fetch/cache automático. Catálogo por provider/operação e limites de duração/resolução ainda não estão completos. Orçamento agregado opcional cobre chat, Decision Model, embeddings e rerank. |
+| 🔍     | Matriz de serialização de mídia por provider                   | Adapters cobrem modos selecionados; faltam fixtures comuns completas e catálogo confiável por operação/modelo. A issue #58 ainda descreve um contrato anterior.                                                                                                                                |
+| 🟨     | Recuperação textual após rejeição de payload multimodal        | Retry textual limitado aos erros e fluxos classificados; não substitui conversão de PDF/vídeo nem processamento local de mídia.                                                                                                                                                                |
+| ☐      | Extração/transcrição local de PDF/áudio/vídeo dentro da Engine | Não faz parte das APIs de geração/inferência atuais; não confundir com passagem de mídia a um provider.                                                                                                                                                                                        |
 
 ## 4. Storage, ledger e mensageria
 
@@ -120,7 +113,7 @@ continuam sendo backlog, não compromisso aprovado.
 | ☑️     | LanceDB e Qdrant: upsert, busca e remoção          | Adapters implementados em Rust e encaminhados pelos bindings.                                                                                                    |
 | ☑️     | Base comum vetorial                                | Escopo/coleção, IDs, validação de dimensão, limites de busca e métrica cosine/similaridade normalizada cobertos em ambos.                                        |
 | 🔍     | Integração e falhas/restart nos serviços vetoriais | Testes locais/service-real cobrem casos declarados; matrizes completas de falha, indexação e versões não estão fechadas.                                         |
-| ☐      | Filtros de metadados equivalentes                  | Gap registrado para LanceDB e Qdrant.                                                                                                                            |
+| ☑️     | Filtros de metadados equivalentes                  | Checkout inclui AST validada e execução antes do top-k em LanceDB/Qdrant; contrato vetorial 3 exige recriação de collections antigas.                            |
 | ☐      | Busca híbrida/lexical equivalente                  | Não implementada como capability comum.                                                                                                                          |
 | ☐      | Configuração e equivalência de índices ANN         | Não implementada como superfície comum comprovada.                                                                                                               |
 | ☐      | Quantização equivalente                            | Não implementada como superfície comum comprovada.                                                                                                               |
@@ -159,7 +152,7 @@ continuam sendo backlog, não compromisso aprovado.
 | 🟨     | Conformidade Rust ↔ Python ↔ TypeScript completa                     | Há fixtures compartilhadas e testes por binding, mas não há paridade integral de todas as capabilities, erros, cancelamentos e serviços.                                                     |
 | 🔍     | Instalação/publicação do pacote npm                                  | Issue #2 segue aberta. Artefatos/build e API existem; publicação oficial/versionada, matriz completa de plataformas, smoke install e todos os critérios da issue não estão comprovados aqui. |
 | ☐      | Binding Go                                                           | Issue #20 é proposta aberta que exige aprovação e decisão ABI C/cgo versus IPC. Não implementar nem declarar suporte aprovado.                                                               |
-| ☑️     | Build e manutenção local via SCons                                   | Targets de build/test/lint/update existem; simulação de update foi adicionada e executada conforme histórico da branch integrada.                                                            |
+| ☑️     | Build e manutenção local via SCons                                   | Targets de build/test/lint/update existem; modo simulado e atualização real dos manifests foram exercitados no fluxo local.                                                                  |
 | 🔍     | Build limpo, instalação e publicação reproduzíveis em todos os alvos | CI/builds dos bindings existem; cobertura de plataforma, pacote instalado fora do checkout e cadeia de publicação verificável precisam ser consolidadas.                                     |
 | 🔍     | Adoção pelo Vectora e GH Bot                                         | Ambos são consumidores previstos; a implementação da Engine não prova integração/adopção em produção. Revisar os repositórios consumidores separadamente antes de anunciar.                  |
 | ☐      | Release 1.0 completa da Engine                                       | Não há evidência de release estável/crates.io + PyPI + npm, gates finais, matriz de suporte e checklist de adoção completos. A proposta de escopo está no plano de continuidade.             |
@@ -175,45 +168,41 @@ continuam sendo backlog, não compromisso aprovado.
 
 ## 7. Inventário documental analisado
 
-Foram inventariados e cruzados os 55 Markdown sob `docs/`, além de
-`README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `CLAUDE.md` e
-`CHANGELOG.md`: estrutura, estados declarados, critérios/checklists, gaps,
-links e referências foram confrontados com o código no SHA acima. Os títulos,
-corpos e estados das 3 issues abertas também foram comparados com o código e
-as specs. Documentos de contrato, plano e auditoria foram usados segundo sua
-função; uma fotografia antiga não prevalece sobre implementação mais recente.
-Os arquivos ficam listados por grupo para facilitar nova auditoria:
+Foram inventariados os 60 Markdown sob `docs/` e os seis Markdown da raiz;
+estrutura, links, estados e critérios foram confrontados com o checkout e os
+testes pertinentes. Títulos, corpos e estados das três issues abertas também
+foram comparados com código e specs. Esta auditoria documental continua em
+andamento para os documentos históricos remanescentes. Inventário atual por
+grupo:
 
 - **Índices/arquitetura (2):** `docs/README.md`, `docs/architecture.md`.
-- **Specs (20):** `docs/specs/README.md` e `docs/specs/01-runtime-agentico-e-harness.md` até `docs/specs/19-storage-de-grafos-falkordb.md` (inclui numericamente os contratos 01–19).
-- **Planos (8):** `docs/plans/00-prompt-loop-goal.md` até `docs/plans/07-plano-storage-grafos-falkordb.md`.
-- **Checklists anteriores (7):** `docs/checklists/00-checklist-de-implementacao.md` até `docs/checklists/06-storage-grafos-falkordb.md`.
-- **Análises (8):** `docs/analyses/00-analise-e-referencias-de-desenvolvimento.md` até `docs/analyses/07-auditoria-storage-grafos-falkordb.md`.
-- **Auditorias/walkthroughs (2):** `docs/audits/01-auditoria-e-walkthrough-da-main.md`, `docs/audits/02-walkthrough-historico-de-prs-engine.md`.
+- **Specs (21):** `docs/specs/README.md` e os contratos 01–20.
+- **Planos (9):** `docs/plans/00-prompt-loop-goal.md` até `docs/plans/08-plano-engine-cli.md`.
+- **Checklists (9):** `docs/checklists/00-checklist-de-implementacao.md` até `docs/checklists/08-engine-cli.md`.
+- **Análises (9):** `docs/analyses/00-analise-e-referencias-de-desenvolvimento.md` até `docs/analyses/08-auditoria-engine-cli.md`.
+- **Auditorias (1):** `docs/audits/01-fotografia-historica-do-bootstrap.md` (fotografia histórica do bootstrap).
 - **Goal loop (5):** `docs/goal-loop/README.md`, `docs/goal-loop/01-plano-operacional.md` até `docs/goal-loop/04-criterios-de-encerramento.md`.
 - **Templates (4):** `docs/templates/README.md` e `docs/templates/00-plano-de-capability.md` até `docs/templates/02-checklist-de-etapa.md`.
 - **Raiz (6):** `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `AGENTS.md`, `CLAUDE.md`.
 
-## 8. Documentos cujo estado precisa ser reconciliado
+## 8. Estado da revisão documental
 
-As fontes documentais são extensas, mas várias ainda apresentam como atual uma
-fotografia anterior ao merge da stack até #112. Tratar seus detalhes datados
-como histórico e atualizar os arquivos em uma revisão documental própria:
+Esta revisão organiza o estado por capability, consumidor, contrato e evidência. Os registros de entrega permanecem no histórico do GitHub e não definem a hierarquia da documentação. Foram atualizados nesta etapa:
 
-- 🔍 `docs/README.md`, `docs/goal-loop/README.md`, `docs/plans/00-prompt-loop-goal.md`, `docs/plans/05-loop-de-desenvolvimento.md`: estado de PRs/branch ainda descreve #112 como aberto ou etapa corrente.
-- 🔍 `docs/plans/03-plano-continuidade.md`: estado verificado e tabela ainda param na fotografia da stack anterior; reconciliar com providers, mídia e FalkorDB já integrados.
-- 🔍 `docs/plans/04-plano-storage-ledger.md`, `docs/checklists/00-checklist-de-implementacao.md`, `docs/checklists/03-auditoria-storage-s0-s5.md`, `docs/analyses/02-matriz-conformidade-capabilities.md`, `docs/analyses/05-auditoria-storage-s0-s5.md`: itens agora implementados continuam marcados pendentes, e alguns itens de teste/SQL continuam gaps reais.
-- 🔍 `docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`, `docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`, `docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`, `docs/analyses/06-auditoria-providers-modalidades.md`: sequência e status ainda descrevem PRs #97–#112 como stack ativa; atualizar cada subetapa sem apagar os gaps de integração real e operações ausentes.
-- 🔍 `docs/plans/07-plano-storage-grafos-falkordb.md`, `docs/specs/19-storage-de-grafos-falkordb.md`, `docs/checklists/06-storage-grafos-falkordb.md`, `docs/analyses/07-auditoria-storage-grafos-falkordb.md`: marcar #112 integrado em main, mantendo documentada a ausência de cancelamento remoto.
-- 🔍 `docs/checklists/04-midia-no-chat.md` e `docs/specs/17-midia-no-chat.md`: contêm declarações antigas de ausência de OpenAI Responses e status de PR; revalidar contra `main` e preservar as limitações de matriz multimodal.
-- 🔍 `docs/checklists/01-review-pr3-openai-compatible.md`, `docs/checklists/02-matriz-conformidade-capabilities.md`, `docs/analyses/01-auditoria-review-pr3.md` e `docs/audits/01-auditoria-e-walkthrough-da-main.md`: manter como auditoria histórica, mas explicitar snapshot/escopo para não induzir uso como estado global atual.
-- 🔍 `docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`, `docs/analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md`, `docs/analyses/04-sabatina-engine-ecossistema.md`, `docs/goal-loop/01-plano-operacional.md` até `docs/goal-loop/04-criterios-de-encerramento.md`: revisar links, branch ativa, próxima etapa e afirmações que envelheceram; não remover decisões aprovadas ou gaps sem evidência.
+- ☑️ `docs/plans/01-plano-portabilidade-llm-rust.md` e `docs/plans/02-plano-loop-agentico.md`: fases e estado organizados por capability.
+- ☑️ `docs/plans/03-plano-continuidade.md`: status de providers, filtros vetoriais, mídia e FalkorDB reconciliado com o checkout.
+- 🔍 `docs/plans/04-plano-storage-ledger.md`, `docs/checklists/00-checklist-de-implementacao.md`, `docs/checklists/03-auditoria-storage-s0-s5.md`, `docs/analyses/02-matriz-conformidade-capabilities.md` e `docs/analyses/05-auditoria-storage-s0-s5.md`: capacidades recentes estão refletidas; permanecem gaps reais de SQL, shutdown de filas e reconexão pub/sub, além de ANN/quantização/busca híbrida.
+- ☑️ Plano/spec/checklist/análise de providers e modalidades foram reestruturados por protocolo e operação; gaps de serviço real e modalidades ausentes estão explícitos.
+- ☑️ Plano/spec/checklist/análise de FalkorDB foram reestruturados por contrato, com configuração de teste e limitação de cancelamento remoto.
+- ☑️ Checklist/spec de mídia agora refletem requests persistíveis/efêmeros, partes de tools e adapter Responses; catálogo e limites de duração/resolução seguem pendentes.
+- 🔍 Revisar os registros históricos em `docs/checklists/01-cliente-openai-compatible.md`, `docs/checklists/02-matriz-conformidade-capabilities.md`, `docs/analyses/01-auditoria-cliente-openai-compatible.md`, `docs/analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md`, `docs/analyses/04-sabatina-engine-ecossistema.md` e `docs/audits/01-fotografia-historica-do-bootstrap.md`; preservar datas e bases auditadas e deixar explícito quando não descrevem o estado atual.
+- ☑️ Validar os links relativos do inventário de 60 Markdown, incluindo os nomes de documentos reorganizados.
 
 ## 9. Prioridades abertas derivadas do inventário
 
-1. Reconciliar os documentos indicados acima com `main` e com este checklist; atualizar os links/índices para este arquivo.
-2. Completar critérios remanescentes da base SQL e storage equivalente: concorrência entre processos/recovery, migrations PostgreSQL, filtros/busca híbrida/índices vetoriais e semânticas de filas/pub-sub.
-3. Fechar catálogo e conformidade de mídia/provider por operação; validar integrações reais de llama-server/Ollama e limites por modelo sem inferir suporte por marca.
+1. Concluir a revisão dos registros históricos remanescentes e manter explícitos seus limites temporais.
+2. Completar critérios remanescentes de SQL e storage: migrations PostgreSQL, busca híbrida, ANN/quantização, limites de fila/DLQ e reconexão pub/sub.
+3. Fechar catálogo e conformidade de mídia/provider por operação; validar integrações reais de llama-server/Ollama/Laya e limites por modelo.
 4. Determinar o escopo da primeira release completa e gates de distribuição, instalação limpa, plataformas, segurança, compatibilidade e adoção reversível.
 5. Resolver issue #2 com evidência de publicação e conformidade; manter issue #20 como proposta até aprovação; reavaliar e atualizar issue #58 face à implementação real.
 
