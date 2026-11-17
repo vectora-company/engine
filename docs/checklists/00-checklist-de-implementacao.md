@@ -101,9 +101,10 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
   controla autenticação, revogação e chamada imediatamente antes do adapter.
 - [parcial] Tool output schema opcional e validador existem no core Rust e nos
   bindings; o host precisa chamar o validador antes de persistir/expor resultados.
-- [parcial] Envelope versionado de eventos de conversa e payloads tipados
-  adicionados ao core Rust; testes escritos, sem execução local nesta etapa.
-  Bindings, persistência, admission e replay estão pendentes. Evidência e
+- [parcial] Envelope versionado de eventos de conversa, payloads tipados e
+  validação nos bindings foram adicionados; fixture comum e testes estão
+  escritos, sem execução local nesta etapa. Persistência, admission e replay
+  estão pendentes. Evidência e
   critérios: [`docs/checklists/conversation-events.md`](conversation-events.md).
 
 ## Contratos e desenho

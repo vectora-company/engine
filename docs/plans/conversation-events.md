@@ -19,8 +19,8 @@ pode divulgar.
 | Camada | Estado | Evidência | Lacuna |
 | --- | --- | --- | --- |
 | Core Rust | Parcial | `crates/vectora-engine/src/harness/events.rs`: envelope v1, payloads tipados e validação de correlação | Persistência, IDs/ordem atribuídos pela store, redaction e integração lifecycle |
-| Python | Pendente | Sem API de eventos de conversa | Tipos, validação e fixtures do core |
-| TypeScript/Node | Pendente | Sem API de eventos de conversa | Tipos, validação e fixtures do core |
+| Python | Parcial | `validate_conversation_event` encaminha ao validador Rust; teste lê fixture compartilhada | Verificação local/CI pendente |
+| TypeScript/Node | Parcial | `validateConversationEvent` e tipos discriminados encaminham ao validador Rust; teste lê fixture compartilhada | Verificação local/CI pendente |
 | Conversation/Turn store | Pendente | Lifecycle store reserva run/thread/turn | Admission genérica, histórico paginado e projeção de timeline |
 | Replay/stream subscriber | Pendente | Streams atuais representam respostas de providers | Replay de eventos duráveis, gaps, backpressure e cancelamento independente |
 
@@ -29,8 +29,10 @@ pode divulgar.
 1. [x] Definir envelope Rust versionado e payloads tipados mínimos; validar
    IDs, versão, sequência e correlação. Testes unitários foram adicionados,
    mas não executados localmente nesta etapa a pedido do mantenedor.
-2. [ ] Expor o mesmo contrato por Python e TypeScript/Node e estabelecer
-   fixtures de conformidade compartilhadas.
+2. [parcial] Expor o contrato por Python e TypeScript/Node e adicionar fixture
+   comum Rust/Python/Node em `tests/fixtures/conversation-events-v1.json`.
+   Testes de conformidade estão no código, mas não foram executados localmente;
+   os checks remotos ainda precisam concluir.
 3. [ ] Associar admission idempotente a `conversation_id`/`turn_id`; definir
    respostas accepted/queued/blocked/rejected e concorrência por conversation.
 4. [ ] Persistir eventos ordenados no ledger SQLite, mantendo payloads grandes
@@ -50,6 +52,8 @@ autorização de leitura, redaction, durabilidade, ordenação entre processos,
 entrega ao consumidor ou retomada após reinício. O `timestamp_ms` é fornecido
 pelo produtor e não substitui a sequência autoritativa da store. Artifact
 references e políticas de expiração permanecem fora desta primeira fatia.
+Inteiros de sequência, timestamp e usage são limitados ao intervalo seguro de
+JSON/JavaScript para que os bindings mantenham o mesmo valor sem arredondamento.
 
 ## Critérios de saída
 
@@ -64,6 +68,7 @@ references e políticas de expiração permanecem fora desta primeira fatia.
 
 ## Próxima etapa
 
-Expor o tipo no binding Python e no binding TypeScript com a mesma validação
-Rust e fixtures equivalentes. Isso não depende de escolher retenção, transporte
-ou política de acesso a artifacts.
+Depois de publicar e observar os checks da etapa de bindings, avançar para
+admission idempotente por scope/conversation/turn. Antes de persistir eventos,
+revisar os contratos existentes de ledger, lifecycle e recuperação para manter
+SQLite como autoridade local e evitar duplicar efeitos ou estados.

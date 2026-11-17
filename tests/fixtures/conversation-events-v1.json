@@ -1,0 +1,63 @@
+{
+  "contract_version": 1,
+  "cases": [
+    {
+      "name": "turn accepted",
+      "valid": true,
+      "event": {
+        "contract_version": 1,
+        "event_id": "event-1",
+        "conversation_id": "conversation-1",
+        "turn_id": "turn-1",
+        "run_id": "run-1",
+        "sequence": 1,
+        "timestamp_ms": 100,
+        "source": "engine.harness",
+        "kind": { "type": "turn_accepted", "data": { "turn_id": "turn-1" } }
+      }
+    },
+    {
+      "name": "visible message delta",
+      "valid": true,
+      "event": {
+        "contract_version": 1,
+        "event_id": "event-2",
+        "conversation_id": "conversation-1",
+        "turn_id": "turn-1",
+        "run_id": "run-1",
+        "sequence": 2,
+        "timestamp_ms": 101,
+        "source": "engine.harness",
+        "kind": { "type": "message_delta", "data": { "text": "answer" } }
+      }
+    },
+    {
+      "name": "payload correlation mismatch",
+      "valid": false,
+      "event": {
+        "contract_version": 1,
+        "event_id": "event-3",
+        "conversation_id": "conversation-1",
+        "turn_id": "turn-1",
+        "run_id": "run-1",
+        "sequence": 3,
+        "timestamp_ms": 102,
+        "source": "engine.harness",
+        "kind": { "type": "turn_accepted", "data": { "turn_id": "other-turn" } }
+      }
+    },
+    {
+      "name": "missing run correlation",
+      "valid": false,
+      "event": {
+        "contract_version": 1,
+        "event_id": "event-4",
+        "conversation_id": "conversation-1",
+        "sequence": 4,
+        "timestamp_ms": 103,
+        "source": "engine.harness",
+        "kind": { "type": "terminal", "data": { "status": "completed" } }
+      }
+    }
+  ]
+}

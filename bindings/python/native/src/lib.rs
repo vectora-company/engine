@@ -24,12 +24,13 @@ use vectora_engine::chat::{
     RealtimeSessionRequest, SpeechRequest, SpeechStream, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
-    ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
-    HOST_IDENTITY_CONTRACT_VERSION, HostIdentityContext, MODEL_TOOL_LOOP_CONTRACT_VERSION,
-    ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity,
-    RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION,
-    TOOL_POLICY_CONTRACT_VERSION, ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult,
-    VerificationReport, advance_model_turn, advance_tool_result, authorize_tool_dispatch,
+    ApprovalGrant, ApprovalRequest, CONVERSATION_EVENT_CONTRACT_VERSION, ConversationEvent,
+    EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy, HOST_IDENTITY_CONTRACT_VERSION,
+    HostIdentityContext, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings,
+    ModelToolLoopState, PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
+    TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
+    ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult, VerificationReport,
+    advance_model_turn, advance_tool_result, authorize_tool_dispatch,
     authorize_tool_dispatch_with_identity, cancel_model_tool_loop, evaluate_verification,
     prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
     validate_tool_result_output,
@@ -1974,6 +1975,19 @@ fn validate_host_identity_context(context_json: String, now_ms: u64) -> PyResult
 }
 
 #[pyfunction]
+fn conversation_event_contract_version() -> u16 {
+    CONVERSATION_EVENT_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn validate_conversation_event(event_json: String) -> PyResult<String> {
+    let event: ConversationEvent =
+        serde_json::from_str(&event_json).map_err(|_| py_error("invalid conversation event"))?;
+    event.validate().map_err(py_error)?;
+    encode_json(&event)
+}
+
+#[pyfunction]
 fn run_transition(lifecycle_json: String, next_status: String) -> PyResult<String> {
     let mut run: RunLifecycle = serde_json::from_str(&lifecycle_json)
         .map_err(|_| py_error("invalid run lifecycle snapshot"))?;
@@ -3269,6 +3283,11 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_create, module)?)?;
     module.add_function(wrap_pyfunction!(host_identity_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(validate_host_identity_context, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        conversation_event_contract_version,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(validate_conversation_event, module)?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_admit, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_load_latest, module)?)?;

@@ -6,14 +6,15 @@ O core implementa eventos de streaming de provider, montagem de turno, IDs de
 run/thread, ledger/checkpoints SQLite e cancelamento/recovery do loop modelo/tool.
 Também há um envelope Rust `ConversationEvent` v1 com payloads tipados para
 eventos mínimos de turno, run, step, tool, aprovação, progresso, mensagem,
-uso e estado terminal, além de validação de correlação. Esse contrato ainda
-não está exposto nos bindings nem ligado ao ledger.
+uso e estado terminal, além de validação de correlação. Os bindings Python e
+TypeScript encaminham ao mesmo validador Rust e usam uma fixture comum. Esse
+contrato ainda não está ligado ao ledger.
 Isso não implementa o contrato de Conversation/Session descrito nesta spec: não
 há API genérica de admission de turnos/conversas, histórico paginado por cursor,
 replay de stream após reconnect, channel adapter, projeção de timeline nem
 contrato separado de cancelamento do assinante. A
 [`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
-registra os limites observados. Até essas APIs e testes existirem, o suporte é
+registra os limites observados. Até essas APIs duráveis existirem, o suporte é
 **parcial** e não se deve anunciar retomada de conversa ou replay de eventos.
 O plano incremental, checklist e análise desta capability estão em
 [`docs/plans/conversation-events.md`](../plans/conversation-events.md),
@@ -48,9 +49,10 @@ tipo do evento e rejeita versão desconhecida, IDs vazios e sequência zero.
 `MessageDelta` representa somente texto destinado ao consumidor; raciocínio
 interno não é um tipo de evento.
 
-Esta é apenas a primeira camada do contrato: bindings, redaction, admission,
+Esta é apenas a primeira camada do contrato: redaction, admission,
 armazenamento, cursor/replay, projeção e cancelamento de assinatura ainda não
-estão implementados. Os próximos critérios estão no
+estão implementados. Os testes de bindings estão escritos, mas ainda aguardam
+execução no CI. Os próximos critérios estão no
 [`plano da capability`](../plans/conversation-events.md).
 
 - Eventos têm schema versionado, `event_id`, conversation/turn/run IDs relevantes, sequência/cursor e timestamp do produtor.

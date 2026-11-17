@@ -5,6 +5,7 @@ use thiserror::Error;
 
 /// Version of the public conversation event envelope.
 pub const CONVERSATION_EVENT_CONTRACT_VERSION: u16 = 1;
+const MAX_JSON_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
 /// A terminal outcome reported by the runtime, never inferred from model text.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -127,6 +128,14 @@ impl ConversationEvent {
         if self.sequence == 0 {
             return Err(ConversationEventError::InvalidSequence);
         }
+        for (field, value) in [
+            ("sequence", self.sequence),
+            ("timestamp_ms", self.timestamp_ms),
+        ] {
+            if value > MAX_JSON_SAFE_INTEGER {
+                return Err(ConversationEventError::IntegerOutOfRange(field));
+            }
+        }
 
         let required = match &self.kind {
             ConversationEventKind::TurnQueued { turn_id }
@@ -182,9 +191,25 @@ impl ConversationEvent {
                 }
                 RequiredCorrelation::Run
             }
-            ConversationEventKind::MessageDelta { .. }
-            | ConversationEventKind::UsageUpdated { .. }
-            | ConversationEventKind::Terminal { .. } => RequiredCorrelation::Run,
+            ConversationEventKind::MessageDelta { .. } | ConversationEventKind::Terminal { .. } => {
+                RequiredCorrelation::Run
+            }
+            ConversationEventKind::UsageUpdated {
+                input_tokens,
+                output_tokens,
+                cost_micros,
+            } => {
+                for (field, value) in [
+                    ("input_tokens", *input_tokens),
+                    ("output_tokens", *output_tokens),
+                    ("cost_micros", cost_micros.unwrap_or(0)),
+                ] {
+                    if value > MAX_JSON_SAFE_INTEGER {
+                        return Err(ConversationEventError::IntegerOutOfRange(field));
+                    }
+                }
+                RequiredCorrelation::Run
+            }
         };
 
         match required {
@@ -245,6 +270,8 @@ pub enum ConversationEventError {
     MissingCorrelation(&'static str),
     #[error("conversation event correlation field {0} does not match its payload")]
     MismatchedCorrelation(&'static str),
+    #[error("conversation event integer field {0} exceeds cross-language safe range")]
+    IntegerOutOfRange(&'static str),
 }
 
 #[cfg(test)]
@@ -354,6 +381,18 @@ mod tests {
         assert_eq!(
             event.validate(),
             Err(ConversationEventError::EmptyField("step_id"))
+        );
+    }
+
+    #[test]
+    fn rejects_integers_that_cannot_roundtrip_through_javascript_numbers() {
+        let mut event = event(ConversationEventKind::Progress {
+            code: "provider.retry".into(),
+        });
+        event.sequence = 9_007_199_254_740_992;
+        assert_eq!(
+            event.validate(),
+            Err(ConversationEventError::IntegerOutOfRange("sequence"))
         );
     }
 }

@@ -24,15 +24,16 @@ use vectora_engine::chat::{
     RealtimeSessionRequest, SpeechRequest, SpeechStream, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
-    ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
-    HOST_IDENTITY_CONTRACT_VERSION, HostIdentityContext, MODEL_TOOL_LOOP_CONTRACT_VERSION,
-    ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity,
-    RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION,
-    TOOL_POLICY_CONTRACT_VERSION, TOOL_RESULT_CONTRACT_VERSION, ToolContract, ToolDispatch,
-    ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
-    authorize_tool_dispatch, authorize_tool_dispatch_with_identity, cancel_model_tool_loop,
-    evaluate_verification, prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop,
-    tool_chat_definitions, validate_tool_result_output,
+    ApprovalGrant, ApprovalRequest, CONVERSATION_EVENT_CONTRACT_VERSION, ConversationEvent,
+    EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy, HOST_IDENTITY_CONTRACT_VERSION,
+    HostIdentityContext, MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopSettings,
+    ModelToolLoopState, PolicySnapshot, RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus,
+    TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, TOOL_POLICY_CONTRACT_VERSION,
+    TOOL_RESULT_CONTRACT_VERSION, ToolContract, ToolDispatch, ToolDispatchSettings, ToolResult,
+    VerificationReport, advance_model_turn, advance_tool_result, authorize_tool_dispatch,
+    authorize_tool_dispatch_with_identity, cancel_model_tool_loop, evaluate_verification,
+    prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
+    validate_tool_result_output,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -1750,6 +1751,21 @@ pub fn validate_host_identity_context(context_json: String, now_ms: f64) -> Resu
     vectora_engine::harness::validate_host_identity_context(&context, now_ms as u64)
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&context)
+}
+
+#[napi]
+pub fn conversation_event_contract_version() -> u32 {
+    u32::from(CONVERSATION_EVENT_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn validate_conversation_event(event_json: String) -> Result<String> {
+    let event: ConversationEvent = serde_json::from_str(&event_json)
+        .map_err(|_| Error::from_reason("invalid conversation event"))?;
+    event
+        .validate()
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&event)
 }
 
 #[napi]

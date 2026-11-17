@@ -16,8 +16,12 @@
   sequência zero e correlação ausente.
 - [x] Testes unitários adicionados para roundtrip, correlação e versão/sequência;
   não executados localmente nesta etapa por instrução do mantenedor.
-- [ ] Bindings Python e TypeScript expõem a mesma API sobre o core Rust.
-- [ ] Fixtures comuns verificam aceitação, rejeição e serialização nos três níveis.
+- [x] Bindings Python e TypeScript expõem validação pela mesma API Rust. Evidência:
+  `validate_conversation_event` e `validateConversationEvent`.
+- [x] Fixture comum `tests/fixtures/conversation-events-v1.json` cobre
+  aceitação, rejeição e correlação nos testes Rust/Python/Node. Os testes estão
+  escritos; execução local foi omitida por solicitação do mantenedor e os checks
+  remotos desta etapa ainda precisam ser conferidos.
 
 ## Estado, persistência e replay
 
@@ -39,6 +43,6 @@
 - [ ] Testes Rust do envelope e das fixtures compartilhadas.
 - [ ] Testes Python e Node de conformidade.
 - [ ] Verificações de storage/replay reais quando o adapter for implementado.
-- [ ] Sem execução local de testes nesta etapa por solicitação do mantenedor;
-  aguardar evidência do CI no SHA publicado.
+- [x] Testes locais não executados por solicitação do mantenedor; aguardar
+  evidência do CI no SHA publicado.
 - [ ] PR empilhado, diff revisado e documentação sincronizada.

@@ -11,8 +11,8 @@ use vectora_engine::{
         ChatEventKind, ChatRequest, FallbackChatClient, FallbackChatSettings, Message, MessageRole,
     },
     harness::{
-        EvidenceDispositionPolicy, ModelToolLoopSettings, ModelToolLoopState, PolicySnapshot,
-        RunIdentity, RunLifecycle, RunStatus, ToolContract, ToolDispatchSettings,
+        ConversationEvent, EvidenceDispositionPolicy, ModelToolLoopSettings, ModelToolLoopState,
+        PolicySnapshot, RunIdentity, RunLifecycle, RunStatus, ToolContract, ToolDispatchSettings,
         VerificationReport, authorize_tool_dispatch, cancel_model_tool_loop, evaluate_verification,
     },
     storage::{
@@ -22,6 +22,22 @@ use vectora_engine::{
 };
 
 const FIXTURE: &str = include_str!("../../../tests/fixtures/conformance-v1.json");
+const CONVERSATION_EVENT_FIXTURE: &str =
+    include_str!("../../../tests/fixtures/conversation-events-v1.json");
+
+#[test]
+fn shared_conversation_event_fixture_conforms_to_rust_contract() {
+    let fixture: Value = serde_json::from_str(CONVERSATION_EVENT_FIXTURE).unwrap();
+    for case in fixture["cases"].as_array().unwrap() {
+        let event: ConversationEvent = serde_json::from_value(case["event"].clone()).unwrap();
+        assert_eq!(
+            event.validate().is_ok(),
+            case["valid"].as_bool().unwrap(),
+            "fixture case: {}",
+            case["name"]
+        );
+    }
+}
 
 fn fixture_server(response: &Value) -> (String, thread::JoinHandle<Value>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind fixture server");

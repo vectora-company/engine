@@ -14,9 +14,9 @@
 - [x] Registrar limites de ownership do host, cancelamento e persistência.
 - [x] Identificar seleções de storage cujo adapter não é suportado.
 - [x] Identificar ausência de memory/context/RAG, sessão/replay e extensão de tools.
-- [x] Adicionar envelope Rust v1 tipado para eventos de conversa; bindings,
-      persistência e replay continuam ausentes. Testes foram adicionados, sem
-      execução local nesta etapa.
+- [x] Adicionar envelope Rust v1 tipado para eventos de conversa e validadores
+      Python/TypeScript sobre o core; persistência e replay continuam ausentes.
+      Fixture de conformidade adicionada; testes sem execução local nesta etapa.
 
 ## Trabalho que permanece nesta etapa do plano de continuidade
 

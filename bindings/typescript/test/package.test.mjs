@@ -18,6 +18,7 @@ import {
   evaluateVerification,
   prepareToolDispatch,
   chatStream,
+  conversationEventContractVersion,
   embed,
   embeddingContractVersion,
   engineContractSnapshot,
@@ -62,6 +63,7 @@ import {
   submitToolResult,
   hostIdentityContractVersion,
   validateHostIdentityContext,
+  validateConversationEvent,
   validateToolResultOutput,
   validateStorageSelection,
   storageCapabilities,
@@ -158,6 +160,36 @@ test("host identity binding validates freshness and grant scope", () => {
   assert.deepEqual(validateHostIdentityContext(context, 50), context);
   context.grants[0].scope_id = "other";
   assert.throws(() => validateHostIdentityContext(context, 50), /grant is invalid/);
+});
+
+test("conversation event binding conforms to the shared Rust fixtures", async () => {
+  assert.equal(conversationEventContractVersion(), 1);
+  const fixtureUrl = new URL(
+    "../../../tests/fixtures/conversation-events-v1.json",
+    import.meta.url,
+  );
+  const fixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
+  for (const testCase of fixture.cases) {
+    if (testCase.valid) {
+      assert.deepEqual(validateConversationEvent(testCase.event), testCase.event);
+    } else {
+      assert.throws(() => validateConversationEvent(testCase.event));
+    }
+  }
+  assert.throws(
+    () =>
+      validateConversationEvent({
+        contract_version: 1,
+        event_id: "event-large",
+        conversation_id: "conversation-1",
+        run_id: "run-1",
+        sequence: Number.MAX_SAFE_INTEGER + 1,
+        timestamp_ms: 100,
+        source: "engine.harness",
+        kind: { type: "progress", data: { code: "large.sequence" } },
+      }),
+    /safe integer/,
+  );
 });
 
 test("host identity dispatch denies capabilities absent from its grants", async () => {
