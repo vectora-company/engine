@@ -514,6 +514,12 @@ impl NatsCorePubSub {
         self.client
             .publish(self.subject(topic)?, payload.into())
             .await
+            .map_err(|_| MessagingError::Storage)?;
+        // Bindings may drop this short-lived adapter as soon as the call
+        // returns. Flush so the queued publish reaches the server first.
+        self.client
+            .flush()
+            .await
             .map_err(|_| MessagingError::Storage)
     }
 
@@ -521,6 +527,27 @@ impl NatsCorePubSub {
         let subscriber = self
             .client
             .subscribe(self.subject(topic)?)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        self.client
+            .flush()
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        Ok(NatsSubscription { subscriber })
+    }
+
+    pub async fn subscribe_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<NatsSubscription, MessagingError> {
+        validate_subject_pattern(pattern)?;
+        let subscriber = self
+            .client
+            .subscribe(format!("{}.{}", self.prefix, pattern))
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        self.client
+            .flush()
             .await
             .map_err(|_| MessagingError::Storage)?;
         Ok(NatsSubscription { subscriber })
@@ -1097,6 +1124,59 @@ fn validate_subject(subject: &str) -> Result<(), MessagingError> {
     }
 }
 
+fn validate_subject_pattern(pattern: &str) -> Result<(), MessagingError> {
+    if pattern.is_empty() || pattern.len() > 512 {
+        return Err(MessagingError::InvalidInput);
+    }
+    let parts: Vec<_> = pattern.split('.').collect();
+    for (index, part) in parts.iter().enumerate() {
+        if part.is_empty()
+            || part.contains('#')
+            || (part.contains(['*', '>'])
+                && *part != "*"
+                && !(*part == ">" && index + 1 == parts.len()))
+            || (*part == ">" && index + 1 != parts.len())
+        {
+            return Err(MessagingError::InvalidInput);
+        }
+    }
+    Ok(())
+}
+
+fn subject_matches_pattern(pattern: &str, subject: &str) -> bool {
+    let pattern: Vec<_> = pattern.split('.').collect();
+    let subject: Vec<_> = subject.split('.').collect();
+    for (index, part) in pattern.iter().enumerate() {
+        match *part {
+            ">" => return subject.len() > index,
+            "*" if subject.get(index).is_some_and(|part| !part.is_empty()) => {}
+            literal if subject.get(index) == Some(&literal) => {}
+            _ => return false,
+        }
+    }
+    pattern.len() == subject.len()
+}
+
+fn redis_subject_glob(prefix: &str, pattern: &str) -> String {
+    let mut glob = format!("{prefix}:");
+    for (index, part) in pattern.split('.').enumerate() {
+        if index > 0 {
+            glob.push('.');
+        }
+        if part == "*" || part == ">" {
+            glob.push('*');
+        } else {
+            for character in part.chars() {
+                if matches!(character, '*' | '?' | '[' | ']' | '\\') {
+                    glob.push('\\');
+                }
+                glob.push(character);
+            }
+        }
+    }
+    glob
+}
+
 pub struct RedisPubSub {
     store: RedisStore,
 }
@@ -1127,7 +1207,31 @@ impl RedisPubSub {
             .subscribe(format!("{}:{channel}", self.store.prefix))
             .await
             .map_err(|_| MessagingError::Storage)?;
-        Ok(RedisSubscription { pubsub })
+        Ok(RedisSubscription {
+            pubsub,
+            filter: None,
+        })
+    }
+
+    pub async fn subscribe_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<RedisSubscription, MessagingError> {
+        validate_subject_pattern(pattern)?;
+        let mut pubsub = self
+            .store
+            .client
+            .get_async_pubsub()
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        pubsub
+            .psubscribe(redis_subject_glob(&self.store.prefix, pattern))
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        Ok(RedisSubscription {
+            pubsub,
+            filter: Some((format!("{}:", self.store.prefix), pattern.to_owned())),
+        })
     }
 }
 
@@ -2178,6 +2282,7 @@ pub enum PubSubAdapter {
 pub trait EphemeralPubSub: Send + Sync {
     async fn publish(&self, topic: &str, payload: Vec<u8>) -> Result<(), MessagingError>;
     async fn subscribe(&self, topic: &str) -> Result<PubSubSubscription, MessagingError>;
+    async fn subscribe_pattern(&self, pattern: &str) -> Result<PubSubSubscription, MessagingError>;
 }
 
 #[async_trait]
@@ -2214,6 +2319,22 @@ impl PubSubAdapter {
             Self::Nats(adapter) => adapter.subscribe(topic).await.map(PubSubSubscription::Nats),
         }
     }
+
+    pub async fn subscribe_pattern(
+        &self,
+        pattern: &str,
+    ) -> Result<PubSubSubscription, MessagingError> {
+        match self {
+            Self::Redis(adapter) => adapter
+                .subscribe_pattern(pattern)
+                .await
+                .map(PubSubSubscription::Redis),
+            Self::Nats(adapter) => adapter
+                .subscribe_pattern(pattern)
+                .await
+                .map(PubSubSubscription::Nats),
+        }
+    }
 }
 
 pub enum PubSubSubscription {
@@ -2239,6 +2360,10 @@ impl EphemeralPubSub for PubSubAdapter {
     async fn subscribe(&self, topic: &str) -> Result<PubSubSubscription, MessagingError> {
         PubSubAdapter::subscribe(self, topic).await
     }
+
+    async fn subscribe_pattern(&self, pattern: &str) -> Result<PubSubSubscription, MessagingError> {
+        PubSubAdapter::subscribe_pattern(self, pattern).await
+    }
 }
 
 #[async_trait]
@@ -2250,17 +2375,36 @@ impl PubSubReceiver for PubSubSubscription {
 
 pub struct RedisSubscription {
     pubsub: redis::aio::PubSub,
+    filter: Option<(String, String)>,
 }
 
 impl RedisSubscription {
     pub async fn receive(&mut self, timeout: Duration) -> Result<Option<Vec<u8>>, MessagingError> {
         use futures_util::StreamExt;
-        match tokio::time::timeout(timeout, self.pubsub.on_message().next()).await {
-            Ok(Some(message)) => message
-                .get_payload()
-                .map(Some)
-                .map_err(|_| MessagingError::Storage),
-            Ok(None) | Err(_) => Ok(None),
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Ok(None);
+            }
+            match tokio::time::timeout(remaining, self.pubsub.on_message().next()).await {
+                Ok(Some(message)) => {
+                    if let Some((namespace, pattern)) = &self.filter {
+                        let channel = message.get_channel_name();
+                        let Some(topic) = channel.strip_prefix(namespace) else {
+                            continue;
+                        };
+                        if !subject_matches_pattern(pattern, topic) {
+                            continue;
+                        }
+                    }
+                    return message
+                        .get_payload()
+                        .map(Some)
+                        .map_err(|_| MessagingError::Storage);
+                }
+                Ok(None) | Err(_) => return Ok(None),
+            }
         }
     }
 }
@@ -2279,6 +2423,107 @@ mod tests {
         assert_eq!(config.max_messages, 100_000);
         assert_eq!(config.max_attempts, 5);
         assert_eq!(config.deduplication_window_seconds, 120);
+    }
+
+    #[test]
+    fn pubsub_patterns_use_shared_nats_segment_semantics() {
+        for pattern in ["jobs.*", "jobs.>", "*", "jobs.*.created"] {
+            assert!(validate_subject_pattern(pattern).is_ok());
+        }
+        for pattern in [
+            "",
+            "jobs.",
+            "jobs.**",
+            "jobs.>.created",
+            "jobs.foo*",
+            "jobs.#",
+        ] {
+            assert!(matches!(
+                validate_subject_pattern(pattern),
+                Err(MessagingError::InvalidInput)
+            ));
+        }
+        assert!(subject_matches_pattern("jobs.*", "jobs.created"));
+        assert!(!subject_matches_pattern("jobs.*", "jobs.deep.created"));
+        assert!(subject_matches_pattern("jobs.>", "jobs.created"));
+        assert!(subject_matches_pattern("jobs.>", "jobs.deep.created"));
+        assert!(!subject_matches_pattern("jobs.>", "jobs"));
+    }
+
+    #[tokio::test]
+    async fn redis_pubsub_pattern_matches_one_segment_against_real_service() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let config = PubSubConfig {
+            backend: super::super::PubSubBackend::Redis,
+            endpoint,
+            namespace: format!("pattern_{}", unique_suffix()),
+        };
+        let pubsub = PubSubAdapter::connect(config).await.unwrap();
+        let mut subscription = pubsub.subscribe_pattern("jobs.*").await.unwrap();
+        pubsub.publish("jobs.one", b"first".to_vec()).await.unwrap();
+        pubsub
+            .publish("jobs.deep.two", b"ignored".to_vec())
+            .await
+            .unwrap();
+        pubsub
+            .publish("jobs.three", b"last".to_vec())
+            .await
+            .unwrap();
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"first".to_vec())
+        );
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"last".to_vec())
+        );
+        assert!(
+            subscription
+                .receive(Duration::from_millis(100))
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn nats_pubsub_pattern_matches_one_segment_against_real_service() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let config = PubSubConfig {
+            backend: super::super::PubSubBackend::NatsCore,
+            endpoint,
+            namespace: format!("pattern_{}", unique_suffix()),
+        };
+        let pubsub = PubSubAdapter::connect(config).await.unwrap();
+        let mut subscription = pubsub.subscribe_pattern("jobs.*").await.unwrap();
+        pubsub.publish("jobs.one", b"first".to_vec()).await.unwrap();
+        pubsub
+            .publish("jobs.deep.two", b"ignored".to_vec())
+            .await
+            .unwrap();
+        pubsub
+            .publish("jobs.three", b"last".to_vec())
+            .await
+            .unwrap();
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"first".to_vec())
+        );
+        assert_eq!(
+            subscription.receive(Duration::from_secs(2)).await.unwrap(),
+            Some(b"last".to_vec())
+        );
+        assert!(
+            subscription
+                .receive(Duration::from_millis(100))
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]

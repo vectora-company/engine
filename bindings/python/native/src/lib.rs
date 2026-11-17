@@ -1577,6 +1577,33 @@ fn pubsub_subscribe<'py>(
 }
 
 #[pyfunction]
+fn pubsub_subscribe_pattern<'py>(
+    py: Python<'py>,
+    config_json: String,
+    pattern: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid pub/sub config"))?;
+        let pubsub = vectora_engine::storage::messaging::PubSubAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        let subscription = Arc::new(tokio::sync::Mutex::new(
+            pubsub.subscribe_pattern(&pattern).await.map_err(py_error)?,
+        ));
+        let handle = format!(
+            "pubsub-{}",
+            STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        pubsub_subscriptions()
+            .lock()
+            .map_err(|_| py_error("pub/sub handle lock failed"))?
+            .insert(handle.clone(), subscription);
+        Ok(handle)
+    })
+}
+
+#[pyfunction]
 fn pubsub_receive<'py>(
     py: Python<'py>,
     subscription_id: String,
@@ -2972,6 +2999,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(queue_release, module)?)?;
     module.add_function(wrap_pyfunction!(pubsub_publish, module)?)?;
     module.add_function(wrap_pyfunction!(pubsub_subscribe, module)?)?;
+    module.add_function(wrap_pyfunction!(pubsub_subscribe_pattern, module)?)?;
     module.add_function(wrap_pyfunction!(pubsub_receive, module)?)?;
     module.add_function(wrap_pyfunction!(pubsub_unsubscribe, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_reserve_run, module)?)?;

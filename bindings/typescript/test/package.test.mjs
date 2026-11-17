@@ -45,6 +45,10 @@ import {
   queueReplayAfter,
   queueReceive,
   queueAck,
+  pubsubPublish,
+  pubsubSubscribePattern,
+  pubsubReceive,
+  pubsubUnsubscribe,
   runContractVersion,
   transitionRun,
   toolContractVersion,
@@ -1767,6 +1771,26 @@ test("JetStream KV validates keys with and without TTL", { skip: !process.env.VE
     await kvStoreDelete(config, key);
   }
 });
+
+for (const [backend, endpoint] of [
+  ["redis", process.env.VECTORA_TEST_REDIS_URL],
+  ["nats_core", process.env.VECTORA_TEST_NATS_URL],
+]) {
+  test(`pub/sub pattern uses single-segment wildcard in ${backend}`, { skip: !endpoint }, async () => {
+    const config = { backend, endpoint, namespace: `pattern_${randomUUID()}` };
+    const subscription = await pubsubSubscribePattern(config, "jobs.*");
+    try {
+      await pubsubPublish(config, "jobs.one", new TextEncoder().encode("first"));
+      await pubsubPublish(config, "jobs.deep.two", new TextEncoder().encode("ignored"));
+      await pubsubPublish(config, "jobs.three", new TextEncoder().encode("last"));
+      assert.equal(new TextDecoder().decode(await pubsubReceive(subscription, 2_000)), "first");
+      assert.equal(new TextDecoder().decode(await pubsubReceive(subscription, 2_000)), "last");
+      assert.equal(await pubsubReceive(subscription, 100), null);
+    } finally {
+      pubsubUnsubscribe(subscription);
+    }
+  });
+}
 
 for (const [backend, endpoint] of [
   ["redis", process.env.VECTORA_TEST_REDIS_URL],

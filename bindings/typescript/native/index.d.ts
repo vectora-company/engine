@@ -328,6 +328,11 @@ export declare function pubsubSubscribe(
   topic: string,
 ): Promise<string>;
 
+export declare function pubsubSubscribePattern(
+  configJson: string,
+  pattern: string,
+): Promise<string>;
+
 export declare function pubsubUnsubscribe(subscriptionId: string): void;
 
 export declare function queueAck(deliveryId: string): Promise<void>;

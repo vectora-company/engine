@@ -773,6 +773,7 @@ interface NativeBinding {
     payloadJson: string,
   ): Promise<void>;
   pubsubSubscribe(configJson: string, topic: string): Promise<string>;
+  pubsubSubscribePattern(configJson: string, pattern: string): Promise<string>;
   pubsubReceive(subscriptionId: string, timeoutMs: number): Promise<string>;
   pubsubUnsubscribe(subscriptionId: string): void;
   sqliteLedgerAppend(path: string, draftJson: string): Promise<string>;
@@ -1457,6 +1458,14 @@ export async function pubsubSubscribe(
   topic: string,
 ): Promise<string> {
   return native.pubsubSubscribe(JSON.stringify(config), topic);
+}
+
+/** Subscribe with NATS-style `*` (one segment) and final `>` (one or more). */
+export async function pubsubSubscribePattern(
+  config: PubSubConfig,
+  pattern: string,
+): Promise<string> {
+  return native.pubsubSubscribePattern(JSON.stringify(config), pattern);
 }
 export async function pubsubReceive(
   subscriptionId: string,

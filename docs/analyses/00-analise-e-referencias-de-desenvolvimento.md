@@ -101,8 +101,9 @@ títulos e bases de PR no estado dinâmico do GitHub.
   [auditoria de storage](05-auditoria-storage-s0-s5.md). A conformance recente
   cobre NACK agendado, enqueue idempotente pela janela configurada e replay
   read-only por cursor em Redis/NATS reais, com wrappers Python e TypeScript.
-  Gaps remanescentes e resultados por execução estão registrados no plano e
-  checklist específicos.
+  Pub/sub agora também tem padrão segmentado equivalente nos dois brokers e
+  bindings. Gaps remanescentes e resultados por execução estão registrados no
+  plano e checklist específicos.
 - [Mídia no chat](../specs/17-midia-no-chat.md) e
   [checklist de mídia](../checklists/04-midia-no-chat.md).
 - [Providers e modalidades](../specs/18-providers-e-modalidades-llama-cpp-v1.md),

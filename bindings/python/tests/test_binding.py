@@ -63,6 +63,10 @@ from vectora_engine import (
     native_chat_stream,
     prepare_chat_content,
     prepare_tool_dispatch,
+    pubsub_publish,
+    pubsub_receive,
+    pubsub_subscribe_pattern,
+    pubsub_unsubscribe,
     queue_ack,
     queue_enqueue_idempotent,
     queue_nack,
@@ -428,6 +432,35 @@ def test_queue_replay_against_real_services(backend: str, variable: str) -> None
             assert delivery is not None
             assert delivery["payload"] == expected
             await queue_ack(delivery["delivery_id"])
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable"),
+    [("redis", "VECTORA_TEST_REDIS_URL"), ("nats_core", "VECTORA_TEST_NATS_URL")],
+)
+def test_pubsub_pattern_against_real_services(backend: str, variable: str) -> None:
+    endpoint = os.environ.get(variable)
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {
+            "backend": backend,
+            "endpoint": endpoint,
+            "namespace": f"pattern_{os.getpid()}_{time.time_ns()}",
+        }
+        subscription = await pubsub_subscribe_pattern(config, "jobs.*")
+        try:
+            await pubsub_publish(config, "jobs.one", b"first")
+            await pubsub_publish(config, "jobs.deep.two", b"ignored")
+            await pubsub_publish(config, "jobs.three", b"last")
+            assert await pubsub_receive(subscription, 2000) == b"first"
+            assert await pubsub_receive(subscription, 2000) == b"last"
+            assert await pubsub_receive(subscription, 100) is None
+        finally:
+            pubsub_unsubscribe(subscription)
 
     asyncio.run(exercise())
 
