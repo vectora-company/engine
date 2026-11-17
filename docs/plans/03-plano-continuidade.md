@@ -94,9 +94,9 @@ indicada. Não as reabra sem pedido dele.
    padrão nos bindings. A stack de mídia está integrada em `main`. Retry textual único para rejeição multimodal classificada (#85) e `ToolResult` tipado (#86) estão entregues; catálogo automático permanece pendente. OpenAI Responses não tem adapter.
    Evidências e critérios: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 2. **Mídia: imagens de resultado de tool — implementado nesta etapa.** `ToolResult` usa partes tipadas; Anthropic, Gemini e OpenAI Chat Completions mapeiam imagens conforme a spec 17. Cohere mantém representação textual porque o protocolo não declara suporte a imagem no resultado. Evidência e testes estão registrados na spec 17 e checklist de mídia.
-3. **Segredo em `Debug`.** `storage/vector.rs::VectorStoreConfig` deriva
-   `Debug` com `api_key`. Saída: `Debug` manual com redação, como em
-   `chat/openai_compatible.rs`. Origem: spec 01.
+3. **Segredos em `Debug` — corrigido nesta etapa.** `VectorStoreConfig` agora
+   redige chave e endpoint (que pode conter credenciais em userinfo/query) e
+   tem teste contra vazamento. Ver checklist de storage e análise de storage.
 4. **Testes ausentes.** `SqliteModelToolLoopStore::submit_tool_result`,
    `recover` e `reconcile_tool_result` (spec 13), `PolicyDigestReuse` e
    `StateTooLarge` (spec 16), KV (CAS, incremento, watch, prefixo, delete) em

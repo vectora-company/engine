@@ -1,5 +1,7 @@
 //! Scoped vector-store contract and LanceDB/Qdrant adapters.
 
+use std::fmt;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -16,13 +18,24 @@ fn valid_vector(vector: &[f32]) -> bool {
     valid_vector_dimensions(vector.len()) && vector.iter().all(|value| value.is_finite())
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct VectorStoreConfig {
     pub backend: super::VectorBackend,
     pub endpoint: String,
     #[serde(default)]
     pub api_key: Option<String>,
+}
+
+impl fmt::Debug for VectorStoreConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VectorStoreConfig")
+            .field("backend", &self.backend)
+            // Endpoints can contain credentials in userinfo or query parameters.
+            .field("endpoint", &"[REDACTED]")
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -493,6 +506,22 @@ impl VectorStore for QdrantStore {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn vector_store_config_debug_redacts_api_key_and_endpoint() {
+        let config = VectorStoreConfig {
+            backend: super::super::VectorBackend::Qdrant,
+            endpoint: "https://user:password@qdrant.example/v1?token=query-secret".into(),
+            api_key: Some("api-key-secret".into()),
+        };
+
+        let debug = format!("{config:?}");
+        assert!(debug.contains("Qdrant"));
+        assert!(debug.contains("[REDACTED]"));
+        assert!(!debug.contains("password"));
+        assert!(!debug.contains("query-secret"));
+        assert!(!debug.contains("api-key-secret"));
+    }
 
     #[tokio::test]
     async fn qdrant_scoped_upsert_search_and_delete_against_real_service() {

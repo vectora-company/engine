@@ -6,6 +6,7 @@ evidência local registrada; não implica prontidão de produção.
 
 ## Contrato público
 
+- [x] `VectorStoreConfig` redige `api_key` e o endpoint completo no `Debug`; teste verifica que credenciais no userinfo/query não aparecem.
 - [x] Seleções independentes para SQL, vetores, KV, filas e pub/sub.
 - [x] Limitar configurações públicas aos adapters reais do produto.
 - [x] Rejeitar seleção `memory` no core e nos bindings Python/TypeScript.

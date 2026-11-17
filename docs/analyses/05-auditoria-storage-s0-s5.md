@@ -247,3 +247,11 @@ Dois testes PostgreSQL reais verificam que `rebuild_projection` falha com `Proje
 ## Concorrência entre projetores — PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main`
 
 Teste service-real em 16 rodadas abre dois `ResilientLedger` independentes sobre o mesmo arquivo SQLite e drena em paralelo dois eventos sequenciais na mesma scope/agregado. Cada evento aparece uma vez no PostgreSQL, não há erro nem outbox restante. Isso cobre handles/conexões independentes no mesmo processo; concorrência entre processos e admissions disputadas ainda não foram medidas. Clippy passou.
+
+## Exposição de credenciais na configuração vetorial
+
+`VectorStoreConfig` continha `api_key` e derivava `Debug`, o que expunha a
+chave quando a configuração era formatada. A correção implementa `Debug`
+manual e redige tanto a chave quanto o endpoint completo, pois este também pode
+conter credenciais em userinfo ou query string. Um teste verifica que nenhum
+desses valores aparece na saída formatada.
