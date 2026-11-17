@@ -177,6 +177,9 @@ do modelo declara como não suportada. `llamaServerModelMediaCapabilities` e
 para `gateway_metadata` nos bindings. A conversão é explícita e não faz
 discovery, cache ou atualização automática; metadata ausente permanece
 desconhecida, e `tool_result_images` não é inferido de suporte a visão.
+O Decision Model efêmero de llama-server também usa as modalidades descobertas
+para validar imagens/áudio antes de `/v1/systemone`; overrides explícitos do
+consumidor seguem a precedência comum.
 
 `desconhecido` é tratado como não suportado para efeito de envio nativo, e o
 consumidor pode sobrescrever. A capability precisa corresponder ao protocolo

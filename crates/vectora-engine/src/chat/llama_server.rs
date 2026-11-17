@@ -462,17 +462,56 @@ impl LlamaServerClient {
         max_total_media_bytes: Option<u64>,
         max_media_parts: Option<usize>,
     ) -> Result<DecisionResponse, ChatError> {
+        self.decide_ephemeral_with_context_and_limits(
+            request,
+            None,
+            max_total_media_bytes,
+            max_media_parts,
+        )
+        .await
+    }
+
+    /// Sends a transient decision request using the consumer's capability
+    /// overrides and media limits together with the selected model metadata.
+    pub async fn decide_ephemeral_with_context(
+        &self,
+        request: EphemeralDecisionRequest,
+        context: &MediaExecutionContext,
+    ) -> Result<DecisionResponse, ChatError> {
+        self.decide_ephemeral_with_context_and_limits(
+            request,
+            Some(context),
+            context.max_total_media_bytes,
+            context.max_media_parts,
+        )
+        .await
+    }
+
+    async fn decide_ephemeral_with_context_and_limits(
+        &self,
+        request: EphemeralDecisionRequest,
+        context: Option<&MediaExecutionContext>,
+        max_total_media_bytes: Option<u64>,
+        max_media_parts: Option<usize>,
+    ) -> Result<DecisionResponse, ChatError> {
         let max_total_media_bytes = max_total_media_bytes.map_or(self.max_media_bytes, |limit| {
             limit.min(self.max_media_bytes)
         });
         request
             .validate_with_limits(max_total_media_bytes, max_media_parts)
             .map_err(ChatError::InvalidRequest)?;
+        let model_id = request
+            .request
+            .model
+            .as_deref()
+            .ok_or(ChatError::InvalidRequest(
+                "llama-server requires a model id",
+            ))?;
         let models = self.models().await?;
         let selected = models
             .data
             .iter()
-            .find(|model| model.id == request.request.model)
+            .find(|model| model.id == model_id)
             .ok_or(ChatError::ModelCapabilityUnsupported)?;
         if !selected
             .architecture
@@ -482,18 +521,18 @@ impl LlamaServerClient {
         {
             return Err(ChatError::ModelCapabilityUnsupported);
         }
-        let input_modalities = selected
-            .architecture
-            .as_ref()
-            .and_then(|architecture| architecture.input_modalities.as_ref());
+        let resolver = context
+            .map(|context| context.resolver.clone())
+            .unwrap_or_default()
+            .with_gateway_metadata("llama_cpp", model_id, selected.media_capabilities());
+        let capabilities = resolver.resolve("llama_cpp", model_id);
         for file in &request.files {
-            let modality = if file.starts_with("data:image/") {
-                "image"
+            let capability = if file.starts_with("data:image/") {
+                capabilities.vision
             } else {
-                "audio"
+                capabilities.audio_input
             };
-            if !input_modalities.is_some_and(|values| values.iter().any(|value| value == modality))
-            {
+            if capability != CapabilityState::Supported {
                 return Err(ChatError::ModelCapabilityUnsupported);
             }
         }
@@ -2448,7 +2487,7 @@ mod tests {
         });
         let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
         let request = DecisionRequest {
-            model: "decision-model".into(),
+            model: Some("decision-model".into()),
             state: serde_json::json!({"ticket":"charged twice"}),
             questions: BTreeMap::from([(
                 "route".into(),
@@ -2463,6 +2502,75 @@ mod tests {
         assert_eq!(response.answers["route"]["choice"], "billing");
         assert_eq!(response.answers["route"]["probabilities"]["billing"], 0.8);
         assert_eq!(response.usage.unwrap().input_tokens, Some(12));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn decision_media_uses_model_metadata_and_consumer_override() {
+        use super::super::{
+            CapabilityResolver, DecisionQuestion, DecisionQuestionKind, MediaExecutionContext,
+            PartialCapabilities,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..3 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 8192];
+                let n = stream.read(&mut request).await.unwrap();
+                let request = String::from_utf8_lossy(&request[..n]);
+                let body = if request.starts_with("GET /v1/models ") {
+                    r#"{"data":[{"id":"decision-model","architecture":{"input_modalities":["text"],"output_modalities":["decisions"]}}]}"#
+                } else {
+                    assert!(request.starts_with("POST /v1/systemone "));
+                    assert!(request.contains("data:image/png;base64,aGVsbG8="));
+                    r#"{"answers":{"inspect":{"choice":"yes","confidence":0.9,"probabilities":{"yes":0.9,"no":0.1}}}}"#
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let client = LlamaServerClient::new(settings(format!("http://{address}"))).unwrap();
+        let request = EphemeralDecisionRequest {
+            request: DecisionRequest {
+                model: Some("decision-model".into()),
+                state: serde_json::json!({"task":"inspect"}),
+                questions: BTreeMap::from([(
+                    "inspect".into(),
+                    DecisionQuestion {
+                        kind: DecisionQuestionKind::Choice,
+                        instructions: None,
+                        criteria: Some(serde_json::json!({"yes": null, "no": null})),
+                    },
+                )]),
+            },
+            files: vec!["data:image/png;base64,aGVsbG8=".into()],
+        };
+        assert!(matches!(
+            client.decide_ephemeral(request.clone()).await,
+            Err(ChatError::ModelCapabilityUnsupported)
+        ));
+
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::new().with_override(
+                "llama_cpp",
+                "decision-model",
+                PartialCapabilities {
+                    vision: Some(CapabilityState::Supported),
+                    ..PartialCapabilities::default()
+                },
+            ),
+            std::sync::Arc::new(EmbeddingAssetStore(std::collections::HashMap::new())),
+        );
+        let response = client
+            .decide_ephemeral_with_context(request, &context)
+            .await
+            .unwrap();
+        assert_eq!(response.answers["inspect"]["choice"], "yes");
         server.await.unwrap();
     }
 

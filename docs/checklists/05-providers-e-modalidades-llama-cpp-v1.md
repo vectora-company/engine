@@ -18,14 +18,14 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
 | feito   | OpenAI Chat Completions e Responses           | Protocolos separados no perfil OpenAI. Entrada de imagem e ferramentas são cobertas onde declaradas; ferramentas hospedadas, áudio/vídeo e geração de imagem não são inferidos.     |
 | feito   | OpenRouter                                    | Perfil dedicado e transporte genérico; atribuição e campos de roteamento testados. Não transfere automaticamente suporte de modalidade entre modelos.                               |
 | parcial | llama.cpp `llama-server` v1.0.0               | Perfil, discovery, chat, Decision Model, embeddings, rerank, TTS e realtime implementados conforme endpoints cobertos. Smoke integral com servidor/modelos reais não foi executado. |
-| parcial | Laya standalone `laya-serve`                  | Cliente health/decision e bindings existem; servidor/checkpoint real não foi configurado para smoke test.                                                                           |
+| parcial | Laya standalone `laya-serve`                  | Adapter SystemOne de health/decision e bindings existem; seletor é opcional e Jev não é checkpoint Laya. Smoke com servidor/checkpoint real permanece pendente.                     |
 
 ## Operações por modalidade
 
 | Estado   | Operação                   | Critério/gap                                                                                                                                                           |
 | -------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | feito    | Chat e stream              | Fixtures de protocolos; fallback explícito e sem troca após saída parcial.                                                                                             |
-| parcial  | Decision Model             | Choice/score/noul; arquivos efêmeros validam bytes totais e quantidade pelo contexto; ampliar matriz real por modelo.                                                  |
+| parcial  | Decision Model             | Choice/score/noul; mídia efêmera valida bytes/quantidade e modalidades do modelo com override do consumidor; smoke real ainda pendente.                                |
 | parcial  | Visão e imagens de entrada | Requests efêmeros com asset map e orçamento compartilhado; metadata `/v1/models` pode ser convertida explicitamente. Falta catálogo automático confiável e smoke real. |
 | pendente | Geração de imagem          | Sem contrato/provider geral implementado.                                                                                                                              |
 | parcial  | TTS                        | Áudio bufferizado e streaming pelo llama-server; verificar servidor/modelo real e completar conformidade operacional.                                                  |
@@ -51,6 +51,10 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
       registros `/v1/models` podem ser convertidos para `gateway_metadata` nos
       bindings Python e TypeScript. Conversão opt-in; discovery/cache automáticos
       e catálogo completo seguem pendentes.
+- [x] Decision Model efêmero do llama-server valida imagem/áudio contra metadata
+      do modelo e respeita override explícito do consumidor antes do envio.
+- [x] Separar categoria Decision Model, modelo Jev e protocolo SystemOne;
+      seletor de modelo Laya opcional e sem default `jev-1`, validado por testes.
 - [ ] Definir e aplicar limites de duração/resolução e propagar orçamento a
       outras operações com entrada de mídia quando suportadas.
 - [ ] Executar smoke tests opt-in com versões fixadas para llama-server,

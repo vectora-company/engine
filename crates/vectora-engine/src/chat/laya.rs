@@ -72,8 +72,8 @@ impl fmt::Debug for LayaSettings {
     }
 }
 
-/// Client for Laya's native `/v1/systemone` API. Unlike llama-server, Laya
-/// chooses its checkpoint internally and does not expose OpenAI `/v1/models`.
+/// Client for Laya's `/v1/systemone` API. Laya accepts optional checkpoint
+/// selection and does not expose OpenAI `/v1/models`.
 pub struct LayaClient {
     root_url: Url,
     client: Client,
@@ -183,12 +183,15 @@ impl LayaClient {
     pub async fn decide(&self, request: DecisionRequest) -> Result<DecisionResponse, ChatError> {
         request.validate().map_err(ChatError::InvalidRequest)?;
         validate_laya_request(&request).map_err(ChatError::InvalidRequest)?;
-        let body = serde_json::to_vec(&serde_json::json!({
-            "model": request.model,
+        let mut payload = serde_json::json!({
             "state": request.state,
             "questions": request.questions,
-        }))
-        .map_err(|_| ChatError::InvalidRequest("decision request could not be encoded"))?;
+        });
+        if let Some(model) = request.model {
+            payload["model"] = serde_json::json!(model);
+        }
+        let body = serde_json::to_vec(&payload)
+            .map_err(|_| ChatError::InvalidRequest("decision request could not be encoded"))?;
         if body.len() > self.max_request_bytes {
             return Err(ChatError::InvalidRequest(
                 "decision request exceeds the configured body limit",

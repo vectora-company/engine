@@ -1,6 +1,6 @@
 # Plano: CLI independente para exercitar a Engine
 
-**Estado verificado em 17/11/2026:** o wizard configura llama.cpp, Ollama, OpenAI Chat/Responses, OpenRouter, Anthropic, Gemini, Cohere e gateways compatíveis; o Decision Model seleciona Laya standalone ou llama.cpp/Laya-GGUF. Credenciais são capturadas sem eco e ficam separadas do JSON, com modo 0600 no Unix. `scons build`, registro em PATH, `--help`, smoke do wizard, 8 testes, lint e pre-commit passaram. `scons install` chama o helper comum, mas o fluxo integral de instalação não foi executado. Branch e base de integração são estado operacional transitório; consulte o GitHub antes de entregar mudanças. Ver [`docs/specs/20-engine-cli.md`](../specs/20-engine-cli.md), [`docs/analyses/08-auditoria-engine-cli.md`](../analyses/08-auditoria-engine-cli.md) e [`docs/checklists/08-engine-cli.md`](../checklists/08-engine-cli.md).
+**Estado verificado em 17/11/2026:** o wizard configura llama.cpp, Ollama, OpenAI Chat/Responses, OpenRouter, Anthropic, Gemini, Cohere e gateways compatíveis; o Decision Model seleciona Laya standalone ou llama.cpp/Laya-GGUF. Ambos usam SystemOne; Jev é modelo específico e não checkpoint Laya; seletor Laya opcional validado por teste, e llama-server exige model id. Testes focados e os 8 testes do CLI passaram. Credenciais são capturadas sem eco e ficam separadas do JSON, com modo 0600 no Unix. `scons install` chama o helper comum, mas o fluxo integral de instalação não foi executado. Consulte branch e base no GitHub. Ver [`docs/specs/20-engine-cli.md`](../specs/20-engine-cli.md), [`docs/analyses/08-auditoria-engine-cli.md`](../analyses/08-auditoria-engine-cli.md) e [`docs/checklists/08-engine-cli.md`](../checklists/08-engine-cli.md).
 
 ## Etapas
 
@@ -13,4 +13,4 @@
 
 ## Limites e aceitação
 
-Os clientes/contratos de produção são reutilizados; nenhum segredo é serializado; parâmetros e chamadas de tool têm validação e limites; os dois protocolos de Decision Model são exercitados por testes determinísticos; documentação geral e índice de docs apontam para os três documentos específicos. A entrega segue o fluxo de branches vigente, sem tocar em arquivos locais fora deste escopo.
+Os clientes/contratos de produção são reutilizados; nenhum segredo é serializado; parâmetros e chamadas de tool têm validação e limites; os adapters Laya e llama-server sobre SystemOne são exercitados por testes determinísticos. Jev é tratado como modelo específico e o seletor de checkpoint Laya é opcional. Documentação geral e índice de docs apontam para os três documentos específicos.

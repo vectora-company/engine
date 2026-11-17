@@ -20,7 +20,7 @@ Fontes de protocolo específicas ficam nos trechos da
 | OpenRouter                  | Perfil nomeado sobre transporte compatível, headers de atribuição e extensions por request                                          | Roteamento e capacidades variam com modelo/configuração do gateway.                                                                                                     |
 | 9router / OmniRouter / Kimi | Transporte genérico configurável quando o endpoint implementa o protocolo suportado                                                 | Não há validação suficientemente específica para declarar cada serviço coberto. “OmniRouter” também pode apontar a serviços distintos.                                  |
 | Llama-server                | Cliente dedicado com health, discovery, chat, Decision Model, embeddings, rerank, TTS e realtime de áudio                           | Discovery é declaração do servidor. Não substitui smoke test do modelo ou de cada modalidade.                                                                           |
-| Laya standalone             | Cliente Jev separado, health e Decision Model de texto, bindings e CLI                                                              | Não oferece chat genérico nem discovery do llama-server; falta integração local com servidor/checkpoint real.                                                           |
+| Laya standalone             | Adapter Laya para SystemOne, health e Decision Model de texto, bindings e CLI; checkpoint opcional                                  | Jev é um modelo específico. Não oferece chat genérico nem discovery OpenAI de llama-server; falta smoke com servidor/checkpoint real.                                   |
 | Embeddings                  | OpenAI-compatible, OpenRouter, Cohere, Voyage, Ollama e llama-server; llama-server também aceita entradas multimodais via asset map | Dimensão, modalidade e formato seguem próprios de cada protocolo/modelo.                                                                                                |
 | Rerank                      | Cohere, Voyage, OpenRouter e llama-server; modalidade textual nos adapters declarados, texto/imagem efêmera no llama-server         | Scores e ordenação não devem ser comparados sem normalização contratual.                                                                                                |
 | Áudio                       | TTS bufferizado/streaming e sessão realtime de transcrição/conversa no llama-server                                                 | Batch STT genérico permanece ausente; TTS não prova STT.                                                                                                                |
@@ -42,19 +42,24 @@ Fontes de protocolo específicas ficam nos trechos da
    A precedência executável é override do consumidor > metadata do modelo/gateway
    > perfil genérico > desconhecido. O teste usa um modelo text-only para impedir
    > que o perfil genérico OpenAI habilite visão; conversão `/v1/models` é opt-in,
-   > sem fetch, cache ou catálogo automático.
-4. **Laya e llama-server são integrações distintas.** O servidor standalone
-   Jev atende decisão; o GGUF servido por llama.cpp usa endpoints do
-   llama-server. Ter o mesmo modelo/weights não unifica protocolos.
+   > sem fetch, cache ou catálogo automático. O Decision Model do llama-server
+   > aplica modalities descobertas às imagens/áudio efêmeros e mantém override
+   > explícito do consumidor como camada superior.
+4. **Laya e llama-server são runtimes/adapters distintos sobre SystemOne.**
+   Jev é um modelo específico, não o protocolo. Laya oferece checkpoints
+   próprios e roteamento sem seletor; o GGUF servido por llama.cpp usa
+   descoberta e endpoints do llama-server. Ter os mesmos pesos não unifica
+   capacidades de runtime.
 
 ## Evidência de teste
 
 Na verificação local de 17/11/2026:
 
 - As suites Rust, Python e Node exercitaram contratos offline e fixtures de
-  providers; `scons tests` passou com 283 testes Rust (incluindo fixtures e
-  teste nativo do binding Python), 102 Python e 56 Node. Nove Python e 16 Node
-  foram ignorados por dependerem de serviços sem endpoint configurado.
+  providers; `scons tests` passou com 279 testes da lib Rust, 3 fixtures Rust,
+  1 teste nativo Python, 101 Python (10 skips) e 56 Node (18 skips). A nova
+  fixture Laya confirma SystemOne sem seletor e o teste de CLI confirma que
+  apenas llama-server requer model id.
 - `scons lint` passou: formatting, Clippy, rustdoc, Ruff, `ty`, Bandit,
   Oxlint e typecheck TypeScript.
 - O endpoint real Qdrant e os adapters LanceDB foram usados para a capability

@@ -48,7 +48,7 @@ substitui serviço real.
 - [ ] Fixtures compartilhadas para a mesma matriz de conteúdo nos três
       bindings e em todos os adapters que alegam equivalência.
 - [x] Limites agregados de bytes e contagem cobertos em Rust/Python/TypeScript no preparo de chat; requests efêmeros inline são rejeitados antes da rede.
-- [x] Aplicar orçamento agregado a Decision Model, embeddings e rerank multimodais do llama-server; core e bindings validados.
+- [x] Aplicar orçamento agregado e validar modalidades descobertas no Decision Model efêmero do llama-server, com override do consumidor; embeddings e rerank também usam metadata do modelo.
 - [ ] Cobrir catálogo com dados ausentes, conflitantes e desatualizados; conversão de metadata `/v1/models` é opt-in, sem discovery/cache automático.
 - [ ] Smoke tests opt-in com modelos reais para cada operação multimodal; não
       considerar teste ignorado por falta de endpoint como sucesso.

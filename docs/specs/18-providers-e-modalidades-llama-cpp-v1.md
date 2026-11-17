@@ -1,6 +1,6 @@
 # Providers e modalidades de IA — referência llama.cpp v1.0.0
 
-**Estado:** contrato e inventário por protocolo/operação. Consulte o plano e checklist desta capability para os gaps atuais. Fixture offline não equivale a integração com serviço/modelo real. `LayaClient` implementa Jev de `laya-serve`; `LlamaServerClient` implementa os endpoints cobertos do `llama-server`. São protocolos diferentes.
+**Estado:** contrato e inventário por protocolo/operação. Consulte o plano e checklist desta capability para os gaps atuais. Fixture offline não equivale a integração com serviço/modelo real. Decision Model é a categoria; Jev é um modelo específico. SystemOne é o protocolo usado tanto pelo servidor Laya quanto pelo endpoint `/v1/systemone` do `llama-server`; adapters e capacidades de cada runtime continuam distintos.
 **Referência fixa:** [`ggml-org/llama.cpp` v1.0.0](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0), commit `b1b770d`.
 
 ## Objetivo
@@ -11,16 +11,16 @@ Rust segue como implementação canônica. Python e TypeScript encaminham para o
 
 ## Inventário observado na Engine
 
-| Provider/protocolo              | Estado no código                                                                                                  | Limites                                                                                                          |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| OpenAI-compatible               | Chat/stream e embeddings genéricos por endpoint                                                                   | 9router, OmniRouter e Kimi precisam de validação específica de serviço/rota/auth/erro antes de perfil dedicado.  |
-| OpenAI                          | Chat Completions, Responses e embeddings compatíveis                                                              | Não implica tools hospedadas, TTS/STT, vídeo ou geração de imagem.                                               |
-| OpenRouter                      | Perfil dedicado para chat, endpoint, Bearer, atribuição e extensões de roteamento; embeddings/rerank disponíveis  | Modalidades e políticas variam por modelo e request.                                                             |
-| Anthropic, Gemini e Cohere      | Chat nativo; Cohere também embeddings/rerank                                                                      | A cobertura multimodal e de stream é por operação e protocolo.                                                   |
-| Ollama                          | Chat nativo `/api/chat`, chat compatível e embeddings                                                             | Fixtures cobrem JSON/NDJSON; serviço real não foi exercitado nesta execução.                                     |
-| llama.cpp `llama-server` v1.0.0 | Health/discovery, chat, Decision Model, TTS, realtime, embeddings e rerank, inclusive operações de mídia cobertas | Discovery preserva declarações do servidor, não prova capacidade efetiva do modelo; smoke real permanece opt-in. |
-| Laya `laya-serve`               | Cliente Jev standalone de health/Decision Model e bindings                                                        | Não oferece o mesmo protocolo que llama-server; servidor/checkpoint real não foi configurado.                    |
-| Voyage                          | Embeddings e rerank                                                                                               | Confirmar detalhes de score, dimensões e erros na matriz da operação.                                            |
+| Provider/protocolo              | Estado no código                                                                                                        | Limites                                                                                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OpenAI-compatible               | Chat/stream e embeddings genéricos por endpoint                                                                         | 9router, OmniRouter e Kimi precisam de validação específica de serviço/rota/auth/erro antes de perfil dedicado.                                    |
+| OpenAI                          | Chat Completions, Responses e embeddings compatíveis                                                                    | Não implica tools hospedadas, TTS/STT, vídeo ou geração de imagem.                                                                                 |
+| OpenRouter                      | Perfil dedicado para chat, endpoint, Bearer, atribuição e extensões de roteamento; embeddings/rerank disponíveis        | Modalidades e políticas variam por modelo e request.                                                                                               |
+| Anthropic, Gemini e Cohere      | Chat nativo; Cohere também embeddings/rerank                                                                            | A cobertura multimodal e de stream é por operação e protocolo.                                                                                     |
+| Ollama                          | Chat nativo `/api/chat`, chat compatível e embeddings                                                                   | Fixtures cobrem JSON/NDJSON; serviço real não foi exercitado nesta execução.                                                                       |
+| llama.cpp `llama-server` v1.0.0 | Health/discovery, chat, Decision Model, TTS, realtime, embeddings e rerank, inclusive operações de mídia cobertas       | Discovery preserva declarações do servidor, não prova capacidade efetiva do modelo; smoke real permanece opt-in.                                   |
+| Laya `laya-serve`               | Cliente standalone para health e Decision Model via SystemOne; checkpoints Laya como `multilingual` e `typed-decisions` | `model` pode ser omitido para roteamento do servidor; Jev é um modelo, não o nome da API nem um checkpoint Laya. Serviço real não foi configurado. |
+| Voyage                          | Embeddings e rerank                                                                                                     | Confirmar detalhes de score, dimensões e erros na matriz da operação.                                                                              |
 
 O perfil OpenAI Chat Completions, OpenAI Responses e OpenRouter mantém protocolos selecionáveis separados. OpenAI Responses cobre apenas conteúdo e eventos mapeáveis pelo contrato comum; built-in tools e modalidades não implementadas permanecem fora do adapter.
 
@@ -134,13 +134,14 @@ spec. Deve ser atualizado junto com cada implementação e fixture.
 
 ## Perfil standalone Laya `laya-serve`
 
-O servidor Python de Laya é outro protocolo Jev, não um `llama-server` nem um
-endpoint OpenAI-compatible. Seu contrato HTTP documenta `GET /health` e
-`POST /v1/systemone`; não há `GET /v1/models`. O request contém `model`, `state`
-e `questions`. O campo `model` aceita nomes de checkpoint, IDs Jev que delegam
-roteamento ao servidor, ou pode ser omitido pelo cliente que adotar uma API
-opcional própria. Nesta versão do contrato compartilhado, `DecisionRequest`
-exige model e o perfil o encaminha sem reinterpretar.
+O servidor standalone Laya expõe `/health` e a API SystemOne em
+`/v1/systemone`; não há `GET /v1/models`. O campo `model` é opcional: quando
+informado, identifica um checkpoint/modelo do próprio Laya, como `english`,
+`multilingual` ou `typed-decisions`; quando omitido, o servidor pode aplicar
+seu roteamento. Jev é um modelo específico e um ID Jev não é checkpoint Laya.
+O `llama-server` também implementa SystemOne, mas usa descoberta de modelos e
+suas próprias capacidades de mídia; compartilhar protocolo não torna os dois
+servidores equivalentes em runtime.
 
 A rota `/v1/systemone` do `laya-serve` aceita estado textual; não recebe
 `image`, `audio` nem `video`. Assets efêmeros multimodais não devem ser enviados
@@ -158,10 +159,13 @@ No llama-server, `EphemeralDecisionRequest.files` aceita data URLs de imagem e
 arquivos; o limite efetivo de bytes nunca excede o teto global do client. O
 binding valida e decodifica os arquivos antes de descobrir o modelo ou enviar
 `/v1/systemone`; essa rota recebe bytes inline somente no envelope efêmero.
+Após discovery, modalidades de imagem/áudio são validadas contra o modelo
+selecionado, usando o resolver comum: override explícito do consumidor vence a
+declaração do modelo. Metadata ausente permanece fail-closed.
 
 Contrato upstream: [`laya/docs/http-api.md`](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md).
 Compatibilidade de schema é exercitada por fixtures; execução com checkpoint
-real é um smoke opt-in, separado de integração com o GGUF no llama.cpp. A CLI de referência está especificada em [`docs/specs/20-engine-cli.md`](20-engine-cli.md); ela mantém separados o cliente Jev standalone e o cliente llama-server usado para Laya-GGUF.
+real é um smoke opt-in, separado de integração com o GGUF no llama.cpp. A CLI de referência está especificada em [`docs/specs/20-engine-cli.md`](20-engine-cli.md); ela mantém adapters separados para SystemOne no servidor Laya e no llama-server usado para Laya-GGUF.
 
 ## Base llama.cpp v1.0.0
 
@@ -258,7 +262,7 @@ Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama
 
 - **Chat/protocolos:** adapters OpenAI-compatible, OpenAI Chat Completions e Responses, OpenRouter, Anthropic, Gemini, Cohere, Ollama e llama-server; fixtures cobrem os adapters declarados. 9router, OmniRouter e Kimi dependem de validação do serviço concreto.
 - **Llama-server v1.0.0:** health/discovery, chat, Decision Model, embeddings, rerank, TTS bufferizado/streaming e realtime. A lista de modalidades devolvida pelo servidor é metadata, não garantia de suporte do modelo. A Engine oferece conversor explícito para o resolver multimodal; não consulta nem atualiza esse catálogo automaticamente.
-- **Laya standalone:** Jev de texto para health/Decision Model, independente do protocolo llama-server. Smoke real requer serviço/checkpoint configurados.
+- **Laya standalone:** SystemOne para health/Decision Model de texto, com checkpoints Laya próprios ou roteamento do servidor; distinto do runtime llama-server. Smoke real requer serviço/checkpoint configurados.
 - **Mídia:** requests persistíveis e efêmeros separados; bytes resolvidos pelo asset map. Ver [spec de mídia](17-midia-no-chat.md) para ownership, MIME, digest e limites.
 - **Ausente ou incompleto:** geração de imagem, batch STT genérico, operações gerais de vídeo, catálogo confiável de modalidades/limites e matriz de smoke tests reais.
 

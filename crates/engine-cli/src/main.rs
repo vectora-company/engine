@@ -70,7 +70,8 @@ struct ChatConfig {
 struct DecisionConfig {
     backend: DecisionBackend,
     base_url: String,
-    model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
     #[serde(default)]
     api_key_env: Option<String>,
 }
@@ -102,7 +103,7 @@ impl Default for Config {
             decision: Some(DecisionConfig {
                 backend: DecisionBackend::LayaServer,
                 base_url: "http://127.0.0.1:18000".into(),
-                model: "jev-1".into(),
+                model: None,
                 api_key_env: None,
             }),
             max_tool_turns: default_tool_turns(),
@@ -645,12 +646,17 @@ fn setup_wizard(path: &Path) -> Result<Config, Box<dyn Error>> {
                 DecisionBackend::LlamaServer
             };
             let (default_url, default_model) = if backend == DecisionBackend::LayaServer {
-                ("http://127.0.0.1:18000", "jev-1")
+                ("http://127.0.0.1:18000", "")
             } else {
                 ("http://127.0.0.1:8080", "local-model")
             };
             let decision_url = ask(&mut editor, "Decision Model API base URL", default_url)?;
-            let decision_model = ask(&mut editor, "Decision Model id", default_model)?;
+            let model_label = if backend == DecisionBackend::LayaServer {
+                "Laya checkpoint/model id"
+            } else {
+                "llama-server model id"
+            };
+            let decision_model = ask(&mut editor, model_label, default_model)?;
             let key_name = ask(
                 &mut editor,
                 "Decision Model API key environment variable (blank for none)",
@@ -672,7 +678,7 @@ fn setup_wizard(path: &Path) -> Result<Config, Box<dyn Error>> {
             Some(DecisionConfig {
                 backend,
                 base_url: decision_url,
-                model: decision_model,
+                model: (!decision_model.is_empty()).then_some(decision_model),
                 api_key_env,
             })
         }
@@ -755,9 +761,16 @@ fn validate_config(config: &Config) -> Result<(), Box<dyn Error>> {
         );
     }
     if let Some(decision) = &config.decision
-        && (decision.base_url.trim().is_empty() || decision.model.trim().is_empty())
+        && (decision.base_url.trim().is_empty()
+            || decision
+                .model
+                .as_deref()
+                .is_some_and(|model| model.trim().is_empty())
+            || (decision.backend == DecisionBackend::LlamaServer && decision.model.is_none()))
     {
-        return Err("decision endpoint/model must be non-empty".into());
+        return Err(
+            "decision endpoint must be non-empty; llama-server also requires a model id".into(),
+        );
     }
     let profile_matches_backend = matches!(
         (config.chat.backend, config.chat.profile),
@@ -903,11 +916,14 @@ mod tests {
     }
 
     #[test]
-    fn supports_both_laya_decision_transports() {
+    fn validates_optional_laya_checkpoint_and_required_llama_server_model() {
         let mut config = Config::default();
         config.decision.as_mut().unwrap().backend = DecisionBackend::LlamaServer;
+        assert!(validate_config(&config).is_err());
+        config.decision.as_mut().unwrap().model = Some("decision-model".into());
         validate_config(&config).unwrap();
         config.decision.as_mut().unwrap().backend = DecisionBackend::LayaServer;
+        config.decision.as_mut().unwrap().model = None;
         validate_config(&config).unwrap();
     }
 
