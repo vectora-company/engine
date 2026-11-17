@@ -108,12 +108,18 @@ títulos e bases de PR no estado dinâmico do GitHub.
   [checklist de mídia](../checklists/04-midia-no-chat.md). Limites opcionais
   agregados de bytes/assets cobrem chat, Decision Model efêmero, embeddings e
   rerank multimodais do llama-server. Metadata específica do modelo pode ser
-  convertida nos bindings e vence perfis genéricos; discovery/cache automático,
-  catálogo completo e limites de duração/resolução permanecem em aberto.
+  convertida nos bindings e vence perfis genéricos. O Decision Model também
+  valida imagem/áudio com essas declarações e aceita override explícito.
+  Discovery/cache automático, catálogo completo e limites de duração/resolução
+  permanecem em aberto.
 - [Providers e modalidades](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
   [plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
   [checklist](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e
-  [análise](06-auditoria-providers-modalidades.md).
+  [análise](06-auditoria-providers-modalidades.md). Decision Model é a
+  categoria, Jev é um modelo específico, e SystemOne é o protocolo usado pelos
+  adapters standalone Laya e llama-server; os runtimes mantêm discovery e
+  capacidades próprias. Seletor Laya opcional permite checkpoint Laya ou
+  roteamento do servidor.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
   [checklist](../checklists/06-storage-grafos-falkordb.md) e

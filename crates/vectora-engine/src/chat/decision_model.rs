@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct DecisionRequest {
-    /// Local target identifier; llama-server serves its loaded decision model
-    /// and the TypeSafe-compatible wire request has no `model` field.
-    #[serde(skip_serializing)]
-    pub model: String,
+    /// Optional target/model selector. It is local metadata for llama-server
+    /// discovery and may be omitted when a SystemOne endpoint routes requests.
+    #[serde(default, skip_serializing)]
+    pub model: Option<String>,
     pub state: serde_json::Value,
     pub questions: BTreeMap<String, DecisionQuestion>,
 }
@@ -67,8 +67,15 @@ pub struct DecisionUsage {
 
 impl DecisionRequest {
     pub(crate) fn validate(&self) -> Result<(), &'static str> {
-        if self.model.trim().is_empty() || self.questions.is_empty() {
-            return Err("model and at least one question are required");
+        if self
+            .model
+            .as_deref()
+            .is_some_and(|model| model.trim().is_empty())
+        {
+            return Err("model must not be empty when provided");
+        }
+        if self.questions.is_empty() {
+            return Err("at least one question is required");
         }
         fn contains_state_media(value: &serde_json::Value) -> bool {
             match value {
@@ -249,7 +256,7 @@ mod tests {
     fn request(file: &str) -> EphemeralDecisionRequest {
         EphemeralDecisionRequest {
             request: DecisionRequest {
-                model: "decision".into(),
+                model: Some("decision".into()),
                 state: serde_json::json!({"case": "example"}),
                 questions: BTreeMap::from([(
                     "route".into(),
@@ -303,10 +310,11 @@ mod tests {
     #[test]
     fn images_is_an_input_alias_for_files() {
         let request: EphemeralDecisionRequest = serde_json::from_value(serde_json::json!({
-            "request": {"model": "decision", "state": null, "questions": {"visible": {"type": "noul"}}},
+            "request": {"state": null, "questions": {"visible": {"type": "noul"}}},
             "images": ["data:image/png;base64,aGVsbG8="]
         }))
         .unwrap();
+        assert_eq!(request.request.model, None);
         assert_eq!(request.files, ["data:image/png;base64,aGVsbG8="]);
         let envelope = serde_json::to_value(request).unwrap();
         assert_eq!(envelope["files"][0], "data:image/png;base64,aGVsbG8=");
@@ -343,7 +351,7 @@ mod tests {
     #[test]
     fn persistent_decision_state_rejects_inline_media_fields() {
         let request = DecisionRequest {
-            model: "decision".into(),
+            model: Some("decision".into()),
             state: serde_json::json!({"messages": [{"image_url": "data:image/png;base64,aGVsbG8="}]}),
             questions: BTreeMap::from([(
                 "visible".into(),

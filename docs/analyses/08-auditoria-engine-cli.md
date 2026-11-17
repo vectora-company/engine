@@ -2,7 +2,7 @@
 
 ## Contexto confirmado
 
-A Engine já contém clientes Rust distintos: `LayaClient` implementa o protocolo Jev do servidor standalone `laya-serve`; `LlamaServerClient` implementa chat compatível e `/v1/systemone` do llama.cpp. Portanto o suporte a Laya-GGUF no llama.cpp usa o segundo cliente; não se deve tentar falar Jev com llama-server nem assumir que `laya-serve` expõe chat OpenAI-compatible. O launcher `laya-install.sh` já documenta ambos os runtimes.
+A Engine contém adapters Rust distintos para Decision Model: `LayaClient` acessa o servidor standalone Laya e `LlamaServerClient` acessa llama.cpp. Ambos falam SystemOne, mas descoberta de modelo e modalidades são próprias de cada runtime. Jev é um modelo específico, não o nome da API; Laya também fornece checkpoints próprios e permite omitir o seletor para roteamento. Laya-GGUF servido por llama.cpp usa o segundo adapter. Não se deve inferir suporte a chat OpenAI-compatible em `laya-serve`. O launcher `laya-install.sh` documenta ambos os runtimes.
 
 O workspace não tinha binário consumidor para exercitar chat e configuração sem bindings/aplicações. A Engine já modela tool calls e mensagens de ferramenta em `ChatRequest`/`ChatCompletion`, então o CLI pode atuar como cliente fino e não precisa duplicar dispatch persistente do harness.
 

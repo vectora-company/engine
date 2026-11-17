@@ -104,7 +104,8 @@ export interface DecisionQuestion {
   criteria?: JsonValue;
 }
 export interface DecisionRequest {
-  model: string;
+  /** Optional SystemOne selector; required by adapters that need model discovery. */
+  model?: string;
   state: JsonValue;
   questions: Record<string, DecisionQuestion>;
 }
