@@ -47,9 +47,9 @@ Fontes de protocolo específicas ficam nos trechos da
    > explícito do consumidor como camada superior. OpenAI Responses e Chat
    > Completions mantêm perfis separados: Responses mapeia WAV/MP3, mas sem
    > metadata/override por modelo a capability fica desconhecida.
-4. **Laya e llama-server são runtimes/adapters distintos sobre SystemOne.**
-   Jev é um modelo específico, não o protocolo. Laya oferece checkpoints
-   próprios e roteamento sem seletor; o GGUF servido por llama.cpp usa
+4. **Laya e llama-server são runtimes/adapters distintos para Decision Model.**
+   SystemOne é a API/protocolo; Jev é um modelo específico e Laya não é seu
+   alias. Laya oferece checkpoints próprios e roteamento sem seletor; o GGUF servido por llama.cpp usa
    descoberta e endpoints do llama-server. Ter os mesmos pesos não unifica
    capacidades de runtime.
 
@@ -59,7 +59,7 @@ Na verificação local de 17/11/2026, após a implementação do input audio:
 
 - `scons tests` passou: 281 testes da lib Rust, 3 fixtures Rust, 8 testes CLI,
   1 teste nativo Python, 102 Python (10 skips) e 57 Node (18 skips). Fixtures
-  Rust validam WAV/MP3 e rejeição de MIME não suportado; os testes Python e
+  Rust validam WAV/MP3 e fallback seguro de MIME não suportado; os testes Python e
   Node reidratam WAV pelo asset map com capability específica do modelo e
   confirmam o payload enviado a Responses. A fixture Laya confirma SystemOne
   sem seletor.

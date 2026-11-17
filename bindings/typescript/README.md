@@ -39,13 +39,13 @@ Anthropic Messages, Google Gemini e Cohere Chat v2 usam `nativeChatComplete` e
 consumer. Campos como Gemini `safetySettings` podem ser passados em
 `request.extensions`, sem defaults de política de produto.
 
-O servidor standalone Laya usa `layaHealth(settings)` e
-`layaDecide(settings, request)` na API SystemOne (`/v1/systemone`). Decision
-Model é a categoria; Jev é um modelo específico. `request.model` é opcional:
-informe um checkpoint Laya, como `multilingual` ou `typed-decisions`, ou omita-o
-para permitir roteamento. Um ID Jev não é checkpoint Laya. O servidor não
-fornece `/v1/models` e sua rota HTTP não recebe mídia. A resposta tolera campos
-extras sem exigir `LAYA_JEV_STRICT`. Veja o [contrato HTTP upstream](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md).
+O runtime Laya usa `layaHealth(settings)` e `layaDecide(settings, request)` na
+API SystemOne (`/v1/systemone`) para a categoria Decision Model. Jev é um modelo
+específico; Laya é um runtime separado e não é um alias de Jev. `request.model`
+seleciona um checkpoint Laya, como `multilingual` ou `typed-decisions`; é
+opcional e pode ser omitido para deixar o roteamento com o servidor. O runtime
+não fornece `/v1/models` e sua rota HTTP não recebe mídia. Campos adicionais
+nas respostas são tolerados. Veja o [contrato HTTP upstream](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md).
 
 ## Famílias de API
 

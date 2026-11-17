@@ -47,13 +47,13 @@ usa `store: false` por padrão e aceita override explícito em `request["extensi
 Campos como Gemini `safetySettings` podem ser passados em
 `request["extensions"]`, sem defaults de política de produto.
 
-O servidor Laya usa `laya_health(settings)` e `laya_decide(settings, request)`
-na API SystemOne (`/v1/systemone`). Decision Model é a categoria; Jev é um
-modelo específico. `request["model"]` é opcional: informe um checkpoint Laya,
-como `multilingual` ou `typed-decisions`, ou omita-o para permitir roteamento.
-Um ID Jev não é checkpoint Laya. Laya não oferece `/v1/models` e a rota HTTP
-não recebe mídia. Campos extras de resposta são aceitos sem ativar
-`LAYA_JEV_STRICT`. O contrato upstream está em
+O runtime Laya usa `laya_health(settings)` e `laya_decide(settings, request)`
+na API SystemOne (`/v1/systemone`) para a categoria Decision Model. Jev é um
+modelo específico; Laya é um runtime separado e não é um alias de Jev. O campo
+`request["model"]` seleciona um checkpoint Laya, como `multilingual` ou
+`typed-decisions`; ele é opcional e pode ser omitido para deixar o roteamento
+com o servidor. O runtime não oferece `/v1/models` e sua rota HTTP não recebe
+mídia. Campos adicionais nas respostas são tolerados. O contrato upstream está em
 [`docs/http-api.md`](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md).
 
 ## Famílias de API

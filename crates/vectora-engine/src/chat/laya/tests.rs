@@ -137,7 +137,6 @@ async fn posts_native_laya_payload_without_openai_model_discovery_and_accepts_fu
         .map(|index| (format!("option-{index}"), serde_json::json!(0.0156)))
         .collect::<serde_json::Map<_, _>>();
     let response = serde_json::json!({
-        "model": "laya-systemone",
         "answers": {"route": {
             "type": "choice", "choice": "option-0", "probabilities": probabilities,
             "confidence": 0.02, "answer_confidence": 0.0156, "action": {"act_probability": 1.0}
