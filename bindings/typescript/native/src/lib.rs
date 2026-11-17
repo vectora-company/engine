@@ -1383,6 +1383,19 @@ pub async fn queue_ack(delivery_id: String) -> Result<()> {
 }
 
 #[napi]
+pub async fn queue_nack(delivery_id: String, delay_ms: u32) -> Result<()> {
+    let delivery = queue_deliveries()
+        .lock()
+        .map_err(|_| Error::from_reason("queue handle lock failed"))?
+        .remove(&delivery_id)
+        .ok_or_else(|| Error::from_reason("unknown queue delivery"))?;
+    delivery
+        .nack(std::time::Duration::from_millis(u64::from(delay_ms)))
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
 pub fn queue_release(delivery_id: String) -> Result<()> {
     queue_deliveries()
         .lock()

@@ -63,6 +63,7 @@ from vectora_engine import (
     native_chat_stream,
     prepare_chat_content,
     prepare_tool_dispatch,
+    queue_nack,
     queue_receive_dead_letter,
     rerank,
     rerank_contract_version,
@@ -350,6 +351,14 @@ def test_queue_dead_letter_receive_is_exposed_through_python_binding() -> None:
             )
 
     asyncio.run(receive_invalid_queue())
+
+
+def test_queue_nack_validates_delivery_handle() -> None:
+    async def nack_unknown_delivery() -> None:
+        with pytest.raises(RuntimeError, match="unknown queue delivery"):
+            await queue_nack("missing-delivery", 25)
+
+    asyncio.run(nack_unknown_delivery())
 
 
 def test_sqlite_ledger_backup_verify_and_restore(tmp_path: Path) -> None:

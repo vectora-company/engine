@@ -43,6 +43,10 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [ ] Para storage, consultar a matriz por pares: implementar a base viável nos
       dois adapters; registrar como especialização apenas incompatibilidade
       técnica comprovada.
+- [x] A etapa de NACK com atraso foi implementada no core e exposta pelas
+      bindings Python e TypeScript; o estado por domínio está em
+      `docs/checklists/03-auditoria-storage-s0-s5.md` e as evidências em
+      `docs/analyses/05-auditoria-storage-s0-s5.md`.
 
 ## Contratos e desenho
 

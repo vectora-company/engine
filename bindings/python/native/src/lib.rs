@@ -1440,6 +1440,26 @@ fn queue_ack<'py>(py: Python<'py>, delivery_id: String) -> PyResult<Bound<'py, P
 }
 
 #[pyfunction]
+fn queue_nack<'py>(
+    py: Python<'py>,
+    delivery_id: String,
+    delay_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let delivery = queue_deliveries()
+            .lock()
+            .map_err(|_| py_error("queue handle lock failed"))?
+            .remove(&delivery_id)
+            .ok_or_else(|| py_error("unknown queue delivery"))?;
+        delivery
+            .nack(std::time::Duration::from_millis(delay_ms))
+            .await
+            .map_err(py_error)?;
+        Ok(())
+    })
+}
+
+#[pyfunction]
 fn queue_release(delivery_id: String) -> PyResult<()> {
     queue_deliveries()
         .lock()
@@ -2902,6 +2922,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(queue_receive, module)?)?;
     module.add_function(wrap_pyfunction!(queue_receive_dead_letter, module)?)?;
     module.add_function(wrap_pyfunction!(queue_ack, module)?)?;
+    module.add_function(wrap_pyfunction!(queue_nack, module)?)?;
     module.add_function(wrap_pyfunction!(queue_release, module)?)?;
     module.add_function(wrap_pyfunction!(pubsub_publish, module)?)?;
     module.add_function(wrap_pyfunction!(pubsub_subscribe, module)?)?;

@@ -230,6 +230,11 @@ async def queue_ack(delivery_id: str) -> None:
     await _native.queue_ack(delivery_id)
 
 
+async def queue_nack(delivery_id: str, delay_ms: int = 0) -> None:
+    """Reject a delivery and schedule redelivery within the visibility timeout."""
+    await _native.queue_nack(delivery_id, delay_ms)
+
+
 def queue_release(delivery_id: str) -> None:
     """Drop the local delivery handle without ACK; provider redelivery follows its visibility timeout."""
     _native.queue_release(delivery_id)
@@ -1470,6 +1475,7 @@ __all__ = [
     "pubsub_unsubscribe",
     "queue_ack",
     "queue_enqueue",
+    "queue_nack",
     "queue_receive",
     "queue_receive_dead_letter",
     "queue_release",

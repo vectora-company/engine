@@ -40,6 +40,7 @@ import {
   kvStoreListKeys,
   kvStorePut,
   queueReceiveDeadLetter,
+  queueNack,
   runContractVersion,
   transitionRun,
   toolContractVersion,
@@ -398,6 +399,10 @@ test("queue dead-letter receive is exposed through the Node binding", async () =
     ),
     /invalid messaging request/,
   );
+});
+
+test("queue NACK validates the delivery handle", async () => {
+  await assert.rejects(queueNack("missing-delivery", 25), /unknown queue delivery/);
 });
 
 const settings = {
