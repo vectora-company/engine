@@ -162,36 +162,35 @@ especialização; se o outro lado puder oferecê-lo, volta para a base.
 
 ## Ledger e estado de execução
 
-Estado experimental verificado em 13 de novembro de 2026: `main` está em
-`dc1aa5e`; os PRs #45–#72 de storage estão integrados. A cadeia atual inclui os PRs #82–#88, sobre bindings de mídia, documentação e
-refinamentos multimodais; nenhum altera adapters de storage. Há ledger/checkpoints em SQLite com backup online e offline,
-stores SQLite especializados de lifecycle, loop e policy, um
-`PostgresLedger` usado como projeção, e `ResilientLedger` que grava localmente
-com outbox antes de projetar para PostgreSQL. Também existem adapters vetoriais
-LanceDB/Qdrant com score cosseno comum e messaging Redis/NATS para KV (TTL,
-CAS, incremento, prefixo e watch), filas com retenção, tentativas e DLQ e
-pub/sub. Consulte a
-[`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
-para APIs, bindings, testes e limites por adapter.
+Estado verificado em 17 de novembro de 2026 no checkout local e comparado
+com a revisão publicada de `main`. A implementação atual inclui ledger,
+checkpoints e stores SQLite de lifecycle, loop e policy; backup online/offline,
+verificação e restore SQLite; projeção PostgreSQL retomável com outbox local,
+flush e rebuild/verify; adapters vetoriais LanceDB/Qdrant; KV, filas e pub/sub
+Redis/NATS. A capability graph FalkorDB é independente e está descrita na
+[spec de graph storage](19-storage-de-grafos-falkordb.md); não integra os cinco
+pares de equivalência desta spec.
 
-Isso ainda não é equivalência entre SQLite e PostgreSQL: PostgreSQL não tem
-os stores de lifecycle/loop/policy nem backup/restore, e o append resiliente
-mantém a autoridade local em SQLite (lacunas na matriz do plano de storage).
-As seleções públicas de storage atualmente aceitam apenas os seis backends
-definidos nesta spec; implementações em memória são doubles internos de teste
-e não fazem parte da configuração de produto. Property graph FalkorDB é uma
-capability adicional implementada no PR #102 e acompanhada pela
-[`docs/specs/19-storage-de-grafos-falkordb.md`](19-storage-de-grafos-falkordb.md);
-não integra os cinco pares de equivalência desta spec. O follow-up de timeout e
-limites dos bindings está na etapa filha do PR #110.
-Ela não integra os cinco pares de equivalência desta spec. Não inferir equivalência
-com Redis KV pelo protocolo compartilhado. Não há ainda APIs de Memory, Context Planner,
-compactação/context engineering, indexação documental ou RAG. Os bindings de
-ledger exigem arquivo SQLite persistente. A presença de adapters não prova
-equivalência operacional: há testes service-real de restart, retenção e DLQ,
-mas eles são condicionais às variáveis `VECTORA_TEST_*`, e faltam shutdown,
-redrive atômico, filtros vetoriais e health (veja o
-[plano de storage](../plans/04-plano-storage-ledger.md)).
+SQLite permanece a cópia local obrigatória e a autoridade de recuperação para
+o ledger e estados críticos. PostgreSQL recebe projeção; backup PostgreSQL é
+gerenciado pelo operador (`pg_dump` ou serviço equivalente), e a Engine verifica
+e reconstrói a projeção a partir da cópia SQLite. PostgreSQL ainda não oferece
+stores equivalentes de lifecycle/loop/policy, migrations versionadas com
+rollback nem concorrência multiprocesso validada para projetores/admissions.
+
+A configuração pública aceita somente os backends concretos definidos nesta
+spec; implementações em memória são doubles internos de teste. A matriz de
+conformidade, os pré-requisitos por serviço e as lacunas atuais estão no
+[plano de storage](../plans/04-plano-storage-ledger.md) e na
+[auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md). Testes contra
+serviços reais dependem das variáveis `VECTORA_TEST_*`; consulte os registros de
+execução para saber quais cenários foram realmente executados. A presença de
+adapters não prova equivalência operacional. Ainda faltam, entre outras lacunas,
+shutdown gracioso e redrive atômico de filas, filtros vetoriais e health.
+
+Não há ainda APIs de Memory, Context Planner, compactação/context engineering,
+indexação documental ou RAG. Os bindings de ledger exigem arquivo SQLite
+persistente.
 
 - Separar registro append-only de eventos, projeções consultáveis, checkpoints, cursor e referências a artifacts.
 - Envelope deve carregar `event_id`, sequência por agregado/stream, versão do schema, idempotency key, run/turno e escopo confiável do consumidor.
@@ -200,7 +199,7 @@ redrive atômico, filtros vetoriais e health (veja o
 - Payload grande fica fora do ledger com referência, hash, tamanho, classificação, expiração e política de acesso.
 - Checkpoints são versionados e restauráveis; checkpoint incompatível falha com erro explícito, não inicia estado novo silenciosamente.
 - SQLite permite append de evento e checkpoint na mesma transação por `sqlite_ledger_append_checkpointed`; o snapshot e o evento devem representar o mesmo sequence.
-- O ledger resiliente mantém append local e outbox na mesma transação SQLite. O PR [#91](https://github.com/vectora-company/engine/pull/91) implementa nas bindings `resilient_ledger_flush_outbox`/`resilientLedgerFlushOutbox` (lote limitado a 1–1000) e `resilient_ledger_pending_count`/`resilientLedgerPendingCount`. Sem PostgreSQL, flush válido retorna zero e preserva pendências; SQLite continua autoridade local. O PR [#92](https://github.com/vectora-company/engine/pull/92), filho do #91, inclui checkpoints dos stores lifecycle/loop/policy na projeção PostgreSQL atômica quando habilitada pelo `ResilientLedger`; faz backfill ao ativar e SQLite-only não acumula outbox. O PR [#93](https://github.com/vectora-company/engine/pull/93), filho do #92, implementa outbox de reservation standalone, vínculo admission, backfill e APIs de consulta. A decisão de brunosrz no chat combina `pg_dump`/backup gerenciado do PostgreSQL completo com verify/rebuild da projeção Engine a partir do SQLite, sem formato próprio de backup. O PR [#94](https://github.com/vectora-company/engine/pull/94), integrado em `main`, implementa replay idempotente e comparação de contagens de agregados/versões por scope; exige writers pausados. O PR [#95](https://github.com/vectora-company/engine/pull/95), filho do #94, integrado em `main`, adiciona testes reais para rejeitar linha extra e conteúdo divergente. O PR [#96](https://github.com/vectora-company/engine/pull/96), aberto sobre `main` após integração do #95, valida projetores independentes concorrendo sobre sequências do mesmo agregado. Concorrência multiprocesso, admissions disputadas e migrations com rollback seguem gaps.
+- O ledger resiliente mantém append local e outbox na mesma transação SQLite. As bindings expõem `resilient_ledger_flush_outbox`/`resilientLedgerFlushOutbox` (lote limitado a 1–1000) e `resilient_ledger_pending_count`/`resilientLedgerPendingCount`. Sem PostgreSQL, flush válido retorna zero e preserva pendências; SQLite continua autoridade local. A projeção abrange eventos, checkpoints dos stores lifecycle/loop/policy, admissions e reservations, com backfill ao ativar e rebuild idempotente. A decisão de `brunosrz` combina backup PostgreSQL gerenciado pelo operador (`pg_dump`) com verify/rebuild da projeção a partir do SQLite, sem formato próprio de backup. A verificação compara agregados e versões por scope, exige writers pausados e rejeita linhas extras ou conteúdo divergente. Concorrência multiprocesso, admissions disputadas e migrations com rollback seguem pendentes.
 - Antes de entregar uma tool com efeito externo ao adapter, persista um evento/checkpoint `effect_started`; após o resultado, persista o resultado e novo checkpoint. Uma execução interrompida nesse intervalo é incerta e requer reconciliação explícita.
 
 ## Memória, contexto e RAG

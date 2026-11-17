@@ -36,7 +36,7 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Cobrir os limites de entrada existentes: busca `limit` 1–1000, vetor 1–65536 dimensões (upsert), escopo/coleção (≤128, charset), chave KV ≤512, identificadores ≤128 e subjects (sem segmentos vazios nem `*`/`#`, ≤512), nos dois lados de cada fronteira.
 - [x] Limite de tamanho de `metadata` vetorial, valores de KV e payloads de fila: decidido não impor limite novo (decisão do mantenedor, 2026-11-12).
 - [ ] Falhas de indexação dos stores vetoriais.
-- [ ] Declarar em `capabilities()` o backup do SQLite, a dependência de `notify-keyspace-events` no watch do Redis e as ausências reais das filas e do vetorial (filtros, índice, quantização).
+- [x] Declarar em `capabilities()` os modos de backup/restore SQLite, backup PostgreSQL gerenciado pelo operador e rebuild/verify pela cópia SQLite; pré-requisito `notify-keyspace-events` do watch Redis; ausências comuns dos pares vetorial e de filas. Testado no core Rust, no binding Python recompilado e no addon TypeScript recompilado.
 - [x] Cobrir em Rust e Python CAS concorrente, incremento atômico, prefixo/ordenação, TTL/expiração, watch (put/remove/expiração/cancelamento), remoção e isolamento KV contra Redis e NATS reais; a suíte Node existente segue como terceira entrada de referência. Evidências e execução estão na análise de storage.
 - [x] Expor `flush_outbox` e `pending_count` do ledger resiliente em Python e TypeScript; cobertura offline confirma flush sem PostgreSQL, preservação da fila e validação 1–1000.
 - [x] Enfileirar eventos e checkpoints dos stores SQLite run/loop/policy atomicamente e projetá-los numa transação PostgreSQL; verificação de serviço 73/73 com imagens registradas na auditoria.
@@ -59,8 +59,7 @@ substituída pelos resultados locais registrados em 2026-11-12.
 
 ## Equivalência por par (política de 2026-11-12)
 
-Os itens marcados concluídos foram verificados no PR indicado; os demais
-são lacunas a fechar nos dois lados do par. Veja a matriz em
+Os itens marcados concluídos têm evidência em código, testes ou execução de serviço registrada na auditoria vinculada; os demais são lacunas a fechar nos dois lados do par. O estado de entrega e revisão é consultado no GitHub e não organiza este checklist. Veja a matriz em
 [`04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md).
 
 - [x] Vetorial: alinhar métrica em `Cosine`, normalizar ambos os scores para similaridade `[-1, 1]` (maior é melhor) e testar ranking com vetores não unitários nos dois backends. `cargo test ... storage::vector::tests` passou 9/9; dois testes integraram com Qdrant real e LanceDB local.
@@ -72,7 +71,7 @@ são lacunas a fechar nos dois lados do par. Veja a matriz em
 - [x] Verificar incremento em Redis e NATS reais: criação concorrente, delta negativo, limite numérico, valor incompatível, TTL e recriação após remoção.
 - [x] Verificar watch KV em Redis e NATS reais: mudanças futuras, filtro de prefixo, isolamento, remoção, expiração e cancelamento da leitura.
 - [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
-- [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens novas.
+- [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens atualizadas.
 - [x] Filas: teto de tentativas e DLQ consumível nos dois brokers.
 - [ ] Filas: NACK e reentrega com atraso, deduplicação na publicação, replay e ordenação com contrato, shutdown gracioso e redrive atômico nas duas.
 - [ ] Pub/sub: reconexão observável e assinatura por padrão/curinga nos dois.

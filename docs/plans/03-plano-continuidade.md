@@ -112,9 +112,12 @@ indicada. Não as reabra sem pedido dele.
    ocioso, preservação das opções configuráveis e recusa sem mutação de subjects
    incompatíveis. Evidências em
    [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
-6. **`capabilities()` incompleto.** Declarar backup no SQLite, a dependência de
-   `notify-keyspace-events` no watch do Redis e as ausências reais das filas e
-   do vetorial (filtros, índice, quantização).
+6. **`capabilities()` — requisitos e lacunas declarados nesta etapa.** O
+   relatório agora informa backup/restore SQLite, backup PostgreSQL gerenciado
+   pelo operador e rebuild/verify via SQLite, pré-requisito de notificações no
+   watch Redis e lacunas reais de vetores e filas. Testes de serialização passam
+   em Rust, Python e TypeScript. A API ainda não diferencia por tipo estruturado
+   lacuna, emulação e especialização; esse refinamento permanece na Fase 2.
 
 ### Fase 1 — mídia e conteúdo multimodal
 

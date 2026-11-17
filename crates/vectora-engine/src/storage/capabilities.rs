@@ -27,7 +27,7 @@ pub enum ScoreDirection {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BackendCapabilities {
-    /// `sql`, `vector`, `kv`, `queue` or `pubsub`.
+    /// `sql`, `vector`, `kv`, `queue`, `pubsub` or `graph`.
     pub kind: String,
     /// Serialized backend name as used in `StorageSelection`.
     pub backend: String,
@@ -91,6 +91,10 @@ impl StorageSelection {
                 "sqlite",
                 &[
                     "ledger",
+                    "ledger_backup_online",
+                    "ledger_backup_offline",
+                    "ledger_backup_verify",
+                    "ledger_restore",
                     "checkpoints",
                     "run_lifecycle_store",
                     "model_tool_loop_store",
@@ -105,9 +109,10 @@ impl StorageSelection {
             Some(SqlBackend::Postgresql) => backends.push(entry(
                 "sql",
                 "postgresql",
-                &["ledger_projection"],
+                &["ledger_projection", "ledger_projection_rebuild_verify"],
                 &[
                     "generic_sql",
+                    "engine_managed_postgresql_backup",
                     "run_lifecycle_store",
                     "model_tool_loop_store",
                     "tool_policy_store",
@@ -115,7 +120,10 @@ impl StorageSelection {
                 None,
                 None,
                 None,
-                &["Receives the ledger projection; SQLite stays authoritative for appends."],
+                &[
+                    "Receives the ledger projection; SQLite stays authoritative for appends.",
+                    "PostgreSQL backup is operator-managed (for example pg_dump); the Engine rebuilds and verifies its projection from SQLite.",
+                ],
             )),
             None => {}
         }
@@ -124,21 +132,39 @@ impl StorageSelection {
                 "vector",
                 "lance_db",
                 &["vector_store"],
-                &["lexical_search", "hybrid_search"],
+                &[
+                    "metadata_filter",
+                    "configurable_ann_index",
+                    "quantization",
+                    "lexical_search",
+                    "hybrid_search",
+                ],
                 None,
                 Some(ScoreDirection::HigherIsCloser),
                 None,
-                &["Cosine similarity is normalized to [-1, 1]; higher is closer."],
+                &[
+                    "Cosine similarity is normalized to [-1, 1]; higher is closer.",
+                    "Metadata filters, configurable ANN index parameters and quantization are not exposed by the adapter.",
+                ],
             )),
             Some(VectorBackend::Qdrant) => backends.push(entry(
                 "vector",
                 "qdrant",
                 &["vector_store"],
-                &["lexical_search", "hybrid_search"],
+                &[
+                    "metadata_filter",
+                    "configurable_ann_index",
+                    "quantization",
+                    "lexical_search",
+                    "hybrid_search",
+                ],
                 None,
                 Some(ScoreDirection::HigherIsCloser),
                 None,
-                &["Cosine similarity is in [-1, 1]; higher is closer."],
+                &[
+                    "Cosine similarity is in [-1, 1]; higher is closer.",
+                    "Metadata filters, configurable ANN index parameters and quantization are not exposed by the adapter.",
+                ],
             )),
             None => {}
         }
@@ -157,7 +183,10 @@ impl StorageSelection {
                 Some(true),
                 None,
                 None,
-                &["TTL is per key, rounded up to whole seconds."],
+                &[
+                    "TTL is per key, rounded up to whole seconds.",
+                    "KV watch requires Redis keyspace notifications (K$gxe or KA); the adapter does not change server configuration.",
+                ],
             )),
             Some(KvBackend::NatsJetstream) => backends.push(entry(
                 "kv",
@@ -173,7 +202,10 @@ impl StorageSelection {
                 Some(true),
                 None,
                 None,
-                &["Per-key TTL uses JetStream message TTL; NATS Server 2.11+ is required."],
+                &[
+                    "Per-key TTL uses JetStream message TTL; NATS Server 2.11+ is required.",
+                    "KV watch observes changes recorded in the selected JetStream bucket.",
+                ],
             )),
             None => {}
         }
@@ -182,7 +214,14 @@ impl StorageSelection {
                 "queue",
                 "redis_streams",
                 &["durable_queue", "dead_letter_queue"],
-                &[],
+                &[
+                    "negative_ack",
+                    "scheduled_retry",
+                    "publisher_deduplication",
+                    "queue_replay_from_cursor",
+                    "graceful_consumer_shutdown",
+                    "atomic_dead_letter_redrive",
+                ],
                 None,
                 None,
                 Some(true),
@@ -197,7 +236,14 @@ impl StorageSelection {
                 "queue",
                 "nats_jetstream",
                 &["durable_queue", "dead_letter_queue"],
-                &[],
+                &[
+                    "negative_ack",
+                    "scheduled_retry",
+                    "publisher_deduplication",
+                    "queue_replay_from_cursor",
+                    "graceful_consumer_shutdown",
+                    "atomic_dead_letter_redrive",
+                ],
                 None,
                 None,
                 Some(true),
@@ -279,7 +325,11 @@ mod tests {
                 .implemented
                 .contains(&"dead_letter_queue".to_owned())
         );
-        assert!(report.backends[2].not_implemented.is_empty());
+        assert!(
+            report.backends[2]
+                .not_implemented
+                .contains(&"atomic_dead_letter_redrive".to_owned())
+        );
         let nats = selection(r#"{"contract_version":1,"queue":"nats_jetstream"}"#).capabilities();
         assert!(
             nats.backends[0]
@@ -309,6 +359,56 @@ mod tests {
                 .contains(&"tool_policy_store".to_owned())
         );
         assert_eq!(report.backends[1].durable, Some(false));
+        assert!(
+            report.backends[0]
+                .notes
+                .iter()
+                .any(|note| note.contains("operator-managed"))
+        );
+        assert!(
+            report.backends[0]
+                .implemented
+                .contains(&"ledger_projection_rebuild_verify".to_owned())
+        );
+        assert!(
+            report.backends[0]
+                .not_implemented
+                .contains(&"engine_managed_postgresql_backup".to_owned())
+        );
+    }
+
+    #[test]
+    fn reports_backup_watch_prerequisites_and_unimplemented_storage_features() {
+        let report = selection(
+            r#"{"contract_version":1,"sql":"sqlite","kv":"redis","vector":"lance_db","queue":"redis_streams"}"#,
+        )
+        .capabilities();
+        let sql = &report.backends[0];
+        for capability in [
+            "ledger_backup_online",
+            "ledger_backup_offline",
+            "ledger_backup_verify",
+            "ledger_restore",
+        ] {
+            assert!(sql.implemented.iter().any(|item| item == capability));
+        }
+        let vector = &report.backends[1];
+        for capability in ["metadata_filter", "configurable_ann_index", "quantization"] {
+            assert!(vector.not_implemented.iter().any(|item| item == capability));
+        }
+        let kv = &report.backends[2];
+        assert!(
+            kv.notes
+                .iter()
+                .any(|note| note.contains("keyspace notifications"))
+        );
+        let queue = &report.backends[3];
+        assert!(
+            queue
+                .not_implemented
+                .iter()
+                .any(|item| item == "atomic_dead_letter_redrive")
+        );
     }
 
     #[test]

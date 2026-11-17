@@ -288,11 +288,27 @@ test("resilient ledger outbox diagnostics expose the local retry queue", async (
 test("storage capabilities state backend differences from Rust", () => {
   const report = storageCapabilities({
     contract_version: 1,
+    sql: "sqlite",
     vector: "qdrant",
-    kv: "nats_jetstream",
+    kv: "redis",
+    queue: "nats_jetstream",
   });
-  assert.equal(report.backends[0].score_direction, "higher_is_closer");
-  assert.equal(report.backends[1].ttl, true);
+  const [sql, vector, kv, queue] = report.backends;
+  assert.ok(sql.implemented.includes("ledger_backup_online"));
+  assert.ok(sql.implemented.includes("ledger_backup_offline"));
+  assert.ok(sql.implemented.includes("ledger_backup_verify"));
+  assert.ok(sql.implemented.includes("ledger_restore"));
+  assert.equal(vector.score_direction, "higher_is_closer");
+  assert.ok(vector.not_implemented.includes("metadata_filter"));
+  assert.ok(vector.not_implemented.includes("configurable_ann_index"));
+  assert.ok(vector.not_implemented.includes("quantization"));
+  assert.equal(kv.ttl, true);
+  assert.ok(kv.notes.some((note) => note.includes("keyspace notifications")));
+  assert.ok(queue.not_implemented.includes("atomic_dead_letter_redrive"));
+  const postgres = storageCapabilities({ contract_version: 1, sql: "postgresql" }).backends[0];
+  assert.ok(postgres.implemented.includes("ledger_projection_rebuild_verify"));
+  assert.ok(postgres.not_implemented.includes("engine_managed_postgresql_backup"));
+  assert.ok(postgres.notes.some((note) => note.includes("operator-managed")));
   const graph = storageCapabilities({ contract_version: 1, graph: "falkordb" }).backends[0];
   assert.equal(graph.kind, "graph");
   assert.ok(graph.implemented.includes("property_graph"));

@@ -124,11 +124,32 @@ def test_storage_selection_is_validated_by_rust() -> None:
 
 def test_storage_capabilities_state_backend_differences() -> None:
     report = storage_capabilities(
-        {"contract_version": 1, "vector": "qdrant", "kv": "nats_jetstream"}
+        {
+            "contract_version": 1,
+            "sql": "sqlite",
+            "vector": "qdrant",
+            "kv": "redis",
+            "queue": "nats_jetstream",
+        }
     )
-    vector, kv = report["backends"]
+    sql, vector, kv, queue = report["backends"]
+    assert "ledger_backup_online" in sql["implemented"]
+    assert "ledger_backup_offline" in sql["implemented"]
+    assert "ledger_backup_verify" in sql["implemented"]
+    assert "ledger_restore" in sql["implemented"]
     assert vector["score_direction"] == "higher_is_closer"
+    assert "metadata_filter" in vector["not_implemented"]
+    assert "configurable_ann_index" in vector["not_implemented"]
+    assert "quantization" in vector["not_implemented"]
     assert kv["ttl"] is True
+    assert any("keyspace notifications" in note for note in kv["notes"])
+    assert "atomic_dead_letter_redrive" in queue["not_implemented"]
+    postgres = storage_capabilities({"contract_version": 1, "sql": "postgresql"})[
+        "backends"
+    ][0]
+    assert "ledger_projection_rebuild_verify" in postgres["implemented"]
+    assert "engine_managed_postgresql_backup" in postgres["not_implemented"]
+    assert any("operator-managed" in note for note in postgres["notes"])
     graph = storage_capabilities({"contract_version": 1, "graph": "falkordb"})[
         "backends"
     ][0]

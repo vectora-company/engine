@@ -5,8 +5,8 @@
 Criar capacidades reutilizáveis para persistência, ledger, busca vetorial, KV,
 filas e pub/sub na Engine Rust. O GH Bot TypeScript é o primeiro consumidor;
 o Vectora Python é referência de comportamento e consumidor posterior. Cada
-capacidade pública entrega Rust, bindings Python e TypeScript e conformidade no
-mesmo PR. A publicação em crates.io, PyPI e npm tem seus próprios gates.
+capacidade pública entrega Rust, bindings Python e TypeScript e conformidade na
+mesma etapa. A publicação em crates.io, PyPI e npm tem seus próprios gates.
 
 Fontes: `/media/brunosrz/externo/vectora-repos/issues/01-loop-agentico-e-harness.md`,
 `/media/brunosrz/externo/vectora-repos/issues/02-storage-memoria-contexto-rag.md`,
@@ -58,85 +58,49 @@ extraia contratos genéricos sem incorporar UI, workbenches ou RBAC do Vectora.
 Adapters em memória podem apoiar testes internos, mas não são backends públicos
 nem uma opção de configuração de produto. A configuração pública atualmente
 oferece os seis backends concretos desta spec e permite combiná-los por
-capability. FalkorDB graph está proposto como capability adicional independente
-em [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md); ainda não é uma seleção suportada nem membro dos cinco pares.
+capability. FalkorDB graph é uma capability adicional independente, implementada e fora dos cinco pares de equivalência; veja [`docs/specs/19-storage-de-grafos-falkordb.md`](../specs/19-storage-de-grafos-falkordb.md).
 Garantias dependem da configuração do serviço; não inferir durabilidade apenas
 pelo nome do backend. A coluna "base equivalente" não é uma lista de
 diferenças aceitas: cada item ausente em um lado é lacuna na matriz abaixo.
 
-## Matriz de equivalência por par (verificada em 2026-11-13)
+## Matriz de equivalência por par (estado verificado em 2026-11-17)
 
-Fonte: código dos adapters em `main` (`dc1aa5e`) e nos PRs de storage já
-integrados (#45–#72), com validação da dimensão no PR #77, ainda aberto na stack
-atual sobre #86. As etapas de mídia #79–#86 e os PRs de mídia/documentação #87–#88 não alteram adapters de storage.
-Consulte também os testes citados na
-[auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md). "Lacuna"
-significa que um lado tem e o outro não; "base comum ausente" significa que
-nenhum dos dois lados expõe a capacidade.
+Fonte: `main` no GitHub em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099` e
+código/testes da stack local. A posição publicada e a base da stack são
+consultadas dinamicamente no GitHub; esta matriz permanece organizada por
+capability e não por entrega ou pull request. Consulte também a
+[auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md).
 
-| Par                       | Base equivalente já entregue                                                                                                                                                                           | Lacuna (um lado tem, o outro não)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Base comum ainda ausente nos dois lados                                                                                                                                                                   |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite × PostgreSQL       | Ledger com idempotência, conflito de versão, paginação, reserva/admissão e checkpoints; projeção SQLite-first com outbox (`resilient_ledger.rs`).                                                      | PostgreSQL recebe evento + checkpoint dos stores SQLite lifecycle/loop/policy por outbox transacional opt-in (PR #92; schema v6); `ResilientLedger` habilita projeção e faz backfill. SQLite-only não acumula cópias. A branch filha `feat/postgres-admission-projection` adiciona outbox de reserva e APIs de leitura de reservation/admission; os testes service-real passaram; PR [#93](https://github.com/vectora-company/engine/pull/93), integrado na stack sobre #92. A decisão foi respondida no chat; o PR #94 implementa rebuild idempotente e comparação de contagens de agregados/versões por scope a partir do SQLite, com writers pausados. Backup integral usa `pg_dump`/backup gerenciado. SQLite é a cópia local e autoridade. | Interface SQL transacional tipada e limitada; testes concorrentes do PostgreSQL com serviço real; migrations PostgreSQL além da v1 com rollback documentado.                                              |
-| LanceDB × Qdrant          | Cosseno normalizado em `[-1, 1]` (#57); dimensões de 1 a 65536 (#65); dimensão divergente da coleção retorna `InvalidInput` (#77); coleção ausente e reinício (#51).                                   | Nenhuma conhecida no contrato atual.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Filtro por metadado além do escopo, índice ANN parametrizado, quantização, busca lexical/híbrida, falhas de indexação visíveis, backup/snapshot e health.                                                 |
-| Redis × NATS JetStream KV | TTL por chave (NATS 2.11+, #59), listagem por prefixo (#67), remoção nos bindings (#68), validação de chaves (#69), CAS por revisão (#70), incremento (#71) e watch por prefixo (#72).                 | Nenhuma de contrato. O watch do Redis depende de `notify-keyspace-events` no servidor e retorna `Unsupported` sem ele; isso precisa constar em `capabilities()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Testes Rust e Python de CAS, incremento, prefixo, watch e remoção (hoje só Node).                                                                                                                         |
-| Redis Streams × JetStream | Grupos, ACK, retenção finita (100000, #60), cinco tentativas e DLQ consumível (#61), recuperação da transferência para a DLQ (#62), uma entrega por leitura (#63) e preservação da configuração (#64). | Deduplicação nativa existe só no JetStream e não é usada no `enqueue`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | NACK e reentrega com atraso, deduplicação na publicação, replay e ordenação com contrato, shutdown gracioso, redrive atômico da DLQ, envelope de job versionado e validação real dos cenários de #62–#64. |
-| Redis Pub/Sub × NATS Core | Entrega efêmera; mensagem sem assinante é descartada (teste `pubsub_drops_messages_published_without_a_subscriber`).                                                                                   | Nenhuma conhecida.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Reconexão observável e assinatura por padrão/curinga.                                                                                                                                                     |
+| Par                       | Base equivalente entregue                                                                                                                                                                                                             | Lacunas verificadas                                                                                                                                                                                                                                           | Base comum ainda ausente                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite × PostgreSQL       | Ledger SQLite-first, stores SQLite de lifecycle/loop/policy, backup/restore SQLite, projeção PostgreSQL de eventos/checkpoints/reservations/admissions, flush, rebuild/verify e testes de divergência/concorrência no mesmo processo. | PostgreSQL não oferece APIs locais equivalentes aos stores especializados SQLite; a cópia SQLite segue autoridade. Backup PostgreSQL é gerenciado pelo operador (`pg_dump` ou serviço equivalente); Engine verifica/reconstrói a projeção a partir do SQLite. | SQL genérico tipado, migrations PostgreSQL com rollback e concorrência multiprocesso dos projetores/admissions.                     |
+| LanceDB × Qdrant          | Upsert/delete por escopo, coleção, cosseno normalizado em `[-1, 1]`, dimensões 1–65536 e validação de coleção/dimensão divergente.                                                                                                    | Nenhuma diferença deliberada aceita; recursos presentes só no backend e viáveis no outro continuam lacunas a avaliar.                                                                                                                                         | Filtro por metadado, ANN configurável, quantização, busca lexical/híbrida, falha de indexação observável, backup/snapshot e health. |
+| Redis × NATS JetStream KV | get/put/delete, TTL, CAS por revisão, incremento, listagem por prefixo e watch; suíte real Rust/Python/TypeScript cobre os dois backends.                                                                                             | NATS requer Server 2.11+ para TTL por mensagem. Watch Redis exige keyspace notifications `K$gxe` ou `KA`; a Engine não altera configuração do servidor.                                                                                                       | Nenhuma operação básica conhecida; TTL e watch dependem dos pré-requisitos descritos.                                               |
+| Redis Streams × JetStream | Enqueue/receive/ACK, redelivery, retenção limitada, teto de tentativas e DLQ consumível; testes reais cobrem corrida ACK×DLQ, retomada NATS, pull único, timeout e preservação de configuração.                                       | Redis transfere para DLQ e confirma origem atomicamente. JetStream publica com deduplicação por sequência antes do ACK; a semântica é at-least-once e pode duplicar se ACK se perder.                                                                         | NACK, retry agendado, deduplicação pública de enqueue, replay por cursor, shutdown gracioso e redrive atômico da DLQ.               |
+| Redis Pub/Sub × NATS Core | Publicação/assinatura efêmera; mensagem sem assinante é descartada.                                                                                                                                                                   | Sem diferença deliberada aceita.                                                                                                                                                                                                                              | Reconexão observável e assinaturas por padrão/curinga.                                                                              |
 
-`capabilities()` enumera implementado, não implementado e notas, mas não tem
-campo estruturado para separar lacuna, emulação e especialização com motivo de
-incompatibilidade. Também omite o backup do SQLite e as ausências reais das
-filas e do vetorial. Corrigir isso faz parte da Fase 0 e da Fase 2 do
-[plano ativo](03-plano-continuidade.md).
+`capabilities()` declara adapters implementados, lacunas comuns e requisitos
+operacionais, incluindo modos de backup, watch Redis e requisitos de versão do
+NATS. A API ainda não representa lacuna, emulação e especialização como
+categorias estruturadas; esse refinamento segue como trabalho. O relatório é
+estático e não testa disponibilidade do serviço.
 
 O contrato vetorial compartilhado usa vetores não unitários, de modo que L2 e
 cosseno ordenariam diferente; os dois adapters ordenam por cosseno.
 
-## Estado das fases S0–S5 (verificado em 2026-11-13; atualizado nesta revisão)
+## Estado das fases S0–S5 (verificado em 2026-11-17)
 
-As fases abaixo foram escritas como plano de implementação original. A tabela
-separa o que existe do que falta; "implementada" não significa pronta para
-produção.
-
-| Fase                                | Estado atual                                                                                                                                                                                                        | Trabalho que continua pendente                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S0 — contratos                      | **Parcial.** Seleção versionada com os seis backends (`memory` rejeitado), contratos de ledger, vetor e mensageria, relatório estático `capabilities()` (#46) e fixture comum `tests/fixtures/conformance-v1.json`. | Fixtures comuns de KV, filas e vetores; `capabilities()` estruturado; health/readiness; contratos de shutdown e cancelamento de filas e pub/sub.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| S1 — SQLite e ledger                | **Implementada experimentalmente.** Ledger, admissão, checkpoints, stores de lifecycle/loop/policy, backup online/offline (#53) e concorrência entre processos (#49).                                               | Procedimento operacional de recovery documentado para o consumidor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| S2 — PostgreSQL                     | **Parcial.** `PostgresLedger` e projeção via `ResilientLedger`, com queda e retorno do serviço testados.                                                                                                            | O PR #92 (filho do #91, integrado) enfileira eventos e checkpoints dos stores lifecycle/loop/policy no SQLite e projeta os dois atomicamente no PostgreSQL. O PR [#93](https://github.com/vectora-company/engine/pull/93), filho do #92, projeta reservas/admissions consultáveis e adiciona APIs de leitura. O PR [#94](https://github.com/vectora-company/engine/pull/94), integrado em `main`, implementa rebuild idempotente do PostgreSQL a partir do SQLite, compara contagens por scope e exige writers pausados durante a conferência; backup completo continua com `pg_dump`/backup gerenciado. O PR [#95](https://github.com/vectora-company/engine/pull/95), integrado em `main`, adiciona testes de rejeição de linhas extras e conteúdo divergente. O PR [#96](https://github.com/vectora-company/engine/pull/96) adiciona teste service-real com dois projetores independentes; migrations PostgreSQL com rollback continuam pendentes. SQL genérico segue pendente. `flush_outbox`/`pending_count` estão no PR #91, filho do #90. |
-| S3 — Redis/NATS                     | **Implementada experimentalmente.** KV completo (TTL, CAS, incremento, prefixo, watch), filas com retenção, tentativas e DLQ, pub/sub efêmero, reinício dos serviços testado.                                       | NACK/atraso, deduplicação, replay, shutdown, redrive atômico, reconexão de pub/sub e validação real de #62–#64.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| S4 — LanceDB/Qdrant                 | **Implementada experimentalmente.** Score cosseno alinhado, limites de dimensão, dimensão divergente, coleção ausente e reinício do Qdrant.                                                                         | Filtros de metadado, índice ANN, quantização, busca híbrida, falhas de indexação e backup/snapshot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| S5 — recuperação, contexto e adoção | **Parcial no recovery; planejada em contexto e adoção.** Run e loop têm persistência e reconciliação SQLite.                                                                                                        | Memória, Context Planner e RAG não existem; nenhum consumidor adotou storage da Engine.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Fase                                | Estado atual                                                                                                                                                                           | Trabalho que continua pendente                                                                                                             |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| S0 — contratos                      | **Parcial.** Seleção versionada, contratos Rust e bindings, fixture inicial e relatório `capabilities()` coerente com os adapters.                                                     | Fixtures comuns de KV, filas e vetores; categorias estruturadas de capability; health/readiness; shutdown e cancelamento de filas/pub-sub. |
+| S1 — SQLite e ledger                | **Implementada experimentalmente.** Ledger, admissão, checkpoints, stores de lifecycle/loop/policy, backup online/offline/verify/restore e concorrência entre processos.               | Documentar procedimento operacional de recovery para consumidores.                                                                         |
+| S2 — PostgreSQL                     | **Parcial.** Projeção SQLite-first com outbox, stores e admissions projetados, flush, rebuild/verify, rejeição de divergências e concorrência entre dois projetores no mesmo processo. | Migrations PostgreSQL com rollback; concorrência multiprocesso/admissions; SQL genérico tipado.                                            |
+| S3 — Redis/NATS                     | **Parcial.** KV, filas com retenção/tentativas/DLQ e pub/sub efêmero; Redis 8.10.3 e NATS 2.15.3 foram testados em serviço real.                                                       | NACK/retry agendado, deduplicação pública, replay por cursor, shutdown, redrive atômico e reconexão pub/sub.                               |
+| S4 — LanceDB/Qdrant                 | **Parcial.** Cosseno alinhado, limites/dimensões, coleção ausente e reinício Qdrant.                                                                                                   | Filtros, parâmetros ANN, quantização, busca híbrida, falhas de indexação, backup/snapshot e health.                                        |
+| S5 — recuperação, contexto e adoção | **Parcial no recovery; planejada em contexto e adoção.** SQLite mantém recovery e a projeção PostgreSQL pode ser reconstruída.                                                         | Memória, Context Planner, RAG e adoção gradual por consumidores ainda não estão implementados.                                             |
 
 A matriz por contrato e binding está em
 [`02-matriz-conformidade-capabilities.md`](../analyses/02-matriz-conformidade-capabilities.md).
-
-Os contratos de vetores (`VectorStore`) e KV (`KvStore`) têm adapters que
-selecionam uma implementação por configuração. Filas duráveis e pub/sub têm
-APIs distintas (`DurableQueue` e `EphemeralPubSub`): a fila entrega um handle
-que deve receber ACK após o processamento; liberar o handle sem ACK mantém a
-possibilidade de redelivery conforme o visibility timeout, até o teto de
-tentativas, quando a mensagem vai para a DLQ. O binding retorna bytes sem
-reinterpretar o payload. Handles de entrega e assinaturas são locais ao
-processo e não devem ser persistidos em configuração.
-
-Redis Streams recupera entregas pendentes com `XAUTOCLAIM`; NATS JetStream usa
-consumidores duráveis e `ack_wait`. O TTL por chave existe nos dois KV (no
-NATS via TTL de mensagem do JetStream, que exige NATS 2.11+). Os dois adapters
-vetoriais reportam similaridade cosseno em `[-1, 1]`, maior é mais próximo.
-
-No ledger, `ResilientLedger` grava evento e outbox atomicamente em SQLite antes
-de tentar a projeção PostgreSQL. O resultado informa `synchronized`, `pending`
-ou `conflict`; um conflito de projeção não desfaz o evento local. Retentativas
-devem reutilizar a mesma chave de idempotência. O append do binding usa esse
-contrato SQLite-first; não abrir um ledger PostgreSQL isolado para substituir a
-autoridade local. O PR #91 expõe `flush_outbox` e `pending_count` em Python e
-TypeScript; contagem é `int` em Python e `bigint` em TypeScript. Sem PostgreSQL,
-um flush válido não remove itens locais. Limite permitido: 1–1000. O PR #92
-adiciona checkpoints à outbox SQLite (schema v6), com projeção opt-in e backfill, e projeta evento/checkpoint
-na mesma transação remota para run lifecycle, model/tool loop e policy. A branch
-filha `feat/postgres-admission-projection` migra o SQLite ao schema v8, adiciona
-outbox de reservas standalone, projeta reservation + admission + event +
-checkpoint atomicamente e acrescenta APIs de leitura. Verificação service-real
-passou; a decisão de `brunosrz` no chat adota backup nativo/gerenciado mais verify/rebuild da projeção a partir do SQLite. O PR [#94](https://github.com/vectora-company/engine/pull/94), head `984e2d066dcc05b0a98e076361ada632751fc61a`, implementa rebuild por scope e verificação de contagens, com writers pausados. Os testes service-real no PR [#95](https://github.com/vectora-company/engine/pull/95), integrado em `main`, cobrem linhas extras e conteúdo divergente. O PR [#96](https://github.com/vectora-company/engine/pull/96) valida projetores independentes concorrendo sobre a mesma outbox; migrations continuam pendentes. SQLite continua autoridade local.
 
 ## Contrato do ledger
 
@@ -160,11 +124,11 @@ Definir limites de payload, redação antes da persistência e referência com h
 tamanho e política de acesso para artifacts grandes. O ledger não armazena
 segredos ou raciocínio interno bruto por padrão.
 
-## PRs propostos
+## Escopo e critérios de aceitação por fase
 
-Cada PR parte do anterior quando houver dependência e deve registrar contrato,
-limites, critérios de aceite, conformidade e interfaces nas três linguagens.
-Os números abaixo representam entregas propostas, não issues já publicadas.
+As fases são ordenadas por dependências técnicas. Os critérios abaixo
+orientam a conclusão das capabilities; a posição da stack de entrega é dinâmica
+e consultada separadamente no GitHub.
 
 ### 1. S0 — contratos e conformidade inicial
 
@@ -173,7 +137,7 @@ tipos versionados, escopo, erros, health/capabilities, cancelamento, timeout,
 shutdown, cursor e limites. Especificar separadamente ledger, SQL, vetores,
 KV, filas e pub/sub; criar matriz de garantias e fixtures de conformidade.
 Documentar as decisões de API e dependências Rust antes dos adapters. Expor os
-contratos utilizáveis pelos bindings Python e TypeScript no mesmo PR.
+contratos utilizáveis pelos bindings Python e TypeScript na mesma etapa.
 
 **Aceite:** contratos reproduzíveis e versionados, seleção independente,
 erros e capabilities observáveis; nenhuma capacidade não implementada é
@@ -186,7 +150,7 @@ Implementar migrations próprias da Engine, conexão/pool e lifecycle; admissão
 idempotente, append com versão esperada e sequência por agregado, leitura por
 cursor e checkpoints. Expor o mesmo núcleo pelos dois bindings e exercitar um
 fluxo mínimo do GH Bot. Avaliar cancelamento, concorrência e recuperação com
-processos independentes; não migrar dados de produto neste PR.
+processos independentes; não migrar dados de produto nesta fase.
 
 **Aceite:** reinício preserva dados; retries não duplicam eventos; conflito de
 idempotência é detectado; falha transacional não deixa estado parcial; cursores
@@ -249,28 +213,24 @@ ocorre sem conformidade, evidência operacional e rollback.
 
 ## Gates transversais
 
-- Testar o contrato Rust e os bindings Python/TypeScript no mesmo PR; fixtures
+- Testar o contrato Rust e os bindings Python/TypeScript na mesma etapa; fixtures
   comuns não substituem testes de serviços reais e falhas de rede/processo.
 - Verificar migrations, compatibilidade, concorrência, limites, redaction,
-  isolamento, observabilidade, shutdown e recuperação aplicáveis a cada PR.
+  isolamento, observabilidade, shutdown e recuperação aplicáveis a cada capability.
 - Medir latência, throughput e memória por SHA, ambiente, versão do backend,
   configuração e carga. Não alegar paridade ou ganho sem evidência.
 - Revisar instalação, empacotamento e plataformas suportadas antes de publicar;
   segredo e credenciais nunca entram em logs, fixtures ou exportações.
 
-## Histórico das entregas de storage
+## Evidência e operação
 
-Graph storage FalkorDB não estava no escopo original S0–S5 e não deve ser
-contabilizado como paridade de storage existente. A proposta da capability,
-seu contrato pendente e seus critérios estão em
-[`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md).
+Graph storage FalkorDB é uma capability adicional fora dos cinco pares de
+equivalência; não deve ser contabilizado como paridade de storage. O contrato e
+seus critérios estão em [`docs/plans/07-plano-storage-grafos-falkordb.md`](07-plano-storage-grafos-falkordb.md).
 
-As etapas S0–S5 entregues pela stack #45–#72 estão integradas em `main`
-(`dc1aa5e`) e listadas na tabela de fases acima. A execução combinada mais
-recente dos testes service-real está registrada na
-[auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md), com a
-contagem e os serviços usados. Resultado local; CI remoto não é usado como
-evidência.
+A execução mais recente dos testes service-real e as versões usadas constam na
+[auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md). Resultados
+locais são registrados por comando e ambiente; CI remoto não os substitui.
 
 ## Decisões
 

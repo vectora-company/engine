@@ -104,9 +104,10 @@ outras etapas aprovadas no plano ativo.
 
 ## Atualização documental
 
-Acompanhe por capability, fase e critério de aceite. PR, commit e SHA podem ser
-registrados no checklist específico como evidência, mas não devem criar seções
-ou ordenar este checklist geral. Ao adicionar uma capability, atualize
+Acompanhe por capability, fase e critério de aceite. Registre evidências em
+código, testes e execuções reproduzíveis; não organize planos, specs ou
+checklists por PR, commit, branch ou SHA. Consulte o estado de entrega no
+GitHub dinamicamente. Ao adicionar uma capability, atualize
 [`docs/README.md`](../README.md),
 [`docs/plans/00-prompt-loop-goal.md`](../plans/00-prompt-loop-goal.md),
 [`docs/goal-loop/README.md`](../goal-loop/README.md) e os documentos gerais
