@@ -83,6 +83,15 @@ nativo Python, 103 testes Python (10 skips) e 59 testes Node (18 skips). As
 fixtures novas exercitam multipart e asset map nos dois bindings. Os skips são
 condicionais à configuração de serviços e não contam como integração real de STT.
 
+Na validação local seguinte, após adicionar testes HTTP para `429`/`Retry-After`
+e limite de resposta do batch STT, `CARGO_BUILD_JOBS=2 scons lint` e
+`CARGO_BUILD_JOBS=2 scons tests` passaram: 287 testes Rust, 3 fixtures Rust,
+8 testes CLI, 1 teste nativo Python, 103 testes Python (10 skips) e 59 testes
+Node (18 skips). Os 18 skips Node e 10 skips Python dependem de serviços e
+variáveis opcionais; não foram contados como integração real dos providers.
+`llm::transcription::tests` passou 6/6. Não havia endpoint ou credencial remota
+de STT configurada; smoke real permanece pendente.
+
 Contagens pertencem àquela execução e não são garantia para outro SHA,
 ambiente ou configuração. O processo reutilizável está no
 [loop](../plans/05-loop-de-desenvolvimento.md).
@@ -98,9 +107,11 @@ ambiente ou configuração. O processo reutilizável está no
   continuar como `unknown` e falhar de modo conservador.
 - Definir contratos antes de adicionar geração de imagem e operações gerais de
   vídeo; especificar suporte concreto, custos, streaming e bytes.
-- Batch STT usa multipart no perfil OpenAI-compatible, sem retry automático;
-  fixtures Rust passaram. Fechar testes dos bindings e gates; a fixture local
-  não comprova integração com serviços reais nem suporte de modelos específicos.
+- Batch STT usa multipart no perfil OpenAI-compatible, sem retry automático.
+  Fixtures Rust/Python/Node exercitam envio e parsing; testes HTTP Rust também
+  confirmam `429` com `Retry-After` sem expor o corpo do provider e rejeição de
+  resposta acima do limite configurado. Fixtures locais não comprovam integração
+  com serviços reais nem suporte de modelos específicos.
 - Executar smokes locais opt-in com versões fixadas de llama-server, Ollama e
   Laya quando os serviços/modelos estiverem disponíveis; para providers
   remotos, usar credenciais de teste sem expô-las em logs/fixtures.

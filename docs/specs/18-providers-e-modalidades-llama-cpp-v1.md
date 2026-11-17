@@ -333,6 +333,9 @@ provider; aceita JSON, verbose JSON, diarized JSON, texto, SRT e VTT, com
 timestamps/chunking quando aplicáveis. A resposta preserva campos adicionais;
 respostas estruturadas validam duração e intervalos. Requisições não são
 repetidas automaticamente, pois o resultado remoto pode ser incerto após uma
-falha de transporte. Rust tem fixtures unitárias; Python/Node têm testes HTTP
-locais pelos bindings. Isso não comprova funcionamento de credenciais, modelos
-ou gateways reais.
+falha de transporte. O corpo de erro do provider não é exposto: o status é
+classificado em erro tipado e `Retry-After` é preservado para rate limit. O
+cliente limita a resposta pelo `max_response_bytes` da configuração HTTP. Rust
+tem fixtures unitárias e testes HTTP locais; Python/Node têm testes HTTP locais
+pelos bindings. Isso não comprova funcionamento de credenciais, modelos ou
+gateways reais.

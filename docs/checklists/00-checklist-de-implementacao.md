@@ -78,6 +78,9 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [x] Gating da etapa multimodal local: `scons lint` e `scons tests` passaram;
       contagens e limitações específicas estão em
       `docs/analyses/06-auditoria-providers-modalidades.md`.
+- [x] Batch STT OpenAI-compatible: cobertura Rust/Python/Node; teste Rust HTTP
+      confirma `429` com `Retry-After` sem vazar corpo e limite configurável de
+      resposta (`llm::transcription::tests`, 6/6 nesta execução).
 - [x] Testes Python e Node exercitam o asset map efêmero no OpenAI Responses;
       a extensão Python foi rebuildada no checkout antes do teste para evitar
       validar um binário local antigo.

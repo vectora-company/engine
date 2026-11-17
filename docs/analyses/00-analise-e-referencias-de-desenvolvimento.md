@@ -126,6 +126,10 @@ títulos e bases de PR no estado dinâmico do GitHub.
   A fixture Rust exercita WAV/MP3 e fallback textual sem envio de bytes para
   formatos não suportados; smoke
   real por modelo permanece pendente.
+  A transcrição batch OpenAI-compatible `/v1/audio/transcriptions` também está
+  implementada no core e nos dois bindings; fixtures locais cobrem o asset
+  efêmero, a resposta multipart, rate limit e o limite de resposta. Nenhum
+  endpoint/modelo real foi validado nesta etapa.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
   [checklist](../checklists/06-storage-grafos-falkordb.md) e

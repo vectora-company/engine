@@ -479,7 +479,12 @@ mod tests {
         }
     }
 
-    async fn read_http_request(listener: TcpListener) -> Vec<u8> {
+    async fn read_http_request(
+        listener: TcpListener,
+        status: u16,
+        extra_headers: &[(&str, &str)],
+        response: &[u8],
+    ) -> Vec<u8> {
         let (mut stream, _) = listener.accept().await.unwrap();
         let mut request = Vec::new();
         let header_end = loop {
@@ -504,9 +509,13 @@ mod tests {
             assert_ne!(read, 0, "client closed before completing multipart body");
             request.extend_from_slice(&chunk[..read]);
         }
-        let response = "{\"text\":\"olá\",\"language\":\"pt\",\"duration\":1.25,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"olá\"}]}".as_bytes();
+        let reason = if status == 200 { "OK" } else { "Error" };
+        let extra_headers = extra_headers
+            .iter()
+            .map(|(name, value)| format!("{name}: {value}\r\n"))
+            .collect::<String>();
         let headers = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{extra_headers}Connection: close\r\n\r\n",
             response.len()
         );
         stream.write_all(headers.as_bytes()).await.unwrap();
@@ -518,7 +527,8 @@ mod tests {
     async fn sends_verified_asset_as_multipart_and_parses_verbose_response() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(read_http_request(listener));
+        let response_body = "{\"text\":\"olá\",\"language\":\"pt\",\"duration\":1.25,\"segments\":[{\"start\":0.0,\"end\":1.0,\"text\":\"olá\"}]}".as_bytes();
+        let server = tokio::spawn(read_http_request(listener, 200, &[], response_body));
         let data = wav();
         let media_ref = media_ref(&data);
         let context = MediaExecutionContext::new(
@@ -556,6 +566,77 @@ mod tests {
         assert_eq!(response.language.as_deref(), Some("pt"));
         assert_eq!(response.duration_seconds, Some(1.25));
         assert_eq!(response.segments.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn classifies_rate_limit_without_exposing_provider_error_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(read_http_request(
+            listener,
+            429,
+            &[("Retry-After", "3")],
+            br#"{"error":{"message":"private provider detail"}}"#,
+        ));
+        let data = wav();
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::new(),
+            Arc::new(MemoryStore(HashMap::from([(
+                "asset-1".into(),
+                data.clone(),
+            )]))),
+        );
+        let client = TranscriptionClient::new(TranscriptionClientSettings::OpenAiCompatible(
+            ProviderHttpSettings {
+                base_url: Some(format!("http://{address}/v1")),
+                ..ProviderHttpSettings::default()
+            },
+        ))
+        .unwrap();
+
+        let error = client
+            .transcribe_ephemeral(request(media_ref(&data)), &context)
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert!(matches!(
+            error,
+            LlmError::RateLimited {
+                retry_after: Some(duration)
+            } if duration.as_secs() == 3
+        ));
+        assert!(!error.to_string().contains("private provider detail"));
+    }
+
+    #[tokio::test]
+    async fn enforces_configured_response_limit_for_transcription() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let response = br#"{"text":"this response is too large"}"#;
+        let server = tokio::spawn(read_http_request(listener, 200, &[], response));
+        let data = wav();
+        let context = MediaExecutionContext::new(
+            CapabilityResolver::new(),
+            Arc::new(MemoryStore(HashMap::from([(
+                "asset-1".into(),
+                data.clone(),
+            )]))),
+        );
+        let client = TranscriptionClient::new(TranscriptionClientSettings::OpenAiCompatible(
+            ProviderHttpSettings {
+                base_url: Some(format!("http://{address}/v1")),
+                max_response_bytes: 8,
+                ..ProviderHttpSettings::default()
+            },
+        ))
+        .unwrap();
+
+        let error = client
+            .transcribe_ephemeral(request(media_ref(&data)), &context)
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert!(matches!(error, LlmError::ResponseTooLarge));
     }
 
     #[test]
