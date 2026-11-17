@@ -69,6 +69,12 @@ artefatos específicos próximos do domínio e ligados entre si:
   [`docs/specs/02-storage-memoria-contexto-rag.md`](../specs/02-storage-memoria-contexto-rag.md),
   [`docs/plans/04-plano-storage-ledger.md`](../plans/04-plano-storage-ledger.md)
   e [`docs/analyses/05-auditoria-storage-s0-s5.md`](../analyses/05-auditoria-storage-s0-s5.md).
+- Harness, identidade do host, tools, isolamento, plano, memória, subagentes e
+  navegação profunda:
+  [`docs/specs/21-harness-tools-identidade-e-isolamento.md`](../specs/21-harness-tools-identidade-e-isolamento.md),
+  [`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](../plans/09-plano-runtime-tools-identidade-e-isolamento.md),
+  [`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](../checklists/09-runtime-tools-identidade-e-isolamento.md)
+  e [`docs/analyses/09-runtime-tools-vectora.md`](../analyses/09-runtime-tools-vectora.md).
 
 Ao abrir uma nova capability, inclua seus caminhos completos no índice
 [`docs/README.md`](../README.md), em

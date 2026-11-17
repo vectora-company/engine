@@ -13,6 +13,8 @@ Use os seguintes checklists por domínio:
 - Storage de grafos: [`docs/checklists/06-storage-grafos-falkordb.md`](06-storage-grafos-falkordb.md).
 - Inventário transversal: [`docs/checklists/07-checklist-completo-da-engine.md`](07-checklist-completo-da-engine.md).
 - CLI: [`docs/checklists/08-engine-cli.md`](08-engine-cli.md).
+- Harness, identidade host, tools, sandbox, memória, subagentes e deep search:
+  [`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](09-runtime-tools-identidade-e-isolamento.md).
 
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Não
 marque um item como feito sem evidência local identificável.
@@ -148,3 +150,15 @@ GitHub dinamicamente. Ao adicionar uma capability, atualize
 [`docs/plans/00-prompt-loop-goal.md`](../plans/00-prompt-loop-goal.md),
 [`docs/goal-loop/README.md`](../goal-loop/README.md) e os documentos gerais
 que a referenciam.
+
+## Expansão do Harness baseada no Vectora
+
+Em 17/11/2026, foi feita leitura do changelog e do código relevante do Vectora,
+além dos títulos e corpos dos 7 PRs e 22 issues abertos (sem comentários ou
+checks). A comparação inicial e suas lacunas estão em
+[`docs/analyses/09-runtime-tools-vectora.md`](../analyses/09-runtime-tools-vectora.md).
+O contrato e a sequência executável estão em
+[`docs/specs/21-harness-tools-identidade-e-isolamento.md`](../specs/21-harness-tools-identidade-e-isolamento.md)
+e [`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](../plans/09-plano-runtime-tools-identidade-e-isolamento.md).
+Esse inventário é baseline; cada etapa futura ainda exige evidência de código,
+testes Rust e conformidade Python/TypeScript.

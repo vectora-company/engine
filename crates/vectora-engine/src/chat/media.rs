@@ -121,6 +121,14 @@ pub struct InlineMedia {
     pub data_base64: String,
 }
 
+/// Verified, bounded bytes materialized only for an outbound media operation.
+pub(crate) struct MaterializedMedia {
+    pub kind: MediaKind,
+    pub mime_type: String,
+    pub name: String,
+    pub bytes: Vec<u8>,
+}
+
 impl InlineMedia {
     pub fn data_url(&self) -> String {
         format!("data:{};base64,{}", self.mime_type, self.data_base64)
@@ -532,6 +540,12 @@ impl CapabilityResolver {
 pub enum MediaError {
     #[error("asset indisponível")]
     Unavailable,
+    #[error("mídia excede o limite configurado")]
+    TooLarge,
+    #[error("digest ou tamanho diverge do asset registrado")]
+    Integrity,
+    #[error("tipo de mídia não suportado pela operação")]
+    UnsupportedType,
 }
 
 /// Store de mídia do consumidor. A autorização de acesso é dele: a Engine só
@@ -590,6 +604,43 @@ impl MediaExecutionContext {
     pub fn with_max_media_parts(mut self, limit: usize) -> Self {
         self.max_media_parts = Some(limit);
         self
+    }
+
+    /// Materializes one consumer-owned audio/video asset for an operation
+    /// such as batch transcription, enforcing the same integrity and budgets
+    /// used by multimodal chat.
+    pub(crate) async fn materialize_transcription_asset(
+        &self,
+        media_ref: &MediaRef,
+    ) -> Result<MaterializedMedia, MediaError> {
+        if media_ref.size_bytes == 0 || media_ref.size_bytes > self.max_media_bytes {
+            return Err(MediaError::TooLarge);
+        }
+        let mut budget = MediaBudget::new(self.max_total_media_bytes, self.max_media_parts);
+        budget
+            .reserve(media_ref.size_bytes)
+            .map_err(|_| MediaError::TooLarge)?;
+        let data = read_verified(media_ref, self.store.as_ref(), self.max_media_bytes)
+            .await
+            .map_err(|error| {
+                if error.starts_with("mídia excede") {
+                    MediaError::TooLarge
+                } else if error.contains("divergente") {
+                    MediaError::Integrity
+                } else {
+                    MediaError::Unavailable
+                }
+            })?;
+        let detected = classify(&data, Some(&media_ref.mime_type));
+        if !matches!(detected.kind, MediaKind::Audio | MediaKind::Video) {
+            return Err(MediaError::UnsupportedType);
+        }
+        Ok(MaterializedMedia {
+            kind: detected.kind,
+            mime_type: detected.mime_type,
+            name: media_ref.name.clone(),
+            bytes: data,
+        })
     }
 
     /// Prepares standalone content using the same limits and resolver as chat.

@@ -41,6 +41,7 @@ use vectora_engine::llm::{
         FallbackRerankClient, FallbackRerankSettings, RerankClient, RerankClientSettings,
         RerankRequest,
     },
+    transcription::{TranscriptionClient, TranscriptionClientSettings, TranscriptionRequest},
 };
 use vectora_engine::storage::sqlite_loop::{DurableModelToolLoopState, SqliteModelToolLoopStore};
 use vectora_engine::storage::sqlite_policy::{DurableToolPolicyState, SqliteToolPolicyStore};
@@ -381,6 +382,11 @@ fn embedding_contract_version() -> u16 {
 #[pyfunction]
 fn rerank_contract_version() -> u16 {
     vectora_engine::llm::rerank::RERANK_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn transcription_contract_version() -> u16 {
+    vectora_engine::llm::transcription::TRANSCRIPTION_CONTRACT_VERSION
 }
 
 #[pyfunction]
@@ -2131,6 +2137,29 @@ fn fallback_rerank<'py>(
 }
 
 #[pyfunction]
+fn transcribe_ephemeral<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let (settings, context) = split_media_context(&settings_json).map_err(py_error)?;
+        let context = context
+            .ok_or_else(|| py_error("batch transcription requires a consumer media context"))?;
+        let settings: TranscriptionClientSettings = serde_json::from_value(settings)
+            .map_err(|_| py_error("invalid transcription settings"))?;
+        let request: TranscriptionRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid transcription request"))?;
+        let response = TranscriptionClient::new(settings)
+            .map_err(py_error)?
+            .transcribe_ephemeral(request, &context)
+            .await
+            .map_err(py_error)?;
+        encode_json(&response)
+    })
+}
+
+#[pyfunction]
 fn chat_complete<'py>(
     py: Python<'py>,
     settings_json: String,
@@ -3108,10 +3137,12 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(embedding_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(rerank_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(transcription_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(embed, module)?)?;
     module.add_function(wrap_pyfunction!(fallback_embed, module)?)?;
     module.add_function(wrap_pyfunction!(rerank, module)?)?;
     module.add_function(wrap_pyfunction!(fallback_rerank, module)?)?;
+    module.add_function(wrap_pyfunction!(transcribe_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(chat_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(chat_assemble_turn, module)?)?;
     module.add_function(wrap_pyfunction!(chat_complete, module)?)?;

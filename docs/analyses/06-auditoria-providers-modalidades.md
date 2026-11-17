@@ -13,18 +13,18 @@ Fontes de protocolo específicas ficam nos trechos da
 
 ## Estado observado no código
 
-| Operação/protocolo          | Implementação observada                                                                                                             | Limite factual                                                                                                                                                                 |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat genérico               | OpenAI-compatible com endpoints configuráveis; fallback ordenado; Anthropic Messages, Gemini, Cohere e Ollama nativos               | O fallback só é seguro antes de qualquer evento/saída entregue. Compatibilidade de wire format não garante paridade funcional.                                                 |
-| OpenAI                      | Chat Completions e Responses selecionáveis separadamente; Responses serializa áudio WAV/MP3 como `input_audio`                      | Responses tem conversão própria de histórico, mídia, tools, reasoning/usage e eventos semânticos. Capability de áudio permanece desconhecida sem metadata/override por modelo. |
-| OpenRouter                  | Perfil nomeado sobre transporte compatível, headers de atribuição e extensions por request                                          | Roteamento e capacidades variam com modelo/configuração do gateway.                                                                                                            |
-| 9router / OmniRouter / Kimi | Transporte genérico configurável quando o endpoint implementa o protocolo suportado                                                 | Não há validação suficientemente específica para declarar cada serviço coberto. “OmniRouter” também pode apontar a serviços distintos.                                         |
-| Llama-server                | Cliente dedicado com health, discovery, chat, Decision Model, embeddings, rerank, TTS e realtime de áudio                           | Discovery é declaração do servidor. Não substitui smoke test do modelo ou de cada modalidade.                                                                                  |
-| Laya standalone             | Adapter Laya para SystemOne, health e Decision Model de texto, bindings e CLI; checkpoint opcional                                  | Jev é um modelo específico. Não oferece chat genérico nem discovery OpenAI de llama-server; falta smoke com servidor/checkpoint real.                                          |
-| Embeddings                  | OpenAI-compatible, OpenRouter, Cohere, Voyage, Ollama e llama-server; llama-server também aceita entradas multimodais via asset map | Dimensão, modalidade e formato seguem próprios de cada protocolo/modelo.                                                                                                       |
-| Rerank                      | Cohere, Voyage, OpenRouter e llama-server; modalidade textual nos adapters declarados, texto/imagem efêmera no llama-server         | Scores e ordenação não devem ser comparados sem normalização contratual.                                                                                                       |
-| Áudio                       | TTS bufferizado/streaming e sessão realtime de transcrição/conversa no llama-server                                                 | Batch STT genérico permanece ausente; TTS não prova STT.                                                                                                                       |
-| Mídia/imagem/vídeo          | Tipos, asset map, envelopes persistível/efêmero, decisões por parte e conversões cobertas por adapters                              | Geração de imagem, operações gerais de vídeo, catálogo automático confiável e limites de duração/resolução permanecem pendentes; limites agregados de chat já existem.         |
+| Operação/protocolo          | Implementação observada                                                                                                             | Limite factual                                                                                                                                                                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat genérico               | OpenAI-compatible com endpoints configuráveis; fallback ordenado; Anthropic Messages, Gemini, Cohere e Ollama nativos               | O fallback só é seguro antes de qualquer evento/saída entregue. Compatibilidade de wire format não garante paridade funcional.                                                                                              |
+| OpenAI                      | Chat Completions e Responses selecionáveis separadamente; Responses serializa áudio WAV/MP3 como `input_audio`                      | Responses tem conversão própria de histórico, mídia, tools, reasoning/usage e eventos semânticos. Capability de áudio permanece desconhecida sem metadata/override por modelo.                                              |
+| OpenRouter                  | Perfil nomeado sobre transporte compatível, headers de atribuição e extensions por request                                          | Roteamento e capacidades variam com modelo/configuração do gateway.                                                                                                                                                         |
+| 9router / OmniRouter / Kimi | Transporte genérico configurável quando o endpoint implementa o protocolo suportado                                                 | Não há validação suficientemente específica para declarar cada serviço coberto. “OmniRouter” também pode apontar a serviços distintos.                                                                                      |
+| Llama-server                | Cliente dedicado com health, discovery, chat, Decision Model, embeddings, rerank, TTS e realtime de áudio                           | Discovery é declaração do servidor. Não substitui smoke test do modelo ou de cada modalidade.                                                                                                                               |
+| Laya standalone             | Adapter Laya para SystemOne, health e Decision Model de texto, bindings e CLI; checkpoint opcional                                  | Jev é um modelo específico. Não oferece chat genérico nem discovery OpenAI de llama-server; falta smoke com servidor/checkpoint real.                                                                                       |
+| Embeddings                  | OpenAI-compatible, OpenRouter, Cohere, Voyage, Ollama e llama-server; llama-server também aceita entradas multimodais via asset map | Dimensão, modalidade e formato seguem próprios de cada protocolo/modelo.                                                                                                                                                    |
+| Rerank                      | Cohere, Voyage, OpenRouter e llama-server; modalidade textual nos adapters declarados, texto/imagem efêmera no llama-server         | Scores e ordenação não devem ser comparados sem normalização contratual.                                                                                                                                                    |
+| Áudio                       | TTS bufferizado/streaming e sessão realtime de transcrição/conversa no llama-server                                                 | Batch STT OpenAI-compatible tem client multipart Rust e wrappers Python/TypeScript; fixtures Python/Node e gates locais passaram nesta revisão; smoke de serviço/modelo real pendente. Não implica STT de outros providers. |
+| Mídia/imagem/vídeo          | Tipos, asset map, envelopes persistível/efêmero, decisões por parte e conversões cobertas por adapters                              | Geração de imagem, operações gerais de vídeo, catálogo automático confiável e limites de duração/resolução permanecem pendentes; limites agregados de chat já existem.                                                      |
 
 ## Análise de paridade dos providers
 
@@ -77,6 +77,12 @@ Na verificação local de 17/11/2026, após a implementação do input audio:
   do contrato; a capability do perfil é verificada separadamente de Chat
   Completions. Isso comprova serialização, não suporte de cada modelo.
 
+Em uma verificação posterior do checkout (17/11/2026), `scons lint` passou;
+`scons tests` passou com 285 testes Rust, 3 fixtures Rust, 8 testes CLI, 1 teste
+nativo Python, 103 testes Python (10 skips) e 59 testes Node (18 skips). As
+fixtures novas exercitam multipart e asset map nos dois bindings. Os skips são
+condicionais à configuração de serviços e não contam como integração real de STT.
+
 Contagens pertencem àquela execução e não são garantia para outro SHA,
 ambiente ou configuração. O processo reutilizável está no
 [loop](../plans/05-loop-de-desenvolvimento.md).
@@ -90,8 +96,11 @@ ambiente ou configuração. O processo reutilizável está no
   modelo está nos bindings, mas discovery/cache é do consumidor. Completar catálogo/metadata
   confiáveis e definir limites de duração/resolução; ausência de dado precisa
   continuar como `unknown` e falhar de modo conservador.
-- Definir contratos antes de adicionar geração de imagem, batch STT e operações
-  gerais de vídeo; especificar suporte concreto, custos, streaming e bytes.
+- Definir contratos antes de adicionar geração de imagem e operações gerais de
+  vídeo; especificar suporte concreto, custos, streaming e bytes.
+- Batch STT usa multipart no perfil OpenAI-compatible, sem retry automático;
+  fixtures Rust passaram. Fechar testes dos bindings e gates; a fixture local
+  não comprova integração com serviços reais nem suporte de modelos específicos.
 - Executar smokes locais opt-in com versões fixadas de llama-server, Ollama e
   Laya quando os serviços/modelos estiverem disponíveis; para providers
   remotos, usar credenciais de teste sem expô-las em logs/fixtures.

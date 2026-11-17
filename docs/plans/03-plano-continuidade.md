@@ -24,6 +24,12 @@ para o charter 1.0 é cobrir uma jornada de agente utilizável de ponta a ponta:
   híbrida e rerank;
 - APIs Rust, Python e TypeScript com fixtures de conformidade, distribuição
   suportada, compatibilidade/versionamento e documentação operacional;
+- tools reutilizáveis de filesystem, Git, shell, planejamento e navegação, com
+  capabilities concedidas pelo host, sandbox efetivo reportado, execução
+  persistida, memória com proveniência e delegação segura a subagentes;
+- identidade configurável pelos consumidores: a Engine aceita contexto e
+  descriptor versionados, mas não possui Souls, contas, credenciais, catálogo
+  de produto ou UX;
 - testes de falha, reinício, concorrência, segurança e adoção reversível em
   consumidores reais.
 
@@ -58,11 +64,23 @@ trabalho independente.
 | Snapshot de contratos para hosts TypeScript                                                       | Implementada                                                                                                                                                                                                                                                                                 | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                         |
 | Providers/modalidades: chat, Decision Model, embeddings, rerank, áudio, bindings                  | Implementado parcialmente; Decision Model é categoria, Jev é modelo, SystemOne é API e Laya é runtime independente; Responses aceita WAV/MP3 e faz fallback textual seguro para outros MIME; faltam APIs/modelos reais e operações como geração de imagem/batch STT                          | spec 18, plano 06, checklist 05                                                                                       |
 | Mídia no chat: tipos, preparação, contexto e serialização por protocolo                           | Implementada parcialmente nos três níveis; requests persistíveis/efêmeros, asset map, limites por asset/agregados, retry multimodal e input audio WAV/MP3 no OpenAI Responses; catálogo e limites de duração/resolução pendentes                                                             | `chat/media.rs`, adapters OpenAI/native/fallback; checklist `docs/checklists/04-midia-no-chat.md`                     |
+| Harness de tools/identidade/isolamento                                                            | Parcial em contratos: tool loop, schemas, policy snapshots, approvals e stores SQLite existem; filesystem/Git/shell broker, identidade host versionada, sandbox executável, planos de alto nível, memória portável, subagentes e deep search não existem como capabilities comuns            | specs 01/10/12/13/16; auditoria Vectora `docs/analyses/09-runtime-tools-vectora.md`                                   |
 
 Os testes service-real (Redis, NATS, Qdrant, PostgreSQL) são condicionais às
 variáveis `VECTORA_TEST_*`; sem elas contam como não executados. Evidências e
 contagens por execução estão na
 [auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md).
+
+No domínio multimodal, a subcapability em implementação é transcrição batch
+via OpenAI-compatible `/v1/audio/transcriptions`. O core e os wrappers Python e
+TypeScript já estão conectados no checkout: asset map efêmero, validação de
+tamanho/digest/MIME, multipart, formatos JSON/texto/subtítulo e testes Rust
+estão implementados; os testes de contrato pelos bindings, lint e suíte integrada passaram. Falta
+smoke real com endpoint/modelo configurado e revisar limites operacionais de
+resposta. A operação não faz retry automático. Sua spec está em
+[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md)
+e o plano em
+[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md).
 
 ## Decisões vigentes
 
@@ -221,16 +239,31 @@ Origem: [spec 01](../specs/01-runtime-agentico-e-harness.md) e
 4. Ligação automática lifecycle, loop e policy (revalidação antes de cada
    efeito).
 5. Hooks pre-tool, post-tool e pre-final; Plan Mode; subagentes com escopo e
-   orçamento derivados; contrato de isolamento/sandbox. **[D]** segurança.
+   orçamento derivados; contrato de isolamento/sandbox.
 6. Decision Models. **[D]**.
 7. Redaction e fixtures de dois perfis de consumidor.
+8. Implementar tools portáveis filesystem/Git/shell, plano persistente,
+   “remember” com proveniência e execução de subagentes com parent ID; usar
+   grants derivados da policy e APIs do host para efeitos.
+9. Implementar pesquisa/navegação profunda bounded, com adapter de busca/fetch,
+   proveniência e validação SSRF em cada URL/redirect/link.
+10. Aceitar descriptor de identidade/Soul configurado pelo host, versionado e
+    escopado, sem manter conteúdo, contas ou credenciais de produto na Engine.
+
+O contrato, o plano ordenado, checklist e análise da expansão estão em
+[`docs/specs/21-harness-tools-identidade-e-isolamento.md`](../specs/21-harness-tools-identidade-e-isolamento.md),
+[`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](09-plano-runtime-tools-identidade-e-isolamento.md),
+[`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](../checklists/09-runtime-tools-identidade-e-isolamento.md)
+e [`docs/analyses/09-runtime-tools-vectora.md`](../analyses/09-runtime-tools-vectora.md).
 
 ### Fase 5 — memória, contexto e RAG
 
 Origem: spec 02 (fase S5 do plano de storage). Contratos de memória,
 documento, chunk e proveniência; Context Planner determinístico; compactação
 que preserva unidades; indexação com falha visível e RAG opt-in (lexical,
-híbrido, rerank). **[D]** dados e segurança. Depende das fases 2 e 3.
+híbrido, rerank). Memória episódica/semântica precisa de proveniência, escopo,
+sensibilidade, validade, revisão e deleção, conforme spec 21. Depende das fases
+2 e 3.
 
 ### Storage de grafos FalkorDB
 
@@ -265,7 +298,10 @@ por capacidade estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../spec
    **[D]** política de versão.
 5. Medições reproduzíveis por SHA (latência, memória, throughput, custo,
    recuperação).
-6. Completar operações ainda ausentes do [plano de providers](06-plano-provedores-e-modalidades-llama-cpp-v1.md), como geração de imagem, batch STT e vídeo, após contrato e evidência de endpoint/modelo.
+6. Batch STT OpenAI-compatible `/v1/audio/transcriptions`: core e bindings
+   implementados no checkout; fixtures Python/Node, typecheck/build, lint e suíte
+   local passaram. Resta smoke real e sincronização contínua dos registros. Geração de imagem e vídeo dedicado
+   permanecem pendentes até haver contrato e evidência de endpoint.
 
 ## Gates de adoção e release
 

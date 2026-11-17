@@ -1,6 +1,6 @@
 # Checklist completo do estado da Engine
 
-**Auditoria documental e de código:** 17 de novembro de 2026, checkout da área de trabalho. O inventário cobre 60 Markdown em `docs/`, documentação de raiz, implementação e testes disponíveis. Issues abertas são consultadas no GitHub como fontes de requisitos, não como estrutura deste checklist. As issues abertas atuais são #2, #20 e #58; seus corpos foram comparados com os contratos/código e há requisitos desatualizados em #58. Este estado descreve o checkout auditado, que pode conter capacidades ainda não integradas à branch principal.
+**Auditoria documental e de código:** 17 de novembro de 2026, checkout da área de trabalho. O inventário cobre 64 Markdown em `docs/`, documentação de raiz, implementação e testes disponíveis. Issues abertas são consultadas no GitHub como fontes de requisitos, não como estrutura deste checklist. As issues abertas atuais são #2, #20 e #58; seus corpos foram comparados com os contratos/código e há requisitos desatualizados em #58. Este estado descreve o checkout auditado, que pode conter capacidades ainda não integradas à branch principal.
 
 O status não representa aprovação de release, adoção por produto, paridade total com SDKs/serviços ou garantia de produção. Propostas sem aprovação permanecem sugestões.
 
@@ -59,7 +59,7 @@ O status não representa aprovação de release, adoção por produto, paridade 
 | ☑️     | Streaming TTS                                               | Chunks binários, limites, backpressure e cancelamento nos bindings, conforme fixtures.                                                                                   |
 | ☑️     | Sessão realtime de áudio/transcrição/conversa               | WebSocket `/v1/realtime`, eventos forward-compatible, envio/recepção e fechamento cancelável no cliente.                                                                 |
 | 🔍     | Interoperabilidade real de TTS/realtime/Decision Model      | Implementação e fixtures existem; execução com servidor e modelos reais compatíveis não está comprovada de forma abrangente.                                             |
-| ☐      | STT/transcrição batch geral                                 | Realtime não equivale a uma API batch; não há adapter batch geral identificado.                                                                                          |
+| 🟨     | STT/transcrição batch OpenAI-compatible                     | Core Rust e wrappers Python/TypeScript implementam `/v1/audio/transcriptions`, multipart e asset efêmero validado; fixtures binding e serviço real ainda pendentes.      |
 | ☐      | Geração de imagem                                           | Nenhuma API de geração de imagem implementada no escopo atual.                                                                                                           |
 | ☐      | Geração de vídeo                                            | Nenhuma API de geração de vídeo implementada no escopo atual.                                                                                                            |
 | 🟨     | Vision, entrada de áudio e vídeo em chat                    | Tipos e serialização existem nos providers/casos compatíveis; suporte efetivo depende do endpoint/modelo e não há catálogo abrangente nem testes reais de toda a matriz. |
@@ -168,7 +168,7 @@ O status não representa aprovação de release, adoção por produto, paridade 
 
 ## 7. Inventário documental analisado
 
-Foram inventariados os 60 Markdown sob `docs/` e os seis Markdown da raiz;
+Foram inventariados os 64 Markdown sob `docs/` e os seis Markdown da raiz;
 estrutura, links, estados e critérios foram confrontados com o checkout e os
 testes pertinentes. Títulos, corpos e estados das três issues abertas também
 foram comparados com código e specs. Esta auditoria documental continua em
@@ -196,7 +196,7 @@ Esta revisão organiza o estado por capability, consumidor, contrato e evidênci
 - ☑️ Plano/spec/checklist/análise de FalkorDB foram reestruturados por contrato, com configuração de teste e limitação de cancelamento remoto.
 - ☑️ Checklist/spec de mídia agora refletem requests persistíveis/efêmeros, partes de tools e adapter Responses; catálogo e limites de duração/resolução seguem pendentes.
 - 🔍 Revisar os registros históricos em `docs/checklists/01-cliente-openai-compatible.md`, `docs/checklists/02-matriz-conformidade-capabilities.md`, `docs/analyses/01-auditoria-cliente-openai-compatible.md`, `docs/analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md`, `docs/analyses/04-sabatina-engine-ecossistema.md` e `docs/audits/01-fotografia-historica-do-bootstrap.md`; preservar datas e bases auditadas e deixar explícito quando não descrevem o estado atual.
-- ☑️ Validar os links relativos do inventário de 60 Markdown, incluindo os nomes de documentos reorganizados.
+- ☑️ Validar os links relativos do inventário de 64 Markdown, incluindo os nomes de documentos reorganizados.
 
 ## 9. Prioridades abertas derivadas do inventário
 

@@ -133,15 +133,25 @@ títulos e bases de PR no estado dinâmico do GitHub.
 - [Engine CLI](../specs/20-engine-cli.md), [plano](../plans/08-plano-engine-cli.md),
   [checklist](../checklists/08-engine-cli.md) e
   [análise](08-auditoria-engine-cli.md).
+- [Harness, identidade configurável, tools, sandbox, memória, subagentes e
+  navegação](../specs/21-harness-tools-identidade-e-isolamento.md), [plano](../plans/09-plano-runtime-tools-identidade-e-isolamento.md),
+  [checklist](../checklists/09-runtime-tools-identidade-e-isolamento.md) e
+  [análise comparativa do Vectora](09-runtime-tools-vectora.md).
 
 ## Estado da revisão documental
 
-A auditoria do checkout de 17/11/2026 identificou documentos de provider,
-mídia e FalkorDB cuja organização seguia uma sequência de PRs e cujo texto
-contradizia o código (incluindo OpenAI Responses e filtro vetorial). Planos,
-specs, checklists e análises dessas capabilities foram atualizados por domínio
-ou operação. O inventário de 60 Markdown, a comparação com as três issues
-abertas e os documentos ainda pendentes de revisão estão em
+Na auditoria de 17/11/2026, além da documentação da Engine, foram consultados
+no Vectora o changelog (0.1.24–0.1.26), o código de tools/ledger/runtime e os
+títulos e corpos dos 7 PRs e 22 issues abertos; comentários e checks não foram
+consultados. Isso orientou a nova capability do Harness, sem tratar código ou
+propostas do app como implementação da Engine. A análise por domínio e as
+lacunas estão em [`docs/analyses/09-runtime-tools-vectora.md`](09-runtime-tools-vectora.md).
+
+A auditoria do checkout também identificou documentos de provider, mídia e
+FalkorDB cuja organização seguia uma sequência de PRs e cujo texto contradizia
+o código (incluindo OpenAI Responses e filtro vetorial). Planos, specs,
+checklists e análises dessas capabilities foram atualizados por domínio ou
+operação. O inventário transversal e os documentos ainda pendentes de revisão estão em
 [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md).
 Não registrar topo, número ou branch de PR no prompt reutilizável nem como
 estrutura de roadmap; o GitHub é fonte dinâmica de entrega.

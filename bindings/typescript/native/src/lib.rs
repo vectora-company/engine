@@ -42,6 +42,7 @@ use vectora_engine::llm::{
         FallbackRerankClient, FallbackRerankSettings, RerankClient, RerankClientSettings,
         RerankRequest,
     },
+    transcription::{TranscriptionClient, TranscriptionClientSettings, TranscriptionRequest},
 };
 use vectora_engine::storage::sqlite_loop::{DurableModelToolLoopState, SqliteModelToolLoopStore};
 use vectora_engine::storage::sqlite_policy::{DurableToolPolicyState, SqliteToolPolicyStore};
@@ -411,6 +412,11 @@ pub fn embedding_contract_version() -> u32 {
 #[napi]
 pub fn rerank_contract_version() -> u32 {
     u32::from(vectora_engine::llm::rerank::RERANK_CONTRACT_VERSION)
+}
+
+#[napi]
+pub fn transcription_contract_version() -> u32 {
+    u32::from(vectora_engine::llm::transcription::TRANSCRIPTION_CONTRACT_VERSION)
 }
 
 #[napi]
@@ -2003,6 +2009,24 @@ pub async fn fallback_rerank(settings_json: String, request_json: String) -> Res
     let (client, request) = parse_fallback_rerank_inputs(&settings_json, &request_json)?;
     let response = client
         .rerank(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
+pub async fn transcribe_ephemeral(settings_json: String, request_json: String) -> Result<String> {
+    let (settings, context) = split_media_context(&settings_json)?;
+    let context = context.ok_or_else(|| {
+        Error::from_reason("batch transcription requires a consumer media context")
+    })?;
+    let settings: TranscriptionClientSettings = serde_json::from_value(settings)
+        .map_err(|_| Error::from_reason("invalid transcription settings"))?;
+    let request: TranscriptionRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid transcription request"))?;
+    let response = TranscriptionClient::new(settings)
+        .map_err(|error| Error::from_reason(error.to_string()))?
+        .transcribe_ephemeral(request, &context)
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&response)

@@ -386,6 +386,13 @@ export declare function rerank(
 
 export declare function rerankContractVersion(): number;
 
+export declare function transcribeEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function transcriptionContractVersion(): number;
+
 export declare function resilientLedgerAppend(
   path: string,
   draftJson: string,
