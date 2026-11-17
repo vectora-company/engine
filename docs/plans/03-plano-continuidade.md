@@ -142,9 +142,12 @@ no checklist da capability, não nesta cronologia de entregas.
 Origem: [plano de storage](04-plano-storage-ledger.md) e
 [spec 02](../specs/02-storage-memoria-contexto-rag.md).
 
-1. Vetorial nos dois backends: filtro por metadado, índice ANN parametrizado,
-   quantização, busca lexical/híbrida, falhas de indexação visíveis e
-   backup/snapshot. **[D]** mapeamento comum de índices.
+1. Vetorial nos dois backends: **filtros escalares equivalentes implementados**
+   antes do top-k, com paths aninhados e composição lógica; contrato vetorial 3
+   usa metadata JSON consultável no LanceDB e exige recriação das coleções com
+   schema legado. Seguem pendentes índice ANN parametrizado, quantização,
+   busca lexical/híbrida, falhas de indexação visíveis e backup/snapshot.
+   **[D]** mapeamento comum de índices.
 2. Filas nos dois backends: **NACK/reentrega atrasada, enqueue idempotente por
    janela e replay read-only paginado por cursor implementados e testados nos
    dois serviços e bindings**. O replay mantém posição vinculada a versão,

@@ -52,6 +52,9 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
       (`*` para um segmento, `>` terminal para vários); os testes reais Rust,
       Python e Node confirmam filtragem e publicação entregue antes do retorno.
       Reconexão observável permanece pendente.
+- [x] LanceDB e Qdrant oferecem filtros de metadados escalares equivalentes
+      antes do top-k, expostos em Python e TypeScript. O contrato vetorial 3
+      registra a incompatibilidade com coleções LanceDB legadas em `Utf8`.
 
 ## Contratos e desenho
 

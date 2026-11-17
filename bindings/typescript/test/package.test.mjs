@@ -308,7 +308,7 @@ test("storage capabilities state backend differences from Rust", () => {
   assert.ok(sql.implemented.includes("ledger_backup_verify"));
   assert.ok(sql.implemented.includes("ledger_restore"));
   assert.equal(vector.score_direction, "higher_is_closer");
-  assert.ok(vector.not_implemented.includes("metadata_filter"));
+  assert.ok(vector.implemented.includes("metadata_filter"));
   assert.ok(vector.not_implemented.includes("configurable_ann_index"));
   assert.ok(vector.not_implemented.includes("quantization"));
   assert.equal(kv.ttl, true);
