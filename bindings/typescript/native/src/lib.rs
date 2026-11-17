@@ -30,8 +30,9 @@ use vectora_engine::harness::{
     RunLifecycle, RunStatus, TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION,
     TOOL_POLICY_CONTRACT_VERSION, TOOL_RESULT_CONTRACT_VERSION, ToolContract, ToolDispatch,
     ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
-    authorize_tool_dispatch, cancel_model_tool_loop, evaluate_verification, prepare_tool_dispatch,
-    reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
+    authorize_tool_dispatch, authorize_tool_dispatch_with_identity, cancel_model_tool_loop,
+    evaluate_verification, prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop,
+    tool_chat_definitions,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -1907,6 +1908,48 @@ pub fn authorize_tool_dispatch_json(
         settings,
         &snapshot,
         &grants,
+        now_ms,
+    )
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&evaluation)
+}
+
+#[napi]
+#[allow(clippy::too_many_arguments)]
+pub fn authorize_tool_dispatch_with_identity_json(
+    lifecycle_json: String,
+    completion_json: String,
+    contracts_json: String,
+    settings_json: String,
+    snapshot_json: String,
+    approvals_json: String,
+    identity_json: String,
+    now_ms: i64,
+) -> Result<String> {
+    let lifecycle: RunLifecycle = serde_json::from_str(&lifecycle_json)
+        .map_err(|_| Error::from_reason("invalid run lifecycle"))?;
+    let completion = serde_json::from_str(&completion_json)
+        .map_err(|_| Error::from_reason("invalid chat completion"))?;
+    let contracts: Vec<ToolContract> = serde_json::from_str(&contracts_json)
+        .map_err(|_| Error::from_reason("invalid tool contracts"))?;
+    let settings: ToolDispatchSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid dispatch settings"))?;
+    let snapshot: PolicySnapshot = serde_json::from_str(&snapshot_json)
+        .map_err(|_| Error::from_reason("invalid policy snapshot"))?;
+    let approvals: Vec<ApprovalGrant> = serde_json::from_str(&approvals_json)
+        .map_err(|_| Error::from_reason("invalid approval grants"))?;
+    let identity: HostIdentityContext = serde_json::from_str(&identity_json)
+        .map_err(|_| Error::from_reason("invalid host identity context"))?;
+    let now_ms =
+        u64::try_from(now_ms).map_err(|_| Error::from_reason("now_ms must be non-negative"))?;
+    let evaluation = authorize_tool_dispatch_with_identity(
+        &lifecycle,
+        &completion,
+        &contracts,
+        settings,
+        &snapshot,
+        &approvals,
+        &identity,
         now_ms,
     )
     .map_err(|error| Error::from_reason(error.to_string()))?;

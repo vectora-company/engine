@@ -13,8 +13,9 @@ use thiserror::Error;
 use crate::chat::{ChatCompletion, ToolArguments, ToolCall};
 
 use super::{
-    RunLifecycle, ToolContract, ToolDecision, ToolDenialCode, ToolDispatch, ToolDispatchError,
-    ToolDispatchSettings, ToolEffect, prepare_tool_dispatch,
+    HostIdentityContext, HostIdentityError, RunLifecycle, ToolContract, ToolDecision,
+    ToolDenialCode, ToolDispatch, ToolDispatchError, ToolDispatchSettings, ToolEffect,
+    prepare_tool_dispatch, validate_host_identity_context,
 };
 
 /// Version of the policy evaluation and approval binding contract.
@@ -150,6 +151,8 @@ pub enum ToolPolicyError {
     SnapshotRunMismatch,
     #[error("policy snapshot has expired")]
     SnapshotExpired,
+    #[error("host identity does not match the active run and policy")]
+    HostIdentityMismatch,
     #[error("policy contains too many entries")]
     TooManyEntries,
     #[error("policy entry is invalid")]
@@ -164,6 +167,8 @@ pub enum ToolPolicyError {
     Dispatch(#[from] ToolDispatchError),
     #[error(transparent)]
     Run(#[from] super::RunError),
+    #[error(transparent)]
+    HostIdentity(#[from] HostIdentityError),
 }
 
 /// Prepare and enforce one tool batch against a run-bound policy snapshot.
@@ -314,6 +319,56 @@ pub fn authorize_tool_dispatch(
         decisions,
         dispatch: authorized_dispatch,
     })
+}
+
+/// Authorize a tool batch using a host-authenticated identity assertion.
+///
+/// Missing capability grants are converted to explicit policy denies. The
+/// caller must authenticate the context issuer before calling and invoke this
+/// immediately before effects; validation here cannot detect later revocation.
+#[allow(clippy::too_many_arguments)]
+pub fn authorize_tool_dispatch_with_identity(
+    run: &RunLifecycle,
+    completion: &ChatCompletion,
+    contracts: &[ToolContract],
+    settings: ToolDispatchSettings,
+    snapshot: &PolicySnapshot,
+    approvals: &[ApprovalGrant],
+    identity: &HostIdentityContext,
+    now_ms: u64,
+) -> Result<PolicyEvaluation, ToolPolicyError> {
+    validate_host_identity_context(identity, now_ms)?;
+    if run.identity.actor_id.as_deref() != Some(identity.subject.as_str())
+        || run.identity.scope_id.as_deref() != Some(identity.scope_id.as_str())
+        || snapshot.actor_id.as_deref() != Some(identity.subject.as_str())
+        || snapshot.scope_id.as_deref() != Some(identity.scope_id.as_str())
+        || snapshot.policy_digest != identity.policy_digest
+    {
+        return Err(ToolPolicyError::HostIdentityMismatch);
+    }
+
+    let granted: HashSet<&str> = identity
+        .grants
+        .iter()
+        .map(|grant| grant.capability.as_str())
+        .collect();
+    let mut effective_snapshot = snapshot.clone();
+    effective_snapshot.denied_capabilities.extend(
+        contracts
+            .iter()
+            .filter(|contract| !granted.contains(contract.required_capability.as_str()))
+            .map(|contract| contract.required_capability.clone()),
+    );
+
+    authorize_tool_dispatch(
+        run,
+        completion,
+        contracts,
+        settings,
+        &effective_snapshot,
+        approvals,
+        now_ms,
+    )
 }
 
 pub fn validate_policy_snapshot(
@@ -478,7 +533,10 @@ fn canonical_json(value: &Value) -> String {
 mod tests {
     use super::*;
     use crate::chat::{CHAT_CONTRACT_VERSION, FinishReason};
-    use crate::harness::{RUN_CONTRACT_VERSION, RunIdentity, RunStatus};
+    use crate::harness::{
+        CapabilityGrant, HOST_IDENTITY_CONTRACT_VERSION, HostIdentityContext, RUN_CONTRACT_VERSION,
+        RunIdentity, RunStatus,
+    };
     use serde_json::json;
 
     fn active_run() -> RunLifecycle {
@@ -550,6 +608,28 @@ mod tests {
             untrusted_content: false,
             approval_mode: ApprovalMode::RequireAllEffects,
             expires_at_ms: Some(5000),
+        }
+    }
+
+    fn host_identity(capability: &str) -> HostIdentityContext {
+        HostIdentityContext {
+            contract_version: HOST_IDENTITY_CONTRACT_VERSION,
+            issuer: "host:test".into(),
+            subject: "actor-1".into(),
+            identity_id: "assistant-1".into(),
+            identity_revision: "r1".into(),
+            identity_digest: "sha256:identity".into(),
+            scope_id: "workspace-1".into(),
+            policy_digest: "sha256:policy-a".into(),
+            issued_at_ms: 100,
+            expires_at_ms: 4000,
+            grants: vec![CapabilityGrant {
+                capability: capability.into(),
+                scope_id: "workspace-1".into(),
+                policy_digest: "sha256:policy-a".into(),
+                issued_at_ms: 100,
+                expires_at_ms: 3000,
+            }],
         }
     }
 
@@ -679,6 +759,68 @@ mod tests {
         assert_eq!(
             evaluate(&run, &call, &contract, &policy, &[], 5000),
             Err(ToolPolicyError::SnapshotExpired)
+        );
+    }
+
+    #[test]
+    fn identity_dispatch_denies_missing_grants_and_rejects_cross_scope_context() {
+        let run = active_run();
+        let call = completion("src/main.rs");
+        let tool = contract(ToolEffect::ReadOnly);
+        let denied = authorize_tool_dispatch_with_identity(
+            &run,
+            &call,
+            std::slice::from_ref(&tool),
+            ToolDispatchSettings::default(),
+            &snapshot(),
+            &[],
+            &host_identity("file.read"),
+            1000,
+        )
+        .unwrap();
+        assert!(matches!(
+            denied.decisions[0],
+            ToolAuthorizationDecision::Deny {
+                code: ToolDenialCode::PolicyCapabilityDenied,
+                ..
+            }
+        ));
+        assert!(matches!(
+            denied.dispatch.unwrap().decisions[0],
+            ToolDecision::Deny { .. }
+        ));
+
+        let allowed = authorize_tool_dispatch_with_identity(
+            &run,
+            &call,
+            &[tool],
+            ToolDispatchSettings::default(),
+            &snapshot(),
+            &[],
+            &host_identity("file.write"),
+            1000,
+        )
+        .unwrap();
+        assert!(matches!(
+            allowed.dispatch.unwrap().decisions[0],
+            ToolDecision::Invoke { .. }
+        ));
+
+        let mut mismatched = host_identity("file.write");
+        mismatched.scope_id = "other-workspace".into();
+        mismatched.grants[0].scope_id = "other-workspace".into();
+        assert_eq!(
+            authorize_tool_dispatch_with_identity(
+                &run,
+                &call,
+                &[contract(ToolEffect::ReadOnly)],
+                ToolDispatchSettings::default(),
+                &snapshot(),
+                &[],
+                &mismatched,
+                1000,
+            ),
+            Err(ToolPolicyError::HostIdentityMismatch)
         );
     }
 

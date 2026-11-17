@@ -26,6 +26,9 @@ implementação e teste; planejar não equivale a implementar.
 - [ ] Contexto de identidade autenticado pelo host, versão, escopo, expiração e
       digest validado; nenhum segredo entra no prompt.
 - [ ] Policy é revalidada antes de efeito, retomada, batch e delegação.
+- [parcial] `authorize_tool_dispatch_with_identity` nega capabilities sem grant
+  e vincula actor/scope/policy digest; o host ainda precisa autenticar o issuer
+  e revalidar imediatamente antes de cada adapter/efeito.
 - [ ] Tool tem schemas input/output, capability, risco, timeout, limite,
       cancellation, retry/idempotência, redaction e evidence definidos.
 - [ ] Ledger confirma intenção/resultado antes de liberar ação/resultado; falha

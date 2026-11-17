@@ -20,6 +20,17 @@ export declare function authorizeToolDispatchJson(
   nowMs: number,
 ): string;
 
+export declare function authorizeToolDispatchWithIdentityJson(
+  lifecycleJson: string,
+  completionJson: string,
+  contractsJson: string,
+  settingsJson: string,
+  snapshotJson: string,
+  approvalsJson: string,
+  identityJson: string,
+  nowMs: number,
+): string;
+
 export declare function chatAssembleTurn(
   settingsJson: string,
   eventsJson: string,

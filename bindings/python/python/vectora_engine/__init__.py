@@ -809,6 +809,31 @@ def authorize_tool_dispatch(
     return json.loads(result)
 
 
+def authorize_tool_dispatch_with_identity(
+    lifecycle: JsonObject,
+    completion: JsonObject,
+    contracts: Sequence[JsonObject],
+    snapshot: JsonObject,
+    identity: JsonObject,
+    approvals: Sequence[JsonObject] = (),
+    *,
+    now_ms: int,
+    max_calls_per_turn: int = 32,
+) -> dict[str, Any]:
+    """Fail closed unless authenticated host grants cover the tool batch."""
+    result = _native.authorize_tool_dispatch_with_identity_json(
+        json.dumps(lifecycle, separators=(",", ":")),
+        json.dumps(completion, separators=(",", ":")),
+        json.dumps(contracts, separators=(",", ":")),
+        json.dumps({"max_calls_per_turn": max_calls_per_turn}, separators=(",", ":")),
+        json.dumps(snapshot, separators=(",", ":")),
+        json.dumps(approvals, separators=(",", ":")),
+        json.dumps(identity, separators=(",", ":")),
+        now_ms,
+    )
+    return json.loads(result)
+
+
 def tool_chat_definitions(contracts: Sequence[JsonObject]) -> list[dict[str, Any]]:
     """Build provider-visible tool schemas from validated Rust contracts."""
     result = _native.tool_chat_definitions_json(
