@@ -332,6 +332,11 @@ export declare function pubsubUnsubscribe(subscriptionId: string): void;
 
 export declare function queueAck(deliveryId: string): Promise<void>;
 
+export declare function queueNack(
+  deliveryId: string,
+  delayMs: number,
+): Promise<void>;
+
 export declare function queueEnqueue(
   configJson: string,
   payloadJson: string,

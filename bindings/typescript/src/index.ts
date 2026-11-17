@@ -755,6 +755,7 @@ interface NativeBinding {
     timeoutMs: number,
   ): Promise<string>;
   queueAck(deliveryId: string): Promise<void>;
+  queueNack(deliveryId: string, delayMs: number): Promise<void>;
   queueRelease(deliveryId: string): void;
   pubsubPublish(
     configJson: string,
@@ -1366,6 +1367,13 @@ export async function queueReceiveDeadLetter(
 }
 export async function queueAck(deliveryId: string): Promise<void> {
   await native.queueAck(deliveryId);
+}
+/** Reject a delivery and request redelivery after a delay up to the visibility timeout. */
+export async function queueNack(
+  deliveryId: string,
+  delayMs = 0,
+): Promise<void> {
+  await native.queueNack(deliveryId, delayMs);
 }
 /** Drop a handle without ACK so the provider may redeliver after its visibility timeout. */
 export function queueRelease(deliveryId: string): void {

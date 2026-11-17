@@ -213,10 +213,13 @@ impl StorageSelection {
             Some(QueueBackend::RedisStreams) => backends.push(entry(
                 "queue",
                 "redis_streams",
-                &["durable_queue", "dead_letter_queue"],
                 &[
+                    "durable_queue",
                     "negative_ack",
-                    "scheduled_retry",
+                    "scheduled_retry_within_visibility_timeout",
+                    "dead_letter_queue",
+                ],
+                &[
                     "publisher_deduplication",
                     "queue_replay_from_cursor",
                     "graceful_consumer_shutdown",
@@ -227,6 +230,7 @@ impl StorageSelection {
                 Some(true),
                 &[
                     "Unacknowledged deliveries are reclaimed with XAUTOCLAIM after the visibility timeout.",
+                    "NACK keeps the stream entry pending and schedules reclaim up to the configured visibility timeout.",
                     "Source stream retention is capped by max_messages (default 100000); oldest entries can be trimmed, including pending deliveries.",
                     "After max_attempts (default 5), unacknowledged jobs move to a separately consumable dead-letter stream.",
                     "Dead-letter transfer and source ACK are atomic in Redis.",
@@ -235,10 +239,13 @@ impl StorageSelection {
             Some(QueueBackend::NatsJetstream) => backends.push(entry(
                 "queue",
                 "nats_jetstream",
-                &["durable_queue", "dead_letter_queue"],
                 &[
+                    "durable_queue",
                     "negative_ack",
-                    "scheduled_retry",
+                    "scheduled_retry_within_visibility_timeout",
+                    "dead_letter_queue",
+                ],
+                &[
                     "publisher_deduplication",
                     "queue_replay_from_cursor",
                     "graceful_consumer_shutdown",
@@ -249,6 +256,7 @@ impl StorageSelection {
                 Some(true),
                 &[
                     "Durable consumers redeliver after ack_wait.",
+                    "NAK schedules redelivery up to the configured ack_wait.",
                     "Source stream retention is capped by max_messages (default 100000); oldest entries can be removed, including pending deliveries.",
                     "After max_attempts (default 5), unacknowledged jobs move to a separately consumable dead-letter stream.",
                     "Dead-letter publication is at-least-once before the source ACK and may duplicate if the ACK is lost.",
@@ -403,6 +411,12 @@ mod tests {
                 .any(|note| note.contains("keyspace notifications"))
         );
         let queue = &report.backends[3];
+        assert!(
+            queue
+                .implemented
+                .iter()
+                .any(|item| item == "scheduled_retry_within_visibility_timeout")
+        );
         assert!(
             queue
                 .not_implemented

@@ -1150,7 +1150,8 @@ impl RedisStreamQueue {
                 return Ok(None);
             }
             let attempts = u32::try_from(*attempts).unwrap_or(u32::MAX);
-            return redis_delivery(&self.store, key, group, entry, attempts).map(Some);
+            return redis_delivery(&self.store, key, group, entry, attempts, visibility_timeout)
+                .map(Some);
         }
         let block_ms = block.as_millis().clamp(1, 30_000) as usize;
         let reply: StreamReadReply = redis::cmd("XREADGROUP")
@@ -1170,7 +1171,7 @@ impl RedisStreamQueue {
         let Some(entry) = reply.keys.into_iter().flat_map(|stream| stream.ids).next() else {
             return Ok(None);
         };
-        redis_delivery(&self.store, key, group, entry, 1).map(Some)
+        redis_delivery(&self.store, key, group, entry, 1, visibility_timeout).map(Some)
     }
 }
 
@@ -1180,6 +1181,7 @@ fn redis_delivery(
     group: &str,
     entry: redis::streams::StreamId,
     attempts: u32,
+    visibility_timeout: Duration,
 ) -> Result<RedisQueueDelivery, MessagingError> {
     let payload = redis::from_redis_value::<Vec<u8>>(
         entry.map.get("payload").ok_or(MessagingError::Storage)?,
@@ -1192,6 +1194,7 @@ fn redis_delivery(
         id: entry.id,
         payload,
         attempts,
+        visibility_timeout,
     })
 }
 
@@ -1202,9 +1205,43 @@ pub struct RedisQueueDelivery {
     pub id: String,
     pub payload: Vec<u8>,
     pub attempts: u32,
+    visibility_timeout: Duration,
 }
 
 impl RedisQueueDelivery {
+    pub async fn nack(self, delay: Duration) -> Result<(), MessagingError> {
+        if delay > self.visibility_timeout {
+            return Err(MessagingError::InvalidInput);
+        }
+        let idle_ms = self
+            .visibility_timeout
+            .saturating_sub(delay)
+            .as_millis()
+            .min(usize::MAX as u128) as usize;
+        let mut conn = self
+            .store
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        let claimed: Vec<String> = redis::cmd("XCLAIM")
+            .arg(&self.stream)
+            .arg(&self.group)
+            .arg("vectora-retry")
+            .arg(0)
+            .arg(&self.id)
+            .arg("IDLE")
+            .arg(idle_ms)
+            .arg("JUSTID")
+            .query_async(&mut conn)
+            .await
+            .map_err(|_| MessagingError::Storage)?;
+        if claimed.iter().any(|id| id == &self.id) {
+            Ok(())
+        } else {
+            Err(MessagingError::Storage)
+        }
+    }
+
     pub async fn ack(self) -> Result<(), MessagingError> {
         let mut conn = self
             .store
@@ -1392,6 +1429,7 @@ impl NatsStreamQueue {
                     Ok(Some(NatsQueueDelivery {
                         message,
                         attempts: u32::try_from(attempts).unwrap_or(u32::MAX),
+                        ack_wait: self.ack_wait,
                     }))
                 }
             }
@@ -1425,7 +1463,11 @@ impl NatsStreamQueue {
                     .map_err(|_| MessagingError::Storage)?
                     .delivered
                     .max(1) as u32;
-                Ok(Some(NatsQueueDelivery { message, attempts }))
+                Ok(Some(NatsQueueDelivery {
+                    message,
+                    attempts,
+                    ack_wait: self.ack_wait,
+                }))
             }
             None => Ok(None),
         }
@@ -1457,6 +1499,7 @@ async fn pull_nats_queue_message(
 pub struct NatsQueueDelivery {
     message: async_nats::jetstream::Message,
     attempts: u32,
+    ack_wait: Duration,
 }
 
 impl NatsQueueDelivery {
@@ -1472,12 +1515,22 @@ impl NatsQueueDelivery {
             .await
             .map_err(|_| MessagingError::Storage)
     }
+
+    pub async fn nack(self, delay: Duration) -> Result<(), MessagingError> {
+        if delay > self.ack_wait {
+            return Err(MessagingError::InvalidInput);
+        }
+        self.message
+            .ack_with(async_nats::jetstream::AckKind::Nak(Some(delay)))
+            .await
+            .map_err(|_| MessagingError::Storage)
+    }
 }
 
 /// Provider-neutral delivery. A delivery is acknowledged explicitly; dropping
 /// it leaves the provider's normal redelivery policy in effect.
 pub enum QueueDelivery {
-    Redis(RedisQueueDelivery),
+    Redis(Box<RedisQueueDelivery>),
     Nats(Box<NatsQueueDelivery>),
 }
 
@@ -1517,6 +1570,15 @@ impl QueueDelivery {
         match self {
             Self::Redis(delivery) => delivery.ack().await,
             Self::Nats(delivery) => delivery.ack().await,
+        }
+    }
+
+    /// Reject this delivery and make it eligible after `delay`.
+    /// The common limit is the configured visibility timeout.
+    pub async fn nack(self, delay: Duration) -> Result<(), MessagingError> {
+        match self {
+            Self::Redis(delivery) => delivery.nack(delay).await,
+            Self::Nats(delivery) => delivery.nack(delay).await,
         }
     }
 }
@@ -1596,7 +1658,7 @@ impl QueueAdapter {
                     Some(*max_attempts),
                 )
                 .await
-                .map(|delivery| delivery.map(QueueDelivery::Redis)),
+                .map(|delivery| delivery.map(|delivery| QueueDelivery::Redis(Box::new(delivery)))),
             Self::Nats { queue, .. } => queue
                 .receive(group, timeout)
                 .await
@@ -1629,7 +1691,9 @@ impl QueueAdapter {
                         None,
                     )
                     .await
-                    .map(|delivery| delivery.map(QueueDelivery::Redis))
+                    .map(|delivery| {
+                        delivery.map(|delivery| QueueDelivery::Redis(Box::new(delivery)))
+                    })
             }
             Self::Nats { queue, .. } => queue
                 .receive_dead_letter(group, timeout)
@@ -1984,6 +2048,55 @@ mod tests {
                     .is_none(),
                 "{backend:?}: an acknowledged job must not be redelivered"
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn nack_schedules_redelivery_with_attempt_count_on_each_broker() {
+        let mut targets = Vec::new();
+        if let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") {
+            targets.push((super::super::QueueBackend::RedisStreams, url));
+        }
+        if let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") {
+            targets.push((super::super::QueueBackend::NatsJetstream, url));
+        }
+        for (backend, endpoint) in targets {
+            let queue = QueueAdapter::connect(QueueConfig {
+                backend,
+                endpoint,
+                namespace: format!("nackq_{}", unique_suffix()),
+                visibility_timeout_seconds: 2,
+                max_messages: 100_000,
+                max_attempts: 5,
+            })
+            .await
+            .unwrap();
+            queue.enqueue(b"retry-job".to_vec()).await.unwrap();
+            let first = queue
+                .receive("worker-a", "workers", Duration::from_secs(2))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(first.attempts(), 1, "{backend:?}");
+            first.nack(Duration::from_millis(300)).await.unwrap();
+
+            assert!(
+                queue
+                    .receive("worker-b", "workers", Duration::from_millis(100))
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{backend:?}: a delayed NACK must not be immediately visible"
+            );
+            tokio::time::sleep(Duration::from_millis(350)).await;
+            let retry = queue
+                .receive("worker-b", "workers", Duration::from_secs(2))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(retry.payload(), b"retry-job", "{backend:?}");
+            assert_eq!(retry.attempts(), 2, "{backend:?}");
+            retry.ack().await.unwrap();
         }
     }
 
