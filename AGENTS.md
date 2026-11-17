@@ -47,6 +47,11 @@ specs locais.
 8. Use Conventional Commits. Títulos e descrições de PR em português; para
    mudanças ligadas a uma spec, inclua uma única linha `Refs: #N` ou
    `Closes: #N` quando houver issue pública correspondente.
+9. Ao decidir entre métodos que possam coexistir sem conflito, implemente e
+   exponha ambos e escolha um padrão recomendado, explicando como o consumidor
+   seleciona a alternativa. Se forem incompatíveis e só um puder ser adotado,
+   estude ambos, compare capacidade, riscos e custos, apresente o comparativo a
+   `brunosrz` no chat e aguarde a escolha antes de fechar o contrato.
 
 ## Fluxo de trabalho do mantenedor
 
