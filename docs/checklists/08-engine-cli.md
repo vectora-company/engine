@@ -18,4 +18,4 @@
 - [x] `scons install` chama o mesmo helper de compilação/registro; execução isolada não realizada porque também instala sidecars, imagens de serviços e dependências de desenvolvimento.
 - [x] Spec, plano, análise, checklist, índices e documentos do goal-loop referenciam a capability.
 - [x] Wizard smoke salvou OpenRouter, modelo, chave modo 0600 e Decision Model llama.cpp/Laya-GGUF.
-- [ ] Commit e push de atualização do PR #121, filho do #120.
+- [x] Commit, push e PR empilhado publicados; conferir a base corrente diretamente no GitHub ao retomar.
