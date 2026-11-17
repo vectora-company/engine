@@ -548,6 +548,8 @@ pub struct MediaExecutionContext {
     pub resolver: CapabilityResolver,
     pub store: Arc<dyn MediaStore>,
     pub max_media_bytes: u64,
+    pub max_total_media_bytes: Option<u64>,
+    pub max_media_parts: Option<usize>,
 }
 
 impl std::fmt::Debug for MediaExecutionContext {
@@ -556,6 +558,8 @@ impl std::fmt::Debug for MediaExecutionContext {
             .field("resolver", &self.resolver)
             .field("store", &"[consumer-owned]")
             .field("max_media_bytes", &self.max_media_bytes)
+            .field("max_total_media_bytes", &self.max_total_media_bytes)
+            .field("max_media_parts", &self.max_media_parts)
             .finish()
     }
 }
@@ -566,12 +570,51 @@ impl MediaExecutionContext {
             resolver,
             store,
             max_media_bytes: DEFAULT_MAX_MEDIA_BYTES,
+            max_total_media_bytes: None,
+            max_media_parts: None,
         }
     }
 
     pub fn with_max_media_bytes(mut self, max_media_bytes: u64) -> Self {
         self.max_media_bytes = max_media_bytes;
         self
+    }
+
+    /// Caps the sum of media bytes the context may materialize for one request.
+    pub fn with_max_total_media_bytes(mut self, limit: u64) -> Self {
+        self.max_total_media_bytes = Some(limit);
+        self
+    }
+
+    /// Caps the number of media assets the context may materialize for one request.
+    pub fn with_max_media_parts(mut self, limit: usize) -> Self {
+        self.max_media_parts = Some(limit);
+        self
+    }
+
+    /// Prepares standalone content using the same limits and resolver as chat.
+    pub async fn prepare_content(
+        &self,
+        provider: &str,
+        model: &str,
+        parts: Vec<ContentPart>,
+        site: ContentSite,
+    ) -> PreparedContent {
+        let capabilities = self.resolver.resolve(provider, model);
+        let mut budget = MediaBudget::new(self.max_total_media_bytes, self.max_media_parts);
+        prepare_content_with_budget(
+            parts,
+            MediaPreparation {
+                capabilities: &capabilities,
+                store: self.store.as_ref(),
+                model,
+                site,
+                max_media_bytes: self.max_media_bytes,
+                model_limits: self.resolver.media_limits_for(provider, model),
+            },
+            &mut budget,
+        )
+        .await
     }
 
     /// Prepares media in the current user turn and following tool results.
@@ -619,6 +662,7 @@ impl MediaExecutionContext {
             .rposition(|message| message.role == super::MessageRole::User)
             .unwrap_or(request.messages.len());
         let mut decisions = Vec::new();
+        let mut budget = MediaBudget::new(self.max_total_media_bytes, self.max_media_parts);
         for (message_index, message) in request.messages.iter_mut().enumerate().skip(start) {
             if !matches!(
                 message.role,
@@ -634,14 +678,17 @@ impl MediaExecutionContext {
             let super::MessageContent::Parts(parts) = &mut message.content else {
                 continue;
             };
-            let prepared = prepare_content_with_limits(
+            let prepared = prepare_content_with_budget(
                 std::mem::take(parts),
-                &capabilities,
-                self.store.as_ref(),
-                &request.model,
-                site,
-                self.max_media_bytes,
-                self.resolver.media_limits_for(provider, &request.model),
+                MediaPreparation {
+                    capabilities: &capabilities,
+                    store: self.store.as_ref(),
+                    model: &request.model,
+                    site,
+                    max_media_bytes: self.max_media_bytes,
+                    model_limits: self.resolver.media_limits_for(provider, &request.model),
+                },
+                &mut budget,
             )
             .await;
             *parts = prepared.parts;
@@ -764,6 +811,80 @@ pub async fn prepare_content_with_limits(
     max_media_bytes: u64,
     model_limits: MediaSizeLimits,
 ) -> PreparedContent {
+    let mut budget = MediaBudget::default();
+    prepare_content_with_budget(
+        parts,
+        MediaPreparation {
+            capabilities,
+            store,
+            model,
+            site,
+            max_media_bytes,
+            model_limits,
+        },
+        &mut budget,
+    )
+    .await
+}
+
+struct MediaPreparation<'a> {
+    capabilities: &'a ModalityCapabilities,
+    store: &'a dyn MediaStore,
+    model: &'a str,
+    site: ContentSite,
+    max_media_bytes: u64,
+    model_limits: MediaSizeLimits,
+}
+
+#[derive(Clone, Debug, Default)]
+struct MediaBudget {
+    max_total_media_bytes: Option<u64>,
+    max_media_parts: Option<usize>,
+    total_media_bytes: u64,
+    media_parts: usize,
+}
+
+impl MediaBudget {
+    fn new(max_total_media_bytes: Option<u64>, max_media_parts: Option<usize>) -> Self {
+        Self {
+            max_total_media_bytes,
+            max_media_parts,
+            ..Self::default()
+        }
+    }
+
+    fn reserve(&mut self, size_bytes: u64) -> Result<(), &'static str> {
+        if self
+            .max_media_parts
+            .is_some_and(|limit| self.media_parts >= limit)
+        {
+            return Err("mídia excede o limite agregado de assets");
+        }
+        let next_count = self
+            .media_parts
+            .checked_add(1)
+            .ok_or("mídia excede o limite agregado de assets")?;
+        let next_total = self
+            .total_media_bytes
+            .checked_add(size_bytes)
+            .ok_or("mídia excede o limite agregado de bytes")?;
+        if self
+            .max_total_media_bytes
+            .is_some_and(|limit| next_total > limit)
+        {
+            return Err("mídia excede o limite agregado de bytes");
+        }
+        self.media_parts = next_count;
+        self.total_media_bytes = next_total;
+        Ok(())
+    }
+}
+
+async fn prepare_content_with_budget(
+    parts: Vec<ContentPart>,
+    preparation: MediaPreparation<'_>,
+    budget: &mut MediaBudget,
+) -> PreparedContent {
     let mut prepared = Vec::with_capacity(parts.len());
     let mut decisions = Vec::new();
     for (index, part) in parts.into_iter().enumerate() {
@@ -771,13 +892,19 @@ pub async fn prepare_content_with_limits(
             prepared.push(part);
             continue;
         };
-        let limit = model_limits
+        let limit = preparation
+            .model_limits
             .for_kind(kind)
-            .map_or(max_media_bytes, |specific| max_media_bytes.min(specific));
-        let image_limit = model_limits
+            .map_or(preparation.max_media_bytes, |specific| {
+                preparation.max_media_bytes.min(specific)
+            });
+        let image_limit = preparation
+            .model_limits
             .image_bytes
-            .map_or(max_media_bytes, |specific| max_media_bytes.min(specific));
-        let outcome = decide(kind, media, capabilities, store, site, limit, image_limit).await;
+            .map_or(preparation.max_media_bytes, |specific| {
+                preparation.max_media_bytes.min(specific)
+            });
+        let outcome = decide(kind, media, &preparation, limit, image_limit, budget).await;
         decisions.push(MediaDecision {
             message_index: 0,
             part_index: index,
@@ -790,7 +917,7 @@ pub async fn prepare_content_with_limits(
             sha256: media.media_ref.sha256.clone(),
             mode: outcome.mode,
             reason: outcome.reason,
-            model: model.to_owned(),
+            model: preparation.model.to_owned(),
         });
         prepared.extend(outcome.parts);
     }
@@ -846,6 +973,25 @@ async fn read_verified(
     Ok(data)
 }
 
+async fn read_verified_with_budget(
+    media_ref: &MediaRef,
+    store: &dyn MediaStore,
+    max_media_bytes: u64,
+    budget: &mut MediaBudget,
+) -> Result<Vec<u8>, String> {
+    if media_ref.size_bytes > max_media_bytes {
+        return Err("mídia excede o limite configurado".to_owned());
+    }
+    budget
+        .reserve(media_ref.size_bytes)
+        .map_err(str::to_owned)?;
+    read_verified(media_ref, store, max_media_bytes).await
+}
+
+fn is_media_limit_error(error: &str) -> bool {
+    error.starts_with("mídia excede o limite")
+}
+
 fn fallback(kind: MediaKind, media: &MediaPart, reason: &str) -> Outcome {
     let has_text = media
         .text
@@ -887,12 +1033,14 @@ fn inline(kind: MediaKind, mime_type: &str, media_ref: &MediaRef, data: &[u8]) -
 async fn decide(
     kind: MediaKind,
     media: &MediaPart,
-    capabilities: &ModalityCapabilities,
-    store: &dyn MediaStore,
-    site: ContentSite,
+    preparation: &MediaPreparation<'_>,
     max_media_bytes: u64,
     max_image_bytes: u64,
+    budget: &mut MediaBudget,
 ) -> Outcome {
+    let capabilities = preparation.capabilities;
+    let store = preparation.store;
+    let site = preparation.site;
     let vision = capabilities.vision.is_supported();
     let native = match kind {
         MediaKind::Image => {
@@ -907,7 +1055,9 @@ async fn decide(
     };
 
     if native {
-        return match read_verified(&media.media_ref, store, max_media_bytes).await {
+        return match read_verified_with_budget(&media.media_ref, store, max_media_bytes, budget)
+            .await
+        {
             Ok(data) => {
                 let detected = classify(&data, Some(&media.media_ref.mime_type));
                 if detected.kind != kind {
@@ -954,7 +1104,7 @@ async fn decide(
                     mime_type: Some(detected.mime_type),
                 }
             }
-            Err(why) if why == "mídia excede o limite configurado" => fallback(kind, media, &why),
+            Err(why) if is_media_limit_error(&why) => fallback(kind, media, &why),
             Err(why) => unavailable(media, &why),
         };
     }
@@ -966,7 +1116,7 @@ async fn decide(
     if derives_images {
         let mut parts = vec![text_part(media.textual_form(kind))];
         for preview in &media.previews {
-            match read_verified(preview, store, max_image_bytes).await {
+            match read_verified_with_budget(preview, store, max_image_bytes, budget).await {
                 Ok(data) => {
                     let detected = classify(&data, Some(&preview.mime_type));
                     if detected.kind != MediaKind::Image {
@@ -984,7 +1134,7 @@ async fn decide(
                         },
                     });
                 }
-                Err(why) if why == "mídia excede o limite configurado" => {
+                Err(why) if is_media_limit_error(&why) => {
                     return fallback(kind, media, &why);
                 }
                 Err(why) => return unavailable(media, &why),
@@ -1478,6 +1628,67 @@ mod tests {
         assert_eq!(result.decisions[0].mode, MediaMode::Text);
         assert!(result.decisions[0].reason.contains("limite"));
         assert!(matches!(&result.parts[0], ContentPart::Text { text } if text == "extracted text"));
+    }
+
+    #[tokio::test]
+    async fn media_context_limits_total_bytes_and_asset_count() {
+        let mut store = MemoryStore::default();
+        let first = ContentPart::Image(part(store.put("first", PNG), None, vec![]));
+        let second = ContentPart::Image(part(store.put("second", PNG), None, vec![]));
+        let context = MediaExecutionContext::new(CapabilityResolver::new(), Arc::new(store))
+            .with_max_total_media_bytes(PNG.len() as u64);
+
+        let prepared = context
+            .prepare_content(
+                "openai",
+                "model",
+                vec![first.clone(), second.clone()],
+                ContentSite::UserMessage,
+            )
+            .await;
+        assert_eq!(prepared.decisions[0].mode, MediaMode::Native);
+        assert_eq!(prepared.decisions[1].mode, MediaMode::Reference);
+        assert!(prepared.decisions[1].reason.contains("agregado de bytes"));
+
+        let mut store = MemoryStore::default();
+        let first = ContentPart::Image(part(store.put("first", PNG), None, vec![]));
+        let second = ContentPart::Image(part(store.put("second", PNG), None, vec![]));
+        let context = MediaExecutionContext::new(CapabilityResolver::new(), Arc::new(store))
+            .with_max_media_parts(1);
+        let prepared = context
+            .prepare_content(
+                "openai",
+                "model",
+                vec![first, second],
+                ContentSite::UserMessage,
+            )
+            .await;
+        assert_eq!(prepared.decisions[0].mode, MediaMode::Native);
+        assert_eq!(prepared.decisions[1].mode, MediaMode::Reference);
+        assert!(prepared.decisions[1].reason.contains("agregado de assets"));
+    }
+
+    #[tokio::test]
+    async fn media_budget_is_shared_across_user_and_tool_messages_in_turn() {
+        use super::super::{ChatRequest, Message, MessageContent, MessageRole};
+
+        let mut store = MemoryStore::default();
+        let first = ContentPart::Image(part(store.put("first", PNG), None, vec![]));
+        let second = ContentPart::Image(part(store.put("second", PNG), None, vec![]));
+        let mut user = Message::text(MessageRole::User, "inspect");
+        user.content = MessageContent::Parts(vec![first]);
+        let mut tool = Message::text(MessageRole::Tool, "result");
+        tool.content = MessageContent::Parts(vec![second]);
+        let request = ChatRequest::new("model", vec![user, tool]);
+        let context = MediaExecutionContext::new(CapabilityResolver::new(), Arc::new(store))
+            .with_max_total_media_bytes(PNG.len() as u64);
+
+        let prepared = context.prepare_request("openai", request).await;
+        assert_eq!(prepared.decisions.len(), 2);
+        assert_eq!(prepared.decisions[0].message_index, 0);
+        assert_eq!(prepared.decisions[0].mode, MediaMode::Native);
+        assert_eq!(prepared.decisions[1].message_index, 1);
+        assert_eq!(prepared.decisions[1].mode, MediaMode::Reference);
     }
 
     #[tokio::test]

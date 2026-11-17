@@ -24,7 +24,7 @@ Fontes de protocolo específicas ficam nos trechos da
 | Embeddings                  | OpenAI-compatible, OpenRouter, Cohere, Voyage, Ollama e llama-server; llama-server também aceita entradas multimodais via asset map | Dimensão, modalidade e formato seguem próprios de cada protocolo/modelo.                                                                                                |
 | Rerank                      | Cohere, Voyage, OpenRouter e llama-server; modalidade textual nos adapters declarados, texto/imagem efêmera no llama-server         | Scores e ordenação não devem ser comparados sem normalização contratual.                                                                                                |
 | Áudio                       | TTS bufferizado/streaming e sessão realtime de transcrição/conversa no llama-server                                                 | Batch STT genérico permanece ausente; TTS não prova STT.                                                                                                                |
-| Mídia/imagem/vídeo          | Tipos, asset map, envelopes persistível/efêmero, decisões por parte e conversões cobertas por adapters                              | Geração de imagem, operações gerais de vídeo, catálogo automático confiável e limites agregados permanecem pendentes.                                                   |
+| Mídia/imagem/vídeo          | Tipos, asset map, envelopes persistível/efêmero, decisões por parte e conversões cobertas por adapters                              | Geração de imagem, operações gerais de vídeo, catálogo automático confiável e limites de duração/resolução permanecem pendentes; limites agregados de chat já existem.  |
 
 ## Análise de paridade dos providers
 
@@ -68,7 +68,7 @@ ambiente ou configuração. O processo reutilizável está no
 
 - Construir e manter uma tabela verificável provider × endpoint × operação ×
   modalidade × modelo, incluindo auth, erros, limites, stream e status real.
-- Cobrir limites agregados de mídia e catálogo/metadata confiáveis; ausência de
+- Estender limites agregados às demais operações e completar catálogo/metadata confiáveis; ausência de
   dado precisa continuar como `unknown` e falhar de modo conservador.
 - Definir contratos antes de adicionar geração de imagem, batch STT e operações
   gerais de vídeo; especificar suporte concreto, custos, streaming e bytes.

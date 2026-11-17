@@ -105,7 +105,10 @@ títulos e bases de PR no estado dinâmico do GitHub.
   bindings. Gaps remanescentes e resultados por execução estão registrados no
   plano e checklist específicos.
 - [Mídia no chat](../specs/17-midia-no-chat.md) e
-  [checklist de mídia](../checklists/04-midia-no-chat.md).
+  [checklist de mídia](../checklists/04-midia-no-chat.md). Limites opcionais
+  agregados de bytes/assets já cobrem reidratação do turno e requests efêmeros
+  inline; outras operações, catálogo de modelo e limites de duração/resolução
+  permanecem em aberto.
 - [Providers e modalidades](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
   [plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
   [checklist](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e

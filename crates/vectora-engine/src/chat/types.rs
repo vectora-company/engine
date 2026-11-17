@@ -267,9 +267,21 @@ impl EphemeralChatRequest {
 
     /// Checks and canonicalizes all inline bytes before a provider send.
     pub fn validate(&mut self, max_media_bytes: u64) -> Result<(), String> {
+        self.validate_with_limits(max_media_bytes, None, None)
+    }
+
+    /// Validates inline payloads with per-asset and request-wide ceilings.
+    pub fn validate_with_limits(
+        &mut self,
+        max_media_bytes: u64,
+        max_total_media_bytes: Option<u64>,
+        max_media_parts: Option<usize>,
+    ) -> Result<(), String> {
         if self.contract_version != EPHEMERAL_CHAT_REQUEST_CONTRACT_VERSION {
             return Err("unsupported ephemeral chat request version".into());
         }
+        let mut total_media_bytes = 0_u64;
+        let mut media_parts = 0_usize;
         for message in &mut self.request.messages {
             let MessageContent::Parts(parts) = &mut message.content else {
                 continue;
@@ -287,6 +299,13 @@ impl EphemeralChatRequest {
                         if bytes.len() as u64 > max_media_bytes {
                             return Err("inline media exceeds the configured byte limit".into());
                         }
+                        reserve_inline_media(
+                            bytes.len() as u64,
+                            &mut total_media_bytes,
+                            &mut media_parts,
+                            max_total_media_bytes,
+                            max_media_parts,
+                        )?;
                         let detected = classify(&bytes, Some(&item.mime_type));
                         if detected.kind != item.kind
                             || (item.kind == MediaKind::Document
@@ -309,6 +328,13 @@ impl EphemeralChatRequest {
                         if bytes.len() as u64 > max_media_bytes {
                             return Err("inline media exceeds the configured byte limit".into());
                         }
+                        reserve_inline_media(
+                            bytes.len() as u64,
+                            &mut total_media_bytes,
+                            &mut media_parts,
+                            max_total_media_bytes,
+                            max_media_parts,
+                        )?;
                         let detected = classify(&bytes, Some(mime));
                         if detected.kind != MediaKind::Image {
                             return Err("data URL bytes are not a recognized image".into());
@@ -329,6 +355,30 @@ impl EphemeralChatRequest {
     pub fn into_inner(self) -> ChatRequest {
         self.request
     }
+}
+
+fn reserve_inline_media(
+    size_bytes: u64,
+    total_media_bytes: &mut u64,
+    media_parts: &mut usize,
+    max_total_media_bytes: Option<u64>,
+    max_media_parts: Option<usize>,
+) -> Result<(), String> {
+    let next_count = media_parts
+        .checked_add(1)
+        .ok_or_else(|| "ephemeral chat request exceeds its media asset limit".to_owned())?;
+    if max_media_parts.is_some_and(|limit| next_count > limit) {
+        return Err("ephemeral chat request exceeds its media asset limit".into());
+    }
+    let next_total = total_media_bytes
+        .checked_add(size_bytes)
+        .ok_or_else(|| "ephemeral chat request exceeds its media byte limit".to_owned())?;
+    if max_total_media_bytes.is_some_and(|limit| next_total > limit) {
+        return Err("ephemeral chat request exceeds its media byte limit".into());
+    }
+    *media_parts = next_count;
+    *total_media_bytes = next_total;
+    Ok(())
 }
 
 impl From<ChatRequest> for EphemeralChatRequest {
@@ -411,6 +461,22 @@ mod request_boundary_tests {
             }))
             .is_err()
         );
+    }
+
+    #[test]
+    fn ephemeral_request_enforces_aggregate_bytes_and_asset_count() {
+        let mut request = request_with(png_inline());
+        request.messages[0].content = MessageContent::Parts(vec![png_inline(), png_inline()]);
+        let mut request = EphemeralChatRequest::new(request);
+        assert!(request.validate_with_limits(1024, Some(1), None).is_err());
+
+        let mut request = EphemeralChatRequest::new(request_with(png_inline()));
+        assert!(request.validate_with_limits(1024, None, Some(0)).is_err());
+
+        let mut request = request_with(png_inline());
+        request.messages[0].content = MessageContent::Parts(vec![png_inline(), png_inline()]);
+        let mut request = EphemeralChatRequest::new(request);
+        assert!(request.validate_with_limits(1024, None, Some(1)).is_err());
     }
 
     #[test]

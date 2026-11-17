@@ -21,7 +21,7 @@ use vectora_engine::chat::{
     MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
     ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
-    TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
+    TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -106,6 +106,10 @@ struct BindingMediaContext {
     #[serde(default)]
     max_media_bytes: Option<u64>,
     #[serde(default)]
+    max_total_media_bytes: Option<u64>,
+    #[serde(default)]
+    max_media_parts: Option<usize>,
+    #[serde(default)]
     provider_limits: Vec<ProviderMediaLimits>,
 }
 
@@ -144,6 +148,12 @@ fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionConte
     if let Some(limit) = settings.max_media_bytes {
         context = context.with_max_media_bytes(limit);
     }
+    if let Some(limit) = settings.max_total_media_bytes {
+        context = context.with_max_total_media_bytes(limit);
+    }
+    if let Some(limit) = settings.max_media_parts {
+        context = context.with_max_media_parts(limit);
+    }
     Ok(context)
 }
 
@@ -160,25 +170,41 @@ fn split_media_context(
     Ok((settings, context))
 }
 
-fn request_media_limit(settings_json: &str) -> Result<u64, String> {
+fn request_media_limits(settings_json: &str) -> Result<(u64, Option<u64>, Option<usize>), String> {
     let value: serde_json::Value =
         serde_json::from_str(settings_json).map_err(|_| "invalid client settings".to_owned())?;
-    Ok(value
+    let context = value
         .get("media_context")
-        .and_then(|context| context.get("max_media_bytes"))
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(DEFAULT_MAX_MEDIA_BYTES))
+        .unwrap_or(&serde_json::Value::Null);
+    let optional_u64 = |key| -> Result<Option<u64>, String> {
+        context
+            .get(key)
+            .map(|value| {
+                value
+                    .as_u64()
+                    .ok_or_else(|| format!("invalid media context field: {key}"))
+            })
+            .transpose()
+    };
+    let max_bytes = optional_u64("max_media_bytes")?.unwrap_or(DEFAULT_MAX_MEDIA_BYTES);
+    let max_total_bytes = optional_u64("max_total_media_bytes")?;
+    let max_parts = optional_u64("max_media_parts")?
+        .map(|value| usize::try_from(value).map_err(|_| "invalid media part limit".to_owned()))
+        .transpose()?;
+    Ok((max_bytes, max_total_bytes, max_parts))
 }
 
 fn parse_chat_request(
     request_json: &str,
     ephemeral: bool,
     max_bytes: u64,
+    max_total_bytes: Option<u64>,
+    max_media_parts: Option<usize>,
 ) -> Result<ChatRequest, String> {
     if ephemeral {
         let mut request: EphemeralChatRequest = serde_json::from_str(request_json)
             .map_err(|error| format!("invalid ephemeral chat request: {error}"))?;
-        request.validate(max_bytes)?;
+        request.validate_with_limits(max_bytes, max_total_bytes, max_media_parts)?;
         Ok(request.into_inner())
     } else {
         serde_json::from_str::<PersistableChatRequest>(request_json)
@@ -192,12 +218,12 @@ fn parse_inputs(
     request_json: &str,
     ephemeral: bool,
 ) -> Result<(OpenAiCompatibleClient, ChatRequest), String> {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: OpenAiCompatibleSettings =
         serde_json::from_value(settings_json).map_err(|_| "invalid client settings".to_owned())?;
     let media_provider = settings.media_provider();
-    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
+    let request = parse_chat_request(request_json, ephemeral, limits.0, limits.1, limits.2)?;
     let mut config = settings.into_config();
     if let Some(context) = media_context {
         config = config.media_context(media_provider, context);
@@ -218,13 +244,13 @@ fn parse_llama_server_inputs(
     ),
     String,
 > {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: LlamaServerSettings = serde_json::from_value(settings_json)
         .map_err(|_| "invalid llama-server settings".to_owned())?;
     let client = LlamaServerClient::new(settings).map_err(|error| error.to_string())?;
     let request = request_json
-        .map(|json| parse_chat_request(json, ephemeral, max_bytes))
+        .map(|json| parse_chat_request(json, ephemeral, limits.0, limits.1, limits.2))
         .transpose()?;
     Ok((client, request, media_context))
 }
@@ -234,11 +260,11 @@ fn parse_native_inputs(
     request_json: &str,
     ephemeral: bool,
 ) -> Result<(NativeChatClient, ChatRequest), String> {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: NativeChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| "invalid native provider settings".to_owned())?;
-    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
+    let request = parse_chat_request(request_json, ephemeral, limits.0, limits.1, limits.2)?;
     let mut client = NativeChatClient::new(settings).map_err(|error| error.to_string())?;
     if let Some(context) = media_context {
         client = client.with_media_context(context);
@@ -251,11 +277,11 @@ fn parse_fallback_inputs(
     request_json: &str,
     ephemeral: bool,
 ) -> Result<(FallbackChatClient, ChatRequest), String> {
-    let max_bytes = request_media_limit(settings_json)?;
+    let limits = request_media_limits(settings_json)?;
     let (settings_json, media_context) = split_media_context(settings_json)?;
     let settings: FallbackChatSettings = serde_json::from_value(settings_json)
         .map_err(|_| "invalid fallback settings".to_owned())?;
-    let request = parse_chat_request(request_json, ephemeral, max_bytes)?;
+    let request = parse_chat_request(request_json, ephemeral, limits.0, limits.1, limits.2)?;
     let mut client = FallbackChatClient::new(settings).map_err(|error| error.to_string())?;
     if let Some(context) = media_context {
         client = client.with_media_context(context);
@@ -1550,11 +1576,11 @@ mod request_boundary_tests {
 
     #[test]
     fn binding_requires_explicit_ephemeral_envelope_for_inline_media() {
-        assert!(parse_chat_request(INNER, false, 1024).is_err());
+        assert!(parse_chat_request(INNER, false, 1024, None, None).is_err());
         let envelope = format!(r#"{{"contract_version":1,"request":{INNER}}}"#);
-        let request = parse_chat_request(&envelope, true, 1024).unwrap();
+        let request = parse_chat_request(&envelope, true, 1024, None, None).unwrap();
         assert_eq!(request.model, "m");
-        assert!(parse_chat_request(&envelope, true, 1).is_err());
+        assert!(parse_chat_request(&envelope, true, 1, None, None).is_err());
     }
 }
 
@@ -2627,17 +2653,9 @@ fn chat_prepare_content<'py>(
         let context_value: serde_json::Value = serde_json::from_str(&media_context_json)
             .map_err(|_| py_error("invalid media context"))?;
         let context = binding_media_context(context_value).map_err(py_error)?;
-        let capabilities = context.resolver.resolve(&provider, &model);
-        let prepared = prepare_content_with_limits(
-            parts,
-            &capabilities,
-            context.store.as_ref(),
-            &model,
-            ContentSite::UserMessage,
-            context.max_media_bytes,
-            context.resolver.media_limits_for(&provider, &model),
-        )
-        .await;
+        let prepared = context
+            .prepare_content(&provider, &model, parts, ContentSite::UserMessage)
+            .await;
         encode_json(&serde_json::json!({
             "parts": prepared.parts,
             "decisions": prepared.decisions,

@@ -2915,6 +2915,51 @@ def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
     assert limited_result["decisions"][0]["mode"] == "reference"
     assert "limite" in limited_result["decisions"][0]["reason"]
 
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII="
+    )
+    image_parts = []
+    for asset_id in ("image-one", "image-two"):
+        image_ref = {
+            "asset_id": asset_id,
+            "sha256": hashlib.sha256(png).hexdigest(),
+            "mime_type": "image/png",
+            "size_bytes": len(png),
+            "name": f"{asset_id}.png",
+        }
+        image_parts.append({"type": "image", "media_ref": image_ref})
+    aggregate = asyncio.run(
+        prepare_chat_content(
+            "openai",
+            "fixture-model",
+            image_parts,
+            MediaExecutionContext(
+                {"image-one": png, "image-two": png},
+                max_total_media_bytes=len(png),
+            ),
+        )
+    )
+    assert [item["mode"] for item in aggregate["decisions"]] == [
+        "native",
+        "reference",
+    ]
+    assert "agregado de bytes" in aggregate["decisions"][1]["reason"]
+    count_limited = asyncio.run(
+        prepare_chat_content(
+            "openai",
+            "fixture-model",
+            image_parts,
+            MediaExecutionContext(
+                {"image-one": png, "image-two": png}, max_media_parts=1
+            ),
+        )
+    )
+    assert [item["mode"] for item in count_limited["decisions"]] == [
+        "native",
+        "reference",
+    ]
+    assert "agregado de assets" in count_limited["decisions"][1]["reason"]
+
     response = json.dumps(
         {"choices": [{"message": {"content": "answer"}, "finish_reason": "stop"}]}
     ).encode()

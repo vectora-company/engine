@@ -19,6 +19,8 @@ class MediaExecutionContext:
 
     assets: Mapping[str, bytes]
     max_media_bytes: int | None = None
+    max_total_media_bytes: int | None = None
+    max_media_parts: int | None = None
     provider_limits: Sequence[Mapping[str, Any]] = ()
 
 
@@ -59,6 +61,16 @@ def _media_settings(
             if isinstance(context, MediaExecutionContext)
             else context.get("max_media_bytes")
         )
+        total_limit = (
+            context.max_total_media_bytes
+            if isinstance(context, MediaExecutionContext)
+            else context.get("max_total_media_bytes")
+        )
+        parts_limit = (
+            context.max_media_parts
+            if isinstance(context, MediaExecutionContext)
+            else context.get("max_media_parts")
+        )
         encoded: dict[str, str] = {}
         for asset_id, data in assets.items():
             if not isinstance(data, (bytes, bytearray, memoryview)):
@@ -74,6 +86,10 @@ def _media_settings(
             media_payload["provider_limits"] = list(provider_limits)
         if limit is not None:
             media_payload["max_media_bytes"] = limit
+        if total_limit is not None:
+            media_payload["max_total_media_bytes"] = total_limit
+        if parts_limit is not None:
+            media_payload["max_media_parts"] = parts_limit
         payload["media_context"] = media_payload
     return json.dumps(payload, separators=(",", ":"))
 

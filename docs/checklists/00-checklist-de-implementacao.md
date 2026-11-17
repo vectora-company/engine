@@ -56,6 +56,12 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [x] LanceDB e Qdrant oferecem filtros de metadados escalares equivalentes
       antes do top-k, expostos em Python e TypeScript. O contrato vetorial 3
       registra a incompatibilidade com coleções LanceDB legadas em `Utf8`.
+- [x] Chat multimodal aceita limites agregados opcionais de bytes/assets no
+      asset map e em requests efêmeros inline, compartilhados pelo turno e
+      validados antes da leitura/envio; testes direcionados em Rust, Python e
+      TypeScript. Decision Model, embeddings e rerank ainda não aplicam esse
+      orçamento; estado e critérios estão em
+      `docs/checklists/04-midia-no-chat.md`.
 
 ## Contratos e desenho
 

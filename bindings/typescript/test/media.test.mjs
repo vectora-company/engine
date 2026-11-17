@@ -71,6 +71,40 @@ test("media bindings support manual, per-call and client-default contexts", asyn
   assert.equal(limited.decisions[0].mode, "reference");
   assert.match(limited.decisions[0].reason, /limite/);
 
+  const image = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  const imageParts = ["image-one", "image-two"].map((asset_id) => ({
+    type: "image",
+    media_ref: {
+      asset_id,
+      sha256: createHash("sha256").update(image).digest("hex"),
+      mime_type: "image/png",
+      size_bytes: image.length,
+      name: `${asset_id}.png`,
+    },
+  }));
+  const assets = { "image-one": image, "image-two": image };
+  const aggregate = await prepareChatContent("openai", "fixture-model", imageParts, {
+    assets,
+    max_total_media_bytes: image.length,
+  });
+  assert.deepEqual(
+    aggregate.decisions.map((item) => item.mode),
+    ["native", "reference"],
+  );
+  assert.match(aggregate.decisions[1].reason, /agregado de bytes/);
+  const countLimited = await prepareChatContent("openai", "fixture-model", imageParts, {
+    assets,
+    max_media_parts: 1,
+  });
+  assert.deepEqual(
+    countLimited.decisions.map((item) => item.mode),
+    ["native", "reference"],
+  );
+  assert.match(countLimited.decisions[1].reason, /agregado de assets/);
+
   const perCall = await startServer();
   try {
     await chatComplete(
@@ -145,6 +179,17 @@ test("inline bytes require the explicit ephemeral request envelope", async () =>
     await chatCompleteEphemeral(server.settings, ephemeral);
     assert.match(server.captured().messages[0].content[0].image_url.url, /^data:image\/png;base64,/);
     await assert.rejects(chatCompleteEphemeral(server.settings, ephemeral, { assets: {}, max_media_bytes: 1 }));
+    const aggregateRequest = structuredClone(ephemeral);
+    aggregateRequest.request.messages[0].content.push(
+      structuredClone(aggregateRequest.request.messages[0].content[0]),
+    );
+    await assert.rejects(
+      chatCompleteEphemeral(server.settings, aggregateRequest, {
+        assets: {},
+        max_total_media_bytes: png.length,
+      }),
+      /media byte limit/,
+    );
   } finally {
     await server.close();
   }
