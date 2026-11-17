@@ -363,3 +363,13 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] `scons lint` passou.
 - [x] Pre-commit integral passou.
 - [ ] Publicar PR filho de [#117](https://github.com/vectora-company/engine/pull/117).
+
+## Guardas de asset map no rerank — `test/llama-rerank-assets-guards`
+
+- [x] Digest divergente falha fechado sem enviar o asset ao endpoint de rerank.
+- [x] Asset acima do limite configurado falha fechado.
+- [x] Cinco testes Rust focados de rerank multimodal passam.
+- [x] `scons tests`: Rust 241; 3 fixtures + 1 fronteira Python; pytest 99 passed/1 skipped; Node 52 passed/11 skips opcionais.
+- [x] `scons lint` passou.
+- [x] Pre-commit passou.
+- [ ] Publicar PR filho de [#118](https://github.com/vectora-company/engine/pull/118).

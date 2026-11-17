@@ -2,7 +2,7 @@
 
 ## Estado atual — rerank llama-server v1.0.0 (16/11/2026)
 
-PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, entrega embeddings multimodais por asset map. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, implementa rerank textual Jina. O PR [#117](https://github.com/vectora-company/engine/pull/117), filho do #116, implementa rerank multimodal via asset map. A branch ativa `test/llama-rerank-negative-cases`, filha do #117, acrescenta cobertura negativa. `scons tests` passou (Rust 240; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips); `scons lint` e pre-commit passaram. PR #117 publicado; pre-commit passou e PR #118 está pendente. O plano, spec,
+PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, entrega embeddings multimodais por asset map. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, implementa rerank textual Jina. O PR [#117](https://github.com/vectora-company/engine/pull/117), filho do #116, implementa rerank multimodal via asset map. O PR [#118](https://github.com/vectora-company/engine/pull/118), filho do #117, cobre respostas negativas. A branch ativa `test/llama-rerank-assets-guards`, filha do #118, cobre integridade do asset map. `scons tests` passou (Rust 241; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips) e `scons lint` passou. PRs #117 e #118 publicados; pre-commit da etapa #119 pendente. O plano, spec,
 checklist e análise são
 [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md),

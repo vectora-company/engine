@@ -178,3 +178,12 @@
 - [x] Gates integrados: Rust 240; pytest 99/1 skip; Node 52/11 skips; lint.
 - [x] Pre-commit integral passou.
 - [ ] Publicar PR filho de #117.
+
+### Integridade de mídia no rerank multimodal
+
+- [x] Digest adulterado é recusado antes do POST.
+- [x] Limite de bytes por chamada é aplicado ao rerank.
+- [x] Cinco testes Rust focados passam.
+- [x] Gates integrados: Rust 241; pytest 99/1 skip; Node 52/11 skips; lint.
+- [x] Pre-commit passou.
+- [ ] PR filho de #118.
