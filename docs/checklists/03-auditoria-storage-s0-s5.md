@@ -70,7 +70,7 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 - [x] Verificar CAS com serviços reais nos dois backends: duas escritas concorrentes com a mesma revisão, invalidação após escrita comum, remoção/recriação, TTL e ausência da chave interna na listagem.
 - [x] Verificar incremento em Redis e NATS reais: criação concorrente, delta negativo, limite numérico, valor incompatível, TTL e recriação após remoção.
 - [x] Verificar watch KV em Redis e NATS reais: mudanças futuras, filtro de prefixo, isolamento, remoção, expiração e cancelamento da leitura.
-- [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends.
+- [ ] Vetorial: filtros de metadado, parâmetros de índice ANN, quantização e busca híbrida nos dois backends. Antes da migração do schema LanceDB `Utf8` para JSON consultável, obter decisão sobre migração automática, operação explícita ou recriação de coleção.
 - [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens atualizadas.
 - [x] Filas: teto de tentativas e DLQ consumível nos dois brokers.
 - [ ] Filas: NACK e reentrega com atraso, deduplicação na publicação, replay e ordenação com contrato, shutdown gracioso e redrive atômico nas duas.

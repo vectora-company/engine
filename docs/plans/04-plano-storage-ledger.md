@@ -242,6 +242,22 @@ equivalência por par antes da especialização.
 Ainda abertas: granularidade e versão dos crates; política de compatibilidade
 de schemas e bindings; retenção e compactação do ledger; envelope de job;
 mapeamento comum de índices vetoriais; formato estruturado de
-`capabilities()`; perfil de deployment do primeiro fluxo do GH Bot. Elas
-dependem de inventário e de provas de conformidade e são perguntadas no chat
-quando a etapa correspondente começar.
+`capabilities()`; perfil de deployment do primeiro fluxo do GH Bot.
+
+**Decisão vital antes de filtros vetoriais:** LanceDB 0.22.3 armazena hoje
+`metadata` como JSON em coluna `Utf8`; os filtros JSON documentados pelo Lance
+operam sobre a coluna de extensão JSONB. Qdrant já aceita filtros sobre payload.
+Para implementar o mesmo filtro antes de limitar os resultados, a Engine precisa
+mudar o formato persistido da metadata LanceDB. Proposta de API comum: expressão
+booleana tipada sobre caminhos de campos e valores escalares JSON; escopo
+continua sempre aplicado pela Engine. Opções para coleções LanceDB existentes:
+
+1. migrar automaticamente cada coleção ao abrir, reescrevendo e verificando
+   todas as linhas;
+2. expor uma operação explícita de migração, com verificação e relatório, e
+   rejeitar busca filtrada até a coleção ser migrada;
+3. declarar o formato anterior incompatível e exigir recriação da coleção.
+
+A opção 2 preserva controle operacional e evita reescrita inesperada de grandes
+coleções. A decisão de compatibilidade e impacto sobre dados pertence ao
+mantenedor; não iniciar a migração persistente antes de resposta no chat.
