@@ -87,7 +87,10 @@ Só depois de a base ser equivalente cada backend se especializa no que o outro
 Exemplos de **base a implementar e verificar** (não afirmação de que já estejam
 disponíveis nos adapters): busca vetorial com filtros por metadado, ANN
 configurável, quantização e busca híbrida; o consumidor pode compor qualquer
-adapter conforme para RAG e contexto do agente. LanceDB 0.22.3, versão da
+adapter conforme para RAG e contexto do agente. A implementação de filtros
+exige formato JSON consultável no LanceDB; a migração de coleções já gravadas
+está pendente de decisão registrada no
+[plano de storage](../plans/04-plano-storage-ledger.md). LanceDB 0.22.3, versão da
 dependência Rust desta branch, contém builders IVF-HNSW-PQ e IVF-HNSW-SQ; isso
 não significa que o adapter já configure índices. O contêiner Qdrant em execução
 é 1.12.4; `SConstruct` provisiona 1.15.5, e Qdrant usa HNSW como índice denso
