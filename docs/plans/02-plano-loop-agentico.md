@@ -46,7 +46,8 @@ etapa troca automaticamente o runtime de qualquer consumidor.
    reavaliar o estado mais recente e rejeitar conflitos de binding. O contrato
    do store está em `docs/specs/16-sqlite-durable-tool-policy.md`. O host segue
    responsável por autenticar aprovadores e validar recibos; o adapter não
-   executa nem cancela tools.
+   executa nem cancela tools. Testes Rust também verificam rejeição de mudança
+   de policy sob o mesmo digest/revisão e do estado que excede 512 KiB.
 5. **Persistência e recovery** — integrar com os contratos de storage do
    [plano de storage](04-plano-storage-ledger.md) e da
    [spec 02](../specs/02-storage-memoria-contexto-rag.md): reserva atômica por

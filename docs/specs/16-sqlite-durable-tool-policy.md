@@ -50,3 +50,10 @@ pedido incompatível, digest/revisão reutilizados, estado desatualizado,
 conflito concorrente, expiração, limite de tamanho e idempotência de
 `operation_id`. Testes dos bindings confirmam que as mesmas operações e erros
 do core são acessíveis em Python e TypeScript.
+
+Cobertura Rust verificada: `PolicyDigestReuse` rejeita conteúdo alterado quando
+digest e revisão são reutilizados, sem alterar checkpoint/outbox; `StateTooLarge`
+rejeita estado acima de 512 KiB antes de persistir. Os dois casos passam em
+`cargo test -p vectora-engine --lib storage::sqlite_policy::tests --locked`.
+Esse registro cobre os limites do core; a paridade dos testes dos bindings
+continua avaliada separadamente.
