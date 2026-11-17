@@ -148,9 +148,10 @@ Origem: [plano de storage](04-plano-storage-ledger.md) e
 2. Filas nos dois backends: **NACK/reentrega atrasada, enqueue idempotente por
    janela e replay read-only paginado por cursor implementados e testados nos
    dois serviços e bindings**. O replay mantém posição vinculada a versão,
-   backend e namespace e não toca offsets de consumers. Pendem teste de cursor
-   expirado após trim, ordenação sob enqueue concorrente, shutdown gracioso e
-   redrive atômico da DLQ; envelope de job versionado. **[D]** envelope de job.
+   backend e namespace e não toca offsets de consumers. Testes reais cobrem
+   cursor expirado após trim e 32 produtores concorrentes com replay ordenado,
+   sem perdas/duplicatas. Pendem shutdown gracioso e redrive atômico da DLQ;
+   envelope de job versionado. **[D]** envelope de job.
 3. Pub/sub: reconexão observável e assinatura por padrão/curinga.
 4. `capabilities()` estruturado (lacuna, emulação, especialização com motivo).
    **[D]** formato.

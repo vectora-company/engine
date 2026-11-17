@@ -1231,9 +1231,7 @@ impl RedisStreamQueue {
                 if compare_redis_stream_ids(cursor, first)? == std::cmp::Ordering::Less {
                     return Err(MessagingError::ReplayCursorExpired);
                 }
-            } else if compare_redis_stream_ids(cursor, &info.last_generated_id)?
-                == std::cmp::Ordering::Less
-            {
+            } else {
                 return Err(MessagingError::ReplayCursorExpired);
             }
         }
@@ -2441,7 +2439,7 @@ mod tests {
         };
         let queue = QueueAdapter::connect(QueueConfig {
             backend: super::super::QueueBackend::RedisStreams,
-            endpoint,
+            endpoint: endpoint.clone(),
             namespace: format!("replay_trim_{}", unique_suffix()),
             visibility_timeout_seconds: 2,
             max_messages: 2,
@@ -2461,6 +2459,39 @@ mod tests {
         queue.enqueue(b"three".to_vec()).await.unwrap();
         assert!(matches!(
             queue.replay_after(Some(&cursor), 10).await,
+            Err(MessagingError::ReplayCursorExpired)
+        ));
+
+        let empty_queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint,
+            namespace: format!("replay_empty_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 2,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        empty_queue.enqueue(b"removed".to_vec()).await.unwrap();
+        let empty_cursor = empty_queue
+            .replay_after(None, 1)
+            .await
+            .unwrap()
+            .next_cursor
+            .unwrap();
+        if let QueueAdapter::Redis { queue, name, .. } = &empty_queue {
+            let key = queue.stream_key(name).unwrap();
+            let mut connection = queue.store.connection().await.unwrap();
+            redis::cmd("XDEL")
+                .arg(key)
+                .arg(&empty_cursor.position)
+                .query_async::<u64>(&mut connection)
+                .await
+                .unwrap();
+        }
+        assert!(matches!(
+            empty_queue.replay_after(Some(&empty_cursor), 10).await,
             Err(MessagingError::ReplayCursorExpired)
         ));
     }
@@ -2494,6 +2525,104 @@ mod tests {
             queue.replay_after(Some(&cursor), 10).await,
             Err(MessagingError::ReplayCursorExpired)
         ));
+    }
+
+    #[tokio::test]
+    async fn redis_queue_replay_is_ordered_and_complete_after_concurrent_producers() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_REDIS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint,
+            namespace: format!("replay_concurrent_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 100,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        let writes = (0..32).map(|n| {
+            let queue = &queue;
+            async move {
+                queue
+                    .enqueue(format!("job-{n}").into_bytes())
+                    .await
+                    .unwrap()
+            }
+        });
+        futures_util::future::join_all(writes).await;
+
+        let mut cursor = None;
+        let mut positions = Vec::new();
+        let mut payloads = std::collections::BTreeSet::new();
+        loop {
+            let page = queue.replay_after(cursor.as_ref(), 7).await.unwrap();
+            let empty = page.records.is_empty();
+            let next_cursor = page.next_cursor;
+            for record in page.records {
+                positions.push(record.cursor.position);
+                payloads.insert(record.payload);
+            }
+            if empty || next_cursor == cursor {
+                break;
+            }
+            cursor = next_cursor;
+        }
+        assert_eq!(positions.len(), 32);
+        assert!(positions.windows(2).all(|ids| {
+            compare_redis_stream_ids(&ids[0], &ids[1]).unwrap() == std::cmp::Ordering::Less
+        }));
+        assert_eq!(payloads.len(), 32);
+    }
+
+    #[tokio::test]
+    async fn nats_queue_replay_is_ordered_and_complete_after_concurrent_producers() {
+        let Ok(endpoint) = std::env::var("VECTORA_TEST_NATS_URL") else {
+            return;
+        };
+        let queue = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::NatsJetstream,
+            endpoint,
+            namespace: format!("replay_concurrent_{}", unique_suffix()),
+            visibility_timeout_seconds: 2,
+            max_messages: 100,
+            max_attempts: 5,
+            deduplication_window_seconds: 7,
+        })
+        .await
+        .unwrap();
+        let writes = (0..32).map(|n| {
+            let queue = &queue;
+            async move {
+                queue
+                    .enqueue(format!("job-{n}").into_bytes())
+                    .await
+                    .unwrap()
+            }
+        });
+        futures_util::future::join_all(writes).await;
+
+        let mut cursor = None;
+        let mut positions = Vec::new();
+        let mut payloads = std::collections::BTreeSet::new();
+        loop {
+            let page = queue.replay_after(cursor.as_ref(), 7).await.unwrap();
+            let empty = page.records.is_empty();
+            let next_cursor = page.next_cursor;
+            for record in page.records {
+                positions.push(record.cursor.position.parse::<u64>().unwrap());
+                payloads.insert(record.payload);
+            }
+            if empty || next_cursor == cursor {
+                break;
+            }
+            cursor = next_cursor;
+        }
+        assert_eq!(positions.len(), 32);
+        assert!(positions.windows(2).all(|ids| ids[0] < ids[1]));
+        assert_eq!(payloads.len(), 32);
     }
 
     #[tokio::test]
