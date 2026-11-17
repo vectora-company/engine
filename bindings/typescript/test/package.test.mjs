@@ -41,6 +41,9 @@ import {
   kvStorePut,
   queueReceiveDeadLetter,
   queueNack,
+  queueEnqueueIdempotent,
+  queueReceive,
+  queueAck,
   runContractVersion,
   transitionRun,
   toolContractVersion,
@@ -1700,6 +1703,28 @@ for (const [backend, endpoint] of [
       await kvStoreDelete(config, "job.keep");
       await kvStoreDelete(other, "job.remove");
     }
+  });
+}
+
+for (const [backend, endpoint] of [
+  ["redis_streams", process.env.VECTORA_TEST_REDIS_URL],
+  ["nats_jetstream", process.env.VECTORA_TEST_NATS_URL],
+]) {
+  test(`queue idempotent enqueue suppresses duplicate deliveries in ${backend}`, { skip: !endpoint }, async () => {
+    const config = {
+      backend,
+      endpoint,
+      namespace: `node_dedupe_${randomUUID()}`,
+      deduplication_window_seconds: 7,
+    };
+    const firstId = await queueEnqueueIdempotent(config, new TextEncoder().encode("original"), "task-42");
+    const duplicateId = await queueEnqueueIdempotent(config, new TextEncoder().encode("different"), "task-42");
+    assert.equal(duplicateId, firstId);
+    const delivery = await queueReceive(config, "worker", "workers", 2_000);
+    assert.ok(delivery);
+    assert.equal(new TextDecoder().decode(delivery.payload), "original");
+    await queueAck(delivery.delivery_id);
+    assert.equal(await queueReceive(config, "worker", "workers", 100), null);
   });
 }
 

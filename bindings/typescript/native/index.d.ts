@@ -342,6 +342,12 @@ export declare function queueEnqueue(
   payloadJson: string,
 ): Promise<string>;
 
+export declare function queueEnqueueIdempotent(
+  configJson: string,
+  payloadJson: string,
+  idempotencyKey: string,
+): Promise<string>;
+
 export declare function queueReceive(
   configJson: string,
   consumer: string,

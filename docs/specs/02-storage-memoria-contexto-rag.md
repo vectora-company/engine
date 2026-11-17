@@ -100,8 +100,12 @@ No SQL, a base inclui transações, migrações, backup/restore e JSON. No KV,
 TTL, escrita condicional por revisão, incremento atômico, listagem por prefixo
 e observação de mudanças. Nas filas, ACK/NACK, redelivery com teto, DLQ,
 deduplicação e replay. NACK pode agendar redelivery até o visibility timeout
-configurado, limite comum aos brokers. A disponibilidade nativa ou emulada de
-cada item ainda deve ser confirmada por versão e registrada na matriz do plano.
+configurado, limite comum aos brokers. `enqueue_idempotent` recebe chave
+restrita a ASCII alfanumérico, `_` ou `-`, retorna o ID original e preserva o
+primeiro payload em repetições dentro de `deduplication_window_seconds` (padrão
+120 segundos). A janela deve ser maior que zero e é comum aos brokers. A
+disponibilidade nativa ou emulada de cada item ainda deve ser confirmada por
+versão e registrada na matriz do plano.
 
 No JetStream KV, a chave tem até 512 bytes e usa letras ASCII, números,
 `-`, `_`, `/`, `=` e pontos que separam segmentos não vazios. Leitura,

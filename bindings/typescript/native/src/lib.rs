@@ -1294,6 +1294,25 @@ pub async fn queue_enqueue(config_json: String, payload_json: String) -> Result<
 }
 
 #[napi]
+pub async fn queue_enqueue_idempotent(
+    config_json: String,
+    payload_json: String,
+    idempotency_key: String,
+) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid queue config"))?;
+    let payload: Vec<u8> = serde_json::from_str(&payload_json)
+        .map_err(|_| Error::from_reason("invalid queue payload"))?;
+    let queue = vectora_engine::storage::messaging::QueueAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    queue
+        .enqueue_idempotent(payload, &idempotency_key)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[napi]
 pub async fn queue_receive(
     config_json: String,
     consumer: String,

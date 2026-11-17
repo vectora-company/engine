@@ -742,6 +742,11 @@ interface NativeBinding {
     limit: number,
   ): Promise<string[]>;
   queueEnqueue(configJson: string, payloadJson: string): Promise<string>;
+  queueEnqueueIdempotent(
+    configJson: string,
+    payloadJson: string,
+    idempotencyKey: string,
+  ): Promise<string>;
   queueReceive(
     configJson: string,
     consumer: string,
@@ -1124,6 +1129,8 @@ export interface QueueConfig {
   max_messages?: number;
   /** Maximum deliveries before moving a job to the dead-letter stream (default 5). */
   max_attempts?: number;
+  /** Idempotency-key retention shared by Redis and NATS (default 120 seconds). */
+  deduplication_window_seconds?: number;
 }
 export interface PubSubConfig {
   backend: "redis" | "nats_core";
@@ -1319,6 +1326,18 @@ export async function queueEnqueue(
   return native.queueEnqueue(
     JSON.stringify(config),
     JSON.stringify(Array.from(payload)),
+  );
+}
+/** Enqueue once per idempotency key within QueueConfig's deduplication window (default 120 seconds). */
+export async function queueEnqueueIdempotent(
+  config: QueueConfig,
+  payload: Uint8Array,
+  idempotencyKey: string,
+): Promise<string> {
+  return native.queueEnqueueIdempotent(
+    JSON.stringify(config),
+    JSON.stringify(Array.from(payload)),
+    idempotencyKey,
   );
 }
 export async function queueReceive(

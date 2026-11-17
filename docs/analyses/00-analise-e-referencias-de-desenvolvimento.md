@@ -99,8 +99,8 @@ títulos e bases de PR no estado dinâmico do GitHub.
 - [Storage, ledger, memória e RAG](../specs/02-storage-memoria-contexto-rag.md),
   [plano de storage](../plans/04-plano-storage-ledger.md) e
   [auditoria de storage](05-auditoria-storage-s0-s5.md). A conformance recente
-  cobre NACK agendado em Redis Streams e NATS JetStream, com delay limitado ao
-  visibility timeout; lacunas restantes estão marcadas no plano e checklist.
+  cobre NACK agendado nos dois brokers e enqueue idempotente pela janela configurada;
+  lacunas restantes estão marcadas no plano e checklist.
 - [Mídia no chat](../specs/17-midia-no-chat.md) e
   [checklist de mídia](../checklists/04-midia-no-chat.md).
 - [Providers e modalidades](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
