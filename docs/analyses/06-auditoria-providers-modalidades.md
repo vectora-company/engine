@@ -1,263 +1,87 @@
-# Auditoria de providers e modalidades (referência llama.cpp v1.0.0)
+# Auditoria de providers e modalidades
 
-**Estado atual:** 16 de novembro de 2026. Checkout `/home/brunosrz/Área de trabalho/engine`, branch `feat/llama-server-multimodal-embeddings-assets`, filha do PR [#114](https://github.com/vectora-company/engine/pull/114). Estado de `main` e checks remotos devem ser revalidados antes de qualquer conclusão sobre merge.
+## Escopo e método
 
-## Fontes consultadas
+Esta análise separa APIs upstream, adapters existentes e operações ainda não
+implementadas. A unidade de suporte é provider × protocolo × operação × modelo;
+nomes de marcas ou endpoints compatíveis não provam equivalência. O código Rust
+é a fonte da lógica, e Python/TypeScript são conferidos como bindings.
 
-- Código local: `crates/vectora-engine/src/chat/{openai_compatible,native_providers,fallback,media,types}.rs`, `crates/vectora-engine/src/llm/{embeddings,rerank}.rs` e bindings Python/TypeScript.
-- Release upstream fixada: [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0), commit de release `b1b770d`.
-- API do servidor fixada: [`tools/server/README.md` na tag v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md).
-- Catálogo do app: [`llama.app/models`](https://llama.app/models), consultado para confirmar que o ecossistema publica modelos de chat, multimodais, decisão e embeddings; o catálogo não prova cobertura da Engine nem do server para todo modelo.
+Referência local: [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/tree/v1.0.0).
+Fontes de protocolo específicas ficam nos trechos da
+[spec 18](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
 
-## O que o código realmente oferece
+## Estado observado no código
 
-### Atualização — cliente standalone Laya (16/11/2026)
+| Operação/protocolo          | Implementação observada                                                                                                             | Limite factual                                                                                                                                                          |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat genérico               | OpenAI-compatible com endpoints configuráveis; fallback ordenado; Anthropic Messages, Gemini, Cohere e Ollama nativos               | O fallback só é seguro antes de qualquer evento/saída entregue. Compatibilidade de wire format não garante paridade funcional.                                          |
+| OpenAI                      | Chat Completions e Responses selecionáveis separadamente                                                                            | Responses tem conversão própria de histórico, tools, reasoning/usage e eventos semânticos; APIs de imagem, áudio, realtime e built-in tools não decorrem desse adapter. |
+| OpenRouter                  | Perfil nomeado sobre transporte compatível, headers de atribuição e extensions por request                                          | Roteamento e capacidades variam com modelo/configuração do gateway.                                                                                                     |
+| 9router / OmniRouter / Kimi | Transporte genérico configurável quando o endpoint implementa o protocolo suportado                                                 | Não há validação suficientemente específica para declarar cada serviço coberto. “OmniRouter” também pode apontar a serviços distintos.                                  |
+| Llama-server                | Cliente dedicado com health, discovery, chat, Decision Model, embeddings, rerank, TTS e realtime de áudio                           | Discovery é declaração do servidor. Não substitui smoke test do modelo ou de cada modalidade.                                                                           |
+| Laya standalone             | Cliente Jev separado, health e Decision Model de texto, bindings e CLI                                                              | Não oferece chat genérico nem discovery do llama-server; falta integração local com servidor/checkpoint real.                                                           |
+| Embeddings                  | OpenAI-compatible, OpenRouter, Cohere, Voyage, Ollama e llama-server; llama-server também aceita entradas multimodais via asset map | Dimensão, modalidade e formato seguem próprios de cada protocolo/modelo.                                                                                                |
+| Rerank                      | Cohere, Voyage, OpenRouter e llama-server; modalidade textual nos adapters declarados, texto/imagem efêmera no llama-server         | Scores e ordenação não devem ser comparados sem normalização contratual.                                                                                                |
+| Áudio                       | TTS bufferizado/streaming e sessão realtime de transcrição/conversa no llama-server                                                 | Batch STT genérico permanece ausente; TTS não prova STT.                                                                                                                |
+| Mídia/imagem/vídeo          | Tipos, asset map, envelopes persistível/efêmero, decisões por parte e conversões cobertas por adapters                              | Geração de imagem, operações gerais de vídeo, catálogo automático confiável e limites agregados permanecem pendentes.                                                   |
 
-O servidor Python Laya é um protocolo Jev: `GET /health` e
-`POST /v1/systemone`, sem endpoint `/v1/models` nem API OpenAI-compatible. A
-documentação upstream também restringe essa rota HTTP a estado textual; campos
-`image`, `audio` e `video` são rejeitados. A resposta full inclui `routing`,
-detalhes adicionais nos answers e campos de usage além dos dois tokens comuns.
-Assim, o adapter `LayaClient` fala diretamente com `/v1/systemone`, sem tentar
-reaproveitar o discovery do `LlamaServerClient`; valida choice/score em mapas,
-aceita os metadados extras sem ativar `LAYA_JEV_STRICT` e não retorna routing
-que pode carregar metadados derivados do estado. A distribuição recebe
-tolerância proporcional ao número de opções, pois Laya arredonda cada
-probabilidade independentemente a quatro casas.
+## Análise de paridade dos providers
 
-Implementados nesta etapa: health e decisão textual em Rust, Python e
-TypeScript; 10 testes Rust focados, fixtures HTTP Python/TypeScript; testes para
-choice de 64 opções, score com `probabilities`/`legend` em mapas, `noul`,
-metadata e usage extras, Bearer, IDs de resposta incorretos, limites de request/
-response e recusa de mídia antes da rede. `cargo fmt --check`, Clippy com
-`-D warnings` e os testes Rust focados passaram. `scons tests` passou: 227
-testes Rust, 3 fixtures de conformidade, 1 teste Rust do binding Python,
-pytest (95 passou, 1 skip) e Node (48 passou, 11 skips de serviços externos
-não configurados). O build nativo Node passou com cache após a compilação
-release inicial. O teste real é
-opt-in por `VECTORA_TEST_LAYA_URL`, `VECTORA_TEST_LAYA_API_KEY` e
-`VECTORA_TEST_LAYA_MODEL`; não foi executado sem um servidor configurado.
+1. **Perfis compartilham transporte somente quando comprovado.** OpenAI
+   Chat Completions, gateways OpenAI-compatible e Ollama OpenAI-compatible não
+   compartilham necessariamente auth, opções, reasoning, erro ou stream. Os
+   fixtures devem manter essas diferenças visíveis.
+2. **Perfis nativos preservam capacidades específicas.** Anthropic, Gemini,
+   Cohere, Ollama e Responses têm formatos próprios. Converter para um
+   contrato comum deve rejeitar ou preservar dados cuja semântica não possa ser
+   representada; não descartar silenciosamente.
+3. **Modalidade pertence à operação e ao modelo.** “Suporta visão” não implica
+   PDF, áudio, vídeo, imagem em resultado de tool ou geração de imagem. Dados
+   de discovery permanecem declarativos até verificação adequada.
+4. **Laya e llama-server são integrações distintas.** O servidor standalone
+   Jev atende decisão; o GGUF servido por llama.cpp usa endpoints do
+   llama-server. Ter o mesmo modelo/weights não unifica protocolos.
 
-Fontes primárias: [API HTTP do Laya](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md)
-e [README upstream](https://github.com/NandhaKishorM/laya).
+## Evidência de teste
 
-### Atualização — embeddings multimodais llama-server v1.0.0 (16/11/2026)
+Na verificação local de 17/11/2026:
 
-O PR [#114](https://github.com/vectora-company/engine/pull/114), filho do #113, adicionou embeddings textuais; o PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, adicionou embeddings multimodais efêmeros por asset map. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, adiciona rerank textual Jina via `/rerank`: Bearer opcional, `top_n`, índices, score e usage. O PR #117, filho do #116, implementa rerank multimodal efêmero por asset map. A etapa ativa `test/llama-rerank-negative-cases`, filha do #117, cobre ausência de capability, score fora do intervalo e índices repetidos. `scons tests` passou com Rust 241, 3 fixtures + 1 fronteira Python, pytest 99/1 skip e Node 52/11 skips; `scons lint` e pre-commit passaram. PR #118 foi publicado; pre-commit da etapa #119 pendente.
+- As suites Rust, Python e Node exercitaram contratos offline e fixtures de
+  providers; `scons tests` passou com 283 testes Rust (incluindo fixtures e
+  teste nativo do binding Python), 102 Python e 56 Node. Nove Python e 16 Node
+  foram ignorados por dependerem de serviços sem endpoint configurado.
+- `scons lint` passou: formatting, Clippy, rustdoc, Ruff, `ty`, Bandit,
+  Oxlint e typecheck TypeScript.
+- O endpoint real Qdrant e os adapters LanceDB foram usados para a capability
+  de filtro vetorial; isso não é evidência de integração com providers/modelos
+  de IA reais.
+- Não foram configurados credenciais remotas, llama-server com modelo, Ollama
+  daemon ou checkpoint Laya para esta rodada. As integrações correspondentes
+  permanecem não verificadas em serviço real.
 
-A API oficial fixa aliases `/rerank`, `/v1/rerank` e `/v1/reranking`; Jina usa `documents` e retorna `results` com índice e score de 0 a 1. Este adapter não habilita entrada multimodal: mídia precisa do envelope efêmero e asset map próprios.
+Contagens pertencem àquela execução e não são garantia para outro SHA,
+ambiente ou configuração. O processo reutilizável está no
+[loop](../plans/05-loop-de-desenvolvimento.md).
 
-O contrato parte da API fixada em
-[`tools/server/README.md` v1.0.0](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md#L1920-L1932).
-`/v1/embeddings` aceita inputs como texto e objetos com partes tipadas de
-texto/imagem/áudio/vídeo; um objeto retorna um vetor. A API exige pooling que
-não seja `none` e normaliza por norma Euclidiana. Vídeo exige suporte do modelo
-e FFmpeg; áudio exige formato/modelo compatível. A rota não divulga de modo
-confiável se um modelo carregado tem pooling de embeddings, então o contrato
-não deve inferir compatibilidade apenas pelo model ID ou copiar
-`input_modalities` de chat. O core materializa bytes somente a partir do asset
-map do consumidor, confere refs, MIME, digest e limite, e não busca URLs remotas
-nem caminhos locais. Imagens seguem como data URL; áudio e vídeo seguem como
-base64 nos campos tipados previstos pelo server. A aprovação de embedding é
-validada separadamente pelo próprio endpoint e permanece sujeita ao modelo e
-pooling configurados no server.
+## Gaps e próximos critérios
 
-| Área           | Implementado                                                                                                                                                                               | Não inferir                                                                                                                        |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Chat           | OpenAI Chat Completions nomeado em implementação; OpenAI Responses; OpenRouter Chat Completions; adapters nativos Anthropic, Google Gemini, Cohere e Ollama; fallback; `LlamaServerClient` | O novo perfil OpenAI está em validação local; 9router, OmniRouter e Kimi ainda não têm perfis/diferenças verificadas por operação. |
-| Embeddings     | OpenAI-compatible, OpenRouter, Cohere, Voyage e Ollama                                                                                                                                     | OpenAI genérico significa conformidade integral; nenhum perfil por modelo garante dimensão/modalidade.                             |
-| Rerank         | Cohere, Voyage, OpenRouter e Jina textual via llama-server v1.0.0 em implementação local                                                                                                   | Rerank multimodal ainda não ligado ao asset map; não inferir compatibilidade com TEI/Jina de outros providers.                     |
-| Mídia no chat  | Tipos image/audio/video/document/file, asset map, preparação e envio em partes dos protocolos                                                                                              | Cada provider/modelo aceita todos os formatos; geração de imagem, áudio ou vídeo.                                                  |
-| Decision Model | Dispatch/policy do harness retorna decisões de autorização de tool                                                                                                                         | Inferência por modelo com perguntas tipadas/probabilidades (`/v1/systemone`). São conceitos distintos.                             |
-| TTS/STT        | Não há cliente LLM para TTS/STT                                                                                                                                                            | Helpers de mídia no consumidor Vectora pertencem à Engine ou estão prontos para binding.                                           |
+- Construir e manter uma tabela verificável provider × endpoint × operação ×
+  modalidade × modelo, incluindo auth, erros, limites, stream e status real.
+- Cobrir limites agregados de mídia e catálogo/metadata confiáveis; ausência de
+  dado precisa continuar como `unknown` e falhar de modo conservador.
+- Definir contratos antes de adicionar geração de imagem, batch STT e operações
+  gerais de vídeo; especificar suporte concreto, custos, streaming e bytes.
+- Executar smokes locais opt-in com versões fixadas de llama-server, Ollama e
+  Laya quando os serviços/modelos estiverem disponíveis; para providers
+  remotos, usar credenciais de teste sem expô-las em logs/fixtures.
+- Completar conformidade compartilhada de cancelamento, redaction, respostas
+  malformadas e stream truncado em Rust, Python e TypeScript.
 
-### Ollama nativo — PR #107, filho do PR #106
+## Referências
 
-A Engine agora mapeia `/api/chat` para o contrato comum, incluindo chat
-bufferizado e stream NDJSON; suporta tools, mensagens multimodais com imagens
-base64, thinking/reasoning, usage e extensões `think`, `format`, `keep_alive`
-e `options`. `temperature` e `max_tokens` são traduzidos para as options
-nativas. O campo `api_key` é opcional para endpoints locais; se informado,
-segue como Bearer para endpoints remotos. A API OpenAI-compatible segue como
-forma portátil separada. Fixtures unitárias Rust e HTTP Python/Node passaram; workspace Rust (210 testes + 3 fixtures), pytest (57/1 skip), Node (43/11 skips), NAPI, TypeScript typecheck, Clippy, Ruff e `ty` passaram.
-Não declarar APIs Responses, TTS/STT ou capabilities de nuvem como suportadas
-por esse adapter. O PR [#107](https://github.com/vectora-company/engine/pull/107) está `OPEN`/`MERGEABLE`, empilhado sobre #106. Fontes oficiais: [API chat](https://docs.ollama.com/api/chat)
-e [compatibilidade OpenAI](https://docs.ollama.com/api/openai-compatibility).
-
-O estado em `main` permanece o snapshot anterior ao adapter. O PR #98
-implementa `LlamaServerClient` em Rust com health, discovery, metadata de modelo
-preservada e chat/stream compartilhado. O PR filho #100 expõe health, models,
-completion e stream pelos bindings Python/TypeScript, incluindo requests
-efêmeros; fixtures locais cobrem SSE nos dois. Isso não prova integração com
-servidor llama-server real nem suporte de cada modalidade/modelo.
-
-## Providers nomeados: documentos primários e gaps no core
-
-| Provider/perfil  | Capacidades documentadas na API                                                                                                   | Estado na Engine                                                                                                                                                                     |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| OpenAI           | Chat/Responses, input vision, image generation/edit, embeddings, file/realtime transcription, TTS e realtime audio                | Apenas tentativa por protocolo OpenAI-compatible em chat/embeddings; falta perfil e adapters dedicados por operação.                                                                 |
-| Anthropic        | Messages, tools e visão por image blocks                                                                                          | Chat nativo presente; imagem é entrada em Messages. Sem geração de mídia, áudio/vídeo ou embedding Anthropic no core.                                                                |
-| Google Gemini    | Conteúdo multimodal incluindo vídeo, image generation, TTS e Live audio                                                           | Chat nativo presente. Não há operações Engine para imagem, TTS, STT ou Live.                                                                                                         |
-| Cohere           | Chat, embeddings e rerank                                                                                                         | As três operações estão implementadas em superfícies separadas; sem implicar outras modalidades.                                                                                     |
-| OpenRouter       | Chat multimodal, geração de imagem/vídeo, TTS, STT, embeddings, rerank e áudio                                                    | Embeddings/rerank dedicados; chat pode usar URL genérica. Faltam adapters dedicados para os demais endpoints.                                                                        |
-| 9Router          | A página oficial anuncia OpenAI-compatible chat, embeddings, TTS, STT, image, vision, video, search e fetch                       | Sem perfil nem API/schema por operação no código. A fonte pública consultada não bastou para implementar requests robustos.                                                          |
-| OmniRouter `.ru` | Chat/Messages/Responses, Decision Model, transcrição, geração de imagem e áudio/música                                            | Sem adapters. Decision Model é endpoint específico; imagem/áudio são jobs idempotentes assíncronos.                                                                                  |
-| Kimi/Moonshot    | API OpenAI/Anthropic-compatible; Kimi Code documenta video upload, enquanto a fonte oficial Kimi K2 diz que K2 não suporta vision | Sem perfil. Capability específica do modelo não pode ser atribuída a todo Kimi.                                                                                                      |
-| Ollama           | API nativa para chat/vision e embeddings de texto; API OpenAI-compatible documentada como subconjunto                             | Embeddings nativos implementados; sem chat Ollama dedicado ou perfil/capability discovery. O `/api/embed` normaliza vetores; o subconjunto `/v1` tem diferenças que exigem fixtures. |
-
-A evidência detalhada e URLs oficiais estão em
-[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
-`OmniRouter` é um nome ambíguo: `api.omnirouter.ru`/`.cloud` e `omnirouter.li`
-documentam APIs diferentes. Uma integração dedicada fica pendente de escolha
-no chat; o trabalho independente em `llama-server` não depende dela.
-
-## O que a tag llama.cpp v1.0.0 documenta
-
-- `/v1/chat/completions`, `/v1/responses` e `/v1/messages` Anthropic-compatível;
-  a própria documentação evita prometer conformidade integral com os originais.
-- `/v1/models` declara `architecture.input_modalities` e
-  `architecture.output_modalities`; `decisions` e `audio` têm semântica
-  especial. Se os metadados do modelo faltam, a documentação diz que o servidor
-  devolve `text` nos dois arrays; `video` só é informado depois que o modelo
-  carrega. Isso deve ser registrado como resposta/fallback do servidor, não como
-  prova de que o modelo só aceite texto.
-- `/v1/systemone` é API TypeSafe sem stream, com perguntas tipadas e input
-  multimodal opcional. Deve virar contrato `DecisionModel` separado do chat.
-- `/v1/audio/speech` converte para `/tts`; WAV/PCM, sample rate e vozes são do
-  modelo, e parâmetros OpenAI podem ser ignorados/rejeitados.
-- `/v1/realtime` suporta sessão WebSocket para ASR/transcrição e conversa de
-  áudio, com PCM16, eventos e controle de sessão; não é transcrição batch de
-  arquivo.
-- Chat aceita partes `image_url`, `input_audio` e `input_video` quando o modelo
-  e a configuração suportam; áudio é decodificado por miniaudio, vídeo por
-  FFmpeg e pode carregar soundtrack. Embeddings aceitam entrada multimodal em
-  extensão que não faz parte da API OpenAI Embeddings padrão.
-- A release inclui modelos/capacidades específicas (inclusive TTS Drama-3 e
-  arquiteturas vision); suporte do runtime a um modelo não implica que todas as
-  rotas/API tenham a mesma modalidade.
-- Geração de imagem não aparece como endpoint do servidor v1.0.0; a capacidade
-  requer outro provider real. Não inventar route.
-
-## Decisões técnicas recomendadas para implementação
-
-1. Implementar `llama-server` por HTTP sobre reqwest, sem dependência C++ nativa;
-   isso oferece portabilidade de bindings e usa precisamente a interface do
-   produto upstream.
-2. Manter `protocol` distinto de `provider_profile`. Protocol codecs são
-   compartilhados; perfis registram endpoints/defaults/headers e diferenças
-   confirmadas com fixtures.
-3. Usar discovery de `/v1/models` preservando os arrays e o estado. Quando o
-   servidor indicar fallback `text` porque não pôde ler metadados, não promover
-   essa resposta a prova de suporte nem de exclusão de mídia. Falha de discovery
-   deixa capability remota desconhecida; mídia não é enviada às cegas.
-4. Modelar separadamente `DecisionModel`, speech synthesis, transcription/realtime
-   audio, image generation e multimodal chat. Não inflar `ChatRequest` com APIs
-   que têm lifecycle e resposta diferentes.
-5. Usar teste HTTP mock para todos os contratos e servidor real v1.0.0 com
-   modelo pequeno apenas em ambiente configurado; no CI padrão não baixar pesos.
-
-Essas escolhas são proposta de implementação coerente com as regras locais. Se
-um detalhe alterar contrato público, segurança ou dependências, registrar opções
-e perguntar a `brunosrz` no chat antes da parte dependente.
-
-## Questões ainda abertas
-
-- Matriz exata de providers e modalidades exigidas no charter de primeira
-  release: o pedido inclui os providers nomeados e as modalidades gerais, mas
-  os endpoints distintos e gaps reais precisam de aceites por operação.
-- Contrato de metadados/capability para modelos remotos que não oferecem
-  `/v1/models` estendido: perfil do provider, override do host e discovery
-  possuem níveis distintos de confiança.
-- Contrato de batch STT e image generation: llama.cpp v1.0.0 não fornece os
-  endpoints equivalentes a batch transcription / geração de imagem; escolher
-  providers específicos exige definir escopo e paridade.
-- Runtime lifecycle para WebSocket realtime: ownership da sessão entre core e
-  host e limites de buffers precisam ser fixados antes do adapter final.
-
-## Limites da verificação
-
-Não foi iniciado `llama-server`, baixado modelo, nem chamada externa a provider.
-O inventário prova a presença/ausência de adapters no código local e os
-endpoints declarados no upstream v1.0.0; não prova interoperabilidade real nem
-capacidade de cada modelo.
-
-## Atualização — Decision Model llama-server (2026-11-15)
-
-A etapa seguinte da stack começa na branch `feat/llama-server-decision-model`, filha do PR #102. O core define `DecisionRequest`, perguntas `choice`/`score`/`noul` e resposta que preserva campos de probabilidade; `/v1/systemone` é não-streaming conforme a API fixada na spec. A validação aceita somente data URLs base64 de imagem/áudio no campo `files`, com limite de mídia; usa auth, timeout e limite de corpo do perfil. A resposta exige exatamente os IDs perguntados. Fixture HTTP Rust passou para rota, bearer token, choice, probabilidades e usage. Wrappers/fixtures Python e TypeScript foram iniciados; build e testes dos bindings ainda pendentes.
-
-## Atualização — TTS bufferizado llama-server (2026-11-15)
-
-O PR [#104](https://github.com/vectora-company/engine/pull/104), filha do PR #103, head `8763968` (`MERGEABLE`), implementa duas superfícies
-conforme a API fixada em [`llama.cpp v1.0.0`](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md): `/v1/audio/speech` (WAV/PCM16, voz opcional e speed=1.0) e `/tts` (WAV, PCM float32 ou PCM16; parâmetros nativos e speaker-reference). O retorno é binário, preserva Content-Type e extrai sample rate do header de áudio ou RIFF/WAVE. O formato de request persistível não contém o áudio de referência; `speaker_ref_b64` está isolado no envelope efêmero com Debug redigido e limite de bytes. A rota com voz explícita consulta `/props`; discovery exige model ID e saída `audio`.
-
-Fixtures Rust passaram (8 testes focados, incluindo ambas as rotas); `cargo check` passou para core e crates Python/Node; TypeScript typecheck passou; Node executou 41 testes aprovados e 11 skips relacionados a serviços externos sem endpoint. Build maturin e fixture pytest focado passaram; pytest do binding Python passou com 50 testes e 1 skip. Não há integração com um llama-server/modelo real neste host. Streaming TTS, realtime WebSocket/ASR e cancelamento ficam pendentes para o PR seguinte, sem afirmar batch STT. O store pnpm deste checkout retorna `/home/brunosrz/.local/share/pnpm/store/v11`; os pacotes e build são do checkout em Área de trabalho.
-
-## Atualização — sessão WebSocket realtime (2026-11-15)
-
-A branch `feat/llama-server-realtime-audio`, filha do PR #104, implementa sessão `/v1/realtime` segundo llama.cpp v1.0.0. O contrato acomoda transcription e conversa; PCM16 mono usa sample rate nativo do modelo por padrão, ou override validado. Commit/evento controlam o buffer, fechamento cancela a sessão, e eventos JSON desconhecidos são preservados. Fixture Rust cobre handshake autenticado, query, atualização de rate, PCM16, commit e eventos de transcrição.
-
-Verificação local concluída: workspace Rust com 205 testes da lib, 3 fixtures e teste do crate Python aprovados; Clippy `-D warnings` passou depois de corrigir a lint `manual_is_multiple_of`; build NAPI release e TypeScript typecheck passaram; Node registrou 41 pass e 11 skips de serviços opcionais sem configuração; `maturin develop` e pytest passaram (55 pass, 1 skip); Ruff, format e `ty` passaram. Uma rodada de hooks globais reportou arquivos SVG e Markdown/TypeScript preexistentes reformatados pelo hook; arquivos fora do escopo foram restaurados. Não há teste contra llama-server/modelo realtime real. O `node_modules` usado está dentro deste checkout em Área de trabalho, com store configurado em `/home/brunosrz/.local/share/pnpm/store/v11`; nenhum build foi executado em `/media`.
-
-O PR #102 agora retorna `MERGEABLE` no GitHub, então o conflito mostrado na captura não está presente no estado remoto consultado. O PR #105 está pronto para publicação como filho do #104; o trabalho prossegue sem aguardar CI. Limites mantidos: teste de interoperabilidade com modelo real, batch STT e streaming TTS não fazem parte do endpoint realtime implementado. Estado operacional e próximos passos em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), checklist em [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e spec em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md).
-
-## Etapa ativa: streaming TTS (15/11/2026)
-
-A branch `feat/llama-server-streaming-tts`, filha do PR #105, já implementa
-stream binário nas duas APIs do llama-server v1.0.0. As chamadas são
-incrementais, com chunks limitados, timeout e limite total; metadados de
-content type/sample rate são mantidos, e falhas após bytes parciais são
-reportadas ao consumidor. Wrappers Python e TypeScript expõem iteradores
-assíncronos com backpressure/cancelamento através de canal limitado. Testes
-Rust cobrem resposta incremental, erro após áudio parcial e limites. Workspace
-Rust e Clippy passaram; pytest passou (56/1 skip), Node passou (42/11 skips) e
-build NAPI/typecheck passaram. O PR [#106](https://github.com/vectora-company/engine/pull/106)
-está `OPEN`/`MERGEABLE` como filho do #105; integração com modelo TTS real não
-foi executada. Consulte
-[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
-[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e
-[`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
-
-A documentação fixa duas superfícies upstream para gerar áudio incrementalmente: `/v1/audio/speech` aceita `stream_format: "audio"` e rejeita `sse`; `/tts` aceita `stream: true`. WAV streamed tem header com tamanho desconhecido (0xFFFFFFFF), portanto a Engine deve preservar os bytes e sinalizar Content-Type/sample rate sem acumular ou reescrever o arquivo. O contrato do PR #104 só retorna áudio bufferizado; o trabalho seguinte será um iterador de chunks com backpressure e cancelamento em Rust/Python/TypeScript, empilhado sobre [#105](https://github.com/vectora-company/engine/pull/105). Fonte normativa: [llama.cpp v1.0.0 HTTP server README](https://github.com/ggml-org/llama.cpp/blob/v1.0.0/tools/server/README.md), seções `/tts` e `/v1/audio/speech`.
-
-## Atualização — perfil de chat OpenRouter (15/11/2026)
-
-O PR [#108](https://github.com/vectora-company/engine/pull/108), filho do #107 e `OPEN`/`MERGEABLE`, implementa perfil na branch `feat/openrouter-chat-profile`: o gateway mantém o
-transporte OpenAI-compatible e recebe perfil nomeado com URL padrão ou proxy
-customizado, chave obrigatória e atribuição opcional nos headers oficiais. Os
-campos `provider`, `models`, `route`, `user` e `plugins` seguem por request via
-`extensions`; defaults globais desses campos poderiam afetar custo, fallback ou
-política de dados. Testes Rust e fixtures HTTP Python/Node passaram: workspace 212 + 3 fixtures + 1 binding Python nativo, pytest 58/1 skip, Node 44/11 skips, typecheck e Clippy. Hooks completos passaram. A API Responses e endpoints de geração de áudio/imagem/vídeo seguem sem ser
-declarados cobertos. O daemon/endpoint OpenRouter real não foi usado. Referências:
-[API chat/headers](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion)
-e [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).
-
-Consulte o plano da etapa em [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), spec em [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e checklist em [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
-
-## OpenAI Responses API — PR #109, filho do PR #108
-
-Responses é um protocolo distinto de Chat Completions, com input multimodal,
-function calls e stream de eventos tipados. O core implementa `store: false` por
-padrão, histórico completo, texto/imagem, tools da aplicação, reasoning/usage e
-eventos SSE mapeáveis. Rust workspace, Clippy, fixture HTTP Python, build NAPI,
-TypeScript/Node e pytest passaram; os hooks completos também passaram. O PR
-[#109](https://github.com/vectora-company/engine/pull/109) foi publicado como
-filho do #108. Built-in tools, geração de imagem, áudio e vídeo ficam fora deste
-subpasso; integração OpenAI real requer credencial. Referências:
-[overview](https://developers.openai.com/api/reference/responses/overview),
-[create](https://developers.openai.com/api/reference/resources/responses/methods/create),
-[eventos](https://developers.openai.com/api/reference/resources/responses/streaming-events),
-[function calling](https://developers.openai.com/api/docs/guides/function-calling)
-e [images](https://developers.openai.com/api/docs/guides/images-vision).
-
-Etapa ativa na branch filha do #109: perfil nomeado OpenAI Chat Completions, com
-URL padrão oficial, chave obrigatória, endpoint customizado e headers extras.
-Core Rust e fixtures HTTP Python/TypeScript foram implementados; workspace Rust
-(216 testes), Clippy, pytest completo e Node (46 pass/11 skips) passaram. Falta
-executar hooks completos e publicar o PR. Na revisão, os headers opcionais de
-atribuição foram restringidos ao perfil OpenRouter; as fixtures Python/Node
-validam que `app_url` e `app_title` não vazam para OpenAI. Integração real
-OpenAI requer credencial; nenhum segredo foi lido.
-
-## Embeddings llama-server — etapa incremental (16/11/2026)
-
-O endpoint `/v1/embeddings` agora tem implementação de texto no core Rust e bindings. O código ordena pela posição `index`, exige cardinalidade exata, índices únicos/contíguos, dimensão uniforme e valores finitos; usage é convertido em tokens de entrada. A API genérica `EmbeddingRequest` foi reutilizada sem alterar seu schema. Fixtures Rust/Python/Node cobrem rota, auth, resposta, ordem, cardinalidade e validação de índice/dimensão/finitude; lotes vazios não abrem rede. `scons tests` e `scons lint` passaram. Embeddings multimodais com asset map efêmero seguem pendentes; o teto de resposta se aplica ao body JSON, enquanto um limite específico de payload total de entrada requer refinamento. Consulte [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md), [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md).
+- [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md)
+- [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md)
+- [`docs/checklists/05-providers-e-modalidades-llama-cpp-v1.md`](../checklists/05-providers-e-modalidades-llama-cpp-v1.md)
+- [`docs/specs/17-midia-no-chat.md`](../specs/17-midia-no-chat.md)
+- [llama.cpp v1.0.0 server API](https://github.com/ggml-org/llama.cpp/tree/v1.0.0/tools/server)

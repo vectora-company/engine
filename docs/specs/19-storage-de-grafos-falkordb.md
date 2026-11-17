@@ -2,7 +2,16 @@
 
 ## Estado
 
-Implementação publicada no PR [#102](https://github.com/vectora-company/engine/pull/102), filho do #101. Uma auditoria posterior encontrou que os bindings descartavam os timeouts/limites do core; o follow-up [#111](https://github.com/vectora-company/engine/pull/111), filho do #110, expõe esses controles e configura os deadlines de conexão/resposta do client oficial. `brunosrz` escolheu as duas camadas e aprovou `falkordb` 0.11.2 com Rust 1.95. Core e bindings foram testados contra FalkorDB 6.0.3 em TCP e TLS com CA confiável; cancelamento remoto segue limitação documentada. Não declarar paridade com SQL/vetores.
+Capability implementada em Rust, Python e TypeScript: contrato portátil de
+property graph, extensão Cypher parametrizada, seleção/capabilities, timeouts,
+limites e TLS. Testes reais foram executados contra FalkorDB 6.0.3, inclusive
+com CA confiável e AOF síncrono. Esses resultados descrevem a configuração
+exercitada, não garantem durabilidade para todos os deployments. Cancelamento
+remoto de uma query permanece indisponível no client utilizado.
+
+A decisão de `brunosrz` é oferecer as duas camadas e usar o client oficial
+`falkordb` 0.11.2 com MSRV Rust 1.95. A implementação não habilita recursos
+embedded. Não declarar equivalência com outros tipos de storage.
 
 ## Objetivo e fronteira
 
@@ -88,11 +97,18 @@ de domínio, embeddings, execução de código/procedures não aprovados e gest�
 automática de serviço. Recursos vector/full-text nativos do FalkorDB não
 substituem os adapters vectoriais existentes sem contrato de equivalência.
 
-## Aceite após decisão
+## Critérios e evidência
 
-- Contrato Rust versionado com conexão e operações, erros tipados, timeout,
-  cancelamento, limites e redaction.
-- Seleção/capabilities e bindings Python/TypeScript coerentes com o core; testes passaram em Python (55) e Node (41; 10 testes de outros backends ignorados por falta de endpoints).
-- Testes unitários e integração contra FalkorDB real. Cobertura executada em FalkorDB 6.0.3: auth via URL, parâmetros, dados não ASCII, substituição de propriedades, isolamento por nome de grafo, traversal nas três direções, limites, timeout, restart/recovery com AOF síncrono, delete e roundtrip nas três linguagens. TLS Rustls foi verificado no PR [#112](https://github.com/vectora-company/engine/pull/112) contra FalkorDB 6.0.3 com CA de teste confiável no trust store do processo (`SSL_CERT_FILE`). Cancelar a future do caller não prova que o comando remoto parou; o client oficial não expõe API de cancelamento, e o timeout server-side foi testado separadamente.
-- Documentar versão/imagem, configuração de persistência testada e limites sem
-  afirmar durabilidade operacional universal.
+- API Rust versionada, seleção, erros tipados, timeouts, limites e redaction
+  expostos coerentemente pelos bindings Python/TypeScript.
+- Testes service-real contra FalkorDB 6.0.3 cobrem auth via URL, queries
+  parametrizadas, Unicode, substituição de propriedades, isolamento por grafo,
+  traversal, limites, timeout, restart/AOF síncrono, TLS Rustls com CA confiável
+  e roundtrip nos três runtimes.
+- O cancelamento da future local não confirma parada do comando remoto; o client
+  não expõe API de cancelamento remoto. Timeout do servidor e deadline local
+  permanecem sinais distintos.
+- Persistência e recuperação dependem da configuração de deployment e volume.
+  O consumidor configura backup, retenção e política operacional.
+- O dialecto FalkorDB deriva de OpenCypher, mas tem subconjunto/extensões
+  próprios; não declarar compatibilidade completa com Neo4j.

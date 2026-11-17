@@ -50,8 +50,8 @@ cronológica de PRs.
 - [Checklist de implementação](checklists/00-checklist-de-implementacao.md):
   checklist completo para preparar, implementar, verificar e entregar cada
   etapa de um plano.
-- [`docs/checklists/07-checklist-completo-da-engine.md`](checklists/07-checklist-completo-da-engine.md): inventário do estado das capabilities, gaps, issues abertas e documentos da Engine, conferido contra `main` em 15/11/2026.
-- [Checklist da auditoria OpenAI-compatible](checklists/01-review-pr3-openai-compatible.md):
+- [`docs/checklists/07-checklist-completo-da-engine.md`](checklists/07-checklist-completo-da-engine.md): inventário do estado das capabilities, gaps, issues abertas e documentos da Engine, auditado no checkout em 17/11/2026; revalidar código, issues e testes ao retomar.
+- [Checklist da auditoria OpenAI-compatible](checklists/01-cliente-openai-compatible.md):
   classificação dos findings antigos e verificação das correções desta etapa.
 - [Análise e referências de desenvolvimento](analyses/00-analise-e-referencias-de-desenvolvimento.md):
   hierarquia das fontes, investigação obrigatória, registro de decisões e
@@ -60,8 +60,7 @@ cronológica de PRs.
   [`docs/templates/00-plano-de-capability.md`](templates/00-plano-de-capability.md),
   [`docs/templates/01-analise-de-capability.md`](templates/01-analise-de-capability.md) e
   [`docs/templates/02-checklist-de-etapa.md`](templates/02-checklist-de-etapa.md).
-- [Auditoria de review do PR #3](analyses/01-auditoria-review-pr3.md): findings
-  revalidados contra a implementação atual, com evidências e limitações.
+- [Auditoria histórica do cliente OpenAI-compatible](analyses/01-auditoria-cliente-openai-compatible.md): findings antigos e evidências; não representa o estado global da Engine.
 - [Matriz de conformidade das capabilities](analyses/02-matriz-conformidade-capabilities.md):
   contratos, APIs Rust/Python/TypeScript, testes existentes, maturidade e gaps.
 - [Análise cruzada: Akita, Engine, Vectora e GH Bot](analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md):
@@ -110,7 +109,7 @@ referências locais. Specs definem o escopo da engine; planos ordenam a execuç�
 
 ## Auditorias
 
-- [Auditoria e walkthrough da main](audits/01-auditoria-e-walkthrough-da-main.md)
+- [Fotografia histórica do bootstrap](audits/01-fotografia-historica-do-bootstrap.md)
 
 As auditorias registram observações datadas. Revalide o estado do código antes
 de tratar uma observação histórica como estado atual.

@@ -6,7 +6,7 @@ acrescentar requisitos, mas não deve remover verificações aplicáveis daqui.
 Estados permitidos: `pendente`, `feito`, `bloqueado` e `não aplicável`. Todo
 item bloqueado ou não aplicável precisa de uma justificativa curta.
 
-Etapa concluída na stack local em 15/11/2026: PR [#112](https://github.com/vectora-company/engine/pull/112), filho do #111; TLS real passou e o cancelamento remoto foi documentado como não exposto pelo client oficial. Consulte [`docs/checklists/06-storage-grafos-falkordb.md`](../checklists/06-storage-grafos-falkordb.md).
+O inventário transversal das capabilities está em [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md). Consulte o estado específico do domínio antes de retomar; este checklist não guarda o topo da stack.
 Para o panorama de todas as capabilities e issues, consulte o [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md); o estado corrente deve ser revalidado contra o checkout e o GitHub.
 
 ## Preparação
@@ -71,7 +71,8 @@ Para o panorama de todas as capabilities e issues, consulte o [`docs/checklists/
       reformatar.
 - [ ] Commitar e fazer push para a URL do GitHub (o `origin` local pode apontar
       para um clone).
-- [ ] Abrir o PR com base na branch do PR anterior da stack (não `main`).
+- [ ] Abrir o PR com base na branch atualmente identificada como anterior na stack;
+      não fixar número nem branch no plano reutilizável.
 - [ ] Antes de parar um contêiner de teste, conferir que não tem `AutoRemove`.
 - [ ] Confirmar que o próximo passo está no plano ativo aprovado; abrir sua
       branch empilhada imediatamente, sem esperar CI ou aprovação do PR anterior.
@@ -82,4 +83,3 @@ Uma etapa está concluída quando todos os critérios de aceite aplicáveis têm
 implementação ou justificativa explícita, verificação local registrada,
 documentação sincronizada e nenhuma decisão vital pendente para aquela etapa.
 Isso não encerra o goal se restarem etapas aprovadas no plano.
-Artefatos específicos desta etapa: `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.

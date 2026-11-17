@@ -1,108 +1,63 @@
-# Plano de implementação do loop agêntico
+# Plano: loop agêntico e harness
 
 ## Objetivo
 
-Implementar na engine Rust o runtime reutilizável descrito em
+Implementar um runtime compartilhado, canônico em Rust, para lifecycle de runs,
+montagem de turnos, dispatch de tools, policy, persistência e verificação.
+Backend Python do Vectora e documentação de requisitos são fontes de
+comportamento, não autorização para migrar consumidores em bloco. UI, RBAC,
+identidade, execução de adapters e storage de produto continuam no host.
+
+## Estado e fases
+
+1. **Lifecycle e montagem de turno — implementados experimentalmente.**
+   Lifecycle versionado e acumulação de eventos/streams existem em Rust e nos
+   bindings. Adoção por consumidor e conformidade integral permanecem gates.
+2. **Tools e dispatch — implementados experimentalmente.** Schema, capabilities,
+   erros, decisões default-deny e coordenação de rodadas modelo → tool → modelo
+   existem. O host executa e isola adapters; timeout/idempotência declarados
+   não são impostos ao processo externo pela Engine.
+3. **Policy e aprovação — implementadas com persistência SQLite.** Snapshot,
+   requests e receipts são validados e persistidos. O host autentica aprovador,
+   verifica a autorização e executa/cessa a tool.
+4. **Persistência e recovery — parcial.** Stores SQLite para lifecycle,
+   model/tool loop e policy gravam estado transacionalmente e permitem reopen,
+   retry idempotente, cancelamento pendente e reconciliação explícita. Efeitos
+   externos não são atômicos nem exactly-once. PostgreSQL é projeção; SQLite
+   permanece autoridade local e fonte de rebuild. Migrations versionadas com
+   rollback e recovery operacional abrangente continuam no plano de storage.
+5. **Verification gates — implementados experimentalmente.** Reports/gates
+   tipados são associados à conclusão. A Engine persiste evidência recebida;
+   o host executa e autentica os checks, cuja veracidade não é inferida.
+
+As specs de referência são
 [`01-runtime-agentico-e-harness.md`](../specs/01-runtime-agentico-e-harness.md),
-usando `/media/brunosrz/externo/vectora-repos/issues/01-loop-agentico-e-harness.md` e
-`/media/brunosrz/externo/vectora-repos/vectora/backend/engine/` como fontes de requisitos e comportamento
-observável. O backend Python é referência para semântica; detalhes de produto,
-UI, RBAC, workbenches, adapters e storage proprietário não viram API da engine.
+[`10-tool-contracts-e-dispatch.md`](../specs/10-tool-contracts-e-dispatch.md),
+[`11-model-tool-loop.md`](../specs/11-model-tool-loop.md),
+[`12-policy-and-approval.md`](../specs/12-policy-and-approval.md),
+[`13-sqlite-model-tool-loop-store.md`](../specs/13-sqlite-model-tool-loop-store.md),
+[`14-sqlite-durable-run-lifecycle.md`](../specs/14-sqlite-durable-run-lifecycle.md)
+e [`15-verification-gates.md`](../specs/15-verification-gates.md).
 
-Toda capacidade pública deve ser implementada uma vez no Rust e exercitada
-pelos bindings Python/PyPI e TypeScript/npm já incluídos no bootstrap. Nenhuma
-etapa troca automaticamente o runtime de qualquer consumidor.
+## Gaps e critérios restantes
 
-## Fases empilhadas
+- [ ] Fechar integração de stores com projeção PostgreSQL e migrations com
+      rollback, mantendo SQLite como autoridade e cópia de recovery.
+- [ ] Ampliar cobertura de concorrência multiprocesso em reservas/admissions,
+      retries, recovery e projeção.
+- [ ] Validar shutdown/cancelamento através de adapters reais; resultado incerto
+      continua exigindo reconciliação antes de avançar.
+- [ ] Definir conformidade compartilhada de redaction, estados e erros entre
+      Rust, Python e TypeScript.
+- [ ] Validar adoção reversível no Vectora e GH Bot sem execução duplicada de
+      efeitos.
+- [ ] Manter sandbox, RBAC e identidade do aprovador como responsabilidades do
+      consumidor até existir contrato aprovado.
 
-1. **Contrato de ciclo de vida** — identidade de execução versionada e estados
-   válidos. Implementado experimentalmente com `SqliteRunLifecycleStore`: a
-   admissão, evento inicial e checkpoint são persistidos atomicamente; as
-   transições verificam sequência esperada. Não torna efeitos externos
-   atômicos; a projeção desse estado em PostgreSQL (com SQLite como autoridade)
-   está pendente no [plano de storage](04-plano-storage-ledger.md).
-2. **Montagem de turno** — acumular texto, tool calls fragmentadas, usage e
-   término em resposta canônica; validar ordem e impor limites. API incremental
-   no Rust e API equivalente de conformidade nos dois bindings. Não executar
-   tools nesta fase.
-3. **Contrato de tools e loop de modelo** — dividido em entregas empilhadas:
-   (a) contrato versionado, schemas, capabilities, erros tipados e decisões
-   default-deny de dispatch; (b) resultados de adapters e máquina de rodadas
-   modelo → dispatch → resultados. A parte (a) está implementada
-   experimentalmente em `docs/specs/10-tool-contracts-e-dispatch.md`; ela
-   propaga timeout e idempotência declarados, mas não os impõe nem executa tools.
-   A máquina de rodadas e o protocolo de resultados foram implementados
-   experimentalmente em `docs/specs/11-model-tool-loop.md`. Ambos os bindings
-   expõem o núcleo. O consumidor fornece adapters; persistência, aprovação e
-   recovery durável foram acrescentados nas etapas seguintes; adapters de tool,
-   identidade e autorização do host continuam fora do core.
-4. **Política e aprovação** — definir snapshot efetivo e decisão default-deny;
-   vincular HITL a conteúdo, arguments normalizados, escopo e digest da policy.
-   Revalidar antes de efeitos e retomar. Falha de policy interrompe o efeito.
-   O contrato síncrono de snapshot, bloqueios e aprovação por binding foi
-   implementado experimentalmente em `docs/specs/12-policy-and-approval.md` e
-   exposto pelos dois bindings. PR #30 acrescentou `SqliteToolPolicyStore`,
-   exposto em Python e TypeScript, para persistir snapshot, pedidos e recibos,
-   reavaliar o estado mais recente e rejeitar conflitos de binding. O contrato
-   do store está em `docs/specs/16-sqlite-durable-tool-policy.md`. O host segue
-   responsável por autenticar aprovadores e validar recibos; o adapter não
-   executa nem cancela tools. Testes Rust também verificam rejeição de mudança
-   de policy sob o mesmo digest/revisão e do estado que excede 512 KiB.
-5. **Persistência e recovery** — integrar com os contratos de storage do
-   [plano de storage](04-plano-storage-ledger.md) e da
-   [spec 02](../specs/02-storage-memoria-contexto-rag.md): reserva atômica por
-   thread/turno, ledger ordenado e checkpoint antes/depois de efeitos. O adapter
-   experimental `SqliteModelToolLoopStore` agora persiste o par
-   evento/checkpoint em uma transação antes de devolver cada ação ao host; os
-   bindings Python e TypeScript expõem o mesmo adapter. Seu contrato e seus
-   limites estão em `docs/specs/13-sqlite-model-tool-loop-store.md`. O adapter
-   `SqliteRunLifecycleStore` também reserva run/thread/turn e grava o evento de
-   admissão, o estado inicial e o checkpoint na mesma transação; suas
-   transições usam sequência esperada e checkpoints duráveis. O contrato está
-   em `docs/specs/14-sqlite-durable-run-lifecycle.md`. Esses adapters não
-   tornam efeitos externos atômicos, não fornecem exactly-once e não autenticam
-   o host. Projeção em PostgreSQL desses stores (SQLite continua a autoridade
-   local, por decisão do mantenedor), coordenação dos
-   providers/adapters, autenticação de recibos pelo host e recuperação
-   operacional ainda precisam ser concluídas. O cancellation request é
-   durável e o host recebe os IDs pendentes para interromper e reconciliar; isso
-   não comprova término dos processos. Recovery nunca repete silenciosamente
-   um efeito de resultado incerto.
-   Testes Rust do store também exercitam `submit_tool_result` idempotente após
-   reopen, `recover` durável sem replay da tool e `reconcile_tool_result`
-   seguido da continuação do loop após reopen; a suíte focada passou 9/9.
-6. **Verificação e conformidade** — o contrato de resultados e vereditos está
-   em `docs/specs/15-verification-gates.md`. `SqliteRunLifecycleStore` grava
-   report, policy, avaliação e transição terminal no mesmo evento/checkpoint;
-   `completed` exige veredito `passed`, `unverified` vai para
-   `recovery_required`. Separadamente, `SqliteModelToolLoopStore::verify`
-   exige loop concluído e grava report, policy e avaliação no checkpoint do
-   loop; o consumidor ainda executa e autentica os checks. Ambos os caminhos
-   estão expostos pelos bindings Python/TypeScript. O contrato de snapshot do
-   loop é v3; snapshots v1/v2 são rejeitados. `ToolResult` é v2 e substitui
-   diretamente a saída textual anterior. Verificação e pedido de
-   cancelamento são persistidos no SQLite; o host recebe IDs de tools pendentes
-   para interrompê-las e deve registrar o resultado de cada uma. Isso não prova
-   que adapters/processos terminaram. Resultados incertos exigem reconciliação
-   antes do estado terminal `cancelled`; sem pedido de cancelamento, a
-   reconciliação permite continuar o loop. Redaction, dois perfis de consumidor e integração com
-   o fluxo completo seguem abertas antes de qualquer alegação de paridade ou
-   adoção.
+## Evidência de referência do consumidor
 
-Cada parte do plano deve ser entregue em PR próprio empilhado sobre o anterior.
-Todo contrato público é implementado uma vez no Rust e coberto pelos bindings
-Python/PyPI e TypeScript/npm no mesmo PR. Cada PR deixa explícito o que ainda
-não é durável nem seguro para produção.
-
-## Evidência de referência no backend Python
-
-- `conversation_loop.py`: streaming, montagem de tool calls, limite de iterações,
-  detecção de repetição, execução em lotes e resultado terminal.
-- `tool_batch.py`, `guardrails.py` e `hitl.py`: budgets, policy antes de efeito,
-  aprovação e redaction.
-- `stream_events.py`, `decision_record.py` e `native_stream.py`: envelopes,
-  identidade de run, ledger, status, recuperação, evidência e limites de
-  serialização.
-
-Esses módulos são fontes de comportamento separadas por responsabilidade; não
-devem ser copiados como um único framework nem importados pela engine.
+`conversation_loop.py`, `tool_batch.py`, `guardrails.py`, `hitl.py`,
+`stream_events.py`, `decision_record.py` e `native_stream.py` ajudam a
+caracterizar semântica de streaming, orçamento, policy, identidade, recovery e
+serialização. Não devem ser copiados como framework único nem importados pela
+Engine.

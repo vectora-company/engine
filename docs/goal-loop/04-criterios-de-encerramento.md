@@ -41,4 +41,3 @@ até essa condição mudar.
   ele e continue;
 - falta de conveniência ou de uma nova instrução quando o próximo passo já está
   definido e aprovado.
-  Artefatos específicos desta etapa: `docs/specs/20-engine-cli.md`, `docs/plans/08-plano-engine-cli.md`, `docs/checklists/08-engine-cli.md` e `docs/analyses/08-auditoria-engine-cli.md`.

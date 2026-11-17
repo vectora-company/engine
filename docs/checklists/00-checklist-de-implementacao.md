@@ -1,9 +1,10 @@
 # Checklist geral de implementação
 
 Este arquivo define gates reutilizáveis por etapa; não é um diário de PRs nem
-um inventário cronológico. O estado das capabilities está no plano da EPIC,
+um inventário cronológico. O estado das capabilities está no plano da EPIC e no inventário transversal,
 [`docs/plans/03-plano-continuidade.md`](../plans/03-plano-continuidade.md), e
-nos checklists específicos. Confirme a stack ao vivo no GitHub em cada sessão.
+nos checklists específicos. O checklist transversal é
+[`docs/checklists/07-checklist-completo-da-engine.md`](07-checklist-completo-da-engine.md). Confirme a stack ao vivo no GitHub em cada sessão.
 
 Use os seguintes checklists por domínio:
 

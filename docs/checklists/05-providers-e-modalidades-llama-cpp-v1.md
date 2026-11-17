@@ -1,197 +1,62 @@
-# Checklist — providers e modalidades de IA (llama.cpp v1.0.0)
+# Checklist: providers e modalidades de IA
 
-## Preparação desta etapa documental
+Escopo definido no [plano por capability](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
+na [spec](../specs/18-providers-e-modalidades-llama-cpp-v1.md) e na
+[análise de protocolos](../analyses/06-auditoria-providers-modalidades.md).
+Os estados descrevem implementação no checkout auditado, não adoção pelo
+consumidor nem estado de merge. Atualize-os após conferir código e testes.
 
-- [x] Confirmar o merge do PR #96; não há PR aberto e esta trilha parte de `main`.
-- [x] Confirmar `main` atual e checkout permitido da Área de trabalho.
-- [x] Ler adapters, settings, bindings, plano anterior e contratos de mídia.
-- [x] Consultar a release e README do `llama-server` na tag v1.0.0.
-- [x] Inventariar providers e operações existentes separando compatibilidade genérica de adapter dedicado.
-- [x] Marcar cada fato como implementação, perfil genérico, limitação ou proposta.
-- [x] Revisar os diffs e as referências upstream fixadas na tag v1.0.0.
-- [x] Revisar conteúdo e links, inclusive os índices e documentos do goal loop; manter o PR documental sobre `main`.
+Estados: `feito`, `parcial`, `revisar` e `pendente`.
 
-## Matriz de capacidade (estado observado)
+## Provedores e protocolos
 
-| Operação                                  | Estado atual                                                                                                                      | Evidência/cobertura desejada                                                                                                                                     |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chat texto/stream                         | OpenAI-compatible; OpenAI/OpenRouter Chat Completions e OpenAI Responses; nativos Anthropic/Gemini/Cohere/Ollama                  | Fixtures por operação; serviço real e limites/modelo seguem individualizados.                                                                                    |
-| OpenAI/OpenRouter/9router/OmniRouter/Kimi | Perfis OpenAI/OpenRouter Chat Completions e OpenAI Responses separados; 9router/OmniRouter/Kimi continuam em auditoria            | Rotas, auth/headers, erros, streaming, usage e modalidades por endpoint; gateway routing por request.                                                            |
-| Ollama chat                               | API nativa `/api/chat` implementada no PR #107, além do perfil OpenAI `/v1`                                                       | Fixtures JSON/NDJSON em Rust/Python/TypeScript; daemon real indisponível localmente.                                                                             |
-| llama.cpp chat/discovery                  | Perfil Rust mais APIs health/models/chat/stream nos bindings                                                                      | Conformidade por fixture; integração real e modalidades por modelo pendentes.                                                                                    |
-| Decision Model                            | `/v1/systemone` implementado no core e bindings (PR #103)                                                                         | Perguntas choice/score/noul, capability decisions, request persistível e envelope efêmero multimodal, probabilidades validadas e fixtures nos três runtimes.     |
-| Laya `laya-serve` Decision Model          | Cliente Jev dedicado no core Rust e bindings Python/TypeScript; texto, sem discovery OpenAI                                       | 10 testes Rust e fixtures HTTP Python/TypeScript cobrem health, Bearer, choice/score/noul, metadados extras, limites e respostas inválidas; smoke real pendente. |
-| Entrada de imagem/visão                   | Tipos e preparação existem; roteamento parcial                                                                                    | Casos reais por protocolo/modelo e capability desconhecida fail-closed.                                                                                          |
-| Geração de imagem                         | Ausente                                                                                                                           | Adapter próprio apenas quando endpoint estiver confirmado.                                                                                                       |
-| TTS                                       | Síntese bufferizada `/v1/audio/speech` e nativa `/tts` implementadas no PR #104                                                   | WAV/PCM16/PCM float e bytes com Content-Type/sample rate; stream e cancelamento ainda pendentes.                                                                 |
-| STT                                       | Ausente                                                                                                                           | `/v1/realtime` é streaming ASR; batch transcription requer API separada.                                                                                         |
-| Entrada de vídeo                          | Tipo existe; cobertura de envio limitada                                                                                          | Chat multimodal v1.0.0 e limites, mídia efêmera e teste por modelo.                                                                                              |
-| Geração de vídeo                          | Ausente                                                                                                                           | Não confundir com vídeo de entrada.                                                                                                                              |
-| Embeddings                                | OpenAI-compatible/OpenRouter/Cohere/Voyage/Ollama; texto e chamada efêmera multimodal llama-server implementados no core/bindings | Fixtures por modalidade e gates completos desta subetapa ainda em validação. Smoke com modelo multimodal real é opt-in.                                          |
-| Rerank                                    | Cohere/Voyage/OpenRouter                                                                                                          | Validar rota `llama-server` v1.0.0 e normalizar índices/scores.                                                                                                  |
+| Estado  | Capability                                    | Verificação e limite                                                                                                                                                                |
+| ------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| parcial | OpenAI-compatible, 9router, OmniRouter e Kimi | Transporte e endpoint customizável existem. Validar cada serviço/rota/auth/headers/erros/modalidades; nome compatível não garante suporte integral.                                 |
+| feito   | Anthropic Messages, Gemini e Cohere chat      | Adapters nativos no core; fixtures de request, resposta e stream nos bindings. Conferir suporte de mídia por operação antes de rotear.                                              |
+| feito   | Ollama `/api/chat`                            | JSON/NDJSON, reasoning, ferramentas, options e auth opcional cobertos por fixtures; daemon real não foi verificado nesta execução.                                                  |
+| feito   | OpenAI Chat Completions e Responses           | Protocolos separados no perfil OpenAI. Entrada de imagem e ferramentas são cobertas onde declaradas; ferramentas hospedadas, áudio/vídeo e geração de imagem não são inferidos.     |
+| feito   | OpenRouter                                    | Perfil dedicado e transporte genérico; atribuição e campos de roteamento testados. Não transfere automaticamente suporte de modalidade entre modelos.                               |
+| parcial | llama.cpp `llama-server` v1.0.0               | Perfil, discovery, chat, Decision Model, embeddings, rerank, TTS e realtime implementados conforme endpoints cobertos. Smoke integral com servidor/modelos reais não foi executado. |
+| parcial | Laya standalone `laya-serve`                  | Cliente health/decision e bindings existem; servidor/checkpoint real não foi configurado para smoke test.                                                                           |
 
-## Gates para etapas de código
+## Operações por modalidade
 
-- [x] Core Rust: settings endpoint seguros, health `/health`, discovery `/v1/models` e chat/stream compartilhado.
-- [x] Fixtures HTTP e parsing: cinco testes focados e 191 testes da lib passam; Clippy `-D warnings` para lib e testes e rustdoc passaram.
-- [x] Publicar o adapter Rust no PR empilhado [#98](https://github.com/vectora-company/engine/pull/98), base `docs/llama-cpp-v1-provider-review`, head `5a463bc`.
-- [x] Expor health, discovery, completion, stream e variantes efêmeras Python/TypeScript no PR filho [#100](https://github.com/vectora-company/engine/pull/100); fixtures passam nos dois bindings.
-- [x] Atualizar stubs `_native.pyi`; Ruff e `ty check bindings/python utils` passam.
-- [ ] Executar integração opt-in com `llama-server` v1.0.0 fixado.
-- [x] Cobrir modalidades multimodais no adapter llama-server: imagem/áudio/vídeo e recusas de URL/path/inline.
-- [ ] Protocolo, operação e provider/profile são campos distintos e tipados.
-- [x] Discovery preserva os arrays brutos e metadata extra; campos ausentes ficam `None`/unknown. O `text` fallback do servidor não vem marcado e não é promovido a garantia. Falha de rede permanece erro/unknown.
-- [x] Requisições multimodais usam bytes efêmeros e respeitam auth/autorização do host.
-- [ ] Erros de provider preservam código/status sem vazar segredo ou payload.
-- [ ] Timeouts, limites, cancelamento, backpressure e retry são definidos por operação.
-- [ ] Fallback só pode ocorrer antes da primeira saída observável.
-- [x] Fixtures HTTP exercitam Rust e bindings Python/TypeScript com metadata de capability, auth, perguntas, resposta probabilística e envelope efêmero.
-- [ ] Integração real fixa tag de servidor/modelo e é opt-in, sem baixar modelo grande no CI por padrão.
-- [x] `systemone` tem contrato separado e fixture de rota/probabilidades no core Rust.
-- [x] `systemone` é exposto e verificado nos bindings Python e TypeScript (fixture local).
-- [x] Cliente Laya chama `/v1/systemone` diretamente, sem `/v1/models`, e aceita a resposta estendida do servidor.
-- [x] Fixtures Laya cobrem health, Bearer, choice arredondado, score em maps, `noul`, limites e ambos os bindings.
-- [x] `scons tests`: Rust 227 + fixtures 3 + binding Rust 1; pytest 95/1 skip; Node 48/11 skips de serviços externos não configurados.
-- [ ] Smoke opt-in contra `laya-serve` e checkpoint compatível.
-- [x] llama-server embeddings texto usa `/v1/embeddings`, autentica e reordena pelo índice.
-- [x] Binding Python e erros/limites básicos da API de embeddings têm fixture dedicada.
-- [x] Core cria payloads `image_url`, `input_audio.data` e `input_video.data` conforme contrato v1.0.0.
-- [x] Assets vêm do mapa efêmero, validam modalidade anunciada, MIME/digest/limites; URL/path e `Inline` são recusados.
-- [x] Validador verifica cardinalidade, índices, dimensão uniforme e valores finitos.
-- [x] Fixtures Rust/Python/TypeScript cobrem embeddings texto, erro estrutural, auth e resposta.
-- [x] Fixtures Python/TypeScript cobrem materialização por asset map e autenticação; erros de modalidade e conteúdo são cobertos no core Rust.
-- [ ] Smoke opt-in com modelo multimodal de embeddings, pooling suportado e tag de servidor imutável.
-- [x] Implementar rerank textual llama-server em formato Jina via `/rerank`, com top_n, usage, score e ordem; fixtures focadas Rust/Python/TypeScript cobrem auth e request/resposta.
-- [x] Rejeitar options de truncamento e scores fora de `[0,1]`; limites/índices inválidos também falham fechados.
-- [ ] Rerank multimodal com asset map permanece etapa posterior; jamais encaminhar URLs ou bytes persistíveis diretamente.
-- [x] `scons tests`: Rust 236; 3 fixtures de conformidade + 1 fronteira Python; pytest 98 passed/1 skipped; Node 51 passed/11 skips opcionais.
-- [x] `scons lint` passou; hooks pre-commit passaram após ajuste automático de formatação Markdown.
-- [ ] Publicar o PR empilhado sobre #115 e iniciar a próxima etapa sem aguardar CI.
-- [x] Síntese TTS bufferizada e `/tts` têm formato binário separado do chat; áudio de referência só usa envelope efêmero.
-- [ ] Streaming TTS e realtime ASR têm contratos de sessão separados; geração de imagem e vídeo também.
-- [ ] Documentação anuncia suporte por modalidade/provider/modelo com evidência.
+| Estado   | Operação                   | Critério/gap                                                                                                                              |
+| -------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| feito    | Chat e stream              | Fixtures de protocolos; fallback explícito e sem troca após saída parcial.                                                                |
+| parcial  | Decision Model             | Choice/score/noul, validação de probabilidades e entrada multimodal efêmera onde suportada; ampliar matrix real por modelo.               |
+| parcial  | Visão e imagens de entrada | Requests efêmeros com asset map e roteamento por protocolo; falta catálogo automático confiável e limites agregados do request.           |
+| pendente | Geração de imagem          | Sem contrato/provider geral implementado.                                                                                                 |
+| parcial  | TTS                        | Áudio bufferizado e streaming pelo llama-server; verificar servidor/modelo real e completar conformidade operacional.                     |
+| parcial  | STT/transcrição            | Realtime pelo llama-server. Batch STT genérico não implementado; STT local de sistema pertence ao consumidor.                             |
+| parcial  | Vídeo                      | Tipos multimodais e entrada via API coberta não significam operações gerais de vídeo, ingestão ou geração.                                |
+| feito    | Embeddings                 | Texto nos adapters declarados; multimodal via asset map do llama-server. Faltam matriz de servidor/modelo real e catálogo confiável.      |
+| feito    | Rerank                     | Cohere, Voyage, OpenRouter e llama-server textual; rerank de texto/imagem efêmera no llama-server com validação de índice/score/resposta. |
 
-## Gate do charter de primeira release
+## Contratos transversais
 
-- [ ] A matriz de providers/modos planejados está completa e com lacunas explícitas.
-- [ ] Core e bindings cobrem os contratos de release com conformidade.
-- [ ] Instalação e empacotamento suportados são reproduzíveis.
-- [ ] Gaps independentes de storage, contexto/RAG, segurança e adoção foram fechados ou deliberadamente excluídos do charter por decisão registrada.
+- [x] Rust implementa a lógica canônica; bindings encaminham ao core.
+- [x] Fixtures offline cobrem adapters e perfis implementados sem credenciais.
+- [x] Requests persistíveis rejeitam bytes inline e URLs `data:`; envio efêmero
+      valida asset, digest, MIME e limite.
+- [x] Erros de provider não expõem corpos de resposta nem credenciais.
+- [x] Fallback não troca provider após emitir saída parcial.
+- [ ] Publicar matriz provider × endpoint × modalidade × modelo com evidência
+      atualizada e declarar explicitamente o que não é suportado.
+- [ ] Acrescentar limites agregados por request, partes, duração/resolução e
+      bytes quando o contrato comum estiver definido.
+- [ ] Executar smoke tests opt-in com versões fixadas para llama-server,
+      Laya, Ollama e providers remotos autorizados; registrar apenas os
+      resultados da execução atual.
+- [ ] Completar conformidade compartilhada de erros, cancelamento, stream,
+      autenticação e redaction entre Rust, Python e TypeScript.
 
-## Etapa TTS bufferizada — PR #104, filha do #103
+## Verificação por mudança
 
-- [x] Implementar `SpeechRequest`, `NativeSpeechRequest`, request efêmero para
-      speaker reference e resposta binária com formato, Content-Type e sample rate.
-- [x] Implementar `/v1/audio/speech` WAV/PCM e `/tts` WAV/PCM16/PCM float;
-      validar discovery de saída `audio`, voz em `/props`, limite de mídia e
-      resposta HTTP limitada.
-- [x] Expor os métodos em Python (`bytes`) e TypeScript (`Uint8Array`) sobre Rust.
-- [x] Fixtures Rust 8/8 focados; Node 41 passaram, 11 skipped por serviços
-      externos não configurados; `cargo check` dos crates Rust/Python/Node e
-      TypeScript typecheck passaram.
-- [x] Build maturin e fixture pytest focado passaram; pytest do binding Python: 55 passaram, 1 skipped.
-- [ ] Integração opt-in contra llama-server v1.0.0/modelo TTS real.
-- [ ] Implementar stream TTS/realtime ASR, desconexão e cancelamento na etapa filha do [PR #104](https://github.com/vectora-company/engine/pull/104).
-
-## Sessão realtime/ASR — filha do PR #104
-
-- [x] Usar `tokio-websockets` 0.13.3, a versão estável já presente no lockfile, para `ws`/`wss` com autenticação e headers do profile.
-- [x] Validar model ID/capability de entrada audio; intents transcription/conversation.
-- [x] Adicionar send PCM16 mono (chunks), commit final/não final, sample-rate update validado e evento raw forward-compatible.
-- [x] Implementar timeout, payload máximo, backpressure e fechamento da sessão.
-- [x] Fixture Rust local exercita handshake autenticado, rate update, áudio base64, commit e eventos delta/completed.
-- [x] Expor start/send/event/receive/close em Python e TypeScript pelo core Rust.
-- [x] Build NAPI release, typecheck e Node tests: 41 passaram, 11 foram pulados por falta dos serviços externos opcionais.
-- [x] `maturin develop` e pytest: 55 passaram, 1 foi pulado.
-- [x] Workspace Rust: 205 testes da lib, 3 fixtures e teste nativo Python passaram; Clippy `-D warnings` passou após corrigir `manual_is_multiple_of`.
-- [x] Hooks completos executados; todos passaram exceto Clippy na primeira rodada, corrigido e revalidado. Prettier/SVGO tocaram arquivos preexistentes fora do escopo; esses arquivos foram restaurados.
-- [ ] Integração opt-in com llama-server v1.0.0 e modelo realtime compatível.
-- [ ] Publicar PR #105 como filho do PR [#104](https://github.com/vectora-company/engine/pull/104); continuar etapas seguintes sem aguardar CI.
-
-## Streaming TTS — branch filha do PR #105
-
-- [x] Implementar stream binário de `/v1/audio/speech` com `stream_format: "audio"` e `/tts` com `stream: true`.
-- [x] Preservar bytes, Content-Type e sample rate sem acumular toda a resposta.
-- [x] Expor iterador assíncrono de chunks de áudio em Rust/Python/TypeScript com backpressure e cancelamento.
-- [x] Limitar tamanho total e chunks; sinalizar falha/truncamento sem afirmar áudio completo.
-- [x] Criar fixture HTTP com chunks atrasados e falha no meio; verificar consumo incremental nos dois bindings.
-- [x] Workspace Rust 208 testes + 3 fixtures; Clippy `-D warnings`; pytest Python 56 pass/1 skip; NAPI build + TypeScript typecheck; Node 42 pass/11 skips; Ruff/format/ty.
-- [x] Atualizar docs, publicar o PR [#106](https://github.com/vectora-company/engine/pull/106) como filho do #105; GitHub confirma `OPEN`/`MERGEABLE`.
-
-## Ollama chat nativo — PR #107, filho do PR #106
-
-- [x] Confirmar contrato oficial `/api/chat` JSON/NDJSON e diferenças em relação ao subconjunto OpenAI-compatible.
-- [x] Implementar tradução do contrato de chat, `options`, extensões nativas, imagens inline, tools, reasoning e usage no core Rust.
-- [x] Adicionar suporte a api_key opcional no endpoint nativo local; manter auth Bearer quando configurada.
-- [x] Adicionar testes unitários de payload e resposta/stream no core.
-- [x] Adicionar fixtures de integração nos bindings Python e TypeScript.
-- [x] Rodar workspace Rust (210 testes + 3 fixtures), Clippy, pytest (57/1 skip), NAPI/typecheck, Node (43/11 skips), Ruff/format/ty; todos passaram. Ollama real não está ativo localmente.
-- [x] Atualizar plano, spec, análise e checklists; hooks pre-commit completos passaram.
-- [x] Publicar o PR [#107](https://github.com/vectora-company/engine/pull/107), filho do #106; GitHub confirma `OPEN`/`MERGEABLE`.
-- [ ] Testar com daemon/modelo Ollama real quando o serviço estiver disponível; fixtures HTTP cobrem o protocolo sem depender do daemon.
-
-## OpenRouter chat — PR #108, filho do PR #107
-
-- [x] Confirmar endpoint Chat Completions, headers de atribuição e campos de roteamento nas docs oficiais.
-- [x] Definir perfil nomeado `openrouter`, URL oficial padrão e suporte a `base_url` customizada; exigir chave no perfil.
-- [x] Definir atribuição opcional de app via `HTTP-Referer`/`X-OpenRouter-Title`, com override por header explícito.
-- [x] Encaminhar `provider`, `models`, `route`, `user` e `plugins` via extensions por request, sem default global de privacidade/custo.
-- [x] Adicionar testes de contrato Rust e fixtures HTTP em Python e TypeScript.
-- [x] Suites: workspace Rust 212 + 3 fixtures + binding Python nativo; pytest 58/1 skip; Node 44/11 skips; typecheck, Clippy, Ruff/format/ty/Prettier passaram.
-- [x] Hooks pre-commit completos passaram; PR [#108](https://github.com/vectora-company/engine/pull/108), filho do #107, está `OPEN`/`MERGEABLE`.
-- [ ] Integração real depende de endpoint/credencial OpenRouter e não foi executada; fixtures verificam o contrato sem rede externa.
-
-## OpenAI Responses API — PR #109, filho do PR #108
-
-- [x] Revisar API oficial Create Response, eventos SSE, function calling e imagem de entrada; registrar limites.
-- [x] Implementar perfil Responses sem remover Chat Completions, com `store: false` por padrão.
-- [x] Mapear histórico, tools/results, imagens, saída de texto/reasoning/usage e SSE semanticamente no core Rust.
-- [x] Adicionar testes Rust e fixtures HTTP em Python/TypeScript para não-stream e stream.
-- [x] Rust workspace (215 testes), Clippy `-D warnings`, build NAPI/TypeScript, Node (45 pass/11 skips), pytest completo e teste Python focado passaram.
-- [x] Ruff/format/ty, Prettier e hooks passaram; publicar PR [#109](https://github.com/vectora-company/engine/pull/109), filho do #108.
-- [ ] Integração OpenAI real exige endpoint/credencial; fixtures locais passaram.
-
-## Perfil OpenAI Chat Completions — branch ativa filha do PR #109
-
-- [x] Adicionar perfil `openai` com endpoint oficial padrão e API key obrigatória.
-- [x] Permitir endpoint customizado e headers extras; preservar o client genérico e OpenRouter.
-- [x] Cobrir endpoint/auth/request em Rust e fixtures HTTP Python/TypeScript.
-- [x] Rust workspace (216 testes), Clippy, build NAPI/TypeScript, Node (46 pass/11 skips), pytest completo e fixture focada passaram.
-- [ ] Rodar hooks completos, revisar/stage apenas arquivos da etapa (manter `bindings/typescript/native/index.d.ts` e `bindings/python/uv.lock` fora), commitar e publicar PR filho do #109; seguir à próxima etapa sem aguardar CI remoto.
-
-### Rerank multimodal efêmero llama-server
-
-- [x] Core Rust materializa texto/imagens por referências efêmeras do consumidor, exige capability `image` e envia Jina `query`/`documents`.
-- [x] Rust rejeita URLs remotas e inclui score/usage da resposta.
-- [x] Fixture Python confirma materialização de imagem por asset map.
-- [x] Fixture Node confirma formato Jina usando asset map.
-- [ ] Rejeições adicionais de payload e limites de media cobertos por casos negativos nos bindings.
-- [x] `scons tests`: Rust 238; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips opcionais.
-- [x] `scons lint` passou.
-- [x] Pre-commit integral passou; PR #116 e filho #117 publicados.
-
-### Casos negativos de rerank multimodal
-
-- [x] Falhar sem POST se o modelo não declara imagem.
-- [x] Rejeitar score fora de `[0,1]` e índice duplicado.
-- [x] Quatro testes focados Rust passam.
-- [x] Gates integrados: Rust 240; pytest 99/1 skip; Node 52/11 skips; lint.
-- [x] Pre-commit integral passou.
-- [ ] Publicar PR filho de #117.
-
-### Integridade de mídia no rerank multimodal
-
-- [x] Digest adulterado é recusado antes do POST.
-- [x] Limite de bytes por chamada é aplicado ao rerank.
-- [x] Cinco testes Rust focados passam.
-- [x] Gates integrados: Rust 241; pytest 99/1 skip; Node 52/11 skips; lint.
-- [x] Pre-commit passou.
-- [ ] PR filho de #118.
-
-### Contrato da resposta de rerank
-
-- [x] Índice inexistente, cardinalidade acima de `top_n` e ausência de `results` falham como resposta inválida.
-- [x] Seis testes Rust focados passam.
-- [x] `scons tests`: Rust 242; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips opcionais.
-- [x] `scons lint`.
-- [ ] Pre-commit e PR filho de #119.
+- [ ] Rust: fmt, Clippy, testes unitários/fixtures e integração configurada.
+- [ ] Python: build da binding, pytest, Ruff e `ty`.
+- [ ] TypeScript: build, typecheck, Oxlint e testes Node.
+- [ ] Revisar payloads/fixtures para não conter credenciais, bytes reais ou
+      dados sensíveis.
+- [ ] Atualizar plano, spec, análise, este checklist e índices afetados.
