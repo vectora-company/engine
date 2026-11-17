@@ -6,6 +6,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub const MESSAGING_CONTRACT_VERSION: u16 = 1;
+const DEFAULT_QUEUE_DEDUPLICATION_WINDOW_SECONDS: u64 = 120;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -29,6 +30,9 @@ pub struct QueueConfig {
     /// Maximum total deliveries before a job moves to the dead-letter stream.
     #[serde(default = "default_queue_max_attempts")]
     pub max_attempts: u32,
+    /// Idempotency-key retention shared by Redis and NATS (default 120 seconds).
+    #[serde(default = "default_queue_deduplication_window_seconds")]
+    pub deduplication_window_seconds: u64,
 }
 
 fn default_visibility_timeout_seconds() -> u64 {
@@ -41,6 +45,10 @@ fn default_queue_max_messages() -> u64 {
 
 fn default_queue_max_attempts() -> u32 {
     5
+}
+
+fn default_queue_deduplication_window_seconds() -> u64 {
+    DEFAULT_QUEUE_DEDUPLICATION_WINDOW_SECONDS
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1050,6 +1058,37 @@ impl RedisStreamQueue {
             .await
             .map_err(|_| MessagingError::Storage)
     }
+
+    pub async fn enqueue_idempotent(
+        &self,
+        queue: &str,
+        payload: Vec<u8>,
+        idempotency_key: &str,
+        deduplication_window: Duration,
+    ) -> Result<String, MessagingError> {
+        validate_identifier(idempotency_key)?;
+        let stream = self.stream_key(queue)?;
+        let dedupe = format!("{stream}:dedupe:{idempotency_key}");
+        let mut conn = self.store.connection().await?;
+        const ENQUEUE_ONCE: &str = r"
+            local existing = redis.call('GET', KEYS[2])
+            if existing then return existing end
+            local id = redis.call('XADD', KEYS[1], 'MAXLEN', ARGV[1], '*', 'payload', ARGV[2])
+            redis.call('SET', KEYS[2], id, 'PX', ARGV[3])
+            return id
+        ";
+        redis::cmd("EVAL")
+            .arg(ENQUEUE_ONCE)
+            .arg(2)
+            .arg(stream)
+            .arg(dedupe)
+            .arg(self.max_messages.min(usize::MAX as u64) as usize)
+            .arg(payload)
+            .arg(deduplication_window.as_millis() as u64)
+            .query_async(&mut conn)
+            .await
+            .map_err(|_| MessagingError::Storage)
+    }
     pub async fn receive(
         &self,
         queue: &str,
@@ -1266,6 +1305,7 @@ pub struct NatsStreamQueue {
     ack_wait: Duration,
     max_messages: u64,
     max_attempts: u32,
+    deduplication_window: Duration,
     dead_stream: String,
     dead_subject: String,
 }
@@ -1277,6 +1317,7 @@ impl NatsStreamQueue {
         ack_wait: Duration,
         max_messages: u64,
         max_attempts: u32,
+        deduplication_window: Duration,
     ) -> Result<Self, MessagingError> {
         validate_identifier(name)?;
         let client = async_nats::connect(url)
@@ -1290,6 +1331,7 @@ impl NatsStreamQueue {
             ack_wait,
             max_messages,
             max_attempts,
+            deduplication_window,
             dead_stream: format!("VQ_{}_DLQ", name.to_ascii_uppercase()),
             dead_subject: format!("vectora.queue.{name}.dead"),
         };
@@ -1353,6 +1395,7 @@ impl NatsStreamQueue {
                 name: name.to_owned(),
                 subjects: vec![subject.to_owned()],
                 max_messages,
+                duplicate_window: self.deduplication_window,
                 ..Default::default()
             })
             .await
@@ -1363,11 +1406,14 @@ impl NatsStreamQueue {
         if current.subjects.len() != 1 || current.subjects[0] != subject {
             return Err(MessagingError::Storage);
         }
-        if current.max_messages == max_messages {
+        if current.max_messages == max_messages
+            && current.duplicate_window == self.deduplication_window
+        {
             return Ok(stream);
         }
         let mut config = current.clone();
         config.max_messages = max_messages;
+        config.duplicate_window = self.deduplication_window;
         self.jetstream
             .update_stream(config)
             .await
@@ -1382,6 +1428,24 @@ impl NatsStreamQueue {
         self.ensure_stream().await?;
         self.jetstream
             .publish(self.subject.clone(), payload.into())
+            .await
+            .map_err(|_| MessagingError::Storage)?
+            .await
+            .map(|ack| ack.sequence)
+            .map_err(|_| MessagingError::Storage)
+    }
+
+    pub async fn enqueue_idempotent(
+        &self,
+        payload: Vec<u8>,
+        idempotency_key: &str,
+    ) -> Result<u64, MessagingError> {
+        validate_identifier(idempotency_key)?;
+        self.ensure_stream().await?;
+        let mut headers = async_nats::HeaderMap::new();
+        headers.insert(async_nats::header::NATS_MESSAGE_ID, idempotency_key);
+        self.jetstream
+            .publish_with_headers(self.subject.clone(), headers, payload.into())
             .await
             .map_err(|_| MessagingError::Storage)?
             .await
@@ -1537,6 +1601,11 @@ pub enum QueueDelivery {
 #[async_trait]
 pub trait DurableQueue: Send + Sync {
     async fn enqueue(&self, payload: Vec<u8>) -> Result<String, MessagingError>;
+    async fn enqueue_idempotent(
+        &self,
+        payload: Vec<u8>,
+        idempotency_key: &str,
+    ) -> Result<String, MessagingError>;
     async fn receive(
         &self,
         consumer: &str,
@@ -1589,6 +1658,7 @@ pub enum QueueAdapter {
         name: String,
         visibility_timeout: Duration,
         max_attempts: u32,
+        deduplication_window: Duration,
     },
     Nats {
         queue: NatsStreamQueue,
@@ -1600,6 +1670,8 @@ impl QueueAdapter {
         if config.visibility_timeout_seconds == 0
             || config.max_messages == 0
             || config.max_attempts == 0
+            || config.deduplication_window_seconds == 0
+            || config.deduplication_window_seconds > u64::MAX / 1_000
         {
             return Err(MessagingError::InvalidInput);
         }
@@ -1612,6 +1684,7 @@ impl QueueAdapter {
                 name: config.namespace,
                 visibility_timeout: Duration::from_secs(config.visibility_timeout_seconds),
                 max_attempts: config.max_attempts,
+                deduplication_window: Duration::from_secs(config.deduplication_window_seconds),
             }),
             super::QueueBackend::NatsJetstream => Ok(Self::Nats {
                 queue: NatsStreamQueue::connect(
@@ -1620,6 +1693,7 @@ impl QueueAdapter {
                     Duration::from_secs(config.visibility_timeout_seconds),
                     config.max_messages,
                     config.max_attempts,
+                    Duration::from_secs(config.deduplication_window_seconds),
                 )
                 .await?,
             }),
@@ -1631,6 +1705,31 @@ impl QueueAdapter {
             Self::Redis { queue, name, .. } => queue.enqueue(name, payload).await,
             Self::Nats { queue, .. } => queue
                 .enqueue(payload)
+                .await
+                .map(|sequence| sequence.to_string()),
+        }
+    }
+
+    /// Enqueues at most one message per key during the configured common window.
+    pub async fn enqueue_idempotent(
+        &self,
+        payload: Vec<u8>,
+        idempotency_key: &str,
+    ) -> Result<String, MessagingError> {
+        validate_identifier(idempotency_key)?;
+        match self {
+            Self::Redis {
+                queue,
+                name,
+                deduplication_window,
+                ..
+            } => {
+                queue
+                    .enqueue_idempotent(name, payload, idempotency_key, *deduplication_window)
+                    .await
+            }
+            Self::Nats { queue, .. } => queue
+                .enqueue_idempotent(payload, idempotency_key)
                 .await
                 .map(|sequence| sequence.to_string()),
         }
@@ -1648,6 +1747,7 @@ impl QueueAdapter {
                 name,
                 visibility_timeout,
                 max_attempts,
+                ..
             } => queue
                 .receive_with_idle(
                     name,
@@ -1707,6 +1807,14 @@ impl QueueAdapter {
 impl DurableQueue for QueueAdapter {
     async fn enqueue(&self, payload: Vec<u8>) -> Result<String, MessagingError> {
         QueueAdapter::enqueue(self, payload).await
+    }
+
+    async fn enqueue_idempotent(
+        &self,
+        payload: Vec<u8>,
+        idempotency_key: &str,
+    ) -> Result<String, MessagingError> {
+        QueueAdapter::enqueue_idempotent(self, payload, idempotency_key).await
     }
 
     async fn receive(
@@ -1837,6 +1945,22 @@ mod tests {
         assert_eq!(config.visibility_timeout_seconds, 30);
         assert_eq!(config.max_messages, 100_000);
         assert_eq!(config.max_attempts, 5);
+        assert_eq!(config.deduplication_window_seconds, 120);
+    }
+
+    #[tokio::test]
+    async fn queue_rejects_a_zero_deduplication_window_before_connecting() {
+        let result = QueueAdapter::connect(QueueConfig {
+            backend: super::super::QueueBackend::RedisStreams,
+            endpoint: "redis://127.0.0.1:1".into(),
+            namespace: "jobs".into(),
+            visibility_timeout_seconds: 30,
+            max_messages: 100_000,
+            max_attempts: 5,
+            deduplication_window_seconds: 0,
+        })
+        .await;
+        assert!(matches!(result, Err(MessagingError::InvalidInput)));
     }
 
     #[tokio::test]
@@ -1931,6 +2055,7 @@ mod tests {
                 visibility_timeout_seconds: 1,
                 max_messages: 100_000,
                 max_attempts: 5,
+                deduplication_window_seconds: 120,
             })
             .await
             .unwrap();
@@ -1969,6 +2094,7 @@ mod tests {
                 visibility_timeout_seconds: 1,
                 max_messages: 100_000,
                 max_attempts: 5,
+                deduplication_window_seconds: 120,
             })
             .await
             .unwrap();
@@ -2020,6 +2146,7 @@ mod tests {
                 visibility_timeout_seconds: 1,
                 max_messages: 100_000,
                 max_attempts: 5,
+                deduplication_window_seconds: 120,
             })
             .await
             .unwrap();
@@ -2068,6 +2195,7 @@ mod tests {
                 visibility_timeout_seconds: 2,
                 max_messages: 100_000,
                 max_attempts: 5,
+                deduplication_window_seconds: 120,
             })
             .await
             .unwrap();
@@ -2097,6 +2225,100 @@ mod tests {
             assert_eq!(retry.payload(), b"retry-job", "{backend:?}");
             assert_eq!(retry.attempts(), 2, "{backend:?}");
             retry.ack().await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn idempotent_enqueue_returns_original_id_and_never_duplicates() {
+        let mut targets = Vec::new();
+        if let Ok(url) = std::env::var("VECTORA_TEST_REDIS_URL") {
+            targets.push((super::super::QueueBackend::RedisStreams, url));
+        }
+        if let Ok(url) = std::env::var("VECTORA_TEST_NATS_URL") {
+            targets.push((super::super::QueueBackend::NatsJetstream, url));
+        }
+        for (backend, endpoint) in targets {
+            let queue = QueueAdapter::connect(QueueConfig {
+                backend,
+                endpoint,
+                namespace: format!("dedupeq_{}", unique_suffix()),
+                visibility_timeout_seconds: 2,
+                max_messages: 100_000,
+                max_attempts: 5,
+                deduplication_window_seconds: 7,
+            })
+            .await
+            .unwrap();
+            assert!(matches!(
+                queue
+                    .enqueue_idempotent(b"invalid".to_vec(), "bad key")
+                    .await,
+                Err(MessagingError::InvalidInput)
+            ));
+            let original = queue
+                .enqueue_idempotent(b"original".to_vec(), "job-42")
+                .await
+                .unwrap();
+            let duplicate = queue
+                .enqueue_idempotent(b"duplicate".to_vec(), "job-42")
+                .await
+                .unwrap();
+            assert_eq!(duplicate, original, "{backend:?}");
+            match &queue {
+                QueueAdapter::Redis {
+                    queue: redis_queue,
+                    name,
+                    ..
+                } => {
+                    let mut conn = redis_queue.store.connection().await.unwrap();
+                    let ttl_ms: i64 = redis::cmd("PTTL")
+                        .arg(format!(
+                            "{}:dedupe:job-42",
+                            redis_queue.stream_key(name).unwrap()
+                        ))
+                        .query_async(&mut conn)
+                        .await
+                        .unwrap();
+                    assert!((0..=7_000).contains(&ttl_ms), "Redis TTL: {ttl_ms}ms");
+                }
+                QueueAdapter::Nats { queue: nats_queue } => {
+                    let info = nats_queue
+                        .ensure_stream()
+                        .await
+                        .unwrap()
+                        .get_info()
+                        .await
+                        .unwrap();
+                    assert_eq!(info.config.duplicate_window, Duration::from_secs(7));
+                }
+            }
+            queue
+                .enqueue_idempotent(b"independent".to_vec(), "job-43")
+                .await
+                .unwrap();
+
+            let first = queue
+                .receive("worker", "workers", Duration::from_secs(2))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(first.payload(), b"original", "{backend:?}");
+            first.ack().await.unwrap();
+            let second = queue
+                .receive("worker", "workers", Duration::from_secs(2))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(second.payload(), b"independent", "{backend:?}");
+            second.ack().await.unwrap();
+            assert!(
+                queue
+                    .receive("worker", "workers", Duration::from_millis(100))
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "{backend:?}: duplicate enqueue must not create another delivery"
+            );
         }
     }
 
@@ -2352,6 +2574,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 100_000,
             max_attempts: 5,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2394,6 +2617,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 100_000,
             max_attempts: 5,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2456,6 +2680,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 1,
             max_attempts: 5,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2494,6 +2719,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 1,
             max_attempts: 5,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2539,6 +2765,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 10,
             max_attempts: 5,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2572,6 +2799,7 @@ mod tests {
         assert_eq!(config.max_messages, 10);
         assert_eq!(config.max_bytes, 1_048_576);
         assert_eq!(config.max_age, Duration::from_secs(300));
+        assert_eq!(config.duplicate_window, Duration::from_secs(120));
         assert_eq!(config.retention, RetentionPolicy::Limits);
         assert_eq!(config.storage, StorageType::Memory);
         assert_eq!(config.subjects.len(), 1);
@@ -2585,6 +2813,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 10,
             max_attempts: 5,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2629,6 +2858,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 10,
             max_attempts: 5,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2673,6 +2903,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 10,
             max_attempts: 1,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2744,6 +2975,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 10,
             max_attempts: 1,
+            deduplication_window_seconds: 120,
         })
         .await
         .unwrap();
@@ -2815,6 +3047,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 10,
             max_attempts: 2,
+            deduplication_window_seconds: 120,
         };
         let queue = QueueAdapter::connect(config).await.unwrap();
         queue.enqueue(b"poison".to_vec()).await.unwrap();
@@ -2862,6 +3095,7 @@ mod tests {
             visibility_timeout_seconds: 1,
             max_messages: 10,
             max_attempts: 2,
+            deduplication_window_seconds: 120,
         };
         let queue = QueueAdapter::connect(config).await.unwrap();
         queue.enqueue(b"poison".to_vec()).await.unwrap();

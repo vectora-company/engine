@@ -74,7 +74,8 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 - [x] KV: implementar TTL nativo NATS 2.11+ e validar create/update/expiração contra NATS 2.15.3 e Redis 8.10.3; `storage::` passou 69/69 contra as quatro imagens atualizadas.
 - [x] Filas: teto de tentativas e DLQ consumível nos dois brokers.
 - [x] Filas: NACK com reentrega atrasada em Redis Streams e NATS JetStream, limitada ao visibility timeout; teste real verifica atraso e incremento de attempts em ambos.
-- [ ] Filas: deduplicação na publicação, replay e ordenação com contrato, shutdown gracioso e redrive atômico nas duas.
+- [x] Filas: enqueue idempotente por chave em Redis Streams e NATS JetStream, com retorno do ID original e janela configurável por contrato; cobertura real Rust/Python/TypeScript.
+- [ ] Filas: replay e ordenação com contrato, shutdown gracioso e redrive atômico nas duas.
 - [ ] Pub/sub: reconexão observável e assinatura por padrão/curinga nos dois.
 - [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL como projeção, com a mesma suíte do SQLite; testes concorrentes com serviço real.
 - [ ] SQL: interface transacional genérica tipada e limitada nos dois (decisão do mantenedor pendente).

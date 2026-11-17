@@ -199,6 +199,15 @@ async def queue_enqueue(config: JsonObject, payload: bytes) -> str:
     return await _native.queue_enqueue(json.dumps(config), json.dumps(list(payload)))
 
 
+async def queue_enqueue_idempotent(
+    config: JsonObject, payload: bytes, idempotency_key: str
+) -> str:
+    """Enqueue once per idempotency key within QueueConfig's configured window (default 120 seconds)."""
+    return await _native.queue_enqueue_idempotent(
+        json.dumps(config), json.dumps(list(payload)), idempotency_key
+    )
+
+
 async def queue_receive(
     config: JsonObject, consumer: str, group: str, timeout_ms: int = 30_000
 ) -> dict[str, Any] | None:
@@ -1475,6 +1484,7 @@ __all__ = [
     "pubsub_unsubscribe",
     "queue_ack",
     "queue_enqueue",
+    "queue_enqueue_idempotent",
     "queue_nack",
     "queue_receive",
     "queue_receive_dead_letter",

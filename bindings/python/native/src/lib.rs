@@ -1345,6 +1345,28 @@ fn queue_enqueue<'py>(
 }
 
 #[pyfunction]
+fn queue_enqueue_idempotent<'py>(
+    py: Python<'py>,
+    config_json: String,
+    payload_json: String,
+    idempotency_key: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid queue config"))?;
+        let payload: Vec<u8> =
+            serde_json::from_str(&payload_json).map_err(|_| py_error("invalid queue payload"))?;
+        let queue = vectora_engine::storage::messaging::QueueAdapter::connect(config)
+            .await
+            .map_err(py_error)?;
+        queue
+            .enqueue_idempotent(payload, &idempotency_key)
+            .await
+            .map_err(py_error)
+    })
+}
+
+#[pyfunction]
 fn queue_receive<'py>(
     py: Python<'py>,
     config_json: String,
@@ -2919,6 +2941,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(kv_store_delete, module)?)?;
     module.add_function(wrap_pyfunction!(kv_store_list_keys, module)?)?;
     module.add_function(wrap_pyfunction!(queue_enqueue, module)?)?;
+    module.add_function(wrap_pyfunction!(queue_enqueue_idempotent, module)?)?;
     module.add_function(wrap_pyfunction!(queue_receive, module)?)?;
     module.add_function(wrap_pyfunction!(queue_receive_dead_letter, module)?)?;
     module.add_function(wrap_pyfunction!(queue_ack, module)?)?;

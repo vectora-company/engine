@@ -63,7 +63,10 @@ from vectora_engine import (
     native_chat_stream,
     prepare_chat_content,
     prepare_tool_dispatch,
+    queue_ack,
+    queue_enqueue_idempotent,
     queue_nack,
+    queue_receive,
     queue_receive_dead_letter,
     rerank,
     rerank_contract_version,
@@ -359,6 +362,39 @@ def test_queue_nack_validates_delivery_handle() -> None:
             await queue_nack("missing-delivery", 25)
 
     asyncio.run(nack_unknown_delivery())
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable"),
+    [
+        ("redis_streams", "VECTORA_TEST_REDIS_URL"),
+        ("nats_jetstream", "VECTORA_TEST_NATS_URL"),
+    ],
+)
+def test_queue_idempotent_enqueue_against_real_services(
+    backend: str, variable: str
+) -> None:
+    endpoint = os.environ.get(variable)
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {
+            "backend": backend,
+            "endpoint": endpoint,
+            "namespace": f"python_dedupe_{os.getpid()}_{time.time_ns()}",
+            "deduplication_window_seconds": 7,
+        }
+        first_id = await queue_enqueue_idempotent(config, b"original", "task-42")
+        duplicate_id = await queue_enqueue_idempotent(config, b"different", "task-42")
+        assert duplicate_id == first_id
+        delivery = await queue_receive(config, "worker", "workers", 2000)
+        assert delivery is not None
+        assert delivery["payload"] == b"original"
+        await queue_ack(delivery["delivery_id"])
+        assert await queue_receive(config, "worker", "workers", 100) is None
+
+    asyncio.run(exercise())
 
 
 def test_sqlite_ledger_backup_verify_and_restore(tmp_path: Path) -> None:

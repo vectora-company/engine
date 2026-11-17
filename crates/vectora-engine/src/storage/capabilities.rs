@@ -215,12 +215,12 @@ impl StorageSelection {
                 "redis_streams",
                 &[
                     "durable_queue",
+                    "idempotent_enqueue_configurable_window",
                     "negative_ack",
                     "scheduled_retry_within_visibility_timeout",
                     "dead_letter_queue",
                 ],
                 &[
-                    "publisher_deduplication",
                     "queue_replay_from_cursor",
                     "graceful_consumer_shutdown",
                     "atomic_dead_letter_redrive",
@@ -231,6 +231,7 @@ impl StorageSelection {
                 &[
                     "Unacknowledged deliveries are reclaimed with XAUTOCLAIM after the visibility timeout.",
                     "NACK keeps the stream entry pending and schedules reclaim up to the configured visibility timeout.",
+                    "Idempotent enqueue uses an atomic Redis Lua script and retains the key for the configured window.",
                     "Source stream retention is capped by max_messages (default 100000); oldest entries can be trimmed, including pending deliveries.",
                     "After max_attempts (default 5), unacknowledged jobs move to a separately consumable dead-letter stream.",
                     "Dead-letter transfer and source ACK are atomic in Redis.",
@@ -241,12 +242,12 @@ impl StorageSelection {
                 "nats_jetstream",
                 &[
                     "durable_queue",
+                    "idempotent_enqueue_configurable_window",
                     "negative_ack",
                     "scheduled_retry_within_visibility_timeout",
                     "dead_letter_queue",
                 ],
                 &[
-                    "publisher_deduplication",
                     "queue_replay_from_cursor",
                     "graceful_consumer_shutdown",
                     "atomic_dead_letter_redrive",
@@ -257,6 +258,7 @@ impl StorageSelection {
                 &[
                     "Durable consumers redeliver after ack_wait.",
                     "NAK schedules redelivery up to the configured ack_wait.",
+                    "Idempotent enqueue uses the NATS message ID header and the configured stream duplicate window.",
                     "Source stream retention is capped by max_messages (default 100000); oldest entries can be removed, including pending deliveries.",
                     "After max_attempts (default 5), unacknowledged jobs move to a separately consumable dead-letter stream.",
                     "Dead-letter publication is at-least-once before the source ACK and may duplicate if the ACK is lost.",
@@ -416,6 +418,12 @@ mod tests {
                 .implemented
                 .iter()
                 .any(|item| item == "scheduled_retry_within_visibility_timeout")
+        );
+        assert!(
+            queue
+                .implemented
+                .iter()
+                .any(|item| item == "idempotent_enqueue_configurable_window")
         );
         assert!(
             queue

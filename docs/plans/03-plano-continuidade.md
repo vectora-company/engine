@@ -146,9 +146,10 @@ Origem: [plano de storage](04-plano-storage-ledger.md) e
    quantização, busca lexical/híbrida, falhas de indexação visíveis e
    backup/snapshot. **[D]** mapeamento comum de índices.
 2. Filas nos dois backends: **NACK e reentrega com atraso implementados e
-   testados em Redis/NATS reais**, com limite igual ao visibility timeout.
-   Pendem deduplicação na publicação, replay e ordenação com contrato e teste,
-   shutdown gracioso dos consumers e redrive atômico da DLQ; envelope de job versionado. **[D]**
+   testados em Redis/NATS reais**, com limite igual ao visibility timeout;
+   **enqueue idempotente por chave com janela configurável implementado nos dois**.
+   Pendem replay e ordenação com contrato e teste, shutdown gracioso dos
+   consumers e redrive atômico da DLQ; envelope de job versionado. **[D]**
    envelope de job.
 3. Pub/sub: reconexão observável e assinatura por padrão/curinga.
 4. `capabilities()` estruturado (lacuna, emulação, especialização com motivo).
