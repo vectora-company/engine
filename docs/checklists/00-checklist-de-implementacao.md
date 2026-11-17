@@ -48,6 +48,10 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
       testes reais dos dois brokers confirmam paginação sem alterar consumers. O estado por domínio está em
       `docs/checklists/03-auditoria-storage-s0-s5.md` e as evidências em
       `docs/analyses/05-auditoria-storage-s0-s5.md`.
+- [x] Pub/sub Redis/NATS oferece assinatura por padrão com semântica comum
+      (`*` para um segmento, `>` terminal para vários); os testes reais Rust,
+      Python e Node confirmam filtragem e publicação entregue antes do retorno.
+      Reconexão observável permanece pendente.
 
 ## Contratos e desenho
 

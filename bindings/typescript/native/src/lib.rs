@@ -1490,6 +1490,30 @@ pub async fn pubsub_subscribe(config_json: String, topic: String) -> Result<Stri
 }
 
 #[napi]
+pub async fn pubsub_subscribe_pattern(config_json: String, pattern: String) -> Result<String> {
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid pub/sub config"))?;
+    let pubsub = vectora_engine::storage::messaging::PubSubAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let subscription = Arc::new(tokio::sync::Mutex::new(
+        pubsub
+            .subscribe_pattern(&pattern)
+            .await
+            .map_err(|error| Error::from_reason(error.to_string()))?,
+    ));
+    let handle = format!(
+        "pubsub-{}",
+        STORAGE_HANDLE_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    pubsub_subscriptions()
+        .lock()
+        .map_err(|_| Error::from_reason("pub/sub handle lock failed"))?
+        .insert(handle.clone(), subscription);
+    Ok(handle)
+}
+
+#[napi]
 pub async fn pubsub_receive(subscription_id: String, timeout_ms: u32) -> Result<String> {
     let subscription = pubsub_subscriptions()
         .lock()

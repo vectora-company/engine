@@ -152,7 +152,12 @@ Origem: [plano de storage](04-plano-storage-ledger.md) e
    cursor expirado após trim e 32 produtores concorrentes com replay ordenado,
    sem perdas/duplicatas. Pendem shutdown gracioso e redrive atômico da DLQ;
    envelope de job versionado. **[D]** envelope de job.
-3. Pub/sub: reconexão observável e assinatura por padrão/curinga.
+3. Pub/sub: **assinatura por padrão implementada nos dois brokers**, com
+   `*` para um segmento e `>` final para múltiplos; Redis filtra localmente
+   para corresponder ao contrato por segmento do NATS. Pende reconexão
+   observável. Publicação NATS aguarda confirmação do envio, inclusive nos
+   bindings de chamada curta; Rust/Python/Node foram exercitados contra Redis
+   8.10.3 e NATS 2.15.3.
 4. `capabilities()` estruturado (lacuna, emulação, especialização com motivo).
    **[D]** formato.
 5. Health/readiness com os seis estados da spec 02 e observabilidade sem

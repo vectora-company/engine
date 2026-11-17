@@ -38,6 +38,7 @@ O fato de o Vectora usar hoje determinadas tabelas ou diretórios não os torna 
 | SQL durável     | SQLite, PostgreSQL            | Transações, consultas tipadas/limitadas, migrações, paginação, health e fechamento de pool.                                                | Locks, concorrência, JSON, precisão/datas, isolamento, conflitos, constraints e comportamento de migration. |
 | Vector store    | LanceDB, Qdrant               | Coleções, upsert/delete idempotente, busca cosseno, score de similaridade em `[-1, 1]` (maior é melhor), filtros/metadata, top-k e health. | Operadores/filtros suportados, lexical/hybrid search, consistência, limites de payload e criação de índice. |
 | KV/cache        | NATS JetStream KV, Redis      | get/set/delete, TTL, namespace e operação atômica quando suportada. TTL por mensagem no NATS requer Server 2.11+ e `AllowMsgTTL`.          | Durabilidade, atomicidade, eviction, TTL e escopo multi-processo.                                           |
+| Pub/sub efêmero | NATS Core, Redis Pub/Sub      | Publicar, assinar tópico e padrão de tópicos; entrega descartável e timeout.                                                               | Correspondência de padrões e descarte sem assinantes.                                                       |
 | Event bus/queue | NATS JetStream, Redis Streams | Envelope versionado, idempotency/task ID, publish/consume, timeout, cancelamento, estado de entrega e health.                              | ACK, consumer/group, redelivery, retenção, replay, ordenação, DLQ, deduplicação e semântica de shutdown.    |
 
 Um adapter não simula em silêncio uma capacidade ausente e não substitui automaticamente uma store durável por memória.
@@ -204,6 +205,15 @@ serviços reais dependem das variáveis `VECTORA_TEST_*`; consulte os registros 
 execução para saber quais cenários foram realmente executados. A presença de
 adapters não prova equivalência operacional. Ainda faltam, entre outras lacunas,
 shutdown gracioso e redrive atômico de filas, filtros vetoriais e health.
+
+Pub/sub expõe `subscribe_pattern` nos dois adapters com sintaxe comum de
+segmentos separados por ponto: `*` corresponde a exatamente um segmento e `>`
+final corresponde a um ou mais segmentos restantes. Wildcards precisam ocupar
+um segmento inteiro; padrão malformado é rejeitado antes de assinar. Redis
+`PSUBSCRIBE` pode fazer correspondência mais ampla que NATS por tratar `*` como
+texto arbitrário, por isso o adapter filtra cada canal recebido com a semântica
+de segmentos compartilhada. Essa operação continua efêmera e não acrescenta
+reconexão automática/observável.
 
 Não há ainda APIs de Memory, Context Planner, compactação/context engineering,
 indexação documental ou RAG. Os bindings de ledger exigem arquivo SQLite

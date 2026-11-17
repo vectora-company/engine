@@ -270,8 +270,11 @@ impl StorageSelection {
             Some(PubSubBackend::Redis) => backends.push(entry(
                 "pubsub",
                 "redis",
-                &["ephemeral_pubsub"],
-                &["durable_delivery", "replay"],
+                &[
+                    "ephemeral_pubsub",
+                    "subscription_patterns_single_and_multi_segment",
+                ],
+                &["durable_delivery", "replay", "observable_reconnection"],
                 None,
                 None,
                 Some(false),
@@ -280,8 +283,11 @@ impl StorageSelection {
             Some(PubSubBackend::NatsCore) => backends.push(entry(
                 "pubsub",
                 "nats_core",
-                &["ephemeral_pubsub"],
-                &["durable_delivery", "replay"],
+                &[
+                    "ephemeral_pubsub",
+                    "subscription_patterns_single_and_multi_segment",
+                ],
+                &["durable_delivery", "replay", "observable_reconnection"],
                 None,
                 None,
                 Some(false),
@@ -367,6 +373,24 @@ mod tests {
             redis.backends[0].score_direction,
             Some(ScoreDirection::HigherIsCloser)
         );
+    }
+
+    #[test]
+    fn reports_common_pubsub_pattern_subscriptions() {
+        for backend in ["redis", "nats_core"] {
+            let report = selection(&format!(r#"{{"contract_version":1,"pubsub":"{backend}"}}"#))
+                .capabilities();
+            assert!(
+                report.backends[0]
+                    .implemented
+                    .contains(&"subscription_patterns_single_and_multi_segment".to_owned())
+            );
+            assert!(
+                report.backends[0]
+                    .not_implemented
+                    .contains(&"observable_reconnection".to_owned())
+            );
+        }
     }
 
     #[test]

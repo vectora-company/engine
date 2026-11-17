@@ -80,7 +80,8 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 - [x] Filas: testar expiração do cursor após trim explícito em Redis Streams e JetStream reais; ambos retornam `ReplayCursorExpired`.
 - [x] Filas: testar 32 produtores concorrentes e replay paginado em ordem estrita sem perdas/duplicatas nos dois brokers reais.
 - [ ] Filas: shutdown gracioso dos consumers e redrive atômico da DLQ nas duas.
-- [ ] Pub/sub: reconexão observável e assinatura por padrão/curinga nos dois.
+- [x] Pub/sub: assinatura por padrão comum nos dois brokers (`*` um segmento, `>` final vários segmentos); Rust e bindings exercitados em serviços reais.
+- [ ] Pub/sub: reconexão observável nos dois.
 - [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL como projeção, com a mesma suíte do SQLite; testes concorrentes com serviço real.
 - [ ] SQL: interface transacional genérica tipada e limitada nos dois (decisão do mantenedor pendente).
 - [x] Decisão do mantenedor: SQLite permanece cópia local obrigatória e autoridade de recovery para ledger e estado crítico interno; PostgreSQL recebe projeções/replicação retomável. Credenciais e autenticação/RBAC do produto ficam no host.

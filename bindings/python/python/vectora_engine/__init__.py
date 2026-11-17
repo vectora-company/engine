@@ -271,6 +271,11 @@ async def pubsub_subscribe(config: JsonObject, topic: str) -> str:
     return await _native.pubsub_subscribe(json.dumps(config), topic)
 
 
+async def pubsub_subscribe_pattern(config: JsonObject, pattern: str) -> str:
+    """Subscribe using `*` for one dot-delimited segment and final `>` for many."""
+    return await _native.pubsub_subscribe_pattern(json.dumps(config), pattern)
+
+
 async def pubsub_receive(
     subscription_id: str, timeout_ms: int = 30_000
 ) -> bytes | None:
@@ -1493,6 +1498,7 @@ __all__ = [
     "pubsub_publish",
     "pubsub_receive",
     "pubsub_subscribe",
+    "pubsub_subscribe_pattern",
     "pubsub_unsubscribe",
     "queue_ack",
     "queue_enqueue",
