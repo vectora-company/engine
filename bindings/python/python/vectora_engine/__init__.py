@@ -1336,7 +1336,7 @@ async def native_chat_complete(
     *,
     media_context: MediaExecutionContext | None = None,
 ) -> dict[str, Any]:
-    """Call Anthropic Messages, Google Gemini, or Cohere Chat through Rust."""
+    """Call Anthropic, Gemini, Cohere, Ollama, or OpenAI Responses through Rust."""
     result = await _native.native_chat_complete(
         _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),

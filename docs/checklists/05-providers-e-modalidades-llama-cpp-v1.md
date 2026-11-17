@@ -56,8 +56,9 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
       do modelo e respeita override explícito do consumidor antes do envio.
 - [x] OpenAI Responses mapeia áudio WAV/MP3 efêmero para `input_audio`; sem
       metadata/override a capability permanece desconhecida nos dois perfis.
-      Fixture Rust rejeita formatos fora do contrato; smoke real por modelo
-      permanece pendente.
+      Fixtures Rust rejeitam formatos fora do contrato; Python e Node testam
+      reidratação pelo asset map e envio. Smoke real por modelo permanece
+      pendente.
 - [x] Separar categoria Decision Model, modelo Jev e protocolo SystemOne;
       seletor de modelo Laya opcional e sem default `jev-1`, validado por testes.
 - [ ] Definir e aplicar limites de duração/resolução e propagar orçamento a

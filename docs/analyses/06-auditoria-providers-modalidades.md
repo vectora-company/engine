@@ -58,9 +58,11 @@ Fontes de protocolo específicas ficam nos trechos da
 Na verificação local de 17/11/2026, após a implementação do input audio:
 
 - `scons tests` passou: 281 testes da lib Rust, 3 fixtures Rust, 8 testes CLI,
-  1 teste nativo Python, 101 Python (10 skips) e 56 Node (18 skips). A fixture
-  Responses valida WAV/MP3 e rejeição de MIME não suportado; a fixture Laya
-  confirma SystemOne sem seletor.
+  1 teste nativo Python, 102 Python (10 skips) e 57 Node (18 skips). Fixtures
+  Rust validam WAV/MP3 e rejeição de MIME não suportado; os testes Python e
+  Node reidratam WAV pelo asset map com capability específica do modelo e
+  confirmam o payload enviado a Responses. A fixture Laya confirma SystemOne
+  sem seletor.
 - `scons lint` passou: formatting, Clippy, rustdoc, Ruff, `ty`, Bandit,
   Oxlint e typecheck TypeScript.
 - O endpoint real Qdrant e os adapters LanceDB foram usados para a capability
