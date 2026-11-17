@@ -1412,6 +1412,15 @@ mod tests {
     fn openai_chat_completions_declara_pdf_nativo() {
         let capabilities = CapabilityResolver::new().resolve("openai", "model-x");
         assert_eq!(capabilities.pdf, CapabilityState::Supported);
+        assert_eq!(capabilities.audio_input, CapabilityState::Unknown);
+    }
+
+    #[test]
+    fn openai_profiles_keep_audio_unknown_without_model_metadata() {
+        let capabilities = CapabilityResolver::new().resolve("openai_responses", "model-x");
+        assert_eq!(capabilities.audio_input, CapabilityState::Unknown);
+        let chat = CapabilityResolver::new().resolve("openai", "model-x");
+        assert_eq!(chat.audio_input, CapabilityState::Unknown);
     }
 
     #[tokio::test]

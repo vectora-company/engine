@@ -15,7 +15,7 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
 | parcial | OpenAI-compatible, 9router, OmniRouter e Kimi | Transporte e endpoint customizável existem. Validar cada serviço/rota/auth/headers/erros/modalidades; nome compatível não garante suporte integral.                                 |
 | feito   | Anthropic Messages, Gemini e Cohere chat      | Adapters nativos no core; fixtures de request, resposta e stream nos bindings. Conferir suporte de mídia por operação antes de rotear.                                              |
 | feito   | Ollama `/api/chat`                            | JSON/NDJSON, reasoning, ferramentas, options e auth opcional cobertos por fixtures; daemon real não foi verificado nesta execução.                                                  |
-| feito   | OpenAI Chat Completions e Responses           | Protocolos separados no perfil OpenAI. Entrada de imagem e ferramentas são cobertas onde declaradas; ferramentas hospedadas, áudio/vídeo e geração de imagem não são inferidos.     |
+| parcial | OpenAI Chat Completions e Responses           | Protocolos separados. Responses serializa imagem e áudio WAV/MP3; capability de áudio permanece desconhecida sem metadata por modelo/override. Smokes reais pendentes.              |
 | feito   | OpenRouter                                    | Perfil dedicado e transporte genérico; atribuição e campos de roteamento testados. Não transfere automaticamente suporte de modalidade entre modelos.                               |
 | parcial | llama.cpp `llama-server` v1.0.0               | Perfil, discovery, chat, Decision Model, embeddings, rerank, TTS e realtime implementados conforme endpoints cobertos. Smoke integral com servidor/modelos reais não foi executado. |
 | parcial | Laya standalone `laya-serve`                  | Adapter SystemOne de health/decision e bindings existem; seletor é opcional e Jev não é checkpoint Laya. Smoke com servidor/checkpoint real permanece pendente.                     |
@@ -27,6 +27,7 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
 | feito    | Chat e stream              | Fixtures de protocolos; fallback explícito e sem troca após saída parcial.                                                                                             |
 | parcial  | Decision Model             | Choice/score/noul; mídia efêmera valida bytes/quantidade e modalidades do modelo com override do consumidor; smoke real ainda pendente.                                |
 | parcial  | Visão e imagens de entrada | Requests efêmeros com asset map e orçamento compartilhado; metadata `/v1/models` pode ser convertida explicitamente. Falta catálogo automático confiável e smoke real. |
+| parcial  | Entrada de áudio           | OpenAI Responses serializa WAV/MP3 como `input_audio`; capability permanece desconhecida até metadata por modelo ou override explícito. Falta smoke real.              |
 | pendente | Geração de imagem          | Sem contrato/provider geral implementado.                                                                                                                              |
 | parcial  | TTS                        | Áudio bufferizado e streaming pelo llama-server; verificar servidor/modelo real e completar conformidade operacional.                                                  |
 | parcial  | STT/transcrição            | Realtime pelo llama-server. Batch STT genérico não implementado; STT local de sistema pertence ao consumidor.                                                          |
@@ -53,6 +54,10 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
       e catálogo completo seguem pendentes.
 - [x] Decision Model efêmero do llama-server valida imagem/áudio contra metadata
       do modelo e respeita override explícito do consumidor antes do envio.
+- [x] OpenAI Responses mapeia áudio WAV/MP3 efêmero para `input_audio`; sem
+      metadata/override a capability permanece desconhecida nos dois perfis.
+      Fixture Rust rejeita formatos fora do contrato; smoke real por modelo
+      permanece pendente.
 - [x] Separar categoria Decision Model, modelo Jev e protocolo SystemOne;
       seletor de modelo Laya opcional e sem default `jev-1`, validado por testes.
 - [ ] Definir e aplicar limites de duração/resolução e propagar orçamento a

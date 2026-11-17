@@ -67,10 +67,15 @@ eventos SSE tipados; testes unitários exercitam os contratos. Fixtures HTTP nos
 bindings Python e TypeScript passaram após build nativo. O perfil é selecionado
 como `native` com `provider: openai_responses`. O suporte declarado cobre texto,
 imagem de entrada, function calling, reasoning/usage quando presentes e eventos
-SSE mapeáveis; built-in tools, TTS/STT, vídeo e geração de imagem continuam fora
-do adapter até possuírem contratos próprios. Referências oficiais: [Responses
+SSE mapeáveis. O serializer do perfil Responses aceita `input_audio` com bytes
+base64 WAV ou MP3. A capability permanece desconhecida sem metadata do modelo
+ou override do consumidor, tanto em Responses quanto em Chat Completions;
+suportar a forma do protocolo não prova suporte de cada modelo. Built-in tools,
+TTS/STT como operações dedicadas, vídeo e geração de imagem continuam fora do
+adapter até possuírem contratos próprios. Referências oficiais: [Responses
 API overview](https://developers.openai.com/api/reference/responses/overview),
 [create response](https://developers.openai.com/api/reference/resources/responses/methods/create),
+[Responses input types](https://developers.openai.com/api/reference/typescript/resources/responses),
 [streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events),
 [function calling](https://developers.openai.com/api/docs/guides/function-calling)
 e [image input](https://developers.openai.com/api/docs/guides/images-vision).
