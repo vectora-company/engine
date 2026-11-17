@@ -1,6 +1,6 @@
 # Plano de continuidade da Vectora Engine
 
-**Estado verificado:** 13 de novembro de 2026. A stack de storage e mídia até o PR [#96](https://github.com/vectora-company/engine/pull/96) foi integrada em `main`, atualmente `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`. Não há PR aberto. O plano ativo é a revisão e expansão de providers/modalidades, com referência normativa ao `llama.cpp` v1.0.0; seus artefatos estão listados em `docs/README.md` e `docs/goal-loop/README.md`.
+**Estado verificado:** 16 de novembro de 2026. A `main` remota está em `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`; PRs até [#112](https://github.com/vectora-company/engine/pull/112) estão integrados. A etapa de cliente dedicado para Laya `laya-serve` está no PR [#113](https://github.com/vectora-company/engine/pull/113), aberto e `MERGEABLE` sobre `main`. O plano ativo continua sendo a revisão e expansão de providers/modalidades, com referência normativa ao `llama.cpp` v1.0.0; veja [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md) e os artefatos ligados em [`docs/README.md`](../README.md).
 
 **Objetivo de produto:** a primeira release deve ser ampla e completa, não um
 MVP. A proposta de escopo e os gates ainda precisam ser consolidados neste

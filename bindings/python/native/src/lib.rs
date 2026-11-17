@@ -16,8 +16,8 @@ use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
     EphemeralDecisionRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
-    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
-    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
+    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerSettings,
+    MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
     ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
     TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
@@ -2036,6 +2036,34 @@ fn llama_server_decide_ephemeral<'py>(
     })
 }
 
+#[pyfunction]
+fn laya_health<'py>(py: Python<'py>, settings_json: String) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let settings: LayaSettings =
+            serde_json::from_str(&settings_json).map_err(|_| py_error("invalid Laya settings"))?;
+        let client = LayaClient::new(settings).map_err(py_error)?;
+        let health = client.health().await.map_err(py_error)?;
+        serde_json::to_string(&health).map_err(|_| py_error("could not encode Laya health"))
+    })
+}
+
+#[pyfunction]
+fn laya_decide<'py>(
+    py: Python<'py>,
+    settings_json: String,
+    request_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let settings: LayaSettings =
+            serde_json::from_str(&settings_json).map_err(|_| py_error("invalid Laya settings"))?;
+        let client = LayaClient::new(settings).map_err(py_error)?;
+        let request: DecisionRequest = serde_json::from_str(&request_json)
+            .map_err(|_| py_error("invalid decision request"))?;
+        let response = client.decide(request).await.map_err(py_error)?;
+        serde_json::to_string(&response).map_err(|_| py_error("could not encode decision response"))
+    })
+}
+
 fn speech_json(response: vectora_engine::chat::SpeechResponse) -> Result<String, String> {
     serde_json::to_string(&serde_json::json!({
         "audio_base64": STANDARD.encode(response.audio),
@@ -2864,6 +2892,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(llama_server_models, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide_ephemeral, module)?)?;
+    module.add_function(wrap_pyfunction!(laya_health, module)?)?;
+    module.add_function(wrap_pyfunction!(laya_decide, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_synthesize, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_synthesize_native, module)?)?;
     module.add_function(wrap_pyfunction!(

@@ -16,8 +16,8 @@ use vectora_engine::chat::{
     CHAT_CONTRACT_VERSION, CapabilityResolver, ChatCompletion, ChatEvent, ChatRequest, ChatStream,
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
     EphemeralDecisionRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
-    FallbackChatSettings, LlamaServerClient, LlamaServerSettings, MediaError,
-    MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
+    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerSettings,
+    MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
     NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
     ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
     TurnAccumulatorSettings, assemble_turn, prepare_content_with_limits,
@@ -1910,6 +1910,34 @@ pub async fn llama_server_decide_ephemeral(
         .map_err(|_| Error::from_reason("invalid ephemeral decision request"))?;
     let response = client
         .decide_ephemeral(request)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&response)
+}
+
+#[napi]
+pub async fn laya_health(settings_json: String) -> Result<String> {
+    let settings: LayaSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid Laya settings"))?;
+    let client =
+        LayaClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    let health = client
+        .health()
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&health)
+}
+
+#[napi]
+pub async fn laya_decide(settings_json: String, request_json: String) -> Result<String> {
+    let settings: LayaSettings = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid Laya settings"))?;
+    let client =
+        LayaClient::new(settings).map_err(|error| Error::from_reason(error.to_string()))?;
+    let request: DecisionRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid decision request"))?;
+    let response = client
+        .decide(request)
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&response)

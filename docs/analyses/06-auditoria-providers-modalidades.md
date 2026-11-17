@@ -1,8 +1,6 @@
 # Auditoria de providers e modalidades (referência llama.cpp v1.0.0)
 
-**Data:** 13 de novembro de 2026. **Checkout:** `/home/brunosrz/Área de trabalho/engine`.
-**Base consultada:** `main` remoto `f4a8cf9d7e30d9fb667a7f443f6572067e536d81`.
-Esta auditoria é inventário documental; não altera o código de produção. O PR #96 foi integrado em `main` antes desta análise.
+**Estado atual:** 16 de novembro de 2026. Checkout `/home/brunosrz/Área de trabalho/engine`, branch `feat/laya-decision-model-client`, base `main` `4140ddeffa646c4dfd2f0e6a7402a1b00e337099`. Os registros datados mais antigos abaixo são histórico; revalide-os antes de tratá-los como estado corrente.
 
 ## Fontes consultadas
 
@@ -12,6 +10,36 @@ Esta auditoria é inventário documental; não altera o código de produção. O
 - Catálogo do app: [`llama.app/models`](https://llama.app/models), consultado para confirmar que o ecossistema publica modelos de chat, multimodais, decisão e embeddings; o catálogo não prova cobertura da Engine nem do server para todo modelo.
 
 ## O que o código realmente oferece
+
+### Atualização — cliente standalone Laya (16/11/2026)
+
+O servidor Python Laya é um protocolo Jev: `GET /health` e
+`POST /v1/systemone`, sem endpoint `/v1/models` nem API OpenAI-compatible. A
+documentação upstream também restringe essa rota HTTP a estado textual; campos
+`image`, `audio` e `video` são rejeitados. A resposta full inclui `routing`,
+detalhes adicionais nos answers e campos de usage além dos dois tokens comuns.
+Assim, o adapter `LayaClient` fala diretamente com `/v1/systemone`, sem tentar
+reaproveitar o discovery do `LlamaServerClient`; valida choice/score em mapas,
+aceita os metadados extras sem ativar `LAYA_JEV_STRICT` e não retorna routing
+que pode carregar metadados derivados do estado. A distribuição recebe
+tolerância proporcional ao número de opções, pois Laya arredonda cada
+probabilidade independentemente a quatro casas.
+
+Implementados nesta etapa: health e decisão textual em Rust, Python e
+TypeScript; 10 testes Rust focados, fixtures HTTP Python/TypeScript; testes para
+choice de 64 opções, score com `probabilities`/`legend` em mapas, `noul`,
+metadata e usage extras, Bearer, IDs de resposta incorretos, limites de request/
+response e recusa de mídia antes da rede. `cargo fmt --check`, Clippy com
+`-D warnings` e os testes Rust focados passaram. `scons tests` passou: 227
+testes Rust, 3 fixtures de conformidade, 1 teste Rust do binding Python,
+pytest (95 passou, 1 skip) e Node (48 passou, 11 skips de serviços externos
+não configurados). O build nativo Node passou com cache após a compilação
+release inicial. O teste real é
+opt-in por `VECTORA_TEST_LAYA_URL`, `VECTORA_TEST_LAYA_API_KEY` e
+`VECTORA_TEST_LAYA_MODEL`; não foi executado sem um servidor configurado.
+
+Fontes primárias: [API HTTP do Laya](https://github.com/NandhaKishorM/laya/blob/main/docs/http-api.md)
+e [README upstream](https://github.com/NandhaKishorM/laya).
 
 | Área           | Implementado                                                                                                                                                                               | Não inferir                                                                                                                        |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |

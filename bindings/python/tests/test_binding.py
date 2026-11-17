@@ -33,6 +33,8 @@ from vectora_engine import (
     fallback_embed,
     fallback_rerank,
     graph_store_operation,
+    laya_decide,
+    laya_health,
     llama_server_chat_complete,
     llama_server_chat_stream,
     llama_server_decide,
@@ -875,6 +877,91 @@ def test_llama_server_profile_exposes_health_models_and_chat() -> None:
             "/v1/chat/completions",
             "/v1/chat/completions",
         ]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_laya_binding_uses_native_systemone_protocol_and_accepts_server_metadata() -> (
+    None
+):
+    captured: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            captured.append((self.command, self.path, None))
+            assert self.headers.get("Authorization") == "Bearer laya-test-key"
+            payload = {"status": "ok"}
+            encoded = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def do_POST(self) -> None:
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            captured.append((self.command, self.path, body))
+            assert self.headers.get("Authorization") == "Bearer laya-test-key"
+            payload = {
+                "model": "laya-systemone",
+                "answers": {
+                    "route": {
+                        "type": "choice",
+                        "choice": "billing",
+                        "probabilities": {"billing": 0.6667, "shipping": 0.3333},
+                        "confidence": 0.3,
+                        "answer_confidence": 0.6667,
+                        "action": {"act_probability": 1.0},
+                    }
+                },
+                "usage": {"input_tokens": 12, "output_tokens": 0, "state_tokens": 7},
+                "routing": {"model": "english", "repo": "convaiinnovations/laya"},
+            }
+            encoded = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        settings = {
+            "base_url": f"http://127.0.0.1:{server.server_port}/v1/",
+            "api_key": "laya-test-key",
+        }
+        assert asyncio.run(laya_health(settings)) == {"status": "ok"}
+        decision = asyncio.run(
+            laya_decide(
+                settings,
+                {
+                    "model": "multilingual",
+                    "state": {"ticket": "charged twice"},
+                    "questions": {
+                        "route": {
+                            "type": "choice",
+                            "instructions": "Which queue?",
+                            "criteria": {
+                                "billing": "billing issue",
+                                "shipping": "delivery issue",
+                            },
+                        }
+                    },
+                },
+            )
+        )
+        assert decision["answers"]["route"]["choice"] == "billing"
+        assert decision["usage"]["input_tokens"] == 12
+        assert [path for _, path, _ in captured] == ["/health", "/v1/systemone"]
+        assert captured[1][2] is not None
+        assert captured[1][2]["model"] == "multilingual"
     finally:
         server.shutdown()
         server.server_close()
