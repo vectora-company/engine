@@ -43,8 +43,9 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [ ] Para storage, consultar a matriz por pares: implementar a base viável nos
       dois adapters; registrar como especialização apenas incompatibilidade
       técnica comprovada.
-- [x] NACK agendado e enqueue idempotente estão implementados no core e expostos
-      pelas bindings Python e TypeScript; o estado por domínio está em
+- [x] NACK agendado, enqueue idempotente e replay read-only paginado por cursor
+      estão implementados no core e expostos pelas bindings Python e TypeScript;
+      testes reais dos dois brokers confirmam paginação sem alterar consumers. O estado por domínio está em
       `docs/checklists/03-auditoria-storage-s0-s5.md` e as evidências em
       `docs/analyses/05-auditoria-storage-s0-s5.md`.
 

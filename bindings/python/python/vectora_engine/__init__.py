@@ -208,6 +208,18 @@ async def queue_enqueue_idempotent(
     )
 
 
+async def queue_replay_after(
+    config: JsonObject, cursor: dict[str, Any] | None = None, limit: int = 100
+) -> dict[str, Any]:
+    """Read retained queue history without changing consumer offsets."""
+    result = json.loads(
+        await _native.queue_replay_after(json.dumps(config), json.dumps(cursor), limit)
+    )
+    for record in result["records"]:
+        record["payload"] = bytes(record["payload"])
+    return result
+
+
 async def queue_receive(
     config: JsonObject, consumer: str, group: str, timeout_ms: int = 30_000
 ) -> dict[str, Any] | None:
@@ -1489,6 +1501,7 @@ __all__ = [
     "queue_receive",
     "queue_receive_dead_letter",
     "queue_release",
+    "queue_replay_after",
     "reconcile_tool_result",
     "recover_model_tool_loop",
     "rerank",

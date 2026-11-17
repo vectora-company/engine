@@ -1367,6 +1367,28 @@ fn queue_enqueue_idempotent<'py>(
 }
 
 #[pyfunction]
+fn queue_replay_after<'py>(
+    py: Python<'py>,
+    config_json: String,
+    cursor_json: String,
+    limit: u32,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        use vectora_engine::storage::messaging::{QueueAdapter, QueueCursor};
+        let config =
+            serde_json::from_str(&config_json).map_err(|_| py_error("invalid queue config"))?;
+        let cursor: Option<QueueCursor> =
+            serde_json::from_str(&cursor_json).map_err(|_| py_error("invalid queue cursor"))?;
+        let queue = QueueAdapter::connect(config).await.map_err(py_error)?;
+        let page = queue
+            .replay_after(cursor.as_ref(), limit)
+            .await
+            .map_err(py_error)?;
+        serde_json::to_string(&page).map_err(|_| py_error("failed to encode queue replay page"))
+    })
+}
+
+#[pyfunction]
 fn queue_receive<'py>(
     py: Python<'py>,
     config_json: String,
@@ -2942,6 +2964,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(kv_store_list_keys, module)?)?;
     module.add_function(wrap_pyfunction!(queue_enqueue, module)?)?;
     module.add_function(wrap_pyfunction!(queue_enqueue_idempotent, module)?)?;
+    module.add_function(wrap_pyfunction!(queue_replay_after, module)?)?;
     module.add_function(wrap_pyfunction!(queue_receive, module)?)?;
     module.add_function(wrap_pyfunction!(queue_receive_dead_letter, module)?)?;
     module.add_function(wrap_pyfunction!(queue_ack, module)?)?;

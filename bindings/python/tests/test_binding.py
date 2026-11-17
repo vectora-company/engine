@@ -68,6 +68,7 @@ from vectora_engine import (
     queue_nack,
     queue_receive,
     queue_receive_dead_letter,
+    queue_replay_after,
     rerank,
     rerank_contract_version,
     resilient_ledger_append,
@@ -393,6 +394,40 @@ def test_queue_idempotent_enqueue_against_real_services(
         assert delivery["payload"] == b"original"
         await queue_ack(delivery["delivery_id"])
         assert await queue_receive(config, "worker", "workers", 100) is None
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("backend", "variable"),
+    [
+        ("redis_streams", "VECTORA_TEST_REDIS_URL"),
+        ("nats_jetstream", "VECTORA_TEST_NATS_URL"),
+    ],
+)
+def test_queue_replay_against_real_services(backend: str, variable: str) -> None:
+    endpoint = os.environ.get(variable)
+    if endpoint is None:
+        pytest.skip(f"{variable} is not configured")
+
+    async def exercise() -> None:
+        config = {
+            "backend": backend,
+            "endpoint": endpoint,
+            "namespace": f"python_replay_{os.getpid()}_{time.time_ns()}",
+        }
+        for value in (b"one", b"two", b"three"):
+            await queue_enqueue_idempotent(config, value, value.decode())
+        page = await queue_replay_after(config, limit=2)
+        assert [entry["payload"] for entry in page["records"]] == [b"one", b"two"]
+        next_page = await queue_replay_after(config, page["next_cursor"], 2)
+        assert [entry["payload"] for entry in next_page["records"]] == [b"three"]
+        # Replay is observational; all jobs remain available to normal consumers.
+        for expected in (b"one", b"two", b"three"):
+            delivery = await queue_receive(config, "worker", "workers", 2000)
+            assert delivery is not None
+            assert delivery["payload"] == expected
+            await queue_ack(delivery["delivery_id"])
 
     asyncio.run(exercise())
 

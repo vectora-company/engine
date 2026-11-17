@@ -103,8 +103,15 @@ deduplicação e replay. NACK pode agendar redelivery até o visibility timeout
 configurado, limite comum aos brokers. `enqueue_idempotent` recebe chave
 restrita a ASCII alfanumérico, `_` ou `-`, retorna o ID original e preserva o
 primeiro payload em repetições dentro de `deduplication_window_seconds` (padrão
-120 segundos). A janela deve ser maior que zero e é comum aos brokers. A
-disponibilidade nativa ou emulada de cada item ainda deve ser confirmada por
+120 segundos). A janela deve ser maior que zero e é comum aos brokers.
+`replay_after(cursor, limit)` lê o histórico retido sem criar nem avançar grupos,
+ACKs ou offsets de consumers. Sem cursor, começa na mensagem retida mais antiga;
+com cursor, retorna posições posteriores em ordem. O limite aceita 1–1000 e o
+cursor serializável contém versão do contrato, backend, namespace e posição do
+stream, impedindo seu uso em outra fila/backend. Retenção que removeu a posição
+retorna `ReplayCursorExpired`; cursores futuros ou incompatíveis são inválidos.
+`next_cursor` aponta à última posição examinada, inclusive quando JetStream tem
+sequências sem mensagem. A disponibilidade nativa ou emulada de cada item ainda deve ser confirmada por
 versão e registrada na matriz do plano.
 
 No JetStream KV, a chave tem até 512 bytes e usa letras ASCII, números,

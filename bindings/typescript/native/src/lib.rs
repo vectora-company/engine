@@ -1313,6 +1313,28 @@ pub async fn queue_enqueue_idempotent(
 }
 
 #[napi]
+pub async fn queue_replay_after(
+    config_json: String,
+    cursor_json: String,
+    limit: u32,
+) -> Result<String> {
+    use vectora_engine::storage::messaging::{QueueAdapter, QueueCursor};
+    let config = serde_json::from_str(&config_json)
+        .map_err(|_| Error::from_reason("invalid queue config"))?;
+    let cursor: Option<QueueCursor> = serde_json::from_str(&cursor_json)
+        .map_err(|_| Error::from_reason("invalid queue cursor"))?;
+    let queue = QueueAdapter::connect(config)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let page = queue
+        .replay_after(cursor.as_ref(), limit)
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    serde_json::to_string(&page)
+        .map_err(|_| Error::from_reason("failed to encode queue replay page"))
+}
+
+#[napi]
 pub async fn queue_receive(
     config_json: String,
     consumer: String,

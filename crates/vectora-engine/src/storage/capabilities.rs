@@ -219,9 +219,9 @@ impl StorageSelection {
                     "negative_ack",
                     "scheduled_retry_within_visibility_timeout",
                     "dead_letter_queue",
+                    "queue_replay_from_cursor",
                 ],
                 &[
-                    "queue_replay_from_cursor",
                     "graceful_consumer_shutdown",
                     "atomic_dead_letter_redrive",
                 ],
@@ -246,9 +246,9 @@ impl StorageSelection {
                     "negative_ack",
                     "scheduled_retry_within_visibility_timeout",
                     "dead_letter_queue",
+                    "queue_replay_from_cursor",
                 ],
                 &[
-                    "queue_replay_from_cursor",
                     "graceful_consumer_shutdown",
                     "atomic_dead_letter_redrive",
                 ],
@@ -337,6 +337,11 @@ mod tests {
         );
         assert!(
             report.backends[2]
+                .implemented
+                .contains(&"queue_replay_from_cursor".to_owned())
+        );
+        assert!(
+            report.backends[2]
                 .not_implemented
                 .contains(&"atomic_dead_letter_redrive".to_owned())
         );
@@ -345,6 +350,11 @@ mod tests {
             nats.backends[0]
                 .implemented
                 .contains(&"dead_letter_queue".to_owned())
+        );
+        assert!(
+            nats.backends[0]
+                .implemented
+                .contains(&"queue_replay_from_cursor".to_owned())
         );
     }
 

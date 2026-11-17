@@ -747,6 +747,11 @@ interface NativeBinding {
     payloadJson: string,
     idempotencyKey: string,
   ): Promise<string>;
+  queueReplayAfter(
+    configJson: string,
+    cursorJson: string,
+    limit: number,
+  ): Promise<string>;
   queueReceive(
     configJson: string,
     consumer: string,
@@ -1319,6 +1324,20 @@ export interface QueueDelivery {
   payload: Uint8Array;
   attempts: number;
 }
+export interface QueueCursor {
+  contract_version: number;
+  backend: QueueConfig["backend"];
+  namespace: string;
+  position: string;
+}
+export interface QueueReplayRecord {
+  cursor: QueueCursor;
+  payload: Uint8Array;
+}
+export interface QueueReplayPage {
+  records: QueueReplayRecord[];
+  next_cursor: QueueCursor | null;
+}
 export async function queueEnqueue(
   config: QueueConfig,
   payload: Uint8Array,
@@ -1339,6 +1358,30 @@ export async function queueEnqueueIdempotent(
     JSON.stringify(Array.from(payload)),
     idempotencyKey,
   );
+}
+/** Read up to 1000 retained jobs after a cursor without changing consumer offsets. */
+export async function queueReplayAfter(
+  config: QueueConfig,
+  cursor: QueueCursor | null = null,
+  limit = 100,
+): Promise<QueueReplayPage> {
+  const page = JSON.parse(
+    await native.queueReplayAfter(
+      JSON.stringify(config),
+      JSON.stringify(cursor),
+      limit,
+    ),
+  ) as {
+    records: { cursor: QueueCursor; payload: number[] }[];
+    next_cursor: QueueCursor | null;
+  };
+  return {
+    records: page.records.map((record) => ({
+      cursor: record.cursor,
+      payload: Uint8Array.from(record.payload),
+    })),
+    next_cursor: page.next_cursor,
+  };
 }
 export async function queueReceive(
   config: QueueConfig,

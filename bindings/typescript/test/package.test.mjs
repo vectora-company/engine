@@ -42,6 +42,7 @@ import {
   queueReceiveDeadLetter,
   queueNack,
   queueEnqueueIdempotent,
+  queueReplayAfter,
   queueReceive,
   queueAck,
   runContractVersion,
@@ -1725,6 +1726,23 @@ for (const [backend, endpoint] of [
     assert.equal(new TextDecoder().decode(delivery.payload), "original");
     await queueAck(delivery.delivery_id);
     assert.equal(await queueReceive(config, "worker", "workers", 100), null);
+  });
+
+  test(`queue replay preserves consumer availability in ${backend}`, { skip: !endpoint }, async () => {
+    const config = { backend, endpoint, namespace: `node_replay_${randomUUID()}` };
+    for (const value of ["one", "two", "three"]) {
+      await queueEnqueueIdempotent(config, new TextEncoder().encode(value), value);
+    }
+    const first = await queueReplayAfter(config, null, 2);
+    assert.deepEqual(first.records.map((record) => new TextDecoder().decode(record.payload)), ["one", "two"]);
+    const second = await queueReplayAfter(config, first.next_cursor, 2);
+    assert.deepEqual(second.records.map((record) => new TextDecoder().decode(record.payload)), ["three"]);
+    for (const expected of ["one", "two", "three"]) {
+      const delivery = await queueReceive(config, "worker", "workers", 2_000);
+      assert.ok(delivery);
+      assert.equal(new TextDecoder().decode(delivery.payload), expected);
+      await queueAck(delivery.delivery_id);
+    }
   });
 }
 

@@ -348,6 +348,12 @@ export declare function queueEnqueueIdempotent(
   idempotencyKey: string,
 ): Promise<string>;
 
+export declare function queueReplayAfter(
+  configJson: string,
+  cursorJson: string,
+  limit: number,
+): Promise<string>;
+
 export declare function queueReceive(
   configJson: string,
   consumer: string,

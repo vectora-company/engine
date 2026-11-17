@@ -145,12 +145,12 @@ Origem: [plano de storage](04-plano-storage-ledger.md) e
 1. Vetorial nos dois backends: filtro por metadado, índice ANN parametrizado,
    quantização, busca lexical/híbrida, falhas de indexação visíveis e
    backup/snapshot. **[D]** mapeamento comum de índices.
-2. Filas nos dois backends: **NACK e reentrega com atraso implementados e
-   testados em Redis/NATS reais**, com limite igual ao visibility timeout;
-   **enqueue idempotente por chave com janela configurável implementado nos dois**.
-   Pendem replay e ordenação com contrato e teste, shutdown gracioso dos
-   consumers e redrive atômico da DLQ; envelope de job versionado. **[D]**
-   envelope de job.
+2. Filas nos dois backends: **NACK/reentrega atrasada, enqueue idempotente por
+   janela e replay read-only paginado por cursor implementados e testados nos
+   dois serviços e bindings**. O replay mantém posição vinculada a versão,
+   backend e namespace e não toca offsets de consumers. Pendem teste de cursor
+   expirado após trim, ordenação sob enqueue concorrente, shutdown gracioso e
+   redrive atômico da DLQ; envelope de job versionado. **[D]** envelope de job.
 3. Pub/sub: reconexão observável e assinatura por padrão/curinga.
 4. `capabilities()` estruturado (lacuna, emulação, especialização com motivo).
    **[D]** formato.
