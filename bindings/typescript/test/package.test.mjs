@@ -1118,6 +1118,43 @@ test("embedding and rerank APIs reach Rust through the Node binding", async () =
   assert.deepEqual(reranked.results, [{ index: 1, relevance_score: 0.93 }]);
 });
 
+test("llama-server rerank uses the Jina endpoint and maps usage", async () => {
+  const result = await withFixtureServer(
+    JSON.stringify({
+      model: "fixture-reranker",
+      results: [{ index: 1, relevance_score: 0.93 }],
+      usage: { prompt_tokens: 7 },
+    }),
+    "application/json",
+    async (baseUrl, captured) => {
+      const reranked = await rerank(
+        {
+          protocol: "llama_server",
+          settings: { base_url: baseUrl, api_key: "fixture" },
+        },
+        {
+          contract_version: 1,
+          model: "fixture-reranker",
+          query: "query",
+          documents: ["first", "second"],
+          top_n: 1,
+        },
+      );
+      assert.equal(captured.path, "/engines/v1/rerank");
+      assert.equal(captured.headers.authorization, "Bearer fixture");
+      assert.deepEqual(captured.body, {
+        model: "fixture-reranker",
+        query: "query",
+        documents: ["first", "second"],
+        top_n: 1,
+      });
+      return reranked;
+    },
+  );
+  assert.deepEqual(result.results, [{ index: 1, relevance_score: 0.93 }]);
+  assert.equal(result.usage.input_tokens, 7);
+});
+
 test("completion rejects invalid endpoints without leaking credentials", async () => {
   await assert.rejects(chatComplete(settings, request), (error) => {
     assert.equal(error.message.includes("secret-for-redaction-test"), false);

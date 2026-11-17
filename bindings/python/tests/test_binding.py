@@ -2043,6 +2043,16 @@ def test_embedding_protocol_adapters(
             "/engines/v1/rerank",
             "top_n",
         ),
+        (
+            "llama_server",
+            {
+                "model": "fixture-model",
+                "results": [{"index": 1, "relevance_score": 0.9}],
+                "usage": {"prompt_tokens": 7},
+            },
+            "/engines/v1/rerank",
+            "top_n",
+        ),
     ],
 )
 def test_rerank_protocol_adapters(
@@ -2071,8 +2081,11 @@ def test_rerank_protocol_adapters(
         server.server_close()
 
     assert captured["path"] == expected_path
+    assert captured["headers"]["authorization"] == "Bearer fixture-token"
     assert captured["body"][expected_top_key] == 1
     assert result["results"] == [{"index": 1, "relevance_score": 0.9}]
+    if protocol == "llama_server":
+        assert result["usage"]["input_tokens"] == 7
 
 
 def test_embedding_fallback_occurs_only_for_quota_and_reports_switch() -> None:

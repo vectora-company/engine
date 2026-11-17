@@ -332,4 +332,14 @@ Artefatos desta etapa: [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-
 - [x] `scons tests` antes da fixture fail-closed mais recente: Rust 234 + 3 fixtures + 1 fronteira Python; pytest 97/1 skip; Node 50/11 skips.
 - [x] `scons lint` e pre-commit passaram; a primeira execução identificou e corrigiu declaração Python duplicada.
 - [x] Reexecutar `scons tests`: Rust 234 + 3 fixtures + 1 fronteira Python; pytest 97/1 skip; Node 50/11 skips.
-- [ ] Commit, push e publicar PR filho de [#114](https://github.com/vectora-company/engine/pull/114); iniciar próxima etapa sem esperar CI remoto.
+- [x] Publicar embeddings multimodais como PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114.
+
+## Rerank textual llama-server v1.0.0 — branch `feat/llama-server-rerank`
+
+- [x] Adicionar perfil `llama_server` ao contrato compartilhado de rerank.
+- [x] Usar formato Jina `/rerank`, mapear `top_n`, preservar ordem/índices, score e usage.
+- [x] Bearer opcional, endpoint raiz ou prefixo `/v1`; opções de truncamento são recusadas antes da rede.
+- [x] Fixtures Rust/Python/TypeScript cobrem request, auth, response e validação de score `[0,1]`.
+- [x] `scons tests`: Rust 236; 3 fixtures de conformidade + 1 fronteira Python; pytest 98 passed/1 skipped; Node 51 passed/11 skips opcionais.
+- [x] `scons lint` passou; pre-commit completo passou após ajuste automático de formatação Markdown.
+- [ ] Commit/push e PR filho de [#115](https://github.com/vectora-company/engine/pull/115); iniciar a próxima etapa sem esperar CI remoto.

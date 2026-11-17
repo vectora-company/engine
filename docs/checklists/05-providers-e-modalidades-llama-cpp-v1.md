@@ -61,6 +61,12 @@
 - [x] Fixtures Rust/Python/TypeScript cobrem embeddings texto, erro estrutural, auth e resposta.
 - [x] Fixtures Python/TypeScript cobrem materialização por asset map e autenticação; erros de modalidade e conteúdo são cobertos no core Rust.
 - [ ] Smoke opt-in com modelo multimodal de embeddings, pooling suportado e tag de servidor imutável.
+- [x] Implementar rerank textual llama-server em formato Jina via `/rerank`, com top_n, usage, score e ordem; fixtures focadas Rust/Python/TypeScript cobrem auth e request/resposta.
+- [x] Rejeitar options de truncamento e scores fora de `[0,1]`; limites/índices inválidos também falham fechados.
+- [ ] Rerank multimodal com asset map permanece etapa posterior; jamais encaminhar URLs ou bytes persistíveis diretamente.
+- [x] `scons tests`: Rust 236; 3 fixtures de conformidade + 1 fronteira Python; pytest 98 passed/1 skipped; Node 51 passed/11 skips opcionais.
+- [x] `scons lint` passou; hooks pre-commit passaram após ajuste automático de formatação Markdown.
+- [ ] Publicar o PR empilhado sobre #115 e iniciar a próxima etapa sem aguardar CI.
 - [x] Síntese TTS bufferizada e `/tts` têm formato binário separado do chat; áudio de referência só usa envelope efêmero.
 - [ ] Streaming TTS e realtime ASR têm contratos de sessão separados; geração de imagem e vídeo também.
 - [ ] Documentação anuncia suporte por modalidade/provider/modelo com evidência.
