@@ -187,3 +187,11 @@
 - [x] Gates integrados: Rust 241; pytest 99/1 skip; Node 52/11 skips; lint.
 - [x] Pre-commit passou.
 - [ ] PR filho de #118.
+
+### Contrato da resposta de rerank
+
+- [x] Índice inexistente, cardinalidade acima de `top_n` e ausência de `results` falham como resposta inválida.
+- [x] Seis testes Rust focados passam.
+- [x] `scons tests`: Rust 242; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips opcionais.
+- [x] `scons lint`.
+- [ ] Pre-commit e PR filho de #119.
