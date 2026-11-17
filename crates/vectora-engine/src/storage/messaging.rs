@@ -281,7 +281,8 @@ fn replay_payload(
     fields: std::collections::HashMap<String, redis::Value>,
 ) -> Result<(String, Vec<u8>), MessagingError> {
     let value = fields.get("payload").ok_or(MessagingError::Storage)?;
-    let payload = redis::from_redis_value::<Vec<u8>>(value).map_err(|_| MessagingError::Storage)?;
+    let payload =
+        redis::from_redis_value::<Vec<u8>>(value.clone()).map_err(|_| MessagingError::Storage)?;
     Ok((id, payload))
 }
 
@@ -807,17 +808,17 @@ impl KvStore for NatsStore {
 }
 
 pub enum KvStoreAdapter {
-    Redis(RedisStore),
+    Redis(Box<RedisStore>),
     Nats(Box<NatsStore>),
 }
 
 impl KvStoreAdapter {
     pub async fn connect(config: KvStoreConfig) -> Result<Self, MessagingError> {
         match config.backend {
-            super::KvBackend::Redis => Ok(Self::Redis(RedisStore::connect(
+            super::KvBackend::Redis => Ok(Self::Redis(Box::new(RedisStore::connect(
                 &config.endpoint,
                 &config.namespace,
-            )?)),
+            )?))),
             super::KvBackend::NatsJetstream => Ok(Self::Nats(Box::new(
                 NatsStore::connect(&config.endpoint, &config.namespace).await?,
             ))),
@@ -850,7 +851,7 @@ impl KvStoreAdapter {
                 {
                     return Err(MessagingError::Unsupported);
                 }
-                let db = store.client.get_connection_info().redis.db;
+                let db = store.client.get_connection_info().redis_settings().db();
                 let channel_prefix = format!("__keyspace@{db}__:{}:", store.prefix);
                 let mut pubsub = store
                     .client
@@ -1446,7 +1447,11 @@ impl RedisStreamQueue {
             }
             if max_attempts.is_some_and(|maximum| *attempts as u64 > u64::from(maximum)) {
                 let payload = redis::from_redis_value::<Vec<u8>>(
-                    entry.map.get("payload").ok_or(MessagingError::Storage)?,
+                    entry
+                        .map
+                        .get("payload")
+                        .ok_or(MessagingError::Storage)?
+                        .clone(),
                 )
                 .map_err(|_| MessagingError::Storage)?;
                 let dead_letter = format!("{key}:dead");
@@ -1511,7 +1516,11 @@ fn redis_delivery(
     visibility_timeout: Duration,
 ) -> Result<RedisQueueDelivery, MessagingError> {
     let payload = redis::from_redis_value::<Vec<u8>>(
-        entry.map.get("payload").ok_or(MessagingError::Storage)?,
+        entry
+            .map
+            .get("payload")
+            .ok_or(MessagingError::Storage)?
+            .clone(),
     )
     .map_err(|_| MessagingError::Storage)?;
     Ok(RedisQueueDelivery {

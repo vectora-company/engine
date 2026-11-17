@@ -8,32 +8,32 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-arrow-array = "56.2"
-arrow-schema = "56.2"
-async-nats = { version = "0.52", features = ["server_2_11"] }
+arrow-array = "58.4.2"
+arrow-schema = "58.4.2"
+async-nats = { version = "0.53", features = ["server_2_11"] }
 blake3 = "1.8"
-getrandom = "0.3"
+getrandom = "0.4"
 async-stream.workspace = true
 async-trait = "0.1"
 bytes.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
-falkordb = { version = "=0.11.2", default-features = false, features = ["tokio", "serde", "tokio-rustls"] }
+falkordb = { version = "=0.11.3", default-features = false, features = ["tokio", "serde", "tokio-rustls"] }
 jsonschema.workspace = true
-lancedb = { version = "0.22", default-features = false }
-lance-arrow = "=0.39.0"
-redis = { version = "0.27", features = ["tokio-comp"] }
+lancedb = { version = "0.41", default-features = false }
+lance-arrow = "=14.0.2"
+redis = { version = "1.8", features = ["tokio-comp"] }
 reqwest.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+rusqlite = { version = "0.39", features = ["bundled", "backup"] }
 serde.workspace = true
 serde_json.workspace = true
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "json"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "json"] }
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
-sha2 = "0.10"
-base64 = "0.22"
+sha2 = "0.11"
+base64 = "0.23"
 tokio-websockets = { version = "0.13.3", features = ["client", "rustls-webpki-roots", "sha1_smol"] }
 
 [dev-dependencies]

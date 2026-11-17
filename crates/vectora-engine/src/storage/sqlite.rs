@@ -677,8 +677,11 @@ impl SqliteLedger {
             .query_row(
                 "SELECT (SELECT COUNT(*) FROM ve_ledger_outbox WHERE delivered=0) + (SELECT COUNT(*) FROM ve_run_reservation_outbox WHERE delivered=0)",
                 [],
-                |row| row.get(0),
+                |row| row.get::<_, i64>(0),
             )
+            .and_then(|count| {
+                u64::try_from(count).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, count))
+            })
             .map_err(Into::into)
     }
 
