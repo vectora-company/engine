@@ -2,7 +2,7 @@
 
 ## Estado atual — rerank llama-server v1.0.0 (16/11/2026)
 
-PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, entrega embeddings multimodais efêmeros por asset map. A branch ativa `feat/llama-server-rerank`, filha do #115, implementa rerank Jina em `/rerank`, com top_n, usage e validação dos scores. Gates integrados passaram (Rust 236; pytest 98/1 skip; Node 51/11 skips; `scons lint`); pre-commit passou; publicação do PR ainda pendente. O plano, spec,
+PR [#115](https://github.com/vectora-company/engine/pull/115), filho do #114, entrega embeddings multimodais por asset map. O PR [#116](https://github.com/vectora-company/engine/pull/116), filho do #115, implementa rerank textual Jina. A branch ativa `feat/llama-server-multimodal-rerank`, filha do #116, implementa rerank multimodal efêmero usando asset map. `scons tests` passou (Rust 238; 3 fixtures + 1 fronteira Python; pytest 99/1 skip; Node 52/11 skips) e `scons lint` passou; pre-commit passou; PR #117 pendente. O plano, spec,
 checklist e análise são
 [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
 [`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md),

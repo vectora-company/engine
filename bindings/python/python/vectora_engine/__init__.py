@@ -927,6 +927,21 @@ async def llama_server_embed_ephemeral(
     )
 
 
+async def llama_server_rerank_ephemeral(
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext,
+) -> dict[str, Any]:
+    """Rerank text and consumer-owned image assets in a transient request."""
+    return json.loads(
+        await _native.llama_server_rerank_ephemeral(
+            _media_settings(settings, media_context),
+            json.dumps(request, separators=(",", ":")),
+        )
+    )
+
+
 async def llama_server_models(settings: JsonObject) -> dict[str, Any]:
     """Return raw model metadata from the llama-server `/v1/models` endpoint."""
     return json.loads(
@@ -1435,6 +1450,7 @@ __all__ = [
     "llama_server_health",
     "llama_server_models",
     "llama_server_realtime_start",
+    "llama_server_rerank_ephemeral",
     "llama_server_synthesize",
     "llama_server_synthesize_native",
     "llama_server_synthesize_native_ephemeral",

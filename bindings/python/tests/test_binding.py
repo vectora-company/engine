@@ -43,6 +43,7 @@ from vectora_engine import (
     llama_server_embed_ephemeral,
     llama_server_health,
     llama_server_models,
+    llama_server_rerank_ephemeral,
     llama_server_synthesize,
     llama_server_synthesize_native_ephemeral,
     llama_server_synthesize_native_stream_ephemeral,
@@ -1000,6 +1001,69 @@ def test_llama_server_multimodal_embeddings_materialize_only_consumer_assets() -
         == "data:image/png;base64," + base64.b64encode(image).decode()
     )
     assert response["embeddings"] == [[0.1, 0.9]]
+
+
+def test_llama_server_multimodal_rerank_uses_consumer_assets() -> None:
+    image = b"\x89PNG\r\n\x1a\nrerank"
+    image_ref = {
+        "asset_id": "rerank-image",
+        "sha256": hashlib.sha256(image).hexdigest(),
+        "mime_type": "image/png",
+        "size_bytes": len(image),
+        "name": "image.png",
+    }
+    captured: dict[str, Any] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = b'{"data":[{"id":"vision-ranker","architecture":{"input_modalities":["text","image"]}}]}'
+            self.send_response(200)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self) -> None:
+            captured["path"] = self.path
+            captured["body"] = json.loads(
+                self.rfile.read(int(self.headers["content-length"]))
+            )
+            body = b'{"results":[{"index":0,"relevance_score":0.88}],"usage":{"prompt_tokens":5}}'
+            self.send_response(200)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    request = {
+        "contract_version": 1,
+        "model": "vision-ranker",
+        "query": [
+            {"type": "text", "text": "compare"},
+            {"type": "image", "media_ref": image_ref},
+        ],
+        "documents": [{"content": [{"type": "text", "text": "candidate"}]}],
+        "top_n": 1,
+    }
+    try:
+        response = asyncio.run(
+            llama_server_rerank_ephemeral(
+                {
+                    "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                    "api_key": "fixture",
+                },
+                request,
+                media_context=MediaExecutionContext({"rerank-image": image}),
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert captured["path"] == "/rerank"
+    assert captured["body"]["query"]["image"][0].startswith("data:image/png;base64,")
+    assert response["results"] == [{"index": 0, "relevance_score": 0.88}]
 
 
 def test_laya_binding_uses_native_systemone_protocol_and_accepts_server_metadata() -> (
