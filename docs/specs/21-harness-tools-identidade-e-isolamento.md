@@ -46,6 +46,12 @@ valida argumentos antes da execução, revalida a policy imediatamente antes do
 efeito e persiste intenção/resultado no ledger. Efeitos externos incertos entram
 em reconciliação; replay não os executa de novo silenciosamente.
 
+`ToolContract.output_schema` é opcional e descreve o array serializado de
+`ToolResult.parts`. O adapter/host chama `validate_tool_result_output` antes de
+persistir ou expor o resultado ao modelo; schema ausente mantém compatibilidade
+e não remove os limites de bytes já impostos pelo loop. A validação não executa
+o adapter nem substitui redaction, limites de tamanho ou verificação de mídia.
+
 ### Filesystem e Git
 
 - Filesystem opera somente em raízes concedidas, resolve caminhos reais,

@@ -52,6 +52,11 @@ pub struct ToolContract {
     pub description: Option<String>,
     /// Self-contained JSON Schema. Remote references are not fetched.
     pub input_schema: Value,
+    /// Optional JSON Schema for the serialized `ToolResult.parts` array.
+    /// Consumers validate with `validate_tool_result_output` before persisting
+    /// or returning adapter output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<Value>,
     pub required_capability: String,
     pub timeout_ms: u64,
     pub effect: ToolEffect,
@@ -89,6 +94,15 @@ impl ToolContract {
         }
         validator_for(&self.input_schema)
             .map_err(|_| ToolDispatchError::InvalidToolContract("input_schema"))?;
+        if let Some(schema) = &self.output_schema {
+            let bytes = serde_json::to_vec(schema)
+                .map_err(|_| ToolDispatchError::InvalidToolContract("output_schema"))?;
+            if bytes.len() > MAX_SCHEMA_BYTES {
+                return Err(ToolDispatchError::InvalidToolContract("output_schema_size"));
+            }
+            validator_for(schema)
+                .map_err(|_| ToolDispatchError::InvalidToolContract("output_schema"))?;
+        }
         Ok(())
     }
 
@@ -100,6 +114,47 @@ impl ToolContract {
             parameters: self.input_schema.clone(),
         }
     }
+}
+
+/// Validate adapter output against the tool's optional output schema.
+/// Call this before persisting the result or exposing it to a model.
+pub fn validate_tool_result_output(
+    contract: &ToolContract,
+    result: &super::ToolResult,
+) -> Result<(), ToolOutputValidationError> {
+    contract
+        .validate()
+        .map_err(ToolOutputValidationError::InvalidContract)?;
+    if result.tool_name != contract.name {
+        return Err(ToolOutputValidationError::ToolMismatch);
+    }
+    let Some(schema) = &contract.output_schema else {
+        return Ok(());
+    };
+    let validator = validator_for(schema).map_err(|_| {
+        ToolOutputValidationError::InvalidContract(ToolDispatchError::InvalidToolContract(
+            "output_schema",
+        ))
+    })?;
+    let value = serde_json::to_value(&result.parts)
+        .map_err(|_| ToolOutputValidationError::InvalidOutput)?;
+    if validator.is_valid(&value) {
+        Ok(())
+    } else {
+        Err(ToolOutputValidationError::SchemaMismatch)
+    }
+}
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum ToolOutputValidationError {
+    #[error(transparent)]
+    InvalidContract(#[from] ToolDispatchError),
+    #[error("tool result belongs to a different tool")]
+    ToolMismatch,
+    #[error("tool output cannot be encoded as JSON")]
+    InvalidOutput,
+    #[error("tool output does not match its declared output schema")]
+    SchemaMismatch,
 }
 
 fn valid_identifier(value: &str, max_bytes: usize) -> bool {
@@ -399,6 +454,7 @@ mod tests {
                 "required": ["key"],
                 "additionalProperties": false
             }),
+            output_schema: None,
             required_capability: "data.read".into(),
             timeout_ms: 5_000,
             effect,
@@ -548,6 +604,40 @@ mod tests {
                 ToolDispatchSettings::default(),
             ),
             Err(ToolDispatchError::DuplicateToolName("lookup".into()))
+        );
+    }
+
+    #[test]
+    fn validates_declared_tool_output_schema_and_tool_identity() {
+        let contract = ToolContract {
+            output_schema: Some(json!({
+                "type": "array",
+                "items": {"type": "object", "required": ["type", "text"], "properties": {"text": {"minLength": 1}}}
+            })),
+            ..contract(ToolEffect::ReadOnly, ToolIdempotency::Idempotent)
+        };
+        let valid: super::super::ToolResult = serde_json::from_value(json!({
+            "contract_version": 2, "run_id": "run-1", "turn_id": "turn-1",
+            "call_id": "call-1", "tool_name": "lookup", "status": "succeeded",
+            "effect_state": "not_applicable", "parts": [{"type":"text","text":"ok"}]
+        }))
+        .unwrap();
+        assert_eq!(validate_tool_result_output(&contract, &valid), Ok(()));
+        let invalid: super::super::ToolResult = serde_json::from_value(json!({
+            "contract_version": 2, "run_id": "run-1", "turn_id": "turn-1",
+            "call_id": "call-1", "tool_name": "lookup", "status": "succeeded",
+            "effect_state": "not_applicable", "parts": [{"type":"text", "text":""}]
+        }))
+        .unwrap();
+        assert_eq!(
+            validate_tool_result_output(&contract, &invalid),
+            Err(ToolOutputValidationError::SchemaMismatch)
+        );
+        let mut wrong_tool = valid;
+        wrong_tool.tool_name = "other".into();
+        assert_eq!(
+            validate_tool_result_output(&contract, &wrong_tool),
+            Err(ToolOutputValidationError::ToolMismatch)
         );
     }
 }

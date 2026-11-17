@@ -604,6 +604,7 @@ export interface ToolContract {
   name: string;
   description?: string;
   input_schema: JsonValue;
+  output_schema?: JsonValue;
   required_capability: string;
   timeout_ms: number;
   effect: ToolEffect;
@@ -1125,6 +1126,7 @@ interface NativeBinding {
     settingsJson: string,
   ): string;
   toolChatDefinitionsJson(contractsJson: string): string;
+  validateToolResultOutputJson(contractJson: string, resultJson: string): void;
   modelToolLoopContractVersion(): number;
   toolResultContractVersion(): number;
   toolResultToChatMessage(resultJson: string): string;
@@ -2373,6 +2375,17 @@ export function toolChatDefinitions(
   return JSON.parse(
     native.toolChatDefinitionsJson(JSON.stringify(contracts)),
   ) as ToolDefinition[];
+}
+
+/** Validate a tool result against its declared output schema before persistence or model exposure. */
+export function validateToolResultOutput(
+  contract: ToolContract,
+  result: ToolResult,
+): void {
+  native.validateToolResultOutputJson(
+    JSON.stringify(contract),
+    JSON.stringify(result),
+  );
 }
 
 export const modelToolLoopContractVersion = (): number =>

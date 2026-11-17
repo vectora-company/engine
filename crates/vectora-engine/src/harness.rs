@@ -28,7 +28,8 @@ pub use policy::{
 pub use tool_dispatch::{
     TOOL_CONTRACT_VERSION, TOOL_DISPATCH_CONTRACT_VERSION, ToolContract, ToolDecision,
     ToolDenialCode, ToolDispatch, ToolDispatchError, ToolDispatchSettings, ToolEffect,
-    ToolExecutionMode, ToolIdempotency, prepare_tool_dispatch, tool_chat_definitions,
+    ToolExecutionMode, ToolIdempotency, ToolOutputValidationError, prepare_tool_dispatch,
+    tool_chat_definitions, validate_tool_result_output,
 };
 pub use verification::{
     EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDisposition, EvidenceDispositionPolicy,

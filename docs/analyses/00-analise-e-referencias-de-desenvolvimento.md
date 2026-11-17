@@ -142,6 +142,11 @@ títulos e bases de PR no estado dinâmico do GitHub.
   dispatch com identidade valida subject, scope e digest e nega por padrão
   qualquer capability sem grant; ainda cabe ao host invocá-lo antes de cada
   efeito e controlar revogação.
+- Contratos de tools agora aceitam `output_schema` JSON Schema opcional e
+  `validate_tool_result_output` valida os `ToolResult.parts` no core/bindings.
+  Esse gate é explícito: o host ainda precisa chamá-lo antes de persistir ou
+  apresentar o resultado; schema ausente conserva o comportamento anterior e
+  não remove os limites de tamanho do loop.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
   [checklist](../checklists/06-storage-grafos-falkordb.md) e
