@@ -1,6 +1,6 @@
 # Providers e modalidades de IA — referência llama.cpp v1.0.0
 
-**Estado:** contrato e inventário por protocolo/operação. Consulte o plano e checklist desta capability para os gaps atuais. Fixture offline não equivale a integração com serviço/modelo real. Decision Model é a categoria; Jev é um modelo específico. SystemOne é o protocolo usado tanto pelo servidor Laya quanto pelo endpoint `/v1/systemone` do `llama-server`; adapters e capacidades de cada runtime continuam distintos.
+**Estado:** contrato e inventário por protocolo/operação. Consulte o plano e checklist desta capability para os gaps atuais. Fixture offline não equivale a integração com serviço/modelo real. Decision Model é a categoria de inferência; Jev é um modelo específico; SystemOne é a API/protocolo. Laya é um runtime que implementa SystemOne, e `llama-server` expõe sua própria implementação em `/v1/systemone`; nenhum desses runtimes é sinônimo de Jev, e adapters/capacidades continuam distintos.
 **Referência fixa:** [`ggml-org/llama.cpp` v1.0.0](https://github.com/ggml-org/llama.cpp/releases/tag/v1.0.0), commit `b1b770d`.
 
 ## Objetivo
@@ -70,7 +70,10 @@ imagem de entrada, function calling, reasoning/usage quando presentes e eventos
 SSE mapeáveis. O serializer do perfil Responses aceita `input_audio` com bytes
 base64 WAV ou MP3. A capability permanece desconhecida sem metadata do modelo
 ou override do consumidor, tanto em Responses quanto em Chat Completions;
-suportar a forma do protocolo não prova suporte de cada modelo. Built-in tools,
+suportar a forma do protocolo não prova suporte de cada modelo. Se o MIME não
+for WAV/MP3, Responses envia somente a nota textual da referência, alinhada ao
+fallback seguro de Chat Completions; bytes do formato incompatível não saem.
+Built-in tools,
 TTS/STT como operações dedicadas, vídeo e geração de imagem continuam fora do
 adapter até possuírem contratos próprios. Referências oficiais: [Responses
 API overview](https://developers.openai.com/api/reference/responses/overview),
@@ -139,11 +142,12 @@ spec. Deve ser atualizado junto com cada implementação e fixture.
 
 ## Perfil standalone Laya `laya-serve`
 
-O servidor standalone Laya expõe `/health` e a API SystemOne em
+O runtime standalone Laya expõe `/health` e a API SystemOne em
 `/v1/systemone`; não há `GET /v1/models`. O campo `model` é opcional: quando
 informado, identifica um checkpoint/modelo do próprio Laya, como `english`,
 `multilingual` ou `typed-decisions`; quando omitido, o servidor pode aplicar
-seu roteamento. Jev é um modelo específico e um ID Jev não é checkpoint Laya.
+seu roteamento. Jev continua sendo um modelo específico; não é nome alternativo
+para Laya, para SystemOne nem para um checkpoint Laya.
 O `llama-server` também implementa SystemOne, mas usa descoberta de modelos e
 suas próprias capacidades de mídia; compartilhar protocolo não torna os dois
 servidores equivalentes em runtime.

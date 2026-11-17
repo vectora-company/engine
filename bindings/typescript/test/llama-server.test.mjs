@@ -37,7 +37,6 @@ test("Laya binding calls native systemone without llama-server model discovery",
     assert.equal(body.questions.route.type, "choice");
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({
-      model: "laya-systemone",
       answers: { route: {
         type: "choice",
         choice: "billing",

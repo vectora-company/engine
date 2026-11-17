@@ -743,9 +743,11 @@ fn responses_content(content: &MessageContent) -> Result<Vec<Value>, ChatError> 
                             "audio/wav" => "wav",
                             "audio/mpeg" => "mp3",
                             _ => {
-                                return Err(ChatError::InvalidRequest(
-                                    "OpenAI Responses input audio must be WAV or MP3",
-                                ));
+                                result.push(json!({
+                                    "type":"input_text",
+                                    "text":format!("[áudio: {} — {}]",media.name,media.mime_type)
+                                }));
+                                continue;
                             }
                         };
                         result.push(json!({
@@ -2369,7 +2371,7 @@ mod tests {
     }
 
     #[test]
-    fn responses_request_maps_supported_audio_formats_and_rejects_others() {
+    fn responses_request_maps_supported_audio_formats_and_falls_back_for_others() {
         let mut request = req();
         request.messages[0].content = MessageContent::Parts(vec![
             ContentPart::Inline(super::super::media::InlineMedia {
@@ -2409,12 +2411,16 @@ mod tests {
                 data_base64: "T2dnUw==".into(),
             },
         )]);
-        assert!(matches!(
-            responses_payload(&request, false),
-            Err(ChatError::InvalidRequest(
-                "OpenAI Responses input audio must be WAV or MP3"
-            ))
-        ));
+        let payload = responses_payload(&request, false).unwrap();
+        assert_eq!(
+            payload["input"][0]["content"][0],
+            json!({"type":"input_text","text":"[áudio: voice.ogg — audio/ogg]"})
+        );
+        assert!(
+            !serde_json::to_string(&payload)
+                .unwrap()
+                .contains("T2dnUw==")
+        );
     }
 
     #[test]

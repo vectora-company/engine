@@ -1519,7 +1519,6 @@ def test_laya_binding_uses_native_systemone_protocol_and_accepts_server_metadata
             captured.append((self.command, self.path, body))
             assert self.headers.get("Authorization") == "Bearer laya-test-key"
             payload = {
-                "model": "laya-systemone",
                 "answers": {
                     "route": {
                         "type": "choice",

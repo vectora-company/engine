@@ -56,11 +56,12 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
       do modelo e respeita override explícito do consumidor antes do envio.
 - [x] OpenAI Responses mapeia áudio WAV/MP3 efêmero para `input_audio`; sem
       metadata/override a capability permanece desconhecida nos dois perfis.
-      Fixtures Rust rejeitam formatos fora do contrato; Python e Node testam
-      reidratação pelo asset map e envio. Smoke real por modelo permanece
-      pendente.
-- [x] Separar categoria Decision Model, modelo Jev e protocolo SystemOne;
-      seletor de modelo Laya opcional e sem default `jev-1`, validado por testes.
+      MIME fora do contrato vira nota textual sem enviar bytes, como Chat
+      Completions. Python e Node testam reidratação pelo asset map e envio;
+      smoke real por modelo permanece pendente.
+- [x] Separar categoria Decision Model, modelo Jev, API/protocolo SystemOne e
+      runtime Laya; respostas de fixture não usam SystemOne como nome de modelo.
+      Seletor de checkpoint Laya é opcional, sem default `jev-1`.
 - [ ] Definir e aplicar limites de duração/resolução e propagar orçamento a
       outras operações com entrada de mídia quando suportadas.
 - [ ] Executar smoke tests opt-in com versões fixadas para llama-server,

@@ -116,13 +116,15 @@ títulos e bases de PR no estado dinâmico do GitHub.
   [plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
   [checklist](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e
   [análise](06-auditoria-providers-modalidades.md). Decision Model é a
-  categoria, Jev é um modelo específico, e SystemOne é o protocolo usado pelos
-  adapters standalone Laya e llama-server; os runtimes mantêm discovery e
-  capacidades próprias. Seletor Laya opcional permite checkpoint Laya ou
+  categoria, Jev é um modelo específico, SystemOne é a API/protocolo e Laya é
+  um runtime independente que implementa essa API. O llama-server tem adapter
+  próprio para `/v1/systemone`; os runtimes mantêm discovery e capacidades
+  próprias. Seletor Laya opcional permite checkpoint Laya ou
   roteamento do servidor. OpenAI Responses mapeia input audio WAV/MP3; a
   capability fica desconhecida sem metadata/override do modelo, também no Chat
   Completions.
-  A fixture Rust exercita WAV/MP3 e rejeição de formatos não suportados; smoke
+  A fixture Rust exercita WAV/MP3 e fallback textual sem envio de bytes para
+  formatos não suportados; smoke
   real por modelo permanece pendente.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
