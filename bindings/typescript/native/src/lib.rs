@@ -17,11 +17,11 @@ use vectora_engine::chat::{
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
     EphemeralDecisionRequest, EphemeralLlamaServerEmbeddingRequest,
     EphemeralLlamaServerRerankRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
-    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerSettings,
-    MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
-    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
-    TurnAccumulatorSettings, assemble_turn,
+    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerModel,
+    LlamaServerModelCapabilities, LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef,
+    MediaStore, NativeChatClient, NativeChatSettings, NativeSpeechRequest, OpenAiCompatibleClient,
+    OpenAiCompatibleSettings, PersistableChatRequest, ProviderMediaLimits, RealtimeSession,
+    RealtimeSessionRequest, SpeechRequest, SpeechStream, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -112,6 +112,8 @@ struct BindingMediaContext {
     max_media_parts: Option<usize>,
     #[serde(default)]
     provider_limits: Vec<ProviderMediaLimits>,
+    #[serde(default)]
+    gateway_metadata: Vec<LlamaServerModelCapabilities>,
 }
 
 struct BindingMediaStore(HashMap<String, Vec<u8>>);
@@ -139,10 +141,21 @@ fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionConte
                 .map_err(|_| Error::from_reason("invalid base64 media asset"))
         })
         .collect::<Result<HashMap<_, _>>>()?;
+    let resolver =
+        settings
+            .gateway_metadata
+            .iter()
+            .fold(CapabilityResolver::new(), |resolver, metadata| {
+                resolver.with_gateway_metadata(
+                    &metadata.provider,
+                    &metadata.model,
+                    metadata.capabilities,
+                )
+            });
     let resolver = settings
         .provider_limits
         .iter()
-        .fold(CapabilityResolver::new(), |resolver, entry| {
+        .fold(resolver, |resolver, entry| {
             resolver.with_media_limits(&entry.provider, &entry.model, entry.limits)
         });
     let mut context = MediaExecutionContext::new(resolver, Arc::new(BindingMediaStore(assets)));
@@ -2073,6 +2086,14 @@ pub async fn llama_server_models(settings_json: String) -> Result<String> {
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&models)
+}
+
+#[napi]
+pub fn llama_server_model_media_capabilities(model_json: String) -> Result<String> {
+    let model: LlamaServerModel = serde_json::from_str(&model_json)
+        .map_err(|_| Error::from_reason("invalid llama-server model"))?;
+    serde_json::to_string(&model.gateway_media_metadata())
+        .map_err(|_| Error::from_reason("could not encode llama-server model capabilities"))
 }
 
 #[napi]

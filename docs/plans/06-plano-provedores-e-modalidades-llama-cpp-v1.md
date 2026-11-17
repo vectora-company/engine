@@ -88,11 +88,11 @@ de workbench pertencem aos consumidores, salvo contratos genéricos aprovados.
 
 ## Dependências e próximo trabalho
 
-A ordem deve seguir dependências dos contratos e gaps verificados, não a
-numeração de entregas. A etapa atual aplica limites agregados opcionais de bytes brutos e assets
-materializados ao turno de chat multimodal e expõe as opções nos bindings. O
-próximo trabalho desta capability é estender o orçamento às operações de
-Decision Model, embeddings e rerank, completar a matriz provider × operação e o
-catálogo confiável de mídia;
-em paralelo, o plano geral da EPIC pode avançar em storage, runtime e
-distribuição.
+A ordem segue dependências dos contratos e gaps verificados. Limites
+agregados opcionais já cobrem chat, Decision Model, embeddings e rerank. A
+metadata de `/v1/models` agora pode ser convertida explicitamente em
+`gateway_metadata` no Rust, Python e TypeScript, com precedência sobre o perfil
+genérico e abaixo de overrides do consumidor. O binding não consulta nem
+atualiza metadata por conta própria: discovery/cache, catálogo confiável por
+provider e operação, além de limites de duração/resolução, continuam pendentes.
+Em paralelo, o plano geral da EPIC avança nas demais capabilities.

@@ -107,8 +107,9 @@ títulos e bases de PR no estado dinâmico do GitHub.
 - [Mídia no chat](../specs/17-midia-no-chat.md) e
   [checklist de mídia](../checklists/04-midia-no-chat.md). Limites opcionais
   agregados de bytes/assets cobrem chat, Decision Model efêmero, embeddings e
-  rerank multimodais do llama-server; catálogo de modelo e limites de
-  duração/resolução permanecem em aberto.
+  rerank multimodais do llama-server. Metadata específica do modelo pode ser
+  convertida nos bindings e vence perfis genéricos; discovery/cache automático,
+  catálogo completo e limites de duração/resolução permanecem em aberto.
 - [Providers e modalidades](../specs/18-providers-e-modalidades-llama-cpp-v1.md),
   [plano de providers](../plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md),
   [checklist](../checklists/05-providers-e-modalidades-llama-cpp-v1.md) e

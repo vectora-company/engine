@@ -257,7 +257,7 @@ Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama
 ## Superfícies implementadas e gaps
 
 - **Chat/protocolos:** adapters OpenAI-compatible, OpenAI Chat Completions e Responses, OpenRouter, Anthropic, Gemini, Cohere, Ollama e llama-server; fixtures cobrem os adapters declarados. 9router, OmniRouter e Kimi dependem de validação do serviço concreto.
-- **Llama-server v1.0.0:** health/discovery, chat, Decision Model, embeddings, rerank, TTS bufferizado/streaming e realtime. A lista de modalidades devolvida pelo servidor é metadata, não garantia de suporte do modelo.
+- **Llama-server v1.0.0:** health/discovery, chat, Decision Model, embeddings, rerank, TTS bufferizado/streaming e realtime. A lista de modalidades devolvida pelo servidor é metadata, não garantia de suporte do modelo. A Engine oferece conversor explícito para o resolver multimodal; não consulta nem atualiza esse catálogo automaticamente.
 - **Laya standalone:** Jev de texto para health/Decision Model, independente do protocolo llama-server. Smoke real requer serviço/checkpoint configurados.
 - **Mídia:** requests persistíveis e efêmeros separados; bytes resolvidos pelo asset map. Ver [spec de mídia](17-midia-no-chat.md) para ownership, MIME, digest e limites.
 - **Ausente ou incompleto:** geração de imagem, batch STT genérico, operações gerais de vídeo, catálogo confiável de modalidades/limites e matriz de smoke tests reais.

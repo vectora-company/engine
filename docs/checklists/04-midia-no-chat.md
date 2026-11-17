@@ -29,15 +29,15 @@ substitui serviço real.
 
 ## Routing e operações
 
-| Estado   | Capacidade                                           | Notas                                                                                                                                                     |
-| -------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| parcial  | Chat multimodal por protocolo                        | Anthropic, Gemini, OpenAI Chat Completions/Responses e adapters compatíveis têm mapeamentos próprios; conferir a tabela da spec antes de inferir suporte. |
-| parcial  | Imagens em resultados de tools                       | Partes tipadas disponíveis; conversão depende do protocolo e da capability.                                                                               |
-| parcial  | PDF, áudio e vídeo                                   | Tipos e algumas rotas nativas existem; conversão de arquivos e STT local são responsabilidade do consumidor.                                              |
-| parcial  | Embeddings/rerank multimodais                        | llama-server suporta entradas efêmeras documentadas e protegidas; não generalizar para outros providers.                                                  |
-| pendente | Catálogo automático de capability/limites por modelo | Overrides explícitos existem; descoberta confiável ligada a endpoint/modelo ainda não existe.                                                             |
-| parcial  | Limites agregados                                    | Esta etapa adiciona tetos configuráveis de bytes totais e assets materializados por request; duração e resolução ainda precisam de contrato.              |
-| pendente | Geração de imagem e operações gerais de vídeo        | Requerem contratos e adapters dedicados.                                                                                                                  |
+| Estado   | Capacidade                                    | Notas                                                                                                                                                                          |
+| -------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| parcial  | Chat multimodal por protocolo                 | Anthropic, Gemini, OpenAI Chat Completions/Responses e adapters compatíveis têm mapeamentos próprios; conferir a tabela da spec antes de inferir suporte.                      |
+| parcial  | Imagens em resultados de tools                | Partes tipadas disponíveis; conversão depende do protocolo e da capability.                                                                                                    |
+| parcial  | PDF, áudio e vídeo                            | Tipos e algumas rotas nativas existem; conversão de arquivos e STT local são responsabilidade do consumidor.                                                                   |
+| parcial  | Embeddings/rerank multimodais                 | llama-server suporta entradas efêmeras documentadas e protegidas; não generalizar para outros providers.                                                                       |
+| parcial  | Catálogo de capability/limites por modelo     | Metadata de `/v1/models` pode ser convertida explicitamente e vence o perfil genérico; discovery/cache, catálogo por operação e limites completos não existem.                 |
+| feito    | Limites agregados                             | Tetos configuráveis de bytes totais e assets materializados cobrem chat, Decision Model efêmero, embeddings e rerank multimodais do llama-server; duração/resolução pendentes. |
+| pendente | Geração de imagem e operações gerais de vídeo | Requerem contratos e adapters dedicados.                                                                                                                                       |
 
 ## Testes e critérios de conclusão
 
@@ -48,7 +48,8 @@ substitui serviço real.
 - [ ] Fixtures compartilhadas para a mesma matriz de conteúdo nos três
       bindings e em todos os adapters que alegam equivalência.
 - [x] Limites agregados de bytes e contagem cobertos em Rust/Python/TypeScript no preparo de chat; requests efêmeros inline são rejeitados antes da rede.
-- [ ] Aplicar orçamento agregado a Decision Model, embeddings e rerank; catálogo coberto com dados ausentes, conflitantes e desatualizados.
+- [x] Aplicar orçamento agregado a Decision Model, embeddings e rerank multimodais do llama-server; core e bindings validados.
+- [ ] Cobrir catálogo com dados ausentes, conflitantes e desatualizados; conversão de metadata `/v1/models` é opt-in, sem discovery/cache automático.
 - [ ] Smoke tests opt-in com modelos reais para cada operação multimodal; não
       considerar teste ignorado por falta de endpoint como sucesso.
 - [ ] Atualizar spec, análise e checklist provider × operação sempre que um

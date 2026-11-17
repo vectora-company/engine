@@ -429,8 +429,8 @@ fn known_provider(provider: &str) -> PartialCapabilities {
     }
 }
 
-/// Resolve as capabilities de um modelo em camadas: override do consumidor,
-/// tabela de providers conhecidos, metadado do gateway e padrão conservador.
+/// Resolve capabilities em camadas: override do consumidor, metadata por modelo,
+/// perfil geral do provider e padrão conservador.
 #[derive(Clone, Debug, Default)]
 pub struct CapabilityResolver {
     overrides: BTreeMap<String, PartialCapabilities>,
@@ -504,8 +504,8 @@ impl CapabilityResolver {
         let key = model_key(provider, model);
         let layers = [
             self.overrides.get(&key).copied().unwrap_or_default(),
-            known_provider(provider),
             self.gateway.get(&key).copied().unwrap_or_default(),
+            known_provider(provider),
         ];
         let pick = |modality: Modality| {
             layers
@@ -1383,18 +1383,25 @@ mod tests {
     }
 
     #[test]
-    fn tabela_conhecida_vence_o_metadado_do_gateway() {
+    fn metadata_do_modelo_vence_perfil_generico_do_provider() {
         let resolver = CapabilityResolver::new().with_gateway_metadata(
-            "anthropic",
-            "claude",
+            "openai",
+            "text-only-model",
             PartialCapabilities {
+                vision: Some(CapabilityState::Unsupported),
                 pdf: Some(CapabilityState::Unsupported),
                 ..PartialCapabilities::default()
             },
         );
-        let resolved = resolver.resolve("anthropic", "claude");
-        assert_eq!(resolved.pdf, CapabilityState::Supported);
-        assert_eq!(resolved.audio_input, CapabilityState::Unsupported);
+        let resolved = resolver.resolve("openai", "text-only-model");
+        assert_eq!(resolved.vision, CapabilityState::Unsupported);
+        assert_eq!(resolved.pdf, CapabilityState::Unsupported);
+        assert_eq!(resolved.audio_input, CapabilityState::Unknown);
+        assert_eq!(
+            CapabilityResolver::new().resolve("anthropic", "claude").pdf,
+            CapabilityState::Supported,
+            "provider profile remains the fallback when model metadata is absent"
+        );
         assert_eq!(
             CapabilityResolver::new().resolve("desconhecido", "x"),
             ModalityCapabilities::UNKNOWN

@@ -22,17 +22,17 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
 
 ## Operações por modalidade
 
-| Estado   | Operação                   | Critério/gap                                                                                                                                                       |
-| -------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| feito    | Chat e stream              | Fixtures de protocolos; fallback explícito e sem troca após saída parcial.                                                                                         |
-| parcial  | Decision Model             | Choice/score/noul; arquivos efêmeros validam bytes totais e quantidade pelo contexto; ampliar matriz real por modelo.                                              |
-| parcial  | Visão e imagens de entrada | Requests efêmeros com asset map e orçamento compartilhado em chat, embeddings e rerank; falta catálogo automático confiável e smoke real.                          |
-| pendente | Geração de imagem          | Sem contrato/provider geral implementado.                                                                                                                          |
-| parcial  | TTS                        | Áudio bufferizado e streaming pelo llama-server; verificar servidor/modelo real e completar conformidade operacional.                                              |
-| parcial  | STT/transcrição            | Realtime pelo llama-server. Batch STT genérico não implementado; STT local de sistema pertence ao consumidor.                                                      |
-| parcial  | Vídeo                      | Tipos multimodais e entrada via API coberta não significam operações gerais de vídeo, ingestão ou geração.                                                         |
-| parcial  | Embeddings                 | Texto nos adapters declarados; multimodal via asset map do llama-server com orçamento compartilhado entre inputs. Falta smoke de modelo real e catálogo confiável. |
-| parcial  | Rerank                     | Cohere, Voyage, OpenRouter e llama-server textual; rerank efêmero de texto/imagem compartilha orçamento entre query e documentos. Falta smoke real.                |
+| Estado   | Operação                   | Critério/gap                                                                                                                                                           |
+| -------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| feito    | Chat e stream              | Fixtures de protocolos; fallback explícito e sem troca após saída parcial.                                                                                             |
+| parcial  | Decision Model             | Choice/score/noul; arquivos efêmeros validam bytes totais e quantidade pelo contexto; ampliar matriz real por modelo.                                                  |
+| parcial  | Visão e imagens de entrada | Requests efêmeros com asset map e orçamento compartilhado; metadata `/v1/models` pode ser convertida explicitamente. Falta catálogo automático confiável e smoke real. |
+| pendente | Geração de imagem          | Sem contrato/provider geral implementado.                                                                                                                              |
+| parcial  | TTS                        | Áudio bufferizado e streaming pelo llama-server; verificar servidor/modelo real e completar conformidade operacional.                                                  |
+| parcial  | STT/transcrição            | Realtime pelo llama-server. Batch STT genérico não implementado; STT local de sistema pertence ao consumidor.                                                          |
+| parcial  | Vídeo                      | Tipos multimodais e entrada via API coberta não significam operações gerais de vídeo, ingestão ou geração.                                                             |
+| parcial  | Embeddings                 | Texto nos adapters declarados; multimodal via asset map do llama-server com orçamento compartilhado entre inputs. Falta smoke de modelo real e catálogo confiável.     |
+| parcial  | Rerank                     | Cohere, Voyage, OpenRouter e llama-server textual; rerank efêmero de texto/imagem compartilha orçamento entre query e documentos. Falta smoke real.                    |
 
 ## Contratos transversais
 
@@ -47,6 +47,10 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
 - [x] Orçamento agregado configurável de bytes/quantidade aplicado a chat,
       Decision Model efêmero, embeddings e rerank multimodais no llama-server;
       core Rust e bindings Python/TypeScript validados.
+- [x] Perfil genérico de provider não sobrepõe metadata específica do modelo;
+      registros `/v1/models` podem ser convertidos para `gateway_metadata` nos
+      bindings Python e TypeScript. Conversão opt-in; discovery/cache automáticos
+      e catálogo completo seguem pendentes.
 - [ ] Definir e aplicar limites de duração/resolução e propagar orçamento a
       outras operações com entrada de mídia quando suportadas.
 - [ ] Executar smoke tests opt-in com versões fixadas para llama-server,

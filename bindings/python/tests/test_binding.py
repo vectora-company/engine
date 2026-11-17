@@ -53,6 +53,7 @@ from vectora_engine import (
     llama_server_embed,
     llama_server_embed_ephemeral,
     llama_server_health,
+    llama_server_model_media_capabilities,
     llama_server_models,
     llama_server_rerank_ephemeral,
     llama_server_synthesize,
@@ -2999,6 +3000,13 @@ def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
     assert limited_result["decisions"][0]["mode"] == "reference"
     assert "limite" in limited_result["decisions"][0]["reason"]
 
+    model_metadata = llama_server_model_media_capabilities(
+        {"id": "text-only", "architecture": {"input_modalities": ["text"]}}
+    )
+    assert model_metadata["provider"] == "llama_cpp"
+    assert model_metadata["capabilities"]["vision"] == "unsupported"
+    assert model_metadata["capabilities"]["tool_result_images"] is None
+
     png = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII="
     )
@@ -3012,6 +3020,15 @@ def test_media_assets_are_usable_manually_per_call_and_by_default() -> None:
             "name": f"{asset_id}.png",
         }
         image_parts.append({"type": "image", "media_ref": image_ref})
+    text_only_context = MediaExecutionContext(
+        {"image-one": png}, gateway_metadata=[model_metadata]
+    )
+    text_only_result = asyncio.run(
+        prepare_chat_content(
+            "llama_cpp", "text-only", [image_parts[0]], text_only_context
+        )
+    )
+    assert text_only_result["decisions"][0]["mode"] == "reference"
     aggregate = asyncio.run(
         prepare_chat_content(
             "openai",

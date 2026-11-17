@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { chatComplete, chatCompleteEphemeral, prepareChatContent } from "../dist/index.js";
+import {
+  chatComplete,
+  chatCompleteEphemeral,
+  llamaServerModelMediaCapabilities,
+  prepareChatContent,
+} from "../dist/index.js";
 
 const pdf = Buffer.from("%PDF-1.4\n");
 const mediaPart = {
@@ -158,6 +163,34 @@ test("media bindings support manual, per-call and client-default contexts", asyn
   } finally {
     await limitedDefault.close();
   }
+});
+
+test("llama-server model metadata constrains generic provider media support", async () => {
+  const image = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8V8AAAAASUVORK5CYII=",
+    "base64",
+  );
+  const modelMetadata = llamaServerModelMediaCapabilities({
+    id: "text-only",
+    architecture: { input_modalities: ["text"] },
+  });
+  assert.equal(modelMetadata.capabilities.vision, "unsupported");
+  assert.equal(modelMetadata.provider, "llama_cpp");
+  const part = {
+    type: "image",
+    media_ref: {
+      asset_id: "image",
+      sha256: createHash("sha256").update(image).digest("hex"),
+      mime_type: "image/png",
+      size_bytes: image.length,
+      name: "image.png",
+    },
+  };
+  const prepared = await prepareChatContent("openai", "text-only", [part], {
+    assets: { image },
+    gateway_metadata: [{ ...modelMetadata, provider: "openai" }],
+  });
+  assert.equal(prepared.decisions[0].mode, "reference");
 });
 
 test("inline bytes require the explicit ephemeral request envelope", async () => {

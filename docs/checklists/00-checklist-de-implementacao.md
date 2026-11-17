@@ -59,13 +59,15 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [x] Chat multimodal aceita limites agregados opcionais de bytes/assets no
       asset map e em requests efêmeros inline, compartilhados pelo turno e
       validados antes da leitura/envio; testes direcionados em Rust, Python e
-      TypeScript. Decision Model, embeddings e rerank ainda não aplicam esse
-      orçamento; estado e critérios estão em
-      `docs/checklists/04-midia-no-chat.md`.
+      TypeScript. O checklist específico registra o estado por operação.
 - [x] Decision Model efêmero limita bytes totais e quantidade de arquivos; as
       entradas multimodais de embeddings e rerank no llama-server compartilham
       orçamento entre todos os inputs. Rust/Python/TypeScript cobertos; detalhes
       e lacunas no checklist de providers.
+- [x] Resolução de mídia usa override do consumidor > metadata específica do
+      modelo/gateway > perfil genérico > desconhecido. Metadata de `/v1/models`
+      pode ser convertida explicitamente nos bindings; discovery/cache
+      automático permanece pendente.
 
 ## Contratos e desenho
 

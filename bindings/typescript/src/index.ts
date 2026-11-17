@@ -140,6 +140,18 @@ export interface LlamaServerModelList {
   [key: string]: JsonValue | LlamaServerModel[] | undefined;
 }
 
+export interface LlamaServerModelMediaCapabilities {
+  provider: string;
+  model: string;
+  capabilities: {
+    vision?: "supported" | "unsupported" | "unknown" | null;
+    pdf?: "supported" | "unsupported" | "unknown" | null;
+    audio_input?: "supported" | "unsupported" | "unknown" | null;
+    video_input?: "supported" | "unsupported" | "unknown" | null;
+    tool_result_images?: "supported" | "unsupported" | "unknown" | null;
+  };
+}
+
 export interface LlamaServerHealth {
   status: string;
 }
@@ -199,6 +211,7 @@ export interface MediaExecutionContext {
   /** Maximum number of media assets materialized for one request. */
   max_media_parts?: number;
   provider_limits?: ProviderMediaLimits[];
+  gateway_metadata?: LlamaServerModelMediaCapabilities[];
 }
 
 export interface PreparedContent {
@@ -1023,6 +1036,7 @@ interface NativeBinding {
     requestJson: string,
   ): Promise<string>;
   llamaServerModels(settingsJson: string): Promise<string>;
+  llamaServerModelMediaCapabilities(modelJson: string): string;
   llamaServerDecide(settingsJson: string, requestJson: string): Promise<string>;
   llamaServerDecideEphemeral(
     settingsJson: string,
@@ -2373,6 +2387,9 @@ function encodeMediaSettings(
       ...(context.provider_limits === undefined
         ? {}
         : { provider_limits: context.provider_limits }),
+      ...(context.gateway_metadata === undefined
+        ? {}
+        : { gateway_metadata: context.gateway_metadata }),
     },
   });
 }
@@ -2544,6 +2561,15 @@ export async function llamaServerModels(
   return JSON.parse(
     await native.llamaServerModels(JSON.stringify(settings)),
   ) as LlamaServerModelList;
+}
+
+/** Convert `/v1/models` metadata into the resolver's model-specific layer. */
+export function llamaServerModelMediaCapabilities(
+  model: LlamaServerModel,
+): LlamaServerModelMediaCapabilities {
+  return JSON.parse(
+    native.llamaServerModelMediaCapabilities(JSON.stringify(model)),
+  ) as LlamaServerModelMediaCapabilities;
 }
 
 /** Answer typed questions through llama-server's non-streaming `/v1/systemone`. */

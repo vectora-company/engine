@@ -22,6 +22,7 @@ class MediaExecutionContext:
     max_total_media_bytes: int | None = None
     max_media_parts: int | None = None
     provider_limits: Sequence[Mapping[str, Any]] = ()
+    gateway_metadata: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +85,13 @@ def _media_settings(
         )
         if provider_limits:
             media_payload["provider_limits"] = list(provider_limits)
+        gateway_metadata = (
+            context.gateway_metadata
+            if isinstance(context, MediaExecutionContext)
+            else context.get("gateway_metadata", ())
+        )
+        if gateway_metadata:
+            media_payload["gateway_metadata"] = list(gateway_metadata)
         if limit is not None:
             media_payload["max_media_bytes"] = limit
         if total_limit is not None:
@@ -1017,6 +1025,15 @@ async def llama_server_models(settings: JsonObject) -> dict[str, Any]:
     )
 
 
+def llama_server_model_media_capabilities(model: JsonObject) -> dict[str, Any]:
+    """Map one `/v1/models` entry into media context gateway metadata."""
+    return json.loads(
+        _native.llama_server_model_media_capabilities(
+            json.dumps(model, separators=(",", ":"))
+        )
+    )
+
+
 async def llama_server_decide(
     settings: JsonObject, request: JsonObject
 ) -> dict[str, Any]:
@@ -1520,6 +1537,7 @@ __all__ = [
     "llama_server_embed",
     "llama_server_embed_ephemeral",
     "llama_server_health",
+    "llama_server_model_media_capabilities",
     "llama_server_models",
     "llama_server_realtime_start",
     "llama_server_rerank_ephemeral",

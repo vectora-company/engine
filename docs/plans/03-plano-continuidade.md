@@ -103,7 +103,7 @@ transversais restantes; números/títulos de PR não são índice do plano.
 1. **Mídia nativa e integração do preparo — implementadas no checkout.**
    Payloads nativos, preparo manual, contexto efêmero por chamada e contexto
    padrão estão disponíveis. Retry textual único para rejeição
-   multimodal classificada e `ToolResult` tipado também estão disponíveis; OpenAI Responses possui adapter próprio. Orçamento agregado também cobre Decision Model, embeddings e rerank multimodais do llama-server; catálogo automático e limites de duração/resolução continuam pendentes.
+   multimodal classificada e `ToolResult` tipado também estão disponíveis; OpenAI Responses possui adapter próprio. Orçamento agregado cobre Decision Model, embeddings e rerank multimodais do llama-server; conversão explícita de metadata de `/v1/models` está nos bindings e vence perfil genérico. Discovery/cache automático, catálogo completo e limites de duração/resolução continuam pendentes.
    Evidências e critérios: [`docs/checklists/04-midia-no-chat.md`](../checklists/04-midia-no-chat.md).
 2. **Mídia: imagens de resultado de tool — implementado nesta etapa.** `ToolResult` usa partes tipadas; Anthropic, Gemini e OpenAI Chat Completions mapeiam imagens conforme a spec 17. Cohere mantém representação textual porque o protocolo não declara suporte a imagem no resultado. Evidência e testes estão registrados na spec 17 e checklist de mídia.
 3. **Segredos em `Debug` — corrigido nesta etapa.** `VectorStoreConfig` agora

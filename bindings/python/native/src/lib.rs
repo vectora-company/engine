@@ -17,11 +17,11 @@ use vectora_engine::chat::{
     ContentPart, ContentSite, DEFAULT_MAX_MEDIA_BYTES, DecisionRequest, EphemeralChatRequest,
     EphemeralDecisionRequest, EphemeralLlamaServerEmbeddingRequest,
     EphemeralLlamaServerRerankRequest, EphemeralNativeSpeechRequest, FallbackChatClient,
-    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerSettings,
-    MediaError, MediaExecutionContext, MediaRef, MediaStore, NativeChatClient, NativeChatSettings,
-    NativeSpeechRequest, OpenAiCompatibleClient, OpenAiCompatibleSettings, PersistableChatRequest,
-    ProviderMediaLimits, RealtimeSession, RealtimeSessionRequest, SpeechRequest, SpeechStream,
-    TurnAccumulatorSettings, assemble_turn,
+    FallbackChatSettings, LayaClient, LayaSettings, LlamaServerClient, LlamaServerModel,
+    LlamaServerModelCapabilities, LlamaServerSettings, MediaError, MediaExecutionContext, MediaRef,
+    MediaStore, NativeChatClient, NativeChatSettings, NativeSpeechRequest, OpenAiCompatibleClient,
+    OpenAiCompatibleSettings, PersistableChatRequest, ProviderMediaLimits, RealtimeSession,
+    RealtimeSessionRequest, SpeechRequest, SpeechStream, TurnAccumulatorSettings, assemble_turn,
 };
 use vectora_engine::harness::{
     ApprovalGrant, ApprovalRequest, EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy,
@@ -111,6 +111,8 @@ struct BindingMediaContext {
     max_media_parts: Option<usize>,
     #[serde(default)]
     provider_limits: Vec<ProviderMediaLimits>,
+    #[serde(default)]
+    gateway_metadata: Vec<LlamaServerModelCapabilities>,
 }
 
 struct BindingMediaStore(HashMap<String, Vec<u8>>);
@@ -138,10 +140,21 @@ fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionConte
                 .map_err(|_| "invalid base64 media asset".to_owned())
         })
         .collect::<Result<HashMap<_, _>, _>>()?;
+    let resolver =
+        settings
+            .gateway_metadata
+            .iter()
+            .fold(CapabilityResolver::new(), |resolver, metadata| {
+                resolver.with_gateway_metadata(
+                    &metadata.provider,
+                    &metadata.model,
+                    metadata.capabilities,
+                )
+            });
     let resolver = settings
         .provider_limits
         .iter()
-        .fold(CapabilityResolver::new(), |resolver, entry| {
+        .fold(resolver, |resolver, entry| {
             resolver.with_media_limits(&entry.provider, &entry.model, entry.limits)
         });
     let mut context = MediaExecutionContext::new(resolver, Arc::new(BindingMediaStore(assets)));
@@ -2211,6 +2224,14 @@ fn llama_server_models<'py>(py: Python<'py>, settings_json: String) -> PyResult<
 }
 
 #[pyfunction]
+fn llama_server_model_media_capabilities(model_json: String) -> PyResult<String> {
+    let model: LlamaServerModel =
+        serde_json::from_str(&model_json).map_err(|_| py_error("invalid llama-server model"))?;
+    serde_json::to_string(&model.gateway_media_metadata())
+        .map_err(|_| py_error("could not encode llama-server model capabilities"))
+}
+
+#[pyfunction]
 fn llama_server_decide<'py>(
     py: Python<'py>,
     settings_json: String,
@@ -3105,6 +3126,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(llama_server_embed_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_rerank_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_models, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        llama_server_model_media_capabilities,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide, module)?)?;
     module.add_function(wrap_pyfunction!(llama_server_decide_ephemeral, module)?)?;
     module.add_function(wrap_pyfunction!(laya_health, module)?)?;
