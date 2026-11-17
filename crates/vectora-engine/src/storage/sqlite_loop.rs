@@ -405,10 +405,12 @@ mod tests {
         sync::atomic::{AtomicU64, Ordering},
     };
 
+    use crate::chat::{ToolArguments, ToolCall};
     use crate::harness::{
         EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDisposition, FailureDisposition,
-        MODEL_TOOL_LOOP_CONTRACT_VERSION, ToolExecutionMode, VerificationCheck,
-        VerificationOutcome, VerificationReport,
+        MODEL_TOOL_LOOP_CONTRACT_VERSION, TOOL_RESULT_CONTRACT_VERSION, ToolDecision, ToolEffect,
+        ToolEffectState, ToolExecutionMode, ToolIdempotency, ToolResult, ToolResultPart,
+        ToolResultStatus, VerificationCheck, VerificationOutcome, VerificationReport,
     };
 
     use super::*;
@@ -492,6 +494,168 @@ mod tests {
             )
             .unwrap()
             .state
+    }
+
+    fn awaiting_tool_result(
+        store: &mut SqliteModelToolLoopStore,
+        run_id: &str,
+        turn_id: &str,
+    ) -> DurableModelToolLoopState {
+        let state = store
+            .start(
+                run_id,
+                turn_id,
+                ModelToolLoopSettings::default(),
+                &format!("start-{turn_id}"),
+            )
+            .unwrap();
+        let call = ToolCall {
+            id: "call-1".into(),
+            name: "write".into(),
+            arguments: ToolArguments::from_json("{}"),
+        };
+        store
+            .accept_model_turn(
+                &state,
+                ChatCompletion {
+                    tool_calls: vec![call.clone()],
+                    content: String::new(),
+                    ..empty_completion()
+                },
+                ToolDispatch {
+                    contract_version: crate::harness::TOOL_DISPATCH_CONTRACT_VERSION,
+                    run_id: run_id.into(),
+                    turn_id: turn_id.into(),
+                    execution_mode: ToolExecutionMode::Sequential,
+                    decisions: vec![ToolDecision::Invoke {
+                        call,
+                        schema_version: "1".into(),
+                        required_capability: "write".into(),
+                        timeout_ms: 1_000,
+                        effect: ToolEffect::ExternalEffect,
+                        idempotency: ToolIdempotency::RequiresKey,
+                        idempotency_key: Some("operation-1".into()),
+                    }],
+                },
+                &format!("accept-{turn_id}"),
+            )
+            .unwrap()
+            .state
+    }
+
+    fn successful_tool_result(run_id: &str, turn_id: &str) -> ToolResult {
+        ToolResult {
+            contract_version: TOOL_RESULT_CONTRACT_VERSION,
+            run_id: run_id.into(),
+            turn_id: turn_id.into(),
+            call_id: "call-1".into(),
+            tool_name: "write".into(),
+            status: ToolResultStatus::Succeeded,
+            effect_state: ToolEffectState::Applied,
+            code: None,
+            parts: vec![ToolResultPart::Text {
+                text: "written".into(),
+            }],
+        }
+    }
+
+    #[test]
+    fn submit_tool_result_is_durable_and_idempotent() {
+        let path = database_path();
+        let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let pending = awaiting_tool_result(&mut store, "run-result", "turn-result");
+        let result = successful_tool_result("run-result", "turn-result");
+
+        let transition = store
+            .submit_tool_result(&pending, result.clone(), "submit-result")
+            .unwrap();
+        assert_eq!(
+            transition.state.loop_state.phase,
+            ModelToolLoopPhase::AwaitingModel
+        );
+        assert_eq!(
+            store
+                .submit_tool_result(&pending, result, "submit-result")
+                .unwrap(),
+            transition
+        );
+        drop(store);
+
+        let store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        assert_eq!(
+            store
+                .load_latest("run-result", "turn-result")
+                .unwrap()
+                .unwrap(),
+            transition.state
+        );
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn recover_persists_reconciliation_required_without_replaying_tool() {
+        let path = database_path();
+        let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let pending = awaiting_tool_result(&mut store, "run-recovery", "turn-recovery");
+
+        let recovery = store.recover(&pending, "recover-loop").unwrap();
+        assert_eq!(
+            recovery.state.loop_state.phase,
+            ModelToolLoopPhase::RecoveryRequired
+        );
+        assert!(matches!(
+            recovery.action,
+            ModelToolLoopAction::RecoveryRequired { .. }
+        ));
+        drop(store);
+
+        let store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        assert_eq!(
+            store
+                .load_latest("run-recovery", "turn-recovery")
+                .unwrap()
+                .unwrap(),
+            recovery.state
+        );
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn reconcile_tool_result_persists_confirmed_effect_after_recovery() {
+        let path = database_path();
+        let mut store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        let pending = awaiting_tool_result(&mut store, "run-reconcile", "turn-reconcile");
+        let recovery = store.recover(&pending, "recover-reconcile").unwrap();
+
+        let reconciled = store
+            .reconcile_tool_result(
+                &recovery.state,
+                successful_tool_result("run-reconcile", "turn-reconcile"),
+                "reconcile-result",
+            )
+            .unwrap();
+        assert_eq!(
+            reconciled.state.loop_state.phase,
+            ModelToolLoopPhase::AwaitingModel
+        );
+        assert!(matches!(
+            reconciled.action,
+            ModelToolLoopAction::ContinueWithToolResults { .. }
+        ));
+        drop(store);
+
+        let store = SqliteModelToolLoopStore::open(&path, "workspace-1").unwrap();
+        assert_eq!(
+            store
+                .load_latest("run-reconcile", "turn-reconcile")
+                .unwrap()
+                .unwrap(),
+            reconciled.state
+        );
+        drop(store);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
