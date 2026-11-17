@@ -111,7 +111,9 @@ cursor serializável contém versão do contrato, backend, namespace e posição
 stream, impedindo seu uso em outra fila/backend. Retenção que removeu a posição
 retorna `ReplayCursorExpired`; cursores futuros ou incompatíveis são inválidos.
 `next_cursor` aponta à última posição examinada, inclusive quando JetStream tem
-sequências sem mensagem. A disponibilidade nativa ou emulada de cada item ainda deve ser confirmada por
+sequências sem mensagem. Páginas seguem as posições imutáveis atribuídas pelo
+broker, mas não representam snapshot: mensagens publicadas durante o replay
+podem aparecer em páginas posteriores. A disponibilidade nativa ou emulada de cada item ainda deve ser confirmada por
 versão e registrada na matriz do plano.
 
 No JetStream KV, a chave tem até 512 bytes e usa letras ASCII, números,

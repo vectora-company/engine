@@ -78,7 +78,8 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 - [x] Filas: replay paginado por cursor serializável em Redis Streams e JetStream; testes reais Rust, Python e Node confirmam ordem, paginação e que consumers continuam recebendo os jobs.
 - [x] Filas: validar limite 1–1000 e rejeitar cursor incompatível com versão/backend/namespace; erro tipado para posição removida pela retenção.
 - [x] Filas: testar expiração do cursor após trim explícito em Redis Streams e JetStream reais; ambos retornam `ReplayCursorExpired`.
-- [ ] Filas: ordenar replay sob concorrência de enqueue, shutdown gracioso dos consumers e redrive atômico da DLQ nas duas.
+- [x] Filas: testar 32 produtores concorrentes e replay paginado em ordem estrita sem perdas/duplicatas nos dois brokers reais.
+- [ ] Filas: shutdown gracioso dos consumers e redrive atômico da DLQ nas duas.
 - [ ] Pub/sub: reconexão observável e assinatura por padrão/curinga nos dois.
 - [ ] SQL: stores de lifecycle, loop e policy e backup/restore/verify no PostgreSQL como projeção, com a mesma suíte do SQLite; testes concorrentes com serviço real.
 - [ ] SQL: interface transacional genérica tipada e limitada nos dois (decisão do mantenedor pendente).
