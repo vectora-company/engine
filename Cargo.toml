@@ -14,6 +14,14 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/vectora-company/engine"
 rust-version = "1.95"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
 [workspace.dependencies]
 async-trait = "0.1.89"
 async-stream = "0.3.6"
