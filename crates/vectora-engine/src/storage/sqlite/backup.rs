@@ -7,10 +7,13 @@
 //! Neither mode overwrites an existing file.
 
 use std::{
-    fs::{self, File},
+    fs::{self, OpenOptions},
     path::{Path, PathBuf},
     time::Duration,
 };
+
+#[cfg(unix)]
+use std::fs::File;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, backup::Backup};
 use serde::{Deserialize, Serialize};
@@ -48,7 +51,10 @@ fn validate_destination(path: &Path) -> Result<(), LedgerError> {
 }
 
 fn sync_file_and_directory(path: &Path) -> Result<(), LedgerError> {
-    File::open(path)
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
         .and_then(|file| file.sync_all())
         .map_err(|_| LedgerError::Storage)?;
     #[cfg(unix)]
@@ -327,6 +333,7 @@ mod tests {
             ledger.backup_online(dir.join("missing").join("b.db")),
             Err(LedgerError::InvalidInput)
         ));
+        drop(ledger);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -356,6 +363,7 @@ mod tests {
             SqliteLedger::backup_offline(&source, &backup),
             Err(LedgerError::InvalidInput)
         ));
+        drop(ledger);
         fs::remove_dir_all(dir).unwrap();
     }
 

@@ -1716,6 +1716,7 @@ mod tests {
         );
         let ledger = SqliteLedger::open_persistent(&path).unwrap();
         assert_eq!(ledger.read("scope", "run", 0, 10).unwrap().len(), 1);
+        drop(ledger);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -1741,6 +1742,7 @@ mod tests {
         }
         let ledger = SqliteLedger::open_persistent(&path).unwrap();
         assert_eq!(ledger.read("scope", "run", 0, 10).unwrap().len(), 1);
+        drop(ledger);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -1764,6 +1766,7 @@ mod tests {
             Err(LedgerError::VersionConflict)
         ));
         assert_eq!(ledger.append(draft("e3", "k3", 2)).unwrap().sequence, 3);
+        drop(ledger);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -1839,6 +1842,7 @@ mod tests {
         assert_eq!((committed, conflicts), (1, 2), "outputs: {outputs:?}");
         let ledger = SqliteLedger::open_persistent(&path).unwrap();
         assert_eq!(ledger.read("scope", "run", 0, 10).unwrap().len(), 1);
+        drop(ledger);
         std::fs::remove_file(path).unwrap();
     }
 }
