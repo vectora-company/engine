@@ -1,0 +1,44 @@
+[advisories]
+version = 2
+yanked = "deny"
+unmaintained = "workspace"
+unsound = "workspace"
+
+[bans]
+# The current LanceDB/Arrow and provider graph contains intentional transitive
+# version splits. Report them so additions are visible; promote to deny after
+# reviewing and recording the existing exceptions.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[licenses]
+version = 2
+confidence-threshold = 0.93
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-1-Clause",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+exceptions = [
+    { crate = "engine-cli", allow = ["AGPL-3.0-only"] },
+    { crate = "vectora-engine", allow = ["AGPL-3.0-only"] },
+    { crate = "vectora-engine-node", allow = ["AGPL-3.0-only"] },
+    { crate = "vectora-engine-python", allow = ["AGPL-3.0-only"] },
+    { crate = "option-ext", allow = ["MPL-2.0"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
