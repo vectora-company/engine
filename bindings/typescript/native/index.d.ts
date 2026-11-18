@@ -457,12 +457,20 @@ export declare function sqliteConversationAppendEvent(
   draftJson: string,
 ): Promise<string>;
 
+export declare function sqliteConversationCursorAfterEvent(
+  path: string,
+  scope: string,
+  conversationId: string,
+  eventId: string,
+): Promise<string>;
+
 export declare function sqliteConversationHistory(
   path: string,
   scope: string,
   conversationId: string,
   cursorJson: string | undefined | null,
   limit: number,
+  tolerant: boolean,
 ): Promise<string>;
 
 export declare function sqliteLatestCheckpoint(

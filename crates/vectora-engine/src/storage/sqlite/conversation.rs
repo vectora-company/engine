@@ -75,10 +75,33 @@ pub struct ConversationCursor {
     pub after_sequence: u64,
 }
 
+/// How history reads treat missing sequences.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationReadMode {
+    /// A missing sequence is an error ([`ConversationStoreError::Gap`]).
+    #[default]
+    Strict,
+    /// A missing sequence is reported in the page `gaps` and reading goes on.
+    Tolerant,
+}
+
+/// Inclusive range of sequences that are not stored (never written, expired
+/// or lost). Consumers must not treat the range as delivered.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ConversationGap {
+    pub from_sequence: u64,
+    pub to_sequence: u64,
+}
+
 /// One page of history in sequence order.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ConversationHistoryPage {
     pub events: Vec<ConversationEvent>,
+    /// Missing sequences found while reading the page; always empty in
+    /// [`ConversationReadMode::Strict`].
+    #[serde(default)]
+    pub gaps: Vec<ConversationGap>,
     /// Cursor to request the following page; it equals the request cursor when
     /// the page is empty.
     pub next_cursor: ConversationCursor,
@@ -104,6 +127,8 @@ pub enum ConversationStoreError {
     RunAlreadyTerminal { run_id: String },
     #[error("conversation history has a gap: expected sequence {expected}, found {found}")]
     Gap { expected: u64, found: u64 },
+    #[error("conversation has no stored event with this id")]
+    EventNotFound,
     #[error("stored conversation event is unreadable")]
     Corrupt,
 }
@@ -230,13 +255,64 @@ impl SqliteLedger {
         Ok(exists)
     }
 
-    /// Reads up to `limit` events after the cursor (or from the start).
+    /// Reads up to `limit` events after the cursor (or from the start),
+    /// failing on a missing sequence.
     pub fn conversation_history(
         &self,
         scope: &str,
         conversation_id: &str,
         cursor: Option<&ConversationCursor>,
         limit: u32,
+    ) -> Result<ConversationHistoryPage, ConversationStoreError> {
+        self.conversation_history_with_mode(
+            scope,
+            conversation_id,
+            cursor,
+            limit,
+            ConversationReadMode::Strict,
+        )
+    }
+
+    /// Cursor that resumes right after a stored event, for reconnecting
+    /// consumers that only remember the last `event_id` they processed.
+    pub fn conversation_cursor_after_event(
+        &self,
+        scope: &str,
+        conversation_id: &str,
+        event_id: &str,
+    ) -> Result<ConversationCursor, ConversationStoreError> {
+        require_scope(scope)?;
+        if conversation_id.trim().is_empty() || event_id.trim().is_empty() {
+            return Err(LedgerError::InvalidInput.into());
+        }
+        let sequence: Option<i64> = self
+            .connection
+            .query_row(
+                "SELECT sequence FROM ve_ledger_events WHERE scope=?1 AND aggregate_id=?2 AND event_id=?3 AND event_type=?4",
+                rusqlite::params![scope, aggregate(conversation_id), event_id, EVENT_TYPE],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(LedgerError::from)?;
+        let sequence = sequence.ok_or(ConversationStoreError::EventNotFound)?;
+        Ok(ConversationCursor {
+            contract_version: CONVERSATION_STORE_CONTRACT_VERSION,
+            scope: scope.to_owned(),
+            conversation_id: conversation_id.to_owned(),
+            after_sequence: sequence as u64,
+        })
+    }
+
+    /// Like [`Self::conversation_history`], choosing how missing sequences are
+    /// handled. A cursor that points before the oldest retained event shows up
+    /// as a leading gap in tolerant mode.
+    pub fn conversation_history_with_mode(
+        &self,
+        scope: &str,
+        conversation_id: &str,
+        cursor: Option<&ConversationCursor>,
+        limit: u32,
+        mode: ConversationReadMode,
     ) -> Result<ConversationHistoryPage, ConversationStoreError> {
         require_scope(scope)?;
         if conversation_id.trim().is_empty() || !(1..=MAX_HISTORY_PAGE).contains(&limit) {
@@ -274,12 +350,19 @@ impl SqliteLedger {
             return Err(ConversationStoreError::CursorAhead);
         }
         let mut events = Vec::new();
+        let mut gaps = Vec::new();
         let mut expected = after + 1;
         for stored in self.read(scope, &aggregate, after, limit)? {
             if stored.sequence != expected {
-                return Err(ConversationStoreError::Gap {
-                    expected,
-                    found: stored.sequence,
+                if mode == ConversationReadMode::Strict {
+                    return Err(ConversationStoreError::Gap {
+                        expected,
+                        found: stored.sequence,
+                    });
+                }
+                gaps.push(ConversationGap {
+                    from_sequence: expected,
+                    to_sequence: stored.sequence - 1,
                 });
             }
             if stored.event_type != EVENT_TYPE {
@@ -293,7 +376,7 @@ impl SqliteLedger {
             let event = draft.with_sequence(stored.sequence);
             event.validate()?;
             events.push(event);
-            expected += 1;
+            expected = stored.sequence + 1;
         }
         drop(snapshot);
         Ok(ConversationHistoryPage {
@@ -304,6 +387,7 @@ impl SqliteLedger {
                 after_sequence: expected - 1,
             },
             events,
+            gaps,
             latest_sequence: latest,
         })
     }
@@ -520,6 +604,95 @@ mod tests {
         ));
         drop(ledger);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn tolerant_reads_report_gaps_and_keep_the_cursor_on_the_last_event() {
+        let path = temp_path("tolerant");
+        let mut ledger = SqliteLedger::open_persistent(&path).unwrap();
+        for n in 1..=5 {
+            ledger
+                .append_conversation_event("scope", draft("c1", &format!("e{n}"), "t"))
+                .unwrap();
+        }
+        rusqlite::Connection::open(&path)
+            .unwrap()
+            .execute(
+                "DELETE FROM ve_ledger_events WHERE aggregate_id=?1 AND sequence IN (1,2,4)",
+                [aggregate("c1")],
+            )
+            .unwrap();
+        let page = ledger
+            .conversation_history_with_mode("scope", "c1", None, 10, ConversationReadMode::Tolerant)
+            .unwrap();
+        assert_eq!(
+            page.events.iter().map(|e| e.sequence).collect::<Vec<_>>(),
+            [3, 5]
+        );
+        assert_eq!(
+            page.gaps,
+            [
+                ConversationGap {
+                    from_sequence: 1,
+                    to_sequence: 2
+                },
+                ConversationGap {
+                    from_sequence: 4,
+                    to_sequence: 4
+                }
+            ]
+        );
+        assert_eq!(page.next_cursor.after_sequence, 5);
+        assert_eq!(page.latest_sequence, 5);
+        let strict = ledger.conversation_history("scope", "c1", None, 10);
+        assert!(matches!(
+            strict,
+            Err(ConversationStoreError::Gap {
+                expected: 1,
+                found: 3
+            })
+        ));
+        drop(ledger);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn reconnecting_with_the_last_event_id_resumes_without_duplicates() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        for n in 1..=4 {
+            ledger
+                .append_conversation_event("scope", draft("c1", &format!("e{n}"), "t"))
+                .unwrap();
+        }
+        ledger
+            .append_conversation_event("scope", draft("c2", "other", "t"))
+            .unwrap();
+        let cursor = ledger
+            .conversation_cursor_after_event("scope", "c1", "e2")
+            .unwrap();
+        assert_eq!(cursor.after_sequence, 2);
+        let page = ledger
+            .conversation_history("scope", "c1", Some(&cursor), 10)
+            .unwrap();
+        assert_eq!(
+            page.events
+                .iter()
+                .map(|e| e.event_id.as_str())
+                .collect::<Vec<_>>(),
+            ["e3", "e4"]
+        );
+        assert!(matches!(
+            ledger.conversation_cursor_after_event("scope", "c1", "other"),
+            Err(ConversationStoreError::EventNotFound)
+        ));
+        assert!(matches!(
+            ledger.conversation_cursor_after_event("scope", "c1", "missing"),
+            Err(ConversationStoreError::EventNotFound)
+        ));
+        assert!(matches!(
+            ledger.conversation_cursor_after_event("other-scope", "c1", "e2"),
+            Err(ConversationStoreError::EventNotFound)
+        ));
     }
 
     #[test]

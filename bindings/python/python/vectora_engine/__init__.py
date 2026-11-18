@@ -583,8 +583,13 @@ async def sqlite_conversation_history(
     *,
     cursor: JsonObject | None = None,
     limit: int = 100,
+    tolerant: bool = False,
 ) -> dict[str, Any]:
-    """Read one page of conversation history after an optional cursor."""
+    """Read one page of conversation history after an optional cursor.
+
+    With ``tolerant=True`` missing sequences are reported in ``gaps`` instead
+    of raising; the default fails on a gap.
+    """
     return json.loads(
         await _native.sqlite_conversation_history(
             path,
@@ -592,6 +597,18 @@ async def sqlite_conversation_history(
             conversation_id,
             None if cursor is None else json.dumps(cursor, separators=(",", ":")),
             limit,
+            tolerant,
+        )
+    )
+
+
+async def sqlite_conversation_cursor_after_event(
+    path: str, scope: str, conversation_id: str, event_id: str
+) -> dict[str, Any]:
+    """Return the cursor that resumes right after a stored ``event_id``."""
+    return json.loads(
+        await _native.sqlite_conversation_cursor_after_event(
+            path, scope, conversation_id, event_id
         )
     )
 
@@ -1776,6 +1793,7 @@ __all__ = [
     "run_contract_version",
     "sqlite_admit_run",
     "sqlite_conversation_append_event",
+    "sqlite_conversation_cursor_after_event",
     "sqlite_conversation_history",
     "sqlite_latest_checkpoint",
     "sqlite_ledger_append",

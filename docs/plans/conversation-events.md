@@ -16,15 +16,15 @@ pode divulgar.
 
 ## Estado observado
 
-| Camada                           | Estado                               | Evidência                                                                                                                                                                                                                                                  | Lacuna                                                                           |
-| -------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Core Rust: envelope              | Implementado e verificado localmente | `crates/vectora-engine/src/harness/events.rs`: envelope v1, payloads tipados e validação de correlação                                                                                                                                                     | Redaction e integração com o lifecycle                                           |
-| Core Rust: log durável           | Implementado e verificado localmente | `crates/vectora-engine/src/storage/sqlite/conversation.rs`: sequência atribuída pela store, idempotência por `event_id`, histórico paginado por cursor, lacunas como erro, um único evento terminal por run, outbox de projeção só com projeção habilitada | Lacuna como dado representável, retenção e cursor expirado, replay com reconexão |
-| Core Rust: eventos do run        | Implementado e verificado localmente | `SqliteRunLifecycleStore::sync_conversation_events` e `conversation_event_for_run_transition`: espelham admissão, transições e verificação do run na conversa, sem duplicar                                                                                | Gravação na mesma transação do lifecycle, redaction                              |
-| Python                           | Implementado e verificado localmente | `validate_conversation_event`, `sqlite_conversation_append_event`, `sqlite_conversation_history`, `sqlite_run_sync_conversation_events`                                                                                                                    | Fixture comum do store                                                           |
-| TypeScript/Node                  | Implementado e verificado localmente | `validateConversationEvent`, `sqliteConversationAppendEvent`, `sqliteConversationHistory`, `sqliteRunSyncConversationEvents`                                                                                                                               | Fixture comum do store                                                           |
-| Admission e projeção de timeline | Pendente                             | Lifecycle store reserva run/thread/turn                                                                                                                                                                                                                    | Admission por conversa, listagem de conversas e projeção de timeline             |
-| Replay/stream subscriber         | Pendente                             | Streams atuais representam respostas de providers                                                                                                                                                                                                          | Replay de eventos duráveis, gaps, backpressure e cancelamento independente       |
+| Camada                           | Estado                               | Evidência                                                                                                                                                                                                                                                                                                                 | Lacuna                                                                     |
+| -------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Core Rust: envelope              | Implementado e verificado localmente | `crates/vectora-engine/src/harness/events.rs`: envelope v1, payloads tipados e validação de correlação                                                                                                                                                                                                                    | Redaction e integração com o lifecycle                                     |
+| Core Rust: log durável           | Implementado e verificado localmente | `crates/vectora-engine/src/storage/sqlite/conversation.rs`: sequência atribuída pela store, idempotência por `event_id`, histórico paginado por cursor, lacunas como erro (estrito) ou dado (`gaps`, tolerante), retomada por `event_id`, um único evento terminal por run, outbox de projeção só com projeção habilitada | Retenção (trim) e cursor expirado dedicado                                 |
+| Core Rust: eventos do run        | Implementado e verificado localmente | `SqliteRunLifecycleStore::sync_conversation_events` e `conversation_event_for_run_transition`: espelham admissão, transições e verificação do run na conversa, sem duplicar                                                                                                                                               | Gravação na mesma transação do lifecycle, redaction                        |
+| Python                           | Implementado e verificado localmente | `validate_conversation_event`, `sqlite_conversation_append_event`, `sqlite_conversation_history`, `sqlite_run_sync_conversation_events`                                                                                                                                                                                   | Fixture comum do store                                                     |
+| TypeScript/Node                  | Implementado e verificado localmente | `validateConversationEvent`, `sqliteConversationAppendEvent`, `sqliteConversationHistory`, `sqliteRunSyncConversationEvents`                                                                                                                                                                                              | Fixture comum do store                                                     |
+| Admission e projeção de timeline | Pendente                             | Lifecycle store reserva run/thread/turn                                                                                                                                                                                                                                                                                   | Admission por conversa, listagem de conversas e projeção de timeline       |
+| Replay/stream subscriber         | Pendente                             | Streams atuais representam respostas de providers                                                                                                                                                                                                                                                                         | Replay de eventos duráveis, gaps, backpressure e cancelamento independente |
 
 ## Entregas ordenadas
 
@@ -47,9 +47,10 @@ pode divulgar.
    espelhados sem duplicar (ver Eventos derivados do run).
 5. [parcial] Consulta de histórico paginado com cursor vinculado a scope,
    conversa e versão, em uma única transação de leitura. Feito: cursor
-   adiantado, de outro escopo ou de versão desconhecida é recusado; lacunas
-   são reportadas como erro. Pendente: lacuna como dado representável e
-   política de retenção com cursor expirado.
+   adiantado, de outro escopo ou de versão desconhecida é recusado; no modo
+   estrito a lacuna é erro e no tolerante vira `gaps` na página. A retomada
+   por `event_id` (`conversation_cursor_after_event`) deduplica a reconexão.
+   Pendente: política de retenção (trim) e erro dedicado de cursor expirado.
 6. [ ] Implementar subscriber com backpressure/coalescência e cancelamento da
        assinatura separado do cancelamento do run.
 7. [ ] Integrar replay/recovery e testar restart, duplicatas, cursor inválido,
@@ -90,8 +91,8 @@ O log recusa qualquer evento de um run depois do seu `Terminal`.
 
 ## Próxima etapa
 
-Replay com lacunas representáveis, retenção com cursor expirado e dedup de
-reconexão; depois subscriber com backpressure e admission.
+Política de retenção com cursor expirado e fixture comum do store nos três
+níveis; depois subscriber com backpressure e admission.
 
 Admission tem dois modos que coexistem: fila FIFO durável limitada e admission
 imediata com `rejected`; `blocked` fica reservado à suspensão explícita por

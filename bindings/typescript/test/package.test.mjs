@@ -65,6 +65,7 @@ import {
   hostIdentityContractVersion,
   validateHostIdentityContext,
   sqliteConversationAppendEvent,
+  sqliteConversationCursorAfterEvent,
   sqliteConversationHistory,
   validateConversationEvent,
   validateToolResultOutput,
@@ -261,6 +262,13 @@ test("conversation store assigns sequences and pages history through Node", asyn
       cursor: page.next_cursor,
     });
     assert.deepEqual(rest.events.map((event) => event.event_id), ["e2"]);
+    assert.deepEqual(rest.gaps, []);
+    const resumed = await sqliteConversationCursorAfterEvent(path, "team", "conversation-1", "e1");
+    assert.equal(resumed.after_sequence, 1);
+    await assert.rejects(
+      sqliteConversationCursorAfterEvent(path, "team", "conversation-1", "missing"),
+      /no stored event/,
+    );
     await assert.rejects(
       sqliteConversationHistory(path, "other", "conversation-1", { cursor: page.next_cursor }),
       /cursor does not belong/,

@@ -12,7 +12,7 @@ mod conversation;
 pub use backup::{BackupReport, verify_backup};
 pub use conversation::{
     CONVERSATION_STORE_CONTRACT_VERSION, ConversationCursor, ConversationEventDraft,
-    ConversationHistoryPage, ConversationStoreError,
+    ConversationGap, ConversationHistoryPage, ConversationReadMode, ConversationStoreError,
 };
 
 const SCHEMA_VERSION: i64 = 8;

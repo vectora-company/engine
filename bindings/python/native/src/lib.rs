@@ -2048,8 +2048,14 @@ fn sqlite_conversation_history<'py>(
     conversation_id: String,
     cursor_json: Option<String>,
     limit: u32,
+    tolerant: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     future_into_py(py, async move {
+        let mode = if tolerant {
+            vectora_engine::storage::sqlite::ConversationReadMode::Tolerant
+        } else {
+            vectora_engine::storage::sqlite::ConversationReadMode::Strict
+        };
         let cursor: Option<vectora_engine::storage::sqlite::ConversationCursor> = cursor_json
             .map(|json| serde_json::from_str(&json))
             .transpose()
@@ -2057,12 +2063,39 @@ fn sqlite_conversation_history<'py>(
         let page = tokio::task::spawn_blocking(move || {
             vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
                 .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
-                .conversation_history(&scope, &conversation_id, cursor.as_ref(), limit)
+                .conversation_history_with_mode(
+                    &scope,
+                    &conversation_id,
+                    cursor.as_ref(),
+                    limit,
+                    mode,
+                )
         })
         .await
         .map_err(|_| py_error("conversation worker failed"))?
         .map_err(py_error)?;
         encode_json(&page)
+    })
+}
+
+#[pyfunction]
+fn sqlite_conversation_cursor_after_event<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    conversation_id: String,
+    event_id: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let cursor = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
+                .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
+                .conversation_cursor_after_event(&scope, &conversation_id, &event_id)
+        })
+        .await
+        .map_err(|_| py_error("conversation worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&cursor)
     })
 }
 
@@ -3373,6 +3406,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(sqlite_conversation_append_event, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_conversation_history, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sqlite_conversation_cursor_after_event,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(
         sqlite_run_sync_conversation_events,
         module
