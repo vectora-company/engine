@@ -5,12 +5,16 @@ use serde_json::{Value, json};
 use thiserror::Error;
 
 use crate::harness::{
+    CONVERSATION_EVENT_CONTRACT_VERSION, ConversationEvent, ConversationEventKind,
     EVIDENCE_GATE_CONTRACT_VERSION, EvidenceDispositionPolicy, GateEvaluation, GateVerdict,
     RUN_CONTRACT_VERSION, RunIdentity, RunLifecycle, RunStatus, RunTransition, VerificationError,
-    VerificationReport, evaluate_verification,
+    VerificationReport, conversation_event_for_run_transition, evaluate_verification,
 };
 
-use super::sqlite::{CheckpointedAdmission, EventDraft, LedgerError, RunReservation, SqliteLedger};
+use super::sqlite::{
+    CheckpointedAdmission, ConversationEventDraft, ConversationStoreError, EventDraft, LedgerError,
+    RunReservation, SqliteLedger,
+};
 
 pub const SQLITE_RUN_STORE_CONTRACT_VERSION: u16 = 1;
 const MAX_OPERATION_ID_BYTES: usize = 256;
@@ -87,6 +91,8 @@ pub enum SqliteRunStoreError {
     VerificationOperationConflict,
     #[error("persisted verification does not match its report, policy, or lifecycle")]
     InvalidVerificationRecord,
+    #[error(transparent)]
+    Conversation(#[from] ConversationStoreError),
 }
 
 pub struct SqliteRunLifecycleStore {
@@ -294,6 +300,74 @@ impl SqliteRunLifecycleStore {
             state: next_state,
             transition: Some(transition),
         })
+    }
+
+    /// Appends to `conversation_id` the events implied by the durable history of
+    /// `run_id` that the conversation does not have yet, and returns them.
+    ///
+    /// The run aggregate stays the authority: each event ID is derived from the
+    /// run and its ledger sequence, so calling this again after a restart or a
+    /// failure appends only what is missing and never duplicates an event.
+    /// `timestamp_ms` stamps only the events appended by this call.
+    pub fn sync_conversation_events(
+        &mut self,
+        conversation_id: &str,
+        run_id: &str,
+        timestamp_ms: u64,
+    ) -> Result<Vec<ConversationEvent>, SqliteRunStoreError> {
+        let state = self
+            .load_latest(run_id)?
+            .ok_or(SqliteRunStoreError::InvalidState)?;
+        let turn_id = state.lifecycle.identity.turn_id.clone();
+        let aggregate = run_aggregate_id(run_id);
+        let mut appended = Vec::new();
+        let mut after = 0;
+        loop {
+            let page = self.ledger.read(&self.scope, &aggregate, after, 1000)?;
+            for event in &page {
+                after = event.sequence;
+                let kind = match event.event_type.as_str() {
+                    "run_lifecycle_admitted" => Some(ConversationEventKind::TurnAccepted {
+                        turn_id: turn_id.clone(),
+                    }),
+                    "run_lifecycle_transition" | "run_verification_recorded" => {
+                        let transition: Option<RunTransition> =
+                            serde_json::from_value(event.payload["transition"].clone())
+                                .map_err(|_| SqliteRunStoreError::Serialization)?;
+                        transition
+                            .as_ref()
+                            .map(conversation_event_for_run_transition)
+                    }
+                    _ => None,
+                };
+                let Some(kind) = kind else { continue };
+                let event_id = format!("run-event:{}:{run_id}:{}", run_id.len(), event.sequence);
+                if self
+                    .ledger
+                    .conversation_event_exists(&self.scope, &event_id)?
+                {
+                    continue;
+                }
+                appended.push(self.ledger.append_conversation_event(
+                    &self.scope,
+                    ConversationEventDraft {
+                        contract_version: CONVERSATION_EVENT_CONTRACT_VERSION,
+                        event_id,
+                        conversation_id: conversation_id.to_owned(),
+                        turn_id: Some(turn_id.clone()),
+                        run_id: Some(run_id.to_owned()),
+                        step_id: None,
+                        timestamp_ms,
+                        source: "engine.run_lifecycle".to_owned(),
+                        kind,
+                    },
+                )?);
+            }
+            if page.len() < 1000 {
+                break;
+            }
+        }
+        Ok(appended)
     }
 
     /// Evaluate and durably record a verification report before applying its
@@ -891,5 +965,111 @@ mod tests {
         ));
         drop(store);
         std::fs::remove_file(path).unwrap();
+    }
+
+    fn conversation_kinds(
+        store: &SqliteRunLifecycleStore,
+        conversation: &str,
+    ) -> Vec<ConversationEventKind> {
+        store
+            .ledger
+            .conversation_history(&store.scope, conversation, None, 100)
+            .unwrap()
+            .events
+            .into_iter()
+            .map(|event| event.kind)
+            .collect()
+    }
+
+    #[test]
+    fn run_history_is_mirrored_into_the_conversation_without_duplicates() {
+        let path = database_path();
+        let mut store = SqliteRunLifecycleStore::open(&path, "workspace-1").unwrap();
+        let admitted = store
+            .admit(identity("run-1", "turn-1", "key-1"), json!({}))
+            .unwrap();
+        let first = store
+            .sync_conversation_events("conversation-1", "run-1", 1_000)
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        assert!(matches!(
+            first[0].kind,
+            ConversationEventKind::TurnAccepted { .. }
+        ));
+        let running = store
+            .transition(&admitted.state, RunStatus::Running, "op-running")
+            .unwrap();
+        let failed = store
+            .transition(&running.state, RunStatus::Failed, "op-failed")
+            .unwrap();
+        assert_eq!(failed.state.lifecycle.status, RunStatus::Failed);
+        let second = store
+            .sync_conversation_events("conversation-1", "run-1", 2_000)
+            .unwrap();
+        assert_eq!(second.len(), 2);
+        assert!(
+            store
+                .sync_conversation_events("conversation-1", "run-1", 3_000)
+                .unwrap()
+                .is_empty(),
+            "a second sync must not duplicate events"
+        );
+        drop(store);
+        let mut reopened = SqliteRunLifecycleStore::open(&path, "workspace-1").unwrap();
+        assert!(
+            reopened
+                .sync_conversation_events("conversation-1", "run-1", 4_000)
+                .unwrap()
+                .is_empty()
+        );
+        let kinds = conversation_kinds(&reopened, "conversation-1");
+        assert_eq!(kinds.len(), 3);
+        assert!(matches!(kinds[1], ConversationEventKind::RunStarted { .. }));
+        assert_eq!(
+            kinds[2],
+            ConversationEventKind::Terminal {
+                status: crate::harness::ConversationTerminalStatus::Failed
+            }
+        );
+        drop(reopened);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn recovery_required_is_progress_and_a_run_has_one_terminal_event() {
+        let path = database_path();
+        let mut store = SqliteRunLifecycleStore::open(&path, "workspace-1").unwrap();
+        let admitted = store
+            .admit(identity("run-1", "turn-1", "key-1"), json!({}))
+            .unwrap();
+        let mut state = admitted.state;
+        for (next, op) in [
+            (RunStatus::Running, "a"),
+            (RunStatus::RecoveryRequired, "b"),
+            (RunStatus::Running, "c"),
+            (RunStatus::Cancelled, "d"),
+        ] {
+            state = store.transition(&state, next, op).unwrap().state;
+        }
+        store
+            .sync_conversation_events("conversation-1", "run-1", 1_000)
+            .unwrap();
+        let kinds = conversation_kinds(&store, "conversation-1");
+        let terminals = kinds
+            .iter()
+            .filter(|kind| matches!(kind, ConversationEventKind::Terminal { .. }))
+            .count();
+        assert_eq!(terminals, 1);
+        assert!(kinds.contains(&ConversationEventKind::Progress {
+            code: "run.recovery_required".into()
+        }));
+        assert!(
+            store
+                .sync_conversation_events("conversation-1", "other-run", 1)
+                .is_err(),
+            "an unknown run has no history to mirror"
+        );
+        drop(store);
+        let _ = std::fs::remove_file(path);
     }
 }

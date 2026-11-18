@@ -100,6 +100,8 @@ pub enum ConversationStoreError {
     CursorAhead,
     #[error("event id is already used by conversation {conversation_id}")]
     EventIdReused { conversation_id: String },
+    #[error("run {run_id} already has a terminal event in this conversation")]
+    RunAlreadyTerminal { run_id: String },
     #[error("conversation history has a gap: expected sequence {expected}, found {found}")]
     Gap { expected: u64, found: u64 },
     #[error("stored conversation event is unreadable")]
@@ -157,6 +159,7 @@ impl SqliteLedger {
             )
             .optional()
             .map_err(LedgerError::from)?;
+        let already_stored = owner.is_some();
         if let Some(owner) = owner.filter(|owner| *owner != aggregate) {
             return Err(ConversationStoreError::EventIdReused {
                 conversation_id: owner
@@ -164,6 +167,22 @@ impl SqliteLedger {
                     .unwrap_or(&owner)
                     .to_owned(),
             });
+        }
+        if !already_stored && let Some(run_id) = draft.run_id.as_deref() {
+            let terminal: i64 = tx
+                .query_row(
+                    "SELECT COUNT(*) FROM ve_ledger_events WHERE scope=?1 AND aggregate_id=?2 \
+                     AND json_extract(payload,'$.run_id')=?3 \
+                     AND json_extract(payload,'$.kind.type')='terminal'",
+                    rusqlite::params![scope, aggregate, run_id],
+                    |row| row.get(0),
+                )
+                .map_err(LedgerError::from)?;
+            if terminal > 0 {
+                return Err(ConversationStoreError::RunAlreadyTerminal {
+                    run_id: run_id.to_owned(),
+                });
+            }
         }
         let event = Self::append_in(
             &tx,
@@ -191,6 +210,24 @@ impl SqliteLedger {
         let stored = draft.with_sequence(event.sequence);
         stored.validate()?;
         Ok(stored)
+    }
+
+    /// Whether the scope already stores an event with this ID.
+    pub(crate) fn conversation_event_exists(
+        &self,
+        scope: &str,
+        event_id: &str,
+    ) -> Result<bool, ConversationStoreError> {
+        require_scope(scope)?;
+        let exists: bool = self
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM ve_ledger_events WHERE scope=?1 AND event_id=?2 AND event_type=?3)",
+                rusqlite::params![scope, event_id, EVENT_TYPE],
+                |row| row.get(0),
+            )
+            .map_err(LedgerError::from)?;
+        Ok(exists)
     }
 
     /// Reads up to `limit` events after the cursor (or from the start).
@@ -562,5 +599,42 @@ mod tests {
         );
         drop(ledger);
         std::fs::remove_file(path).unwrap();
+    }
+
+    fn terminal(conversation: &str, event_id: &str, run_id: &str) -> ConversationEventDraft {
+        let mut draft = draft(conversation, event_id, "t");
+        draft.run_id = Some(run_id.into());
+        draft.kind = ConversationEventKind::Terminal {
+            status: crate::harness::ConversationTerminalStatus::Completed,
+        };
+        draft
+    }
+
+    #[test]
+    fn a_run_accepts_no_event_after_its_terminal_event() {
+        let mut ledger = SqliteLedger::open(":memory:").unwrap();
+        ledger
+            .append_conversation_event("scope", draft("c1", "e1", "a"))
+            .unwrap();
+        let end = ledger
+            .append_conversation_event("scope", terminal("c1", "end", "run-1"))
+            .unwrap();
+        let retried = ledger
+            .append_conversation_event("scope", terminal("c1", "end", "run-1"))
+            .unwrap();
+        assert_eq!(retried, end, "retrying the terminal event stays idempotent");
+        assert!(matches!(
+            ledger.append_conversation_event("scope", draft("c1", "late", "b")),
+            Err(ConversationStoreError::RunAlreadyTerminal { run_id }) if run_id == "run-1"
+        ));
+        assert!(matches!(
+            ledger.append_conversation_event("scope", terminal("c1", "end-2", "run-1")),
+            Err(ConversationStoreError::RunAlreadyTerminal { .. })
+        ));
+        let mut other_run = draft("c1", "other", "c");
+        other_run.run_id = Some("run-2".into());
+        ledger
+            .append_conversation_event("scope", other_run)
+            .unwrap();
     }
 }

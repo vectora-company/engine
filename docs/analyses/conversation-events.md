@@ -55,28 +55,43 @@ de modo que `latest_sequence` e os eventos são consistentes. O cursor é vincul
 a scope, conversa e versão do contrato, mas não é assinado: o host autoriza quem
 pode ler o escopo. Uma lacuna na sequência é reportada como erro explícito.
 
+## Eventos derivados do run
+
+`SqliteRunLifecycleStore::sync_conversation_events` lê o histórico durável do
+run (admissão, transições e verificação) e acrescenta à conversa os eventos que
+faltam. Cada `event_id` deriva do run e da sequência do ledger; a sincronização
+não depende de relógio nem de estado em memória, e uma segunda chamada, mesmo
+após reabrir o store, não acrescenta nada. Gravar o evento de conversa na mesma
+transação da transição exigiria coordenar três agregados num único append e fica
+para a etapa do coordenador de execução. Decisão de mapeamento: `RecoveryRequired`
+é progresso, não terminal, porque o run pode retomar; assim cada run tem um único
+`Terminal`, e o log recusa eventos do run depois dele.
+
 ## Limites
 
 O log não prova redaction, entrega ao consumidor, retenção nem retomada de
 stream. `timestamp_ms` é do produtor e não substitui a sequência da store. Um
 payload acima de 1 MiB é recusado pelo ledger; a referência de artifact é uma
-decisão de contrato pendente. Ainda faltam emitir eventos a partir do lifecycle
-do run, lacunas representáveis, política de retenção, subscriber e admission.
+decisão de contrato pendente. Ainda faltam lacunas representáveis, política de
+retenção, subscriber e admission.
 
 ## Evidência de verificação (2026-11-18, Linux, checkout local)
 
 - `cargo fmt --all -- --check` e `cargo clippy --workspace --all-targets
 --all-features --locked -- -D warnings`: passaram.
 - `cargo test -p vectora-engine --lib --locked storage::sqlite::conversation`:
-  7 passaram (sequência e idempotência, rascunhos inválidos, paginação sem
+  8 passaram (sequência e idempotência, rascunhos inválidos, paginação sem
   alterar estado, vínculo do cursor, lacunas, reabertura com projeção, 8
-  escritores concorrentes).
+  escritores concorrentes e terminal único por run).
+- `harness::events` (mapeamento do run, 1 teste) e `storage::sqlite_run`
+  (espelho idempotente com reabertura e `RecoveryRequired`, 2 testes): passaram.
 - `cargo test -p vectora-engine --lib --locked harness::events`: 6 passaram;
   `cargo test --locked --test conformance_fixtures conversation`: 1 passou
   (fixture compartilhada).
-- Python: `maturin develop` e `pytest -k conversation`: 2 passaram.
-- Node: `pnpm build` e `node --test --test-name-pattern conversation`: 2
-  passaram.
+- Python: `maturin develop` e `pytest -k "conversation or mirrored"`: 3 passaram;
+  `ruff check` e `ruff format --check` passaram.
+- Node: `pnpm build` e `node --test --test-name-pattern "conversation|mirrored"`:
+  3 passaram.
 
 ## Decisão de contrato pendente: admission sob concorrência
 

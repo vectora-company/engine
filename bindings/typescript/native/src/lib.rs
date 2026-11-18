@@ -1853,6 +1853,30 @@ pub async fn sqlite_run_admit(
 }
 
 #[napi]
+pub async fn sqlite_run_sync_conversation_events(
+    path: String,
+    scope: String,
+    conversation_id: String,
+    run_id: String,
+    timestamp_ms: i64,
+) -> Result<String> {
+    let timestamp_ms = u64::try_from(timestamp_ms)
+        .map_err(|_| Error::from_reason("timestamp_ms must not be negative"))?;
+    let events = tokio::task::spawn_blocking(move || -> std::result::Result<_, String> {
+        let mut store =
+            vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                .map_err(|error| error.to_string())?;
+        store
+            .sync_conversation_events(&conversation_id, &run_id, timestamp_ms)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| Error::from_reason("run store worker failed"))?
+    .map_err(Error::from_reason)?;
+    encode_json(&events)
+}
+
+#[napi]
 pub async fn sqlite_run_load_latest(
     path: String,
     scope: String,

@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::{RunStatus, RunTransition};
+
 /// Version of the public conversation event envelope.
 pub const CONVERSATION_EVENT_CONTRACT_VERSION: u16 = 1;
 const MAX_JSON_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
@@ -72,6 +74,37 @@ pub enum ConversationEventKind {
     Terminal {
         status: ConversationTerminalStatus,
     },
+}
+
+/// The event that reports a run lifecycle transition to conversation readers.
+///
+/// Leaving `Planned` for `Running` is `RunStarted`. Reaching `Completed`,
+/// `Degraded`, `Failed` or `Cancelled` is the single `Terminal` event of the
+/// run. `RecoveryRequired` is progress, not terminal, because a run in that
+/// state may resume; every other transition is progress with a stable code.
+pub fn conversation_event_for_run_transition(transition: &RunTransition) -> ConversationEventKind {
+    let terminal = match transition.to {
+        RunStatus::Completed => Some(ConversationTerminalStatus::Completed),
+        RunStatus::Degraded => Some(ConversationTerminalStatus::Degraded),
+        RunStatus::Failed => Some(ConversationTerminalStatus::Failed),
+        RunStatus::Cancelled => Some(ConversationTerminalStatus::Cancelled),
+        _ => None,
+    };
+    if let Some(status) = terminal {
+        return ConversationEventKind::Terminal { status };
+    }
+    if transition.from == RunStatus::Planned && transition.to == RunStatus::Running {
+        return ConversationEventKind::RunStarted {
+            run_id: transition.run_id.clone(),
+        };
+    }
+    let status = serde_json::to_value(transition.to)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "unknown".to_owned());
+    ConversationEventKind::Progress {
+        code: format!("run.{status}"),
+    }
 }
 
 /// A single ordered event in a consumer-owned conversation.
@@ -393,6 +426,59 @@ mod tests {
         assert_eq!(
             event.validate(),
             Err(ConversationEventError::IntegerOutOfRange("sequence"))
+        );
+    }
+
+    fn transition(from: RunStatus, to: RunStatus) -> RunTransition {
+        RunTransition {
+            contract_version: crate::harness::RUN_CONTRACT_VERSION,
+            run_id: "run-1".into(),
+            sequence: 1,
+            from,
+            to,
+        }
+    }
+
+    #[test]
+    fn run_transitions_map_to_one_terminal_and_stable_progress_codes() {
+        assert_eq!(
+            conversation_event_for_run_transition(&transition(
+                RunStatus::Planned,
+                RunStatus::Running
+            )),
+            ConversationEventKind::RunStarted {
+                run_id: "run-1".into()
+            }
+        );
+        for (to, status) in [
+            (RunStatus::Completed, ConversationTerminalStatus::Completed),
+            (RunStatus::Degraded, ConversationTerminalStatus::Degraded),
+            (RunStatus::Failed, ConversationTerminalStatus::Failed),
+            (RunStatus::Cancelled, ConversationTerminalStatus::Cancelled),
+        ] {
+            assert_eq!(
+                conversation_event_for_run_transition(&transition(RunStatus::Running, to)),
+                ConversationEventKind::Terminal { status }
+            );
+        }
+        for (to, code) in [
+            (RunStatus::WaitingApproval, "run.waiting_approval"),
+            (RunStatus::ToolRunning, "run.tool_running"),
+            (RunStatus::RecoveryRequired, "run.recovery_required"),
+        ] {
+            assert_eq!(
+                conversation_event_for_run_transition(&transition(RunStatus::Running, to)),
+                ConversationEventKind::Progress { code: code.into() }
+            );
+        }
+        assert_eq!(
+            conversation_event_for_run_transition(&transition(
+                RunStatus::RecoveryRequired,
+                RunStatus::Running
+            )),
+            ConversationEventKind::Progress {
+                code: "run.running".into()
+            }
         );
     }
 }

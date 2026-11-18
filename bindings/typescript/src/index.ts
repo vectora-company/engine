@@ -507,11 +507,7 @@ export interface HostIdentityContext {
 }
 
 export type ConversationTerminalStatus =
-  | "completed"
-  | "degraded"
-  | "failed"
-  | "cancelled"
-  | "recovery_required";
+  "completed" | "degraded" | "failed" | "cancelled" | "recovery_required";
 
 export type ConversationEventKind =
   | { type: "turn_queued" | "turn_accepted"; data: { turn_id: string } }
@@ -1131,6 +1127,13 @@ interface NativeBinding {
     scope: string,
     identityJson: string,
     requestJson: string,
+  ): Promise<string>;
+  sqliteRunSyncConversationEvents(
+    path: string,
+    scope: string,
+    conversationId: string,
+    runId: string,
+    timestampMs: number,
   ): Promise<string>;
   sqliteRunLoadLatest(
     path: string,
@@ -1854,6 +1857,31 @@ export async function sqliteRunAdmit(
   ) as DurableRunAdmission;
 }
 
+/**
+ * Mirror a run's durable history into a conversation without duplicates.
+ * Returns only the events appended by this call.
+ */
+export async function sqliteRunSyncConversationEvents(
+  path: string,
+  scope: string,
+  conversationId: string,
+  runId: string,
+  timestampMs: number,
+): Promise<ConversationEvent[]> {
+  if (!Number.isSafeInteger(timestampMs) || timestampMs < 0) {
+    throw new RangeError("timestampMs must be a non-negative safe integer");
+  }
+  return JSON.parse(
+    await native.sqliteRunSyncConversationEvents(
+      path,
+      scope,
+      conversationId,
+      runId,
+      timestampMs,
+    ),
+  ) as ConversationEvent[];
+}
+
 /** Load the latest persisted lifecycle state for a run. */
 export async function sqliteRunLoadLatest(
   path: string,
@@ -2417,7 +2445,11 @@ export async function sqliteConversationAppendEvent(
   draft: ConversationEventDraft,
 ): Promise<ConversationEvent> {
   return JSON.parse(
-    await native.sqliteConversationAppendEvent(path, scope, JSON.stringify(draft)),
+    await native.sqliteConversationAppendEvent(
+      path,
+      scope,
+      JSON.stringify(draft),
+    ),
   ) as ConversationEvent;
 }
 

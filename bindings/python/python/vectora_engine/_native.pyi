@@ -237,6 +237,9 @@ def conversation_store_contract_version() -> int: ...
 async def sqlite_conversation_append_event(
     path: str, scope: str, draft_json: str
 ) -> str: ...
+async def sqlite_run_sync_conversation_events(
+    path: str, scope: str, conversation_id: str, run_id: str, timestamp_ms: int
+) -> str: ...
 async def sqlite_conversation_history(
     path: str,
     scope: str,
