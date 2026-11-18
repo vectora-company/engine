@@ -249,11 +249,13 @@ mod tests {
             "ve_ledger_events",
             "ve_ledger_versions",
         ] {
-            sqlx::query(&format!("DELETE FROM {table} WHERE scope=$1"))
-                .bind(scope)
-                .execute(&mut *tx)
-                .await
-                .unwrap();
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "DELETE FROM {table} WHERE scope=$1"
+            )))
+            .bind(scope)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
         }
         tx.commit().await.unwrap();
     }
