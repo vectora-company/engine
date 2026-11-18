@@ -27,6 +27,7 @@ from vectora_engine import (
     chat_contract_version,
     chat_stream,
     conversation_event_contract_version,
+    conversation_store_contract_version,
     create_run,
     embed,
     embedding_contract_version,
@@ -123,6 +124,8 @@ from vectora_engine import (
     transcribe_ephemeral,
     transcription_contract_version,
     transition_run,
+    sqlite_conversation_append_event,
+    sqlite_conversation_history,
     validate_conversation_event,
     validate_host_identity_context,
     validate_storage_selection,
@@ -4007,3 +4010,64 @@ def test_conversation_event_binding_uses_versioned_rust_contract() -> None:
         else:
             with pytest.raises(RuntimeError):
                 validate_conversation_event(case["event"])
+
+
+def _conversation_draft(event_id: str, text: str) -> dict[str, Any]:
+    return {
+        "contract_version": conversation_event_contract_version(),
+        "event_id": event_id,
+        "conversation_id": "conversation-1",
+        "turn_id": "turn-1",
+        "run_id": "run-1",
+        "timestamp_ms": 100,
+        "source": "engine.harness",
+        "kind": {"type": "message_delta", "data": {"text": text}},
+    }
+
+
+def test_conversation_store_assigns_sequences_and_pages_history(
+    tmp_path: Path,
+) -> None:
+    assert conversation_store_contract_version() == 1
+    path = str(tmp_path / "ledger.db")
+
+    async def scenario() -> None:
+        first = await sqlite_conversation_append_event(
+            path, "team", _conversation_draft("e1", "a")
+        )
+        second = await sqlite_conversation_append_event(
+            path, "team", _conversation_draft("e2", "b")
+        )
+        assert (first["sequence"], second["sequence"]) == (1, 2)
+        retried = await sqlite_conversation_append_event(
+            path, "team", _conversation_draft("e1", "a")
+        )
+        assert retried == first
+        with pytest.raises(RuntimeError, match="idempotency key"):
+            await sqlite_conversation_append_event(
+                path, "team", _conversation_draft("e1", "changed")
+            )
+        page = await sqlite_conversation_history(
+            path, "team", "conversation-1", limit=1
+        )
+        assert [event["sequence"] for event in page["events"]] == [1]
+        assert page["latest_sequence"] == 2
+        rest = await sqlite_conversation_history(
+            path,
+            "team",
+            "conversation-1",
+            cursor=page["next_cursor"],
+            limit=10,
+        )
+        assert [event["event_id"] for event in rest["events"]] == ["e2"]
+        with pytest.raises(RuntimeError, match="cursor does not belong"):
+            await sqlite_conversation_history(
+                path, "other", "conversation-1", cursor=page["next_cursor"]
+            )
+        invalid = _conversation_draft("e3", "c")
+        del invalid["run_id"]
+        with pytest.raises(RuntimeError, match="run_id"):
+            await sqlite_conversation_append_event(path, "team", invalid)
+
+    asyncio.run(scenario())
+

@@ -19,6 +19,7 @@ import {
   prepareToolDispatch,
   chatStream,
   conversationEventContractVersion,
+  conversationStoreContractVersion,
   embed,
   embeddingContractVersion,
   engineContractSnapshot,
@@ -63,6 +64,8 @@ import {
   submitToolResult,
   hostIdentityContractVersion,
   validateHostIdentityContext,
+  sqliteConversationAppendEvent,
+  sqliteConversationHistory,
   validateConversationEvent,
   validateToolResultOutput,
   validateStorageSelection,
@@ -190,6 +193,48 @@ test("conversation event binding conforms to the shared Rust fixtures", async ()
       }),
     /safe integer/,
   );
+});
+
+test("conversation store assigns sequences and pages history through Node", async () => {
+  assert.equal(conversationStoreContractVersion(), 1);
+  const dir = await mkdtemp(join(tmpdir(), "vectora-conversation-"));
+  try {
+    const path = join(dir, "ledger.db");
+    const draft = (eventId, text) => ({
+      contract_version: conversationEventContractVersion(),
+      event_id: eventId,
+      conversation_id: "conversation-1",
+      turn_id: "turn-1",
+      run_id: "run-1",
+      timestamp_ms: 100,
+      source: "engine.harness",
+      kind: { type: "message_delta", data: { text } },
+    });
+    const first = await sqliteConversationAppendEvent(path, "team", draft("e1", "a"));
+    const second = await sqliteConversationAppendEvent(path, "team", draft("e2", "b"));
+    assert.deepEqual([first.sequence, second.sequence], [1, 2]);
+    assert.deepEqual(await sqliteConversationAppendEvent(path, "team", draft("e1", "a")), first);
+    await assert.rejects(
+      sqliteConversationAppendEvent(path, "team", draft("e1", "changed")),
+      /idempotency key/,
+    );
+    const page = await sqliteConversationHistory(path, "team", "conversation-1", { limit: 1 });
+    assert.deepEqual(page.events.map((event) => event.sequence), [1]);
+    assert.equal(page.latest_sequence, 2);
+    const rest = await sqliteConversationHistory(path, "team", "conversation-1", {
+      cursor: page.next_cursor,
+    });
+    assert.deepEqual(rest.events.map((event) => event.event_id), ["e2"]);
+    await assert.rejects(
+      sqliteConversationHistory(path, "other", "conversation-1", { cursor: page.next_cursor }),
+      /cursor does not belong/,
+    );
+    const invalid = draft("e3", "c");
+    delete invalid.run_id;
+    await assert.rejects(sqliteConversationAppendEvent(path, "team", invalid), /run_id/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("host identity dispatch denies capabilities absent from its grants", async () => {

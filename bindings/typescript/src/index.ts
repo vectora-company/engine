@@ -1112,6 +1112,19 @@ interface NativeBinding {
   validateHostIdentityContext(contextJson: string, nowMs: number): string;
   conversationEventContractVersion(): number;
   validateConversationEvent(eventJson: string): string;
+  conversationStoreContractVersion(): number;
+  sqliteConversationAppendEvent(
+    path: string,
+    scope: string,
+    draftJson: string,
+  ): Promise<string>;
+  sqliteConversationHistory(
+    path: string,
+    scope: string,
+    conversationId: string,
+    cursorJson: string | null,
+    limit: number,
+  ): Promise<string>;
   runTransition(lifecycleJson: string, nextStatus: string): string;
   sqliteRunAdmit(
     path: string,
@@ -2369,6 +2382,61 @@ export function validateConversationEvent(
   return JSON.parse(
     native.validateConversationEvent(JSON.stringify(event)),
   ) as ConversationEvent;
+}
+
+/** A conversation event before the store assigns its sequence. */
+export type ConversationEventDraft = Omit<ConversationEvent, "sequence">;
+
+/** Position after which the next history page starts. */
+export interface ConversationCursor {
+  contract_version: number;
+  scope: string;
+  conversation_id: string;
+  after_sequence: number;
+}
+
+export interface ConversationHistoryPage {
+  events: ConversationEvent[];
+  /** Cursor for the following page; equals the request cursor when empty. */
+  next_cursor: ConversationCursor;
+  /** Highest sequence stored for the conversation when the page was read. */
+  latest_sequence: number;
+}
+
+export function conversationStoreContractVersion(): number {
+  return native.conversationStoreContractVersion();
+}
+
+/**
+ * Append a conversation event. The store assigns the sequence; retrying a
+ * draft with the same `event_id` and content returns the stored event.
+ */
+export async function sqliteConversationAppendEvent(
+  path: string,
+  scope: string,
+  draft: ConversationEventDraft,
+): Promise<ConversationEvent> {
+  return JSON.parse(
+    await native.sqliteConversationAppendEvent(path, scope, JSON.stringify(draft)),
+  ) as ConversationEvent;
+}
+
+/** Read one page of conversation history after an optional cursor. */
+export async function sqliteConversationHistory(
+  path: string,
+  scope: string,
+  conversationId: string,
+  options: { cursor?: ConversationCursor; limit?: number } = {},
+): Promise<ConversationHistoryPage> {
+  return JSON.parse(
+    await native.sqliteConversationHistory(
+      path,
+      scope,
+      conversationId,
+      options.cursor === undefined ? null : JSON.stringify(options.cursor),
+      options.limit ?? 100,
+    ),
+  ) as ConversationHistoryPage;
 }
 
 /** Apply a deterministic lifecycle transition to the supplied snapshot. */

@@ -1769,6 +1769,54 @@ pub fn validate_conversation_event(event_json: String) -> Result<String> {
 }
 
 #[napi]
+pub fn conversation_store_contract_version() -> u32 {
+    u32::from(vectora_engine::storage::sqlite::CONVERSATION_STORE_CONTRACT_VERSION)
+}
+
+#[napi]
+pub async fn sqlite_conversation_append_event(
+    path: String,
+    scope: String,
+    draft_json: String,
+) -> Result<String> {
+    let draft: vectora_engine::storage::sqlite::ConversationEventDraft =
+        serde_json::from_str(&draft_json)
+            .map_err(|_| Error::from_reason("invalid conversation event draft"))?;
+    let event = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
+            .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
+            .append_conversation_event(&scope, draft)
+    })
+    .await
+    .map_err(|_| Error::from_reason("conversation worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&event)
+}
+
+#[napi]
+pub async fn sqlite_conversation_history(
+    path: String,
+    scope: String,
+    conversation_id: String,
+    cursor_json: Option<String>,
+    limit: u32,
+) -> Result<String> {
+    let cursor: Option<vectora_engine::storage::sqlite::ConversationCursor> = cursor_json
+        .map(|json| serde_json::from_str(&json))
+        .transpose()
+        .map_err(|_| Error::from_reason("invalid conversation cursor"))?;
+    let page = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
+            .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
+            .conversation_history(&scope, &conversation_id, cursor.as_ref(), limit)
+    })
+    .await
+    .map_err(|_| Error::from_reason("conversation worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&page)
+}
+
+#[napi]
 pub fn run_transition(lifecycle_json: String, next_status: String) -> Result<String> {
     let mut run: RunLifecycle = serde_json::from_str(&lifecycle_json)
         .map_err(|_| Error::from_reason("invalid run lifecycle snapshot"))?;
