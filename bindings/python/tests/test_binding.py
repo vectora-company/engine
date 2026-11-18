@@ -90,6 +90,8 @@ from vectora_engine import (
     resilient_ledger_rebuild_projection,
     run_contract_version,
     sqlite_admit_run,
+    sqlite_conversation_append_event,
+    sqlite_conversation_history,
     sqlite_latest_checkpoint,
     sqlite_ledger_append,
     sqlite_ledger_append_checkpointed,
@@ -124,8 +126,6 @@ from vectora_engine import (
     transcribe_ephemeral,
     transcription_contract_version,
     transition_run,
-    sqlite_conversation_append_event,
-    sqlite_conversation_history,
     validate_conversation_event,
     validate_host_identity_context,
     validate_storage_selection,
@@ -4070,4 +4070,3 @@ def test_conversation_store_assigns_sequences_and_pages_history(
             await sqlite_conversation_append_event(path, "team", invalid)
 
     asyncio.run(scenario())
-

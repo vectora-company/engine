@@ -7,12 +7,14 @@ run/thread, ledger/checkpoints SQLite e cancelamento/recovery do loop modelo/too
 Também há um envelope Rust `ConversationEvent` v1 com payloads tipados para
 eventos mínimos de turno, run, step, tool, aprovação, progresso, mensagem,
 uso e estado terminal, além de validação de correlação. Os bindings Python e
-TypeScript encaminham ao mesmo validador Rust e usam uma fixture comum. Esse
-contrato ainda não está ligado ao ledger.
+TypeScript encaminham ao mesmo validador Rust e usam uma fixture comum. Um log
+durável sobre o ledger SQLite atribui a sequência, deduplica por `event_id` e
+devolve histórico paginado por cursor, também nos bindings; ele ainda não é
+alimentado pelo lifecycle do run.
 Isso não implementa o contrato de Conversation/Session descrito nesta spec: não
-há API genérica de admission de turnos/conversas, histórico paginado por cursor,
-replay de stream após reconnect, channel adapter, projeção de timeline nem
-contrato separado de cancelamento do assinante. A
+há API genérica de admission de turnos/conversas, replay de stream após
+reconnect, channel adapter, projeção de timeline nem contrato separado de
+cancelamento do assinante. A
 [`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
 registra os limites observados. Até essas APIs duráveis existirem, o suporte é
 **parcial** e não se deve anunciar retomada de conversa ou replay de eventos.
