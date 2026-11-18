@@ -147,7 +147,7 @@ impl PostgresLedger {
             else {
                 return Err(PostgresError::SchemaVersion);
             };
-            sqlx::raw_sql(sql).execute(&mut *tx).await?;
+            sqlx::raw_sql(*sql).execute(&mut *tx).await?;
             sqlx::query("UPDATE ve_ledger_meta SET version=$1 WHERE id=1")
                 .bind(migration_version)
                 .execute(&mut *tx)
@@ -587,6 +587,7 @@ async fn append_tx(
 mod tests {
     use super::*;
     use serde_json::json;
+    use sqlx::AssertSqlSafe;
 
     #[test]
     fn postgres_schema_migrations_are_contiguous_and_match_current_version() {
@@ -653,7 +654,8 @@ mod tests {
             .as_nanos();
         let schema = format!("ve_migration_test_{suffix}");
         let admin = sqlx::PgPool::connect(&url).await.unwrap();
-        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+        // `schema` is generated exclusively from a fixed prefix and a decimal timestamp.
+        sqlx::query(AssertSqlSafe(format!("CREATE SCHEMA {schema}")))
             .execute(&admin)
             .await
             .unwrap();
@@ -663,7 +665,7 @@ mod tests {
             .connect(&url)
             .await
             .unwrap();
-        sqlx::query(&format!("SET search_path TO {schema}"))
+        sqlx::query(AssertSqlSafe(format!("SET search_path TO {schema}")))
             .execute(&pool)
             .await
             .unwrap();
@@ -682,7 +684,7 @@ mod tests {
         );
 
         ledger.pool.close().await;
-        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+        sqlx::query(AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE")))
             .execute(&admin)
             .await
             .unwrap();
