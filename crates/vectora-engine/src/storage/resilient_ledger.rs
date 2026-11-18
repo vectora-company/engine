@@ -249,7 +249,6 @@ mod tests {
             "ve_ledger_events",
             "ve_ledger_versions",
         ] {
-            // `table` comes only from the fixed list immediately above.
             sqlx::query(sqlx::AssertSqlSafe(format!(
                 "DELETE FROM {table} WHERE scope=$1"
             )))
