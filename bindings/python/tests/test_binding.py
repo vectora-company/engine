@@ -22,11 +22,11 @@ from vectora_engine import (
     authorize_tool_dispatch,
     authorize_tool_dispatch_with_identity,
     cancel_model_tool_loop,
-    conversation_event_contract_version,
     chat_complete,
     chat_complete_ephemeral,
     chat_contract_version,
     chat_stream,
+    conversation_event_contract_version,
     create_run,
     embed,
     embedding_contract_version,
@@ -123,8 +123,8 @@ from vectora_engine import (
     transcribe_ephemeral,
     transcription_contract_version,
     transition_run,
-    validate_host_identity_context,
     validate_conversation_event,
+    validate_host_identity_context,
     validate_storage_selection,
     validate_tool_result_output,
     vector_store_search_filtered,
@@ -3997,7 +3997,9 @@ def test_host_identity_context_binding_validates_version_and_scope() -> None:
 
 def test_conversation_event_binding_uses_versioned_rust_contract() -> None:
     assert conversation_event_contract_version() == 1
-    fixture_path = Path(__file__).parents[3] / "tests/fixtures/conversation-events-v1.json"
+    fixture_path = (
+        Path(__file__).parents[3] / "tests/fixtures/conversation-events-v1.json"
+    )
     fixture = json.loads(fixture_path.read_text())
     for case in fixture["cases"]:
         if case["valid"]:
