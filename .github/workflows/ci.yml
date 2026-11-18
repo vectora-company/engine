@@ -46,6 +46,10 @@ jobs:
           version: "36.2"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
+      - name: Install Nextest
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check all targets and features
@@ -53,11 +57,69 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Tests
-        run: cargo test --workspace --all-features --locked
+        run: cargo nextest run --workspace --all-features --locked --test-threads 2
+      # Nextest does not run rustdoc tests; keep Cargo's doctest runner too.
+      - name: Documentation tests
+        run: cargo test --workspace --all-features --doc --locked
       - name: Documentation
         run: cargo doc --workspace --all-features --no-deps --locked
         env:
           RUSTDOCFLAGS: -D warnings
+
+  rust-msrv:
+    name: Rust / minimum supported version
+    runs-on: ubuntu-24.04
+    env:
+      PYO3_PYTHON: python
+      CARGO_BUILD_JOBS: 2
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.15"
+      - uses: dtolnay/rust-toolchain@1.95.0
+      - name: Install Protocol Buffers compiler
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: "36.2"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Check workspace at the declared MSRV
+        run: cargo check --workspace --all-targets --all-features --locked
+
+  rust-dependencies:
+    name: Rust / unused dependencies
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+          persist-credentials: false
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-machete@0.10.1
+      - name: Find unused dependencies
+        run: cargo machete
+
+  rust-supply-chain:
+    name: Rust / dependency policy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+          persist-credentials: false
+      - name: Check advisories, licenses, duplicate versions, and sources
+        uses: EmbarkStudios/cargo-deny-action@995303aa121612dcd7bbd5b92550ed2d6fc70af9 # v2.1.2
+        with:
+          rust-version: "1.95.0"
+          command: check
+          arguments: --all-features
 
   repository-tooling:
     name: Shared repository tooling

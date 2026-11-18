@@ -124,6 +124,14 @@ fn publish(partial: &Path, destination: &Path) -> Result<BackupReport, LedgerErr
     Ok(report)
 }
 
+/// Copies the file body with ordinary reads and flushes the result.
+fn copy_file_contents(source: &Path, destination: &Path) -> Result<(), LedgerError> {
+    let mut input = fs::File::open(source).map_err(|_| LedgerError::Storage)?;
+    let mut output = fs::File::create(destination).map_err(|_| LedgerError::Storage)?;
+    std::io::copy(&mut input, &mut output).map_err(|_| LedgerError::Storage)?;
+    output.sync_all().map_err(|_| LedgerError::Storage)
+}
+
 impl SqliteLedger {
     /// Copies this ledger while other connections may keep writing. The copy is
     /// a consistent snapshot of one committed state.
@@ -165,7 +173,10 @@ impl SqliteLedger {
             .execute_batch("BEGIN EXCLUSIVE")
             .map_err(|_| LedgerError::Busy)?;
         let partial = sibling(destination, ".partial");
-        let copied = fs::copy(source, &partial).map_err(|_| LedgerError::Storage);
+        // Plain reads, not `fs::copy`: on Windows the exclusive lock held by
+        // `locker` makes `CopyFileEx` fail, while ordinary reads of the file
+        // body are not affected by SQLite's byte-range locks.
+        let copied = copy_file_contents(source, &partial);
         locker.execute_batch("ROLLBACK")?;
         if let Err(error) = copied {
             let _ = fs::remove_file(&partial);
