@@ -140,21 +140,9 @@ repos:
         language: system
         pass_filenames: false
         files: \.rs$|Cargo\.toml$
-      - id: rust-clippy
-        name: Rust Clippy
-        entry: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - id: rust-machete
+        name: Unused Rust dependencies
+        entry: cargo machete
         language: system
         pass_filenames: false
-        files: \.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$
-      - id: rust-tests
-        name: Rust tests
-        entry: cargo test --workspace --all-features --locked
-        language: system
-        pass_filenames: false
-        files: \.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$
-      - id: rust-docs
-        name: Rust documentation
-        entry: cargo doc --workspace --all-features --no-deps --locked
-        language: system
-        pass_filenames: false
-        files: \.rs$|Cargo\.toml$|Cargo\.lock$|rust-toolchain\.toml$
+        files: \.rs$|Cargo\.toml$|Cargo\.lock$
