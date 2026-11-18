@@ -1,0 +1,35 @@
+name: Dependency audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - "deny.toml"
+      - ".github/workflows/dependency-audit.yml"
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-deny:
+    name: Advisories, licenses, and dependency sources
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check dependency policy
+        uses: EmbarkStudios/cargo-deny-action@995303aa121612dcd7bbd5b92550ed2d6fc70af9 # v2.1.2
+        with:
+          rust-version: "1.95.0"
+          command: check
+          arguments: --all-features
