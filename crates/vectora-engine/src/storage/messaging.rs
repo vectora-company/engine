@@ -808,17 +808,17 @@ impl KvStore for NatsStore {
 }
 
 pub enum KvStoreAdapter {
-    Redis(RedisStore),
+    Redis(Box<RedisStore>),
     Nats(Box<NatsStore>),
 }
 
 impl KvStoreAdapter {
     pub async fn connect(config: KvStoreConfig) -> Result<Self, MessagingError> {
         match config.backend {
-            super::KvBackend::Redis => Ok(Self::Redis(RedisStore::connect(
+            super::KvBackend::Redis => Ok(Self::Redis(Box::new(RedisStore::connect(
                 &config.endpoint,
                 &config.namespace,
-            )?)),
+            )?))),
             super::KvBackend::NatsJetstream => Ok(Self::Nats(Box::new(
                 NatsStore::connect(&config.endpoint, &config.namespace).await?,
             ))),
