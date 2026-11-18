@@ -8,7 +8,7 @@ capability correspondente demonstrar conformidade e rollback.
 ## Preparar o ambiente
 
 Em Linux, `dotfiles.sh` configura o host: pacotes de sistema, `protoc`, Podman,
-Rust, Python 3.13, Node.js 24, pnpm, uv, SCons e pre-commit. Ele reconhece
+Rust, Python 3.15, Node.js 24, pnpm, uv, SCons e pre-commit. Ele reconhece
 distribuições Debian/Ubuntu, Fedora e Arch. `--check` apenas diagnostica o host.
 O script não chama SCons, não instala dependências do checkout e não compila.
 
@@ -33,11 +33,13 @@ Cargo e TypeScript mantêm caches incrementais locais entre builds.
 
 - Rust stable via `rustup`, com `rustfmt` e `clippy` (selecionados por
   `rust-toolchain.toml`).
+- `cargo-machete` para o hook local de dependências sem uso. Instale com
+  `cargo install --locked cargo-machete`.
 - `protoc` (Protocol Buffers compiler), necessário pela dependência LanceDB.
   No Linux o script instala `protobuf-compiler` em Debian/Ubuntu/Fedora e
   `protobuf` no Arch.
 - `scons` para os alvos de desenvolvimento.
-- `uv` e Python 3.13 para tooling e verificações dos bindings Python.
+- `uv` e Python 3.15 para tooling e verificações dos bindings Python.
 - `pnpm` e Node.js 24 para build, lint e testes do binding TypeScript (o pacote
   aceita Node.js 22.13 ou superior).
 - Podman para preparar as imagens usadas pelos testes de integração com serviços.
@@ -53,12 +55,17 @@ scons lint
 scons tests
 ```
 
-Os checks diretos de Rust são `cargo fmt`, Clippy com todos os targets e
-features, testes com todas as features e geração de documentação sem
-dependências. Para Python, o fluxo executa syntax check, Ruff, ty, Bandit e
-pytest em `utils/` e `bindings/python/`. Para TypeScript, executa oxlint, `tsc`,
-build do addon e testes Node. O CI roda os checks Rust em Linux, macOS e
-Windows.
+No commit, os hooks Rust verificam formatação e dependências não usadas.
+Compilação, Clippy, testes e documentação ficam no CI para não repetir builds
+pesados a cada commit local. O CI executa Nextest com concorrência limitada,
+doctests com Cargo, verifica o workspace na MSRV declarada e audita licenças,
+advisories, fontes e dependências não usadas. A auditoria de dependências também
+roda diariamente. Nextest não executa doctests, por isso eles continuam numa
+etapa separada.
+
+Para verificações locais sob demanda, `scons lint` e `scons tests` executam os
+checks Rust e Python. Para TypeScript, executam oxlint, `tsc`, build do addon e
+testes Node. CI mantém a matriz Rust em Linux, macOS e Windows.
 
 ## Pull requests
 
