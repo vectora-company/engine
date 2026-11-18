@@ -20,4 +20,4 @@ pyo3-async-runtimes.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-vectora-engine = { path = "../../../crates/vectora-engine" }
+vectora-engine = { version = "0.0.1", path = "../../../crates/vectora-engine" }
