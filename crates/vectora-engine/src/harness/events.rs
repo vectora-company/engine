@@ -281,32 +281,32 @@ mod tests {
 
     #[test]
     fn requires_correlation_for_turn_run_and_step_events() {
-        let mut event = event(ConversationEventKind::TurnQueued {
+        let mut queued = event(ConversationEventKind::TurnQueued {
             turn_id: "turn-1".into(),
         });
-        event.turn_id = None;
+        queued.turn_id = None;
         assert_eq!(
-            event.validate(),
+            queued.validate(),
             Err(ConversationEventError::MissingCorrelation("turn_id"))
         );
 
-        let mut event = event(ConversationEventKind::Terminal {
+        let mut terminal = event(ConversationEventKind::Terminal {
             status: ConversationTerminalStatus::Failed,
         });
-        event.run_id = None;
+        terminal.run_id = None;
         assert_eq!(
-            event.validate(),
+            terminal.validate(),
             Err(ConversationEventError::MissingCorrelation("run_id"))
         );
 
-        let mut event = event(ConversationEventKind::ToolCallStarted {
+        let mut tool_call = event(ConversationEventKind::ToolCallStarted {
             step_id: "step-1".into(),
             tool_call_id: "call-1".into(),
             tool_name: "filesystem.read".into(),
         });
-        event.step_id = None;
+        tool_call.step_id = None;
         assert_eq!(
-            event.validate(),
+            tool_call.validate(),
             Err(ConversationEventError::MissingCorrelation("step_id"))
         );
     }
