@@ -18,4 +18,4 @@ serde.workspace = true
 serde_json.workspace = true
 termimad = "0.35.5"
 tokio.workspace = true
-vectora-engine = { path = "../vectora-engine" }
+vectora-engine = { version = "0.0.1", path = "../vectora-engine" }
