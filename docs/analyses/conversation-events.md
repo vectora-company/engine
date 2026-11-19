@@ -53,7 +53,13 @@ como os demais stores; habilitá-la depois faz backfill dos eventos existentes.
 `conversation_history` lê uma página por cursor numa única transação de leitura,
 de modo que `latest_sequence` e os eventos são consistentes. O cursor é vinculado
 a scope, conversa e versão do contrato, mas não é assinado: o host autoriza quem
-pode ler o escopo. Uma lacuna na sequência é reportada como erro explícito.
+pode ler o escopo. Uma lacuna na sequência é erro no modo estrito (padrão) e
+dado (`gaps`, intervalo inclusivo) no modo tolerante, que continua a leitura e
+posiciona o cursor no último evento lido. Uma lacuna inicial indica eventos
+anteriores ao cursor que não estão mais armazenados. A reconexão usa
+`conversation_cursor_after_event(event_id)`: retoma depois do evento e recusa
+IDs de outra conversa ou escopo. Os dois modos coexistem; o estrito é o padrão
+recomendado porque nunca entrega história com buraco sem o consumidor pedir.
 
 ## Eventos derivados do run
 
@@ -72,17 +78,21 @@ para a etapa do coordenador de execução. Decisão de mapeamento: `RecoveryRequ
 O log não prova redaction, entrega ao consumidor, retenção nem retomada de
 stream. `timestamp_ms` é do produtor e não substitui a sequência da store. Um
 payload acima de 1 MiB é recusado pelo ledger; a referência de artifact é uma
-decisão de contrato pendente. Ainda faltam lacunas representáveis, política de
-retenção, subscriber e admission.
+decisão de contrato pendente. Ainda faltam política de retenção (trim) com erro
+dedicado de cursor expirado, subscriber e admission.
 
 ## Evidência de verificação (2026-11-18, Linux, checkout local)
 
 - `cargo fmt --all -- --check` e `cargo clippy --workspace --all-targets
 --all-features --locked -- -D warnings`: passaram.
-- `cargo test -p vectora-engine --lib --locked storage::sqlite::conversation`:
-  8 passaram (sequência e idempotência, rascunhos inválidos, paginação sem
-  alterar estado, vínculo do cursor, lacunas, reabertura com projeção, 8
-  escritores concorrentes e terminal único por run).
+- `cargo test -p vectora-engine conversation` (SHA desta branch): 11 passaram,
+  incluindo leitura tolerante com lacunas e retomada por `event_id`, além de
+  sequência e idempotência, rascunhos inválidos, paginação sem alterar estado,
+  vínculo do cursor, lacunas, reabertura com projeção, 8 escritores
+  concorrentes e terminal único por run.
+- Python: `pytest -k conversation` (4 passaram) e `ruff`; Node: `pnpm build`,
+  `typecheck` e `node --test` (85 testes: 67 passaram, 0 falharam, 18 não
+  executados por falta de serviços reais).
 - `harness::events` (mapeamento do run, 1 teste) e `storage::sqlite_run`
   (espelho idempotente com reabertura e `RecoveryRequired`, 2 testes): passaram.
 - `cargo test -p vectora-engine --lib --locked harness::events`: 6 passaram;

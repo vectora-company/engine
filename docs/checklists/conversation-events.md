@@ -38,8 +38,13 @@
       o espelho é derivado e retomável).
 - [x] History paginado e cursores validados por scope, conversation e versão,
       lidos numa única transação.
-- [ ] Replay reporta lacuna como dado representável e cursor expirado, e não
-      altera o estado de consumers. Hoje a lacuna é reportada como erro.
+- [x] Leitura tolerante reporta lacuna como dado representável (`gaps`,
+      inclusive lacuna inicial quando o cursor aponta antes do primeiro evento
+      retido) sem alterar estado; o modo estrito continua falhando.
+- [x] Reconexão retoma após o último `event_id` processado
+      (`conversation_cursor_after_event`) sem repetir eventos.
+- [ ] Política de retenção que remove eventos antigos e cursor expirado
+      explícito (hoje a lacuna aparece, mas não há trim nem erro dedicado).
 - [ ] Subscriber tem buffer limitado, política de coalescência e cancelamento
       independente do run.
 - [x] Reabrir o ledger preserva a sequência do log de conversa. Pendente: recovery que não repete efeitos externos a partir do lifecycle.

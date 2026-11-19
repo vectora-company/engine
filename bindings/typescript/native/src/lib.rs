@@ -1800,7 +1800,13 @@ pub async fn sqlite_conversation_history(
     conversation_id: String,
     cursor_json: Option<String>,
     limit: u32,
+    tolerant: bool,
 ) -> Result<String> {
+    let mode = if tolerant {
+        vectora_engine::storage::sqlite::ConversationReadMode::Tolerant
+    } else {
+        vectora_engine::storage::sqlite::ConversationReadMode::Strict
+    };
     let cursor: Option<vectora_engine::storage::sqlite::ConversationCursor> = cursor_json
         .map(|json| serde_json::from_str(&json))
         .transpose()
@@ -1808,12 +1814,30 @@ pub async fn sqlite_conversation_history(
     let page = tokio::task::spawn_blocking(move || {
         vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
             .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
-            .conversation_history(&scope, &conversation_id, cursor.as_ref(), limit)
+            .conversation_history_with_mode(&scope, &conversation_id, cursor.as_ref(), limit, mode)
     })
     .await
     .map_err(|_| Error::from_reason("conversation worker failed"))?
     .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&page)
+}
+
+#[napi]
+pub async fn sqlite_conversation_cursor_after_event(
+    path: String,
+    scope: String,
+    conversation_id: String,
+    event_id: String,
+) -> Result<String> {
+    let cursor = tokio::task::spawn_blocking(move || {
+        vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
+            .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
+            .conversation_cursor_after_event(&scope, &conversation_id, &event_id)
+    })
+    .await
+    .map_err(|_| Error::from_reason("conversation worker failed"))?
+    .map_err(|error| Error::from_reason(error.to_string()))?;
+    encode_json(&cursor)
 }
 
 #[napi]

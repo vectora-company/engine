@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import os
+import sqlite3
 import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -91,6 +92,7 @@ from vectora_engine import (
     run_contract_version,
     sqlite_admit_run,
     sqlite_conversation_append_event,
+    sqlite_conversation_cursor_after_event,
     sqlite_conversation_history,
     sqlite_latest_checkpoint,
     sqlite_ledger_append,
@@ -4061,6 +4063,15 @@ def test_conversation_store_assigns_sequences_and_pages_history(
             limit=10,
         )
         assert [event["event_id"] for event in rest["events"]] == ["e2"]
+        assert rest["gaps"] == []
+        resumed = await sqlite_conversation_cursor_after_event(
+            path, "team", "conversation-1", "e1"
+        )
+        assert resumed["after_sequence"] == 1
+        with pytest.raises(RuntimeError, match="no stored event"):
+            await sqlite_conversation_cursor_after_event(
+                path, "team", "conversation-1", "missing"
+            )
         with pytest.raises(RuntimeError, match="cursor does not belong"):
             await sqlite_conversation_history(
                 path, "other", "conversation-1", cursor=page["next_cursor"]
@@ -4069,6 +4080,33 @@ def test_conversation_store_assigns_sequences_and_pages_history(
         del invalid["run_id"]
         with pytest.raises(RuntimeError, match="run_id"):
             await sqlite_conversation_append_event(path, "team", invalid)
+
+    asyncio.run(scenario())
+
+
+def test_conversation_history_reports_missing_sequences_in_tolerant_mode(
+    tmp_path: Path,
+) -> None:
+    path = str(tmp_path / "ledger.db")
+
+    async def scenario() -> None:
+        for number in range(1, 4):
+            await sqlite_conversation_append_event(
+                path, "team", _conversation_draft(f"e{number}", "x")
+            )
+        with sqlite3.connect(path) as connection:
+            connection.execute(
+                "DELETE FROM ve_ledger_events WHERE aggregate_id = ? AND sequence = 2",
+                ("conversation_events:conversation-1",),
+            )
+        with pytest.raises(RuntimeError, match="gap"):
+            await sqlite_conversation_history(path, "team", "conversation-1")
+        page = await sqlite_conversation_history(
+            path, "team", "conversation-1", tolerant=True
+        )
+        assert [event["sequence"] for event in page["events"]] == [1, 3]
+        assert page["gaps"] == [{"from_sequence": 2, "to_sequence": 2}]
+        assert page["next_cursor"]["after_sequence"] == 3
 
     asyncio.run(scenario())
 

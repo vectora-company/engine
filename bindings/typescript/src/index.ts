@@ -1120,6 +1120,13 @@ interface NativeBinding {
     conversationId: string,
     cursorJson: string | null,
     limit: number,
+    tolerant: boolean,
+  ): Promise<string>;
+  sqliteConversationCursorAfterEvent(
+    path: string,
+    scope: string,
+    conversationId: string,
+    eventId: string,
   ): Promise<string>;
   runTransition(lifecycleJson: string, nextStatus: string): string;
   sqliteRunAdmit(
@@ -2423,8 +2430,16 @@ export interface ConversationCursor {
   after_sequence: number;
 }
 
+/** Inclusive range of sequences that are not stored; never treat as delivered. */
+export interface ConversationGap {
+  from_sequence: number;
+  to_sequence: number;
+}
+
 export interface ConversationHistoryPage {
   events: ConversationEvent[];
+  /** Missing sequences found while reading; always empty unless `tolerant`. */
+  gaps: ConversationGap[];
   /** Cursor for the following page; equals the request cursor when empty. */
   next_cursor: ConversationCursor;
   /** Highest sequence stored for the conversation when the page was read. */
@@ -2458,7 +2473,12 @@ export async function sqliteConversationHistory(
   path: string,
   scope: string,
   conversationId: string,
-  options: { cursor?: ConversationCursor; limit?: number } = {},
+  options: {
+    cursor?: ConversationCursor;
+    limit?: number;
+    /** Report missing sequences in `gaps` instead of failing. */
+    tolerant?: boolean;
+  } = {},
 ): Promise<ConversationHistoryPage> {
   return JSON.parse(
     await native.sqliteConversationHistory(
@@ -2467,8 +2487,26 @@ export async function sqliteConversationHistory(
       conversationId,
       options.cursor === undefined ? null : JSON.stringify(options.cursor),
       options.limit ?? 100,
+      options.tolerant ?? false,
     ),
   ) as ConversationHistoryPage;
+}
+
+/** Cursor that resumes right after a stored `event_id` (reconnection dedup). */
+export async function sqliteConversationCursorAfterEvent(
+  path: string,
+  scope: string,
+  conversationId: string,
+  eventId: string,
+): Promise<ConversationCursor> {
+  return JSON.parse(
+    await native.sqliteConversationCursorAfterEvent(
+      path,
+      scope,
+      conversationId,
+      eventId,
+    ),
+  ) as ConversationCursor;
 }
 
 /** Apply a deterministic lifecycle transition to the supplied snapshot. */
