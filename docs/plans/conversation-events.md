@@ -1,7 +1,7 @@
 # Plano: eventos versionados, conversas e replay
 
-**Estado:** `aguardando decisão vital de contrato para admission`
-**Atualizado em:** 2026-11-17
+**Estado:** `em andamento`: envelope e log durável verificados localmente; admission, subscriber e artifact pendentes
+**Atualizado em:** 2026-11-18
 **Spec:** [`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md)
 **Análise:** [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md)
 **Checklist:** [`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
@@ -16,19 +16,20 @@ pode divulgar.
 
 ## Estado observado
 
-| Camada | Estado | Evidência | Lacuna |
-| --- | --- | --- | --- |
-| Core Rust | Parcial | `crates/vectora-engine/src/harness/events.rs`: envelope v1, payloads tipados e validação de correlação | Persistência, IDs/ordem atribuídos pela store, redaction e integração lifecycle |
-| Python | Parcial | `validate_conversation_event` encaminha ao validador Rust; teste lê fixture compartilhada | Verificação local/CI pendente |
-| TypeScript/Node | Parcial | `validateConversationEvent` e tipos discriminados encaminham ao validador Rust; teste lê fixture compartilhada | Verificação local/CI pendente |
-| Conversation/Turn store | Pendente | Lifecycle store reserva run/thread/turn | Admission genérica, histórico paginado e projeção de timeline |
-| Replay/stream subscriber | Pendente | Streams atuais representam respostas de providers | Replay de eventos duráveis, gaps, backpressure e cancelamento independente |
+| Camada                           | Estado                               | Evidência                                                                                                                                                                                                                | Lacuna                                                                           |
+| -------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Core Rust: envelope              | Implementado e verificado localmente | `crates/vectora-engine/src/harness/events.rs`: envelope v1, payloads tipados e validação de correlação                                                                                                                   | Redaction e integração com o lifecycle                                           |
+| Core Rust: log durável           | Implementado e verificado localmente | `crates/vectora-engine/src/storage/sqlite/conversation.rs`: sequência atribuída pela store, idempotência por `event_id`, histórico paginado por cursor, lacunas como erro, outbox de projeção só com projeção habilitada | Lacuna como dado representável, retenção e cursor expirado, replay com reconexão |
+| Python                           | Implementado e verificado localmente | `validate_conversation_event`, `sqlite_conversation_append_event`, `sqlite_conversation_history`                                                                                                                         | Fixture comum do store                                                           |
+| TypeScript/Node                  | Implementado e verificado localmente | `validateConversationEvent`, `sqliteConversationAppendEvent`, `sqliteConversationHistory`                                                                                                                                | Fixture comum do store                                                           |
+| Admission e projeção de timeline | Pendente                             | Lifecycle store reserva run/thread/turn                                                                                                                                                                                  | Admission por conversa, listagem de conversas e projeção de timeline             |
+| Replay/stream subscriber         | Pendente                             | Streams atuais representam respostas de providers                                                                                                                                                                        | Replay de eventos duráveis, gaps, backpressure e cancelamento independente       |
 
 ## Entregas ordenadas
 
 1. [x] Definir envelope Rust versionado e payloads tipados mínimos; validar
-   IDs, versão, sequência e correlação. Testes unitários foram adicionados,
-   mas não executados localmente nesta etapa a pedido do mantenedor.
+       IDs, versão, sequência e correlação. Testes unitários foram adicionados,
+       mas não executados localmente nesta etapa a pedido do mantenedor.
 2. [parcial] Expor o contrato por Python e TypeScript/Node e adicionar fixture
    comum Rust/Python/Node em `tests/fixtures/conversation-events-v1.json`.
    Testes de conformidade estão no código, mas não foram executados localmente;
@@ -37,15 +38,20 @@ pode divulgar.
    `conversation_id`/`turn_id`; fechar estratégia de saturação, limites de fila,
    significado de `blocked` e modo padrão. Comparativo em
    [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
-4. [ ] Persistir eventos ordenados no ledger SQLite, mantendo payloads grandes
-   referenciados fora do ledger; conectar lifecycle sem duplicar evento ou
-   efeito.
-5. [ ] Implementar consulta de histórico paginado e cursor vinculado ao scope,
-   conversation e versão; reportar retenção/gaps sem ocultar eventos ausentes.
+4. [parcial] Persistir eventos ordenados no ledger SQLite. Feito: sequência
+   atribuída pela store em transação imediata, idempotência por `event_id`,
+   erro tipado para `event_id` reutilizado em outra conversa e fila de projeção
+   quando habilitada. Pendente: payloads grandes por referência fora do ledger
+   e emissão de eventos a partir do lifecycle do run sem duplicar efeito.
+5. [parcial] Consulta de histórico paginado com cursor vinculado a scope,
+   conversa e versão, em uma única transação de leitura. Feito: cursor
+   adiantado, de outro escopo ou de versão desconhecida é recusado; lacunas
+   são reportadas como erro. Pendente: lacuna como dado representável e
+   política de retenção com cursor expirado.
 6. [ ] Implementar subscriber com backpressure/coalescência e cancelamento da
-   assinatura separado do cancelamento do run.
+       assinatura separado do cancelamento do run.
 7. [ ] Integrar replay/recovery e testar restart, duplicatas, cursor inválido,
-   concorrência e cancelamento nos três níveis.
+       concorrência e cancelamento nos três níveis.
 
 ## Limites da entrega atual
 
@@ -70,10 +76,13 @@ JSON/JavaScript para que os bindings mantenham o mesmo valor sem arredondamento.
 
 ## Próxima etapa
 
-A etapa de bindings foi publicada no PR #159, filho do PR #158; seus checks
-remotos ainda precisam ser consultados no SHA corrente e não foram aguardados.
-O código independente seguinte é admission idempotente por
-scope/conversation/turn. A implementação está parada antes de alterar o schema
-persistido porque o modo de saturação e a semântica de `blocked` são decisões
-de contrato que dependem de brunosrz no chat. SQLite permanece a autoridade
-local; PostgreSQL recebe somente a projeção.
+Emitir eventos de conversa a partir das transições do lifecycle do run, na mesma
+transação do ledger, com `event_id` derivado do run e da sequência e um único
+evento terminal por turno. Em seguida: replay com lacunas representáveis,
+subscriber com backpressure e admission.
+
+Admission tem dois modos que coexistem: fila FIFO durável limitada e admission
+imediata com `rejected`; `blocked` fica reservado à suspensão explícita por
+policy ou ação do host. O modo padrão recomendado é a fila limitada; o padrão e
+os limites aguardam a confirmação de `brunosrz` no chat. SQLite permanece a
+autoridade local e PostgreSQL recebe somente a projeção.

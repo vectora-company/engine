@@ -5,13 +5,14 @@
 //! contiguous, unique positions. The producer's `event_id` is the idempotency
 //! key: retrying the same draft returns the stored event and its sequence,
 //! while reusing the ID with different content is a conflict. Appends are
-//! queued for the PostgreSQL projection exactly like other ledger events.
+//! queued for the PostgreSQL projection exactly like other ledger events:
+//! only once projection has been enabled on the ledger.
 //!
 //! History is read-only: reading a page never changes producer or consumer
 //! state. Cursors are bound to the scope, the conversation and the contract
 //! version. They are not signed; the host authorizes who may read a scope.
 
-use rusqlite::TransactionBehavior;
+use rusqlite::{OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -97,6 +98,8 @@ pub enum ConversationStoreError {
     CursorMismatch,
     #[error("conversation cursor is ahead of the stored history")]
     CursorAhead,
+    #[error("event id is already used by conversation {conversation_id}")]
+    EventIdReused { conversation_id: String },
     #[error("conversation history has a gap: expected sequence {expected}, found {found}")]
     Gap { expected: u64, found: u64 },
     #[error("stored conversation event is unreadable")]
@@ -146,6 +149,22 @@ impl SqliteLedger {
                 |row| row.get(0),
             )
             .map_err(LedgerError::from)?;
+        let owner: Option<String> = tx
+            .query_row(
+                "SELECT aggregate_id FROM ve_ledger_events WHERE scope=?1 AND event_id=?2",
+                rusqlite::params![scope, draft.event_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(LedgerError::from)?;
+        if let Some(owner) = owner.filter(|owner| *owner != aggregate) {
+            return Err(ConversationStoreError::EventIdReused {
+                conversation_id: owner
+                    .strip_prefix(AGGREGATE_PREFIX)
+                    .unwrap_or(&owner)
+                    .to_owned(),
+            });
+        }
         let event = Self::append_in(
             &tx,
             EventDraft {
@@ -158,7 +177,16 @@ impl SqliteLedger {
                 expected_version: current as u64,
             },
         )?;
-        Self::queue_projection_in(&tx, &event, None, None)?;
+        let projection_enabled: bool = tx
+            .query_row(
+                "SELECT projection_enabled FROM ve_ledger_meta WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(LedgerError::from)?;
+        if projection_enabled {
+            Self::queue_projection_in(&tx, &event, None, None)?;
+        }
         tx.commit().map_err(LedgerError::from)?;
         let stored = draft.with_sequence(event.sequence);
         stored.validate()?;
@@ -192,8 +220,12 @@ impl SqliteLedger {
             }
         };
         let aggregate = aggregate(conversation_id);
-        let latest: i64 = self
+        // One read transaction keeps `latest_sequence` and the page consistent.
+        let snapshot = self
             .connection
+            .unchecked_transaction()
+            .map_err(LedgerError::from)?;
+        let latest: i64 = snapshot
             .query_row(
                 "SELECT COALESCE(MAX(sequence),0) FROM ve_ledger_events WHERE scope=?1 AND aggregate_id=?2",
                 rusqlite::params![scope, aggregate],
@@ -226,6 +258,7 @@ impl SqliteLedger {
             events.push(event);
             expected += 1;
         }
+        drop(snapshot);
         Ok(ConversationHistoryPage {
             next_cursor: ConversationCursor {
                 contract_version: CONVERSATION_STORE_CONTRACT_VERSION,
@@ -296,9 +329,7 @@ mod tests {
         ));
         assert!(matches!(
             ledger.append_conversation_event("scope", draft("c2", "e1", "a")),
-            Err(ConversationStoreError::Ledger(
-                LedgerError::IdempotencyConflict
-            ))
+            Err(ConversationStoreError::EventIdReused { conversation_id }) if conversation_id == "c1"
         ));
         let other_conversation = ledger
             .append_conversation_event("scope", draft("c2", "e3", "c"))
@@ -462,20 +493,37 @@ mod tests {
             ledger
                 .append_conversation_event("scope", draft("c1", "e1", "t"))
                 .unwrap();
-            assert_eq!(ledger.pending_outbox(10).unwrap().len(), 1);
+            assert!(
+                ledger.pending_outbox(10).unwrap().is_empty(),
+                "nothing is queued before projection is enabled"
+            );
+            ledger.enable_projection().unwrap();
+            assert_eq!(
+                ledger.pending_outbox(10).unwrap().len(),
+                1,
+                "enabling projection backfills existing events"
+            );
+            ledger
+                .append_conversation_event("scope", draft("c1", "e1b", "t"))
+                .unwrap();
+            assert_eq!(ledger.pending_outbox(10).unwrap().len(), 2);
+            ledger
+                .append_conversation_event("scope", draft("c1", "e1b", "t"))
+                .unwrap();
+            assert_eq!(ledger.pending_outbox(10).unwrap().len(), 2);
         }
         let mut ledger = SqliteLedger::open_persistent(&path).unwrap();
         let next = ledger
             .append_conversation_event("scope", draft("c1", "e2", "t"))
             .unwrap();
-        assert_eq!(next.sequence, 2);
+        assert_eq!(next.sequence, 3);
         assert_eq!(
             ledger
                 .conversation_history("scope", "c1", None, 10)
                 .unwrap()
                 .events
                 .len(),
-            2
+            3
         );
         drop(ledger);
         std::fs::remove_file(path).unwrap();

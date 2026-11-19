@@ -3342,7 +3342,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(validate_conversation_event, module)?)?;
-    module.add_function(wrap_pyfunction!(conversation_store_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        conversation_store_contract_version,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(sqlite_conversation_append_event, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_conversation_history, module)?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;

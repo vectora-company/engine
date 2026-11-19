@@ -224,20 +224,23 @@ O plano, checklist e análise específicos estão em
 [`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
 e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
-1. **Parcial:** envelope Rust v1 (`ConversationEvent`) com event/conversation/
-   turn/run/step IDs, sequência, timestamp, origem e payloads tipados; validação
-   estrutural; bindings Python e TypeScript encaminham ao mesmo validador Rust;
-   fixture comum cobre casos válidos e inválidos nos três níveis. Os testes
-   foram adicionados, mas não executados localmente por solicitação do
-   mantenedor; CI remoto pendente. Faltam sequência atribuída pela store,
-   persistência e replay. Evidência: `crates/vectora-engine/src/harness/events.rs`
-   e `tests/fixtures/conversation-events-v1.json`.
-2. Gaps representáveis e replay por cursor com reconexão sem duplicação.
-3. API de conversa/sessão, histórico paginado e projeções; admissão com
-   `queued`, `blocked` e `rejected` e concorrência por conversa. **[D]** Modo
-   de saturação, limites e semântica de `blocked` aguardam decisão do mantenedor;
-   comparativo em [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
-4. Buffer, coalescência e cancelamento do assinante.
+1. **Implementado e verificado localmente:** envelope Rust v1
+   (`ConversationEvent`) com event/conversation/turn/run/step IDs, sequência,
+   timestamp, origem e payloads tipados; validação estrutural; bindings Python
+   e TypeScript encaminham ao mesmo validador Rust; fixture comum nos três
+   níveis. Evidência: `crates/vectora-engine/src/harness/events.rs`,
+   `tests/fixtures/conversation-events-v1.json` e a análise da capability.
+2. **Parcial:** log durável no ledger SQLite com sequência atribuída pela store,
+   idempotência por `event_id` e histórico paginado por cursor (Rust, Python e
+   TypeScript, verificados localmente). Faltam emitir eventos a partir do
+   lifecycle do run, lacuna como dado representável, retenção com cursor
+   expirado e replay com reconexão sem duplicação.
+   Evidência: `crates/vectora-engine/src/storage/sqlite/conversation.rs`.
+3. **Pendente:** admissão com `queued`, `blocked` e `rejected` e concorrência por
+   conversa. Os dois modos (fila FIFO limitada e admissão imediata) coexistem;
+   o padrão recomendado e os limites aguardam confirmação no chat. Comparativo
+   em [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
+4. **Não iniciado:** buffer, coalescência e cancelamento do assinante.
 5. Referência de artifact fora do ledger (hash, tamanho, expiração, acesso).
    **[D]** dados e segurança.
 

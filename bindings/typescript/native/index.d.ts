@@ -69,6 +69,10 @@ export declare function chatStreamStartEphemeral(
   requestJson: string,
 ): Promise<string>;
 
+export declare function conversationEventContractVersion(): number;
+
+export declare function conversationStoreContractVersion(): number;
+
 export declare function embed(
   settingsJson: string,
   requestJson: string,
@@ -118,12 +122,14 @@ export declare function generateImage(
   requestJson: string,
 ): Promise<string>;
 
-export declare function imageGenerationContractVersion(): number;
-
 export declare function graphStoreOperation(
   configJson: string,
   operationJson: string,
 ): Promise<string>;
+
+export declare function hostIdentityContractVersion(): number;
+
+export declare function imageGenerationContractVersion(): number;
 
 export declare function kvStoreCompareAndSet(
   configJson: string,
@@ -231,13 +237,13 @@ export declare function llamaServerHealth(
   settingsJson: string,
 ): Promise<string>;
 
-export declare function llamaServerModels(
-  settingsJson: string,
-): Promise<string>;
-
 export declare function llamaServerModelMediaCapabilities(
   modelJson: string,
 ): string;
+
+export declare function llamaServerModels(
+  settingsJson: string,
+): Promise<string>;
 
 export declare function llamaServerRealtimeSend(
   sessionId: string,
@@ -245,6 +251,11 @@ export declare function llamaServerRealtimeSend(
 ): Promise<void>;
 
 export declare function llamaServerRealtimeStart(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function llamaServerRerankEphemeral(
   settingsJson: string,
   requestJson: string,
 ): Promise<string>;
@@ -359,11 +370,6 @@ export declare function pubsubUnsubscribe(subscriptionId: string): void;
 
 export declare function queueAck(deliveryId: string): Promise<void>;
 
-export declare function queueNack(
-  deliveryId: string,
-  delayMs: number,
-): Promise<void>;
-
 export declare function queueEnqueue(
   configJson: string,
   payloadJson: string,
@@ -375,11 +381,10 @@ export declare function queueEnqueueIdempotent(
   idempotencyKey: string,
 ): Promise<string>;
 
-export declare function queueReplayAfter(
-  configJson: string,
-  cursorJson: string,
-  limit: number,
-): Promise<string>;
+export declare function queueNack(
+  deliveryId: string,
+  delayMs: number,
+): Promise<void>;
 
 export declare function queueReceive(
   configJson: string,
@@ -397,19 +402,18 @@ export declare function queueReceiveDeadLetter(
 
 export declare function queueRelease(deliveryId: string): void;
 
+export declare function queueReplayAfter(
+  configJson: string,
+  cursorJson: string,
+  limit: number,
+): Promise<string>;
+
 export declare function rerank(
   settingsJson: string,
   requestJson: string,
 ): Promise<string>;
 
 export declare function rerankContractVersion(): number;
-
-export declare function transcribeEphemeral(
-  settingsJson: string,
-  requestJson: string,
-): Promise<string>;
-
-export declare function transcriptionContractVersion(): number;
 
 export declare function resilientLedgerAppend(
   path: string,
@@ -436,17 +440,6 @@ export declare function runContractVersion(): number;
 
 export declare function runCreate(identityJson: string): string;
 
-export declare function hostIdentityContractVersion(): number;
-
-export declare function validateHostIdentityContext(
-  contextJson: string,
-  nowMs: number,
-): string;
-
-export declare function conversationEventContractVersion(): number;
-
-export declare function validateConversationEvent(eventJson: string): string;
-
 export declare function runTransition(
   lifecycleJson: string,
   nextStatus: string,
@@ -456,6 +449,20 @@ export declare function sqliteAdmitRun(
   path: string,
   reservationJson: string,
   eventJson: string,
+): Promise<string>;
+
+export declare function sqliteConversationAppendEvent(
+  path: string,
+  scope: string,
+  draftJson: string,
+): Promise<string>;
+
+export declare function sqliteConversationHistory(
+  path: string,
+  scope: string,
+  conversationId: string,
+  cursorJson: string | undefined | null,
+  limit: number,
 ): Promise<string>;
 
 export declare function sqliteLatestCheckpoint(
@@ -659,6 +666,25 @@ export declare function toolPolicyContractVersion(): number;
 export declare function toolResultContractVersion(): number;
 
 export declare function toolResultToChatMessage(resultJson: string): string;
+
+export declare function transcribeEphemeral(
+  settingsJson: string,
+  requestJson: string,
+): Promise<string>;
+
+export declare function transcriptionContractVersion(): number;
+
+export declare function validateConversationEvent(eventJson: string): string;
+
+export declare function validateHostIdentityContext(
+  contextJson: string,
+  nowMs: number,
+): string;
+
+export declare function validateToolResultOutputJson(
+  contractJson: string,
+  resultJson: string,
+): void;
 
 export declare function vectorStoreDelete(
   configJson: string,
