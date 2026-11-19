@@ -51,6 +51,8 @@ fn validate_destination(path: &Path) -> Result<(), LedgerError> {
 }
 
 fn sync_file_and_directory(path: &Path) -> Result<(), LedgerError> {
+    // `FlushFileBuffers` on Windows requires a writable handle. Opening the
+    // completed backup read-only works on Unix but makes sync fail on Windows.
     OpenOptions::new()
         .read(true)
         .write(true)
