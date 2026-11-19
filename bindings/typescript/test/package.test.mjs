@@ -59,6 +59,8 @@ import {
   toolResultToChatMessage,
   startModelToolLoop,
   submitToolResult,
+  hostIdentityContractVersion,
+  validateHostIdentityContext,
   validateStorageSelection,
   storageCapabilities,
   graphStoreOperation,
@@ -127,6 +129,33 @@ test("verification gate distinguishes check result from final verdict", () => {
     () => evaluateVerification({ ...report, run_id: "" }, policy),
     /run ID must not be empty/,
   );
+});
+
+test("host identity binding validates freshness and grant scope", () => {
+  const context = {
+    contract_version: hostIdentityContractVersion(),
+    issuer: "host:test",
+    subject: "user-1",
+    identity_id: "assistant-1",
+    identity_revision: "r1",
+    identity_digest: "sha256:identity",
+    scope_id: "workspace-1",
+    policy_digest: "sha256:policy",
+    issued_at_ms: 10,
+    expires_at_ms: 100,
+    grants: [
+      {
+        capability: "filesystem.read",
+        scope_id: "workspace-1",
+        policy_digest: "sha256:policy",
+        issued_at_ms: 10,
+        expires_at_ms: 90,
+      },
+    ],
+  };
+  assert.deepEqual(validateHostIdentityContext(context, 50), context);
+  context.grants[0].scope_id = "other";
+  assert.throws(() => validateHostIdentityContext(context, 50), /grant is invalid/);
 });
 
 test("shared JSON fixture conforms to run, verification, and storage contracts", async () => {

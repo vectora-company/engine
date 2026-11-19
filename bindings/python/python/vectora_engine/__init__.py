@@ -529,6 +529,22 @@ async def sqlite_run_admit(
     )
 
 
+def host_identity_contract_version() -> int:
+    """Return the version of the host supplied identity and grant contract."""
+    return _native.host_identity_contract_version()
+
+
+def validate_host_identity_context(
+    context: JsonObject, *, now_ms: int
+) -> dict[str, Any]:
+    """Validate host-authenticated context structure and freshness only."""
+    return json.loads(
+        _native.validate_host_identity_context(
+            json.dumps(context, separators=(",", ":")), now_ms
+        )
+    )
+
+
 async def sqlite_run_load_latest(
     path: str, scope: str, run_id: str
 ) -> dict[str, Any] | None:

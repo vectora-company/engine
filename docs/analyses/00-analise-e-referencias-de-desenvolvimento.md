@@ -134,6 +134,11 @@ títulos e bases de PR no estado dinâmico do GitHub.
   implementada no core e nos dois bindings; fixtures locais cobrem o asset
   efêmero, a resposta multipart, rate limit e o limite de resposta. Nenhum
   endpoint/modelo real foi validado nesta etapa.
+- Harness e identidade: `HostIdentityContext`/`CapabilityGrant` agora possuem
+  contrato versionado e validação no core Rust e nos bindings Python/TypeScript.
+  Ela verifica versão, timestamps, campos, grants duplicados e vínculo de scope
+  e policy digest, mas não autentica o issuer. A próxima integração precisa
+  aplicar revogação/revalidação imediatamente antes de cada efeito.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
   [checklist](../checklists/06-storage-grafos-falkordb.md) e

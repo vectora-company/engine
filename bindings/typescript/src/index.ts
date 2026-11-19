@@ -483,6 +483,29 @@ export interface RunIdentity {
   capabilities?: string[];
 }
 
+export interface CapabilityGrant {
+  capability: string;
+  scope_id: string;
+  policy_digest: string;
+  issued_at_ms: number;
+  expires_at_ms: number;
+}
+
+/** Host-authenticated assertion; local validation does not authenticate issuer. */
+export interface HostIdentityContext {
+  contract_version: number;
+  issuer: string;
+  subject: string;
+  identity_id: string;
+  identity_revision: string;
+  identity_digest: string;
+  scope_id: string;
+  policy_digest: string;
+  issued_at_ms: number;
+  expires_at_ms: number;
+  grants: CapabilityGrant[];
+}
+
 export interface RunLifecycle {
   contract_version: number;
   identity: RunIdentity;
@@ -1034,6 +1057,8 @@ interface NativeBinding {
   evidenceGateContractVersion(): number;
   evaluateVerificationJson(reportJson: string, policyJson: string): string;
   runCreate(identityJson: string): string;
+  hostIdentityContractVersion(): number;
+  validateHostIdentityContext(contextJson: string, nowMs: number): string;
   runTransition(lifecycleJson: string, nextStatus: string): string;
   sqliteRunAdmit(
     path: string,
@@ -2225,6 +2250,19 @@ export function evaluateVerification(
 /** Create a validated planned run snapshot; durability is caller-owned. */
 export function createRun(identity: RunIdentity): RunLifecycle {
   return JSON.parse(native.runCreate(JSON.stringify(identity))) as RunLifecycle;
+}
+
+export function hostIdentityContractVersion(): number {
+  return native.hostIdentityContractVersion();
+}
+
+export function validateHostIdentityContext(
+  context: HostIdentityContext,
+  nowMs = Date.now(),
+): HostIdentityContext {
+  return JSON.parse(
+    native.validateHostIdentityContext(JSON.stringify(context), nowMs),
+  ) as HostIdentityContext;
 }
 
 /** Apply a deterministic lifecycle transition to the supplied snapshot. */

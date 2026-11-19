@@ -7,14 +7,14 @@ adapters, sandbox e UX. Não se organiza por PR.
 
 ## Estado inicial
 
-| Domínio                 | Estado verificado                                                                                  | Próxima lacuna                                                                                          |
-| ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Ledger                  | SQLite append/idempotência, backup/restore, loop/policy e projeção PostgreSQL já existem em partes | Concorrência multiprocesso completa da projeção, migrations/rollback e recovery operacional validado    |
-| Tool loop/policy        | Core Rust, bindings e stores SQLite experimentais                                                  | Integração segura contínua com brokers, cancelamento real e conformidade entre consumidores             |
-| Identidade host         | Contexto de policy do host e configuração de providers existem                                     | Descriptor versionado, escopos explícitos, digest e APIs uniformes nos bindings                         |
-| Filesystem/Git/shell    | Não há tool pack executável comum da Engine                                                        | Adapters com capabilities isoladas e evidências; shell depende de broker do host                        |
-| Plano/memória/subagente | Persistência de loop e store de embeddings existem                                                 | Agregados portáveis e operações de produto configuráveis, sem persistência implícita ou privilégio novo |
-| Navegação               | Não há orquestrador de deep search da Engine                                                       | Contrato de busca/fetch, expansão bounded e defesa SSRF em cada hop                                     |
+| Domínio                 | Estado verificado                                                                                                | Próxima lacuna                                                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Ledger                  | SQLite append/idempotência, backup/restore, loop/policy e projeção PostgreSQL já existem em partes               | Concorrência multiprocesso completa da projeção, migrations/rollback e recovery operacional validado                      |
+| Tool loop/policy        | Core Rust, bindings e stores SQLite experimentais                                                                | Integração segura contínua com brokers, cancelamento real e conformidade entre consumidores                               |
+| Identidade host         | Descriptor versionado no core e validadores Python/TypeScript; grants presos ao scope, policy digest e expiração | Autenticação do issuer pertence ao host; falta ligar grants à revalidação antes de cada efeito e persistir/revogar grants |
+| Filesystem/Git/shell    | Não há tool pack executável comum da Engine                                                                      | Adapters com capabilities isoladas e evidências; shell depende de broker do host                                          |
+| Plano/memória/subagente | Persistência de loop e store de embeddings existem                                                               | Agregados portáveis e operações de produto configuráveis, sem persistência implícita ou privilégio novo                   |
+| Navegação               | Não há orquestrador de deep search da Engine                                                                     | Contrato de busca/fetch, expansão bounded e defesa SSRF em cada hop                                                       |
 
 ## Sequência de entrega
 
@@ -29,9 +29,11 @@ adapters, sandbox e UX. Não se organiza por PR.
 
 ### B. Contexto confiável e registro de tools
 
-1. Definir `HostIdentityContext` e `CapabilityGrant` versionados, fornecidos
-   pelo host, com issuer/subject/scope, expiração, digest de policy e grants
-   explícitos. O conteúdo de Soul permanece do consumidor.
+1. [x] Definir `HostIdentityContext` e `CapabilityGrant` versionados, fornecidos
+       pelo host, com issuer/subject/scope, expiração, digest de policy e grants
+       explícitos. O conteúdo de Soul permanece do consumidor. Core e bindings
+       validam shape, validade temporal, unicidade e aderência de scope/digest; a
+       autenticação do issuer continua exclusivamente no host.
 2. Normalizar registro de tool: schemas, risco/efeito, capability, timeout,
    idempotência, cancellation, output limits e evidence.
 3. Conectar ledger, authorization e tool dispatch com revalidação imediatamente
