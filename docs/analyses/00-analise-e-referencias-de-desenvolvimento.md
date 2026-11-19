@@ -123,6 +123,10 @@ títulos e bases de PR no estado dinâmico do GitHub.
   roteamento do servidor. OpenAI Responses mapeia input audio WAV/MP3; a
   capability fica desconhecida sem metadata/override do modelo, também no Chat
   Completions.
+  Geração básica de imagem é uma operação separada no core e bindings, via
+  OpenAI Images/OpenAI-compatible e OpenRouter. A resposta efêmera de bytes é o
+  padrão; hosts podem optar por gravar no mapa mutável de assets. Fixtures locais
+  verificam ambas as opções; integração real, edição e vídeo seguem pendentes.
   A fixture Rust exercita WAV/MP3 e fallback textual sem envio de bytes para
   formatos não suportados; smoke
   real por modelo permanece pendente.

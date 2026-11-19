@@ -84,6 +84,10 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [x] Testes Python e Node exercitam o asset map efêmero no OpenAI Responses;
       a extensão Python foi rebuildada no checkout antes do teste para evitar
       validar um binário local antigo.
+- [x] Geração de imagem no core Rust, Python e TypeScript: `return_bytes` é o
+      padrão e `store_in_media_context` grava no mapa mutável do host. Fixtures
+      offline validam payload, assinatura, MIME, SHA-256, limites e ambos os
+      caminhos; os smokes remotos seguem pendentes no checklist de providers.
 
 ## Contratos e desenho
 

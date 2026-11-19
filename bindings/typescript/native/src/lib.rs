@@ -38,6 +38,9 @@ use vectora_engine::llm::{
         EmbeddingClient, EmbeddingClientSettings, EmbeddingRequest, FallbackEmbeddingClient,
         FallbackEmbeddingSettings,
     },
+    image_generation::{
+        ImageGenerationClient, ImageGenerationClientSettings, ImageGenerationRequest,
+    },
     rerank::{
         FallbackRerankClient, FallbackRerankSettings, RerankClient, RerankClientSettings,
         RerankRequest,
@@ -117,19 +120,56 @@ struct BindingMediaContext {
     gateway_metadata: Vec<LlamaServerModelCapabilities>,
 }
 
-struct BindingMediaStore(HashMap<String, Vec<u8>>);
+#[derive(Default)]
+struct BindingMediaStore {
+    assets: Mutex<HashMap<String, Vec<u8>>>,
+    generated: Mutex<Vec<(String, Vec<u8>)>>,
+}
 
 #[async_trait::async_trait]
 impl MediaStore for BindingMediaStore {
     async fn read(&self, media_ref: &MediaRef) -> std::result::Result<Vec<u8>, MediaError> {
-        self.0
+        self.assets
+            .lock()
+            .map_err(|_| MediaError::Unavailable)?
             .get(&media_ref.asset_id)
             .cloned()
             .ok_or(MediaError::Unavailable)
     }
+
+    async fn write_generated(
+        &self,
+        bytes: Vec<u8>,
+        mime_type: &str,
+        name: &str,
+    ) -> std::result::Result<MediaRef, MediaError> {
+        let sha256 = vectora_engine::chat::sha256_hex(&bytes);
+        let asset_id = format!("generated-{sha256}");
+        self.assets
+            .lock()
+            .map_err(|_| MediaError::Unavailable)?
+            .insert(asset_id.clone(), bytes.clone());
+        self.generated
+            .lock()
+            .map_err(|_| MediaError::Unavailable)?
+            .push((asset_id.clone(), bytes.clone()));
+        Ok(MediaRef {
+            asset_id,
+            sha256,
+            mime_type: mime_type.to_owned(),
+            size_bytes: bytes.len() as u64,
+            name: name.to_owned(),
+        })
+    }
 }
 
 fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionContext> {
+    binding_media_context_with_store(value).map(|(context, _)| context)
+}
+
+fn binding_media_context_with_store(
+    value: serde_json::Value,
+) -> Result<(MediaExecutionContext, Arc<BindingMediaStore>)> {
     let settings: BindingMediaContext =
         serde_json::from_value(value).map_err(|_| Error::from_reason("invalid media context"))?;
     let assets = settings
@@ -159,7 +199,11 @@ fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionConte
         .fold(resolver, |resolver, entry| {
             resolver.with_media_limits(&entry.provider, &entry.model, entry.limits)
         });
-    let mut context = MediaExecutionContext::new(resolver, Arc::new(BindingMediaStore(assets)));
+    let store = Arc::new(BindingMediaStore {
+        assets: Mutex::new(assets),
+        generated: Mutex::new(Vec::new()),
+    });
+    let mut context = MediaExecutionContext::new(resolver, store.clone());
     if let Some(limit) = settings.max_media_bytes {
         context = context.with_max_media_bytes(limit);
     }
@@ -169,7 +213,7 @@ fn binding_media_context(value: serde_json::Value) -> Result<MediaExecutionConte
     if let Some(limit) = settings.max_media_parts {
         context = context.with_max_media_parts(limit);
     }
-    Ok(context)
+    Ok((context, store))
 }
 
 fn split_media_context(
@@ -2030,6 +2074,52 @@ pub async fn transcribe_ephemeral(settings_json: String, request_json: String) -
         .await
         .map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&response)
+}
+
+#[napi]
+pub fn image_generation_contract_version() -> u16 {
+    vectora_engine::llm::image_generation::IMAGE_GENERATION_CONTRACT_VERSION
+}
+
+#[napi]
+pub async fn generate_image(settings_json: String, request_json: String) -> Result<String> {
+    let mut settings: serde_json::Value = serde_json::from_str(&settings_json)
+        .map_err(|_| Error::from_reason("invalid client settings"))?;
+    let context_value = settings
+        .as_object_mut()
+        .and_then(|settings| settings.remove("media_context"));
+    let (context, store) = match context_value {
+        Some(value) => {
+            let (context, store) = binding_media_context_with_store(value)?;
+            (Some(context), Some(store))
+        }
+        None => (None, None),
+    };
+    let provider: ImageGenerationClientSettings = serde_json::from_value(settings)
+        .map_err(|_| Error::from_reason("invalid image generation settings"))?;
+    let request: ImageGenerationRequest = serde_json::from_str(&request_json)
+        .map_err(|_| Error::from_reason("invalid image generation request"))?;
+    let response = ImageGenerationClient::new(provider)
+        .map_err(|error| Error::from_reason(error.to_string()))?
+        .generate(request, context.as_ref())
+        .await
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+    let generated = store
+        .map(|store| {
+            store
+                .generated
+                .lock()
+                .map(|mut assets| std::mem::take(&mut *assets))
+                .map_err(|_| Error::from_reason("media store unavailable"))
+        })
+        .transpose()?
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(asset_id, bytes)| {
+            serde_json::json!({"asset_id": asset_id, "bytes_base64": STANDARD.encode(bytes)})
+        })
+        .collect::<Vec<_>>();
+    encode_json(&serde_json::json!({"response": response, "stored_assets": generated}))
 }
 
 #[napi]
