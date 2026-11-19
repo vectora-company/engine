@@ -9,8 +9,8 @@ eventos mínimos de turno, run, step, tool, aprovação, progresso, mensagem,
 uso e estado terminal, além de validação de correlação. Os bindings Python e
 TypeScript encaminham ao mesmo validador Rust e usam uma fixture comum. Um log
 durável sobre o ledger SQLite atribui a sequência, deduplica por `event_id` e
-devolve histórico paginado por cursor, também nos bindings; ele ainda não é
-alimentado pelo lifecycle do run.
+devolve histórico paginado por cursor, também nos bindings. O lifecycle do run é
+espelhado na conversa de forma idempotente, com um único evento terminal por run.
 Isso não implementa o contrato de Conversation/Session descrito nesta spec: não
 há API genérica de admission de turnos/conversas, replay de stream após
 reconnect, channel adapter, projeção de timeline nem contrato separado de

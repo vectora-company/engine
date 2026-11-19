@@ -591,6 +591,14 @@ export declare function sqliteRunLoadLatest(
   runId: string,
 ): Promise<string | null>;
 
+export declare function sqliteRunSyncConversationEvents(
+  path: string,
+  scope: string,
+  conversationId: string,
+  runId: string,
+  timestampMs: number,
+): Promise<string>;
+
 export declare function sqliteRunTransition(
   path: string,
   scope: string,

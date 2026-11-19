@@ -14,7 +14,7 @@ mod verification;
 
 pub use events::{
     CONVERSATION_EVENT_CONTRACT_VERSION, ConversationEvent, ConversationEventError,
-    ConversationEventKind, ConversationTerminalStatus,
+    ConversationEventKind, ConversationTerminalStatus, conversation_event_for_run_transition,
 };
 pub use model_tool_loop::{
     MODEL_TOOL_LOOP_CONTRACT_VERSION, ModelToolLoopAction, ModelToolLoopError, ModelToolLoopPhase,

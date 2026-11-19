@@ -596,6 +596,26 @@ async def sqlite_conversation_history(
     )
 
 
+async def sqlite_run_sync_conversation_events(
+    path: str,
+    scope: str,
+    conversation_id: str,
+    run_id: str,
+    *,
+    timestamp_ms: int,
+) -> list[dict[str, Any]]:
+    """Mirror a run's durable history into a conversation, without duplicates.
+
+    Returns only the events appended by this call; calling it again appends
+    nothing until the run has new durable history.
+    """
+    return json.loads(
+        await _native.sqlite_run_sync_conversation_events(
+            path, scope, conversation_id, run_id, timestamp_ms
+        )
+    )
+
+
 async def sqlite_run_load_latest(
     path: str, scope: str, run_id: str
 ) -> dict[str, Any] | None:
@@ -1776,6 +1796,7 @@ __all__ = [
     "sqlite_reserve_run",
     "sqlite_run_admit",
     "sqlite_run_load_latest",
+    "sqlite_run_sync_conversation_events",
     "sqlite_run_transition",
     "sqlite_run_verify",
     "sqlite_save_checkpoint",

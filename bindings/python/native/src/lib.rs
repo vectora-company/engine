@@ -1812,6 +1812,31 @@ fn sqlite_run_admit<'py>(
 }
 
 #[pyfunction]
+fn sqlite_run_sync_conversation_events<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    conversation_id: String,
+    run_id: String,
+    timestamp_ms: u64,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let events = tokio::task::spawn_blocking(move || {
+            let mut store =
+                vectora_engine::storage::sqlite_run::SqliteRunLifecycleStore::open(path, scope)
+                    .map_err(|error| error.to_string())?;
+            store
+                .sync_conversation_events(&conversation_id, &run_id, timestamp_ms)
+                .map_err(|error| error.to_string())
+        })
+        .await
+        .map_err(|_| py_error("run store worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&events)
+    })
+}
+
+#[pyfunction]
 fn sqlite_run_load_latest<'py>(
     py: Python<'py>,
     path: String,
@@ -3348,6 +3373,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(sqlite_conversation_append_event, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_conversation_history, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sqlite_run_sync_conversation_events,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_admit, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_load_latest, module)?)?;

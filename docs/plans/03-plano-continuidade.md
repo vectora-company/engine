@@ -231,10 +231,11 @@ e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
    níveis. Evidência: `crates/vectora-engine/src/harness/events.rs`,
    `tests/fixtures/conversation-events-v1.json` e a análise da capability.
 2. **Parcial:** log durável no ledger SQLite com sequência atribuída pela store,
-   idempotência por `event_id` e histórico paginado por cursor (Rust, Python e
-   TypeScript, verificados localmente). Faltam emitir eventos a partir do
-   lifecycle do run, lacuna como dado representável, retenção com cursor
-   expirado e replay com reconexão sem duplicação.
+   idempotência por `event_id`, histórico paginado por cursor e espelho
+   idempotente do lifecycle do run, com um único evento terminal por run (Rust,
+   Python e TypeScript, verificados localmente). Faltam lacuna como dado
+   representável, retenção com cursor expirado e replay com reconexão sem
+   duplicação.
    Evidência: `crates/vectora-engine/src/storage/sqlite/conversation.rs`.
 3. **Pendente:** admissão com `queued`, `blocked` e `rejected` e concorrência por
    conversa. Os dois modos (fila FIFO limitada e admissão imediata) coexistem;

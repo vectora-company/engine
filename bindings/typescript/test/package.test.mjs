@@ -88,6 +88,7 @@ import {
   sqliteAdmitRun,
   sqliteRunAdmit,
   sqliteRunLoadLatest,
+  sqliteRunSyncConversationEvents,
   sqliteRunTransition,
   sqliteRunVerify,
   sqliteLedgerBackupOffline,
@@ -193,6 +194,41 @@ test("conversation event binding conforms to the shared Rust fixtures", async ()
       }),
     /safe integer/,
   );
+});
+
+test("run history is mirrored into the conversation through Node", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vectora-run-mirror-"));
+  try {
+    const path = join(dir, "ledger.db");
+    const scope = "workspace-durable-1";
+    const identity = {
+      contract_version: 1,
+      run_id: "run-mirror-1",
+      idempotency_key: "admit-mirror-1",
+      thread_id: "thread-mirror-1",
+      turn_id: "turn-mirror-1",
+      scope_id: scope,
+      capabilities: ["tools.read"],
+    };
+    const admitted = await sqliteRunAdmit(path, scope, identity, {});
+    const running = await sqliteRunTransition(path, scope, admitted.state, "running", "op-running");
+    await sqliteRunTransition(path, scope, running.state, "cancelled", "op-cancelled");
+    const first = await sqliteRunSyncConversationEvents(path, scope, "conversation-1", "run-mirror-1", 1000);
+    assert.deepEqual(first.map((event) => event.kind.type), ["turn_accepted", "run_started", "terminal"]);
+    assert.deepEqual(first.map((event) => event.sequence), [1, 2, 3]);
+    assert.deepEqual(
+      await sqliteRunSyncConversationEvents(path, scope, "conversation-1", "run-mirror-1", 2000),
+      [],
+    );
+    await assert.rejects(
+      sqliteRunSyncConversationEvents(path, scope, "conversation-1", "run-mirror-1", -1),
+      /non-negative/,
+    );
+    const page = await sqliteConversationHistory(path, scope, "conversation-1");
+    assert.equal(page.latest_sequence, 3);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("conversation store assigns sequences and pages history through Node", async () => {

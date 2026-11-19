@@ -107,6 +107,7 @@ from vectora_engine import (
     sqlite_reserve_run,
     sqlite_run_admit,
     sqlite_run_load_latest,
+    sqlite_run_sync_conversation_events,
     sqlite_run_transition,
     sqlite_run_verify,
     sqlite_save_checkpoint,
@@ -4068,5 +4069,49 @@ def test_conversation_store_assigns_sequences_and_pages_history(
         del invalid["run_id"]
         with pytest.raises(RuntimeError, match="run_id"):
             await sqlite_conversation_append_event(path, "team", invalid)
+
+    asyncio.run(scenario())
+
+
+def test_run_history_is_mirrored_into_the_conversation_through_python(
+    tmp_path: Path,
+) -> None:
+    path = str(tmp_path / "ledger.db")
+    scope = "workspace-durable-1"
+    identity = {
+        "contract_version": 1,
+        "run_id": "run-mirror-1",
+        "idempotency_key": "admit-mirror-1",
+        "thread_id": "thread-mirror-1",
+        "turn_id": "turn-mirror-1",
+        "scope_id": scope,
+        "capabilities": ["tools.read"],
+    }
+
+    async def scenario() -> None:
+        admitted = await sqlite_run_admit(path, scope, identity, {})
+        running = await sqlite_run_transition(
+            path, scope, admitted["state"], "running", "op-running"
+        )
+        await sqlite_run_transition(
+            path, scope, running["state"], "cancelled", "op-cancelled"
+        )
+        first = await sqlite_run_sync_conversation_events(
+            path, scope, "conversation-1", "run-mirror-1", timestamp_ms=1_000
+        )
+        assert [event["kind"]["type"] for event in first] == [
+            "turn_accepted",
+            "run_started",
+            "terminal",
+        ]
+        assert [event["sequence"] for event in first] == [1, 2, 3]
+        again = await sqlite_run_sync_conversation_events(
+            path, scope, "conversation-1", "run-mirror-1", timestamp_ms=2_000
+        )
+        assert again == []
+        page = await sqlite_conversation_history(
+            path, scope, "conversation-1", limit=10
+        )
+        assert page["latest_sequence"] == 3
 
     asyncio.run(scenario())
