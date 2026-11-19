@@ -557,6 +557,45 @@ def validate_conversation_event(event: JsonObject) -> dict[str, Any]:
     )
 
 
+def conversation_store_contract_version() -> int:
+    """Return the version of the durable conversation log contract."""
+    return _native.conversation_store_contract_version()
+
+
+async def sqlite_conversation_append_event(
+    path: str, scope: str, draft: JsonObject
+) -> dict[str, Any]:
+    """Append a conversation event; the store assigns the sequence.
+
+    Retrying a draft with the same ``event_id`` and content is idempotent.
+    """
+    return json.loads(
+        await _native.sqlite_conversation_append_event(
+            path, scope, json.dumps(draft, separators=(",", ":"))
+        )
+    )
+
+
+async def sqlite_conversation_history(
+    path: str,
+    scope: str,
+    conversation_id: str,
+    *,
+    cursor: JsonObject | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Read one page of conversation history after an optional cursor."""
+    return json.loads(
+        await _native.sqlite_conversation_history(
+            path,
+            scope,
+            conversation_id,
+            None if cursor is None else json.dumps(cursor, separators=(",", ":")),
+            limit,
+        )
+    )
+
+
 async def sqlite_run_load_latest(
     path: str, scope: str, run_id: str
 ) -> dict[str, Any] | None:
@@ -1643,6 +1682,7 @@ __all__ = [
     "chat_contract_version",
     "chat_stream",
     "chat_stream_ephemeral",
+    "conversation_store_contract_version",
     "create_run",
     "embed",
     "embedding_contract_version",
@@ -1715,6 +1755,8 @@ __all__ = [
     "resilient_ledger_rebuild_projection",
     "run_contract_version",
     "sqlite_admit_run",
+    "sqlite_conversation_append_event",
+    "sqlite_conversation_history",
     "sqlite_latest_checkpoint",
     "sqlite_ledger_append",
     "sqlite_ledger_append_checkpointed",

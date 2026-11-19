@@ -1988,6 +1988,60 @@ fn validate_conversation_event(event_json: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn conversation_store_contract_version() -> u16 {
+    vectora_engine::storage::sqlite::CONVERSATION_STORE_CONTRACT_VERSION
+}
+
+#[pyfunction]
+fn sqlite_conversation_append_event<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    draft_json: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let draft: vectora_engine::storage::sqlite::ConversationEventDraft =
+            serde_json::from_str(&draft_json)
+                .map_err(|_| py_error("invalid conversation event draft"))?;
+        let event = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
+                .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
+                .append_conversation_event(&scope, draft)
+        })
+        .await
+        .map_err(|_| py_error("conversation worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&event)
+    })
+}
+
+#[pyfunction]
+fn sqlite_conversation_history<'py>(
+    py: Python<'py>,
+    path: String,
+    scope: String,
+    conversation_id: String,
+    cursor_json: Option<String>,
+    limit: u32,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py(py, async move {
+        let cursor: Option<vectora_engine::storage::sqlite::ConversationCursor> = cursor_json
+            .map(|json| serde_json::from_str(&json))
+            .transpose()
+            .map_err(|_| py_error("invalid conversation cursor"))?;
+        let page = tokio::task::spawn_blocking(move || {
+            vectora_engine::storage::sqlite::SqliteLedger::open_persistent(path)
+                .map_err(vectora_engine::storage::sqlite::ConversationStoreError::from)?
+                .conversation_history(&scope, &conversation_id, cursor.as_ref(), limit)
+        })
+        .await
+        .map_err(|_| py_error("conversation worker failed"))?
+        .map_err(py_error)?;
+        encode_json(&page)
+    })
+}
+
+#[pyfunction]
 fn run_transition(lifecycle_json: String, next_status: String) -> PyResult<String> {
     let mut run: RunLifecycle = serde_json::from_str(&lifecycle_json)
         .map_err(|_| py_error("invalid run lifecycle snapshot"))?;
@@ -3288,6 +3342,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(validate_conversation_event, module)?)?;
+    module.add_function(wrap_pyfunction!(conversation_store_contract_version, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_conversation_append_event, module)?)?;
+    module.add_function(wrap_pyfunction!(sqlite_conversation_history, module)?)?;
     module.add_function(wrap_pyfunction!(run_transition, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_admit, module)?)?;
     module.add_function(wrap_pyfunction!(sqlite_run_load_latest, module)?)?;

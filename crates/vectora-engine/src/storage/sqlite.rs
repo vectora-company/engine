@@ -8,7 +8,12 @@ use serde_json::Value;
 use thiserror::Error;
 
 mod backup;
+mod conversation;
 pub use backup::{BackupReport, verify_backup};
+pub use conversation::{
+    CONVERSATION_STORE_CONTRACT_VERSION, ConversationCursor, ConversationEventDraft,
+    ConversationHistoryPage, ConversationStoreError,
+};
 
 const SCHEMA_VERSION: i64 = 8;
 pub const CHECKPOINT_VERSION: u16 = 1;
