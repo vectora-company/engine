@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use futures_util::StreamExt;
-use reqwest::{Client, Response, header};
+use reqwest::{Client, Response, header, multipart::Form};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::time::{Instant, timeout_at};
@@ -172,6 +172,33 @@ impl ProviderHttpClient {
             .read_body(response, deadline, self.max_response_bytes)
             .await?;
         serde_json::from_slice(&bytes).map_err(|_| LlmError::InvalidResponse)
+    }
+
+    pub(crate) async fn post_multipart(&self, path: &str, form: Form) -> Result<Vec<u8>, LlmError> {
+        let endpoint = self.endpoint(path)?;
+        let deadline = Instant::now() + self.total_timeout;
+        let mut request = self.client.post(endpoint).multipart(form);
+        if let Some(api_key) = &self.api_key {
+            request = request.header(header::AUTHORIZATION, api_key.clone());
+        }
+        for (name, value) in &self.headers {
+            request = request.header(name, value);
+        }
+        let response = timeout_at(deadline, request.send())
+            .await
+            .map_err(|_| LlmError::Timeout)?
+            .map_err(|error| {
+                if error.is_timeout() {
+                    LlmError::Timeout
+                } else {
+                    LlmError::Connection
+                }
+            })?;
+        if !response.status().is_success() {
+            return Err(self.http_error(response, deadline).await);
+        }
+        self.read_body(response, deadline, self.max_response_bytes)
+            .await
     }
 
     fn endpoint(&self, path: &str) -> Result<Url, LlmError> {

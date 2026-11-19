@@ -906,6 +906,11 @@ def rerank_contract_version() -> int:
     return _native.rerank_contract_version()
 
 
+def transcription_contract_version() -> int:
+    """Return the version of the shared batch transcription contract."""
+    return _native.transcription_contract_version()
+
+
 async def embed(settings: JsonObject, request: JsonObject) -> dict[str, Any]:
     """Create embeddings with the canonical Rust provider implementation."""
     result = await _native.embed(
@@ -937,6 +942,20 @@ async def fallback_rerank(settings: JsonObject, request: JsonObject) -> dict[str
     """Rerank using caller-ordered quota fallback candidates."""
     result = await _native.fallback_rerank(
         json.dumps(settings, separators=(",", ":")),
+        json.dumps(request, separators=(",", ":")),
+    )
+    return json.loads(result)
+
+
+async def transcribe_ephemeral(
+    settings: JsonObject,
+    request: JsonObject,
+    *,
+    media_context: MediaExecutionContext | None = None,
+) -> dict[str, Any]:
+    """Transcribe one consumer-owned temporary audio/video asset."""
+    result = await _native.transcribe_ephemeral(
+        _media_settings(settings, media_context),
         json.dumps(request, separators=(",", ":")),
     )
     return json.loads(result)

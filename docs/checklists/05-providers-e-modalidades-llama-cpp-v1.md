@@ -22,18 +22,18 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
 
 ## Operações por modalidade
 
-| Estado   | Operação                   | Critério/gap                                                                                                                                                           |
-| -------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| feito    | Chat e stream              | Fixtures de protocolos; fallback explícito e sem troca após saída parcial.                                                                                             |
-| parcial  | Decision Model             | Choice/score/noul; mídia efêmera valida bytes/quantidade e modalidades do modelo com override do consumidor; smoke real ainda pendente.                                |
-| parcial  | Visão e imagens de entrada | Requests efêmeros com asset map e orçamento compartilhado; metadata `/v1/models` pode ser convertida explicitamente. Falta catálogo automático confiável e smoke real. |
-| parcial  | Entrada de áudio           | OpenAI Responses serializa WAV/MP3 como `input_audio`; capability permanece desconhecida até metadata por modelo ou override explícito. Falta smoke real.              |
-| pendente | Geração de imagem          | Sem contrato/provider geral implementado.                                                                                                                              |
-| parcial  | TTS                        | Áudio bufferizado e streaming pelo llama-server; verificar servidor/modelo real e completar conformidade operacional.                                                  |
-| parcial  | STT/transcrição            | Realtime pelo llama-server. Batch STT genérico não implementado; STT local de sistema pertence ao consumidor.                                                          |
-| parcial  | Vídeo                      | Tipos multimodais e entrada via API coberta não significam operações gerais de vídeo, ingestão ou geração.                                                             |
-| parcial  | Embeddings                 | Texto nos adapters declarados; multimodal via asset map do llama-server com orçamento compartilhado entre inputs. Falta smoke de modelo real e catálogo confiável.     |
-| parcial  | Rerank                     | Cohere, Voyage, OpenRouter e llama-server textual; rerank efêmero de texto/imagem compartilha orçamento entre query e documentos. Falta smoke real.                    |
+| Estado   | Operação                   | Critério/gap                                                                                                                                                                                                                                                                                                |
+| -------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| feito    | Chat e stream              | Fixtures de protocolos; fallback explícito e sem troca após saída parcial.                                                                                                                                                                                                                                  |
+| parcial  | Decision Model             | Choice/score/noul; mídia efêmera valida bytes/quantidade e modalidades do modelo com override do consumidor; smoke real ainda pendente.                                                                                                                                                                     |
+| parcial  | Visão e imagens de entrada | Requests efêmeros com asset map e orçamento compartilhado; metadata `/v1/models` pode ser convertida explicitamente. Falta catálogo automático confiável e smoke real.                                                                                                                                      |
+| parcial  | Entrada de áudio           | OpenAI Responses serializa WAV/MP3 como `input_audio`; capability permanece desconhecida até metadata por modelo ou override explícito. Falta smoke real.                                                                                                                                                   |
+| pendente | Geração de imagem          | Sem contrato/provider geral implementado.                                                                                                                                                                                                                                                                   |
+| parcial  | TTS                        | Áudio bufferizado e streaming pelo llama-server; verificar servidor/modelo real e completar conformidade operacional.                                                                                                                                                                                       |
+| parcial  | STT/transcrição            | Realtime pelo llama-server existe. Batch OpenAI-compatible `/v1/audio/transcriptions` está no core e bindings; fixtures Rust/Python/Node cobrem sucesso, 429/Retry-After sem vazar corpo e tamanho máximo da resposta. Smoke de provider/modelo real pendente. STT local de sistema pertence ao consumidor. |
+| parcial  | Vídeo                      | Tipos multimodais e entrada via API coberta não significam operações gerais de vídeo, ingestão ou geração.                                                                                                                                                                                                  |
+| parcial  | Embeddings                 | Texto nos adapters declarados; multimodal via asset map do llama-server com orçamento compartilhado entre inputs. Falta smoke de modelo real e catálogo confiável.                                                                                                                                          |
+| parcial  | Rerank                     | Cohere, Voyage, OpenRouter e llama-server textual; rerank efêmero de texto/imagem compartilha orçamento entre query e documentos. Falta smoke real.                                                                                                                                                         |
 
 ## Contratos transversais
 
@@ -69,12 +69,20 @@ Estados: `feito`, `parcial`, `revisar` e `pendente`.
       resultados da execução atual.
 - [ ] Completar conformidade compartilhada de erros, cancelamento, stream,
       autenticação e redaction entre Rust, Python e TypeScript.
+- [x] Batch transcription: multipart OpenAI `/v1/audio/transcriptions`, asset
+      efêmero validado e resposta tipada em Rust/Python/TypeScript.
+- [x] Fixtures Rust/Python/Node, build, typecheck, lint e suíte local.
+- [x] Cliente batch: `429` preserva `Retry-After` sem expor corpo do provider;
+      `max_response_bytes` é respeitado no body da resposta (testes HTTP locais Rust).
+- [ ] Smoke opt-in contra endpoint/modelo real; avaliar erros e limites de
+      resposta sem credenciais no log.
 
 ## Verificação por mudança
 
-- [ ] Rust: fmt, Clippy, testes unitários/fixtures e integração configurada.
-- [ ] Python: build da binding, pytest, Ruff e `ty`.
-- [ ] TypeScript: build, typecheck, Oxlint e testes Node.
+- [x] Rust: fmt, Clippy, testes unitários/fixtures.
+- [ ] Integração real configurada quando endpoint autorizado estiver disponível.
+- [x] Python: build da binding, pytest, Ruff e `ty`.
+- [x] TypeScript: build, typecheck, Oxlint e testes Node.
 - [ ] Revisar payloads/fixtures para não conter credenciais, bytes reais ou
       dados sensíveis.
-- [ ] Atualizar plano, spec, análise, este checklist e índices afetados.
+- [x] Atualizar plano, spec, análise, este checklist e índices afetados.

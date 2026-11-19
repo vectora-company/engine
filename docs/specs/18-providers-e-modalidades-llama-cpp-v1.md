@@ -189,6 +189,7 @@ documenta:
 | Imagem/áudio/vídeo de entrada | Partes `image_url`, `input_audio` e `input_video` em chat; formatos de entrada multimodais também em `/v1/embeddings`. Vídeo depende de FFmpeg; áudio de entrada aceita formatos do miniaudio.                                                                            | Mapear somente bytes/assets que o host autorizou e materializou. Não encaminhar URL remota nem `file://` para o servidor por padrão: isso delegaria acesso à rede/FS ao processo externo.                                                                                           |
 | TTS                           | `/v1/audio/speech` e `/tts`; saída WAV/PCM, streams de áudio; voz e sample rate dependem do modelo                                                                                                                                                                        | API `SpeechSynthesis`; resposta binária e metadados de formato/sample rate; não assumir MP3, 24 kHz ou vozes OpenAI.                                                                                                                                                                |
 | Áudio realtime / transcrição  | WebSocket `/v1/realtime`, PCM16 e eventos; sessão pode ser transcription ou conversation                                                                                                                                                                                  | API de sessão realtime/ASR com eventos tipados, cancelamento e backpressure. Não rotular como upload STT batch.                                                                                                                                                                     |
+| STT batch OpenAI-compatible   | `POST /v1/audio/transcriptions` multipart, asset temporário, modelo e opções tipadas                                                                                                                                                                                      | Implementado no core Rust e bindings. Não faz retry automático; validar serviço/modelo real em smoke opt-in.                                                                                                                                                                        |
 | Embeddings                    | `/v1/embeddings`, inclusive conteúdo multimodal para modelos habilitados                                                                                                                                                                                                  | Usar contrato de embeddings com extensão de entrada multimodal versionada; conservar ordem/dimensões.                                                                                                                                                                               |
 | Rerank                        | `--rerank` habilita `/reranking`, `/rerank`, `/v1/rerank` e `/v1/reranking`; aceita formatos Jina/TEI, top_n e pares com score. Jina também admite texto/imagem para rerankers compatíveis.                                                                               | Rerank textual usa `documents` no formato Jina e o contrato comum; preserva índice/ordem e score em [0,1]. A extensão multimodal é efêmera, aceita texto e imagens via asset map e requer capacidade declarada pelo modelo; URLs remotas e bytes inline persistíveis são recusados. |
 | Geração de imagem             | Não consta como operação do `llama-server` v1.0.0                                                                                                                                                                                                                         | Não suportada por este adapter; contrato Engine deve permitir provider distinto quando houver backend real.                                                                                                                                                                         |
@@ -273,7 +274,7 @@ Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama
 - **Llama-server v1.0.0:** health/discovery, chat, Decision Model, embeddings, rerank, TTS bufferizado/streaming e realtime. A lista de modalidades devolvida pelo servidor é metadata, não garantia de suporte do modelo. A Engine oferece conversor explícito para o resolver multimodal; não consulta nem atualiza esse catálogo automaticamente.
 - **Laya standalone:** SystemOne para health/Decision Model de texto, com checkpoints Laya próprios ou roteamento do servidor; distinto do runtime llama-server. Smoke real requer serviço/checkpoint configurados.
 - **Mídia:** requests persistíveis e efêmeros separados; bytes resolvidos pelo asset map. Ver [spec de mídia](17-midia-no-chat.md) para ownership, MIME, digest e limites.
-- **Ausente ou incompleto:** geração de imagem, batch STT genérico, operações gerais de vídeo, catálogo confiável de modalidades/limites e matriz de smoke tests reais.
+- **Ausente ou incompleto:** geração de imagem, STT dedicado para outros providers, operações gerais de vídeo, catálogo confiável de modalidades/limites e matriz de smoke tests reais.
 
 ## Ordem por dependência
 
@@ -281,7 +282,7 @@ Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama
 2. Fechar conformidade de erros, autenticação, cancelamento, stream, redaction e limites entre Rust/Python/TypeScript.
 3. Completar catálogo de modalidade/limites; ampliar limites de duração e
    resolução e cobrir operações multimodais adicionais que exponham assets.
-4. Implementar operações ausentes somente após contrato e endpoint verificáveis; começar por geração de imagem, batch STT e vídeo conforme a prioridade da EPIC.
+4. Implementar operações ausentes somente após contrato e endpoint verificáveis; continuar por geração de imagem, outros perfis de STT e vídeo conforme a prioridade da EPIC.
 5. Executar smoke tests opt-in com versões fixadas e consolidar gates de distribuição/adoção no plano geral.
 
 ## Fora do escopo presumido
@@ -300,8 +301,10 @@ Fontes fixadas: [API embeddings da tag v1.0.0](https://github.com/ggml-org/llama
   operação; lacunas visíveis nos dois bindings.
 - llama.cpp v1.0.0 fixado e coberto em `llama-server`; chat, discovery,
   `systemone`, TTS/realtime ASR e entradas multimodais têm contratos próprios.
-- Imagem gerada, batch STT e qualquer API ausente na v1.0.0 ficam marcadas como
-  não suportadas por esse adapter até existir implementação e evidência.
+- Imagem gerada e qualquer API ausente na v1.0.0 ficam marcadas como não
+  suportadas por esse adapter até existir implementação e evidência. Batch STT
+  OpenAI-compatible possui contrato próprio, sem alegar que seja endpoint de
+  `llama-server` nem cobertura de outros providers.
 - Falhas de auth, modalidade, payload, tamanho, cancelamento e stream são
   testadas sem credenciais externas e com integração real opt-in.
 - Nenhuma implementação de regra ou transporte paralela em Python/TypeScript.
@@ -320,3 +323,19 @@ integração com modelo real requer smoke test configurado.
 ## Sessão realtime de áudio
 
 `/v1/realtime` é WebSocket e tem contrato de ciclo de vida próprio. O cliente da Engine suporta `intent=transcription` e a sessão default de conversa, PCM16 mono em chunks base64, `input_audio_buffer.commit` final/não final, `session.update` para sample rate entre 8–192 kHz, eventos JSON preservados e fechamento/cancelamento pelo host. Sem override, a taxa é model-native e precisa ser lida de `session.created`; a Engine não presume 24 kHz. O host pode enviar eventos nativos de conversa, como mensagens, `response.create` e `response.cancel`. Eventos desconhecidos, inclusive `error`, preservam campos para o consumidor. Requests de controle são efêmeros; batch STT não é inferido dessa API. A cobertura está registrada no plano e checklist desta capability.
+
+## STT batch OpenAI-compatible
+
+`TranscriptionClient` implementa `POST /v1/audio/transcriptions` com asset
+resolvido exclusivamente pelo mapa efêmero do consumidor. O core valida
+versão/modelo/opções, digest, MIME, orçamento de mídia e teto de 25 MiB do
+provider; aceita JSON, verbose JSON, diarized JSON, texto, SRT e VTT, com
+timestamps/chunking quando aplicáveis. A resposta preserva campos adicionais;
+respostas estruturadas validam duração e intervalos. Requisições não são
+repetidas automaticamente, pois o resultado remoto pode ser incerto após uma
+falha de transporte. O corpo de erro do provider não é exposto: o status é
+classificado em erro tipado e `Retry-After` é preservado para rate limit. O
+cliente limita a resposta pelo `max_response_bytes` da configuração HTTP. Rust
+tem fixtures unitárias e testes HTTP locais; Python/Node têm testes HTTP locais
+pelos bindings. Isso não comprova funcionamento de credenciais, modelos ou
+gateways reais.

@@ -114,6 +114,8 @@ from vectora_engine import (
     tool_policy_contract_version,
     tool_result_contract_version,
     tool_result_to_chat_message,
+    transcribe_ephemeral,
+    transcription_contract_version,
     transition_run,
     validate_storage_selection,
     vector_store_search_filtered,
@@ -1752,6 +1754,66 @@ def test_llama_server_speech_streams_are_incremental_and_preserve_metadata() -> 
 def test_embedding_and_rerank_contract_versions_match_rust_core() -> None:
     assert embedding_contract_version() == 1
     assert rerank_contract_version() == 1
+    assert transcription_contract_version() == 1
+
+
+def test_batch_transcription_binding_sends_ephemeral_asset() -> None:
+    audio = b"RIFF\x08\x00\x00\x00WAVEfmt "
+    captured: dict[str, Any] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            captured["path"] = self.path
+            captured["authorization"] = self.headers.get("Authorization")
+            captured["content_type"] = self.headers.get("Content-Type", "")
+            captured["body"] = self.rfile.read(int(self.headers["Content-Length"]))
+            body = b'{"text":"ol\xc3\xa1","language":"pt"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = asyncio.run(
+            transcribe_ephemeral(
+                {
+                    "protocol": "open_ai_compatible",
+                    "settings": {
+                        "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                    },
+                },
+                {
+                    "contract_version": 1,
+                    "model": "whisper-fixture",
+                    "media_ref": {
+                        "asset_id": "audio-1",
+                        "sha256": hashlib.sha256(audio).hexdigest(),
+                        "mime_type": "audio/wav",
+                        "size_bytes": len(audio),
+                        "name": "voice.wav",
+                    },
+                    "response_format": "json",
+                },
+                media_context=MediaExecutionContext({"audio-1": audio}),
+            )
+        )
+        assert result["text"] == "olá"
+        assert captured["path"] == "/v1/audio/transcriptions"
+        assert "multipart/form-data; boundary=" in captured["content_type"]
+        assert b'filename="voice.wav"' in captured["body"]
+        assert b"whisper-fixture" in captured["body"]
+        assert audio in captured["body"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_run_lifecycle_contract_is_exposed_through_python_binding() -> None:

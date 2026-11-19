@@ -317,6 +317,60 @@ export interface RerankSettings {
   settings: ProviderHttpSettings;
 }
 
+export type TranscriptionProtocol = "open_ai" | "open_ai_compatible";
+export interface TranscriptionSettings {
+  protocol: TranscriptionProtocol;
+  settings: ProviderHttpSettings;
+  media_context?: MediaExecutionContext;
+}
+export type TranscriptionResponseFormat =
+  "json" | "text" | "srt" | "verbose_json" | "vtt" | "diarized_json";
+export type TimestampGranularity = "segment" | "word";
+export type TranscriptionChunkingStrategy =
+  | { type: "auto" }
+  | {
+      type: "server_vad";
+      prefix_padding_ms?: number;
+      silence_duration_ms?: number;
+      threshold?: number;
+    };
+export interface TranscriptionRequest {
+  contract_version: number;
+  model: string;
+  media_ref: MediaRef;
+  language?: string;
+  prompt?: string;
+  temperature?: number;
+  response_format?: TranscriptionResponseFormat;
+  timestamp_granularities?: TimestampGranularity[];
+  chunking_strategy?: TranscriptionChunkingStrategy;
+}
+export interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
+  id?: number;
+  speaker_id?: string;
+}
+export interface TranscriptionWord {
+  start: number;
+  end: number;
+  word: string;
+  speaker_id?: string;
+}
+export interface TranscriptionResponse {
+  contract_version: number;
+  response_format: TranscriptionResponseFormat;
+  /** Text/SRT/VTT formats preserve the complete provider body here. */
+  text: string;
+  language?: string;
+  duration_seconds?: number;
+  segments: TranscriptionSegment[];
+  words: TranscriptionWord[];
+  usage?: JsonValue;
+  [key: string]: unknown;
+}
+
 export interface EmbeddingRequest {
   contract_version: number;
   model: string;
@@ -1013,10 +1067,15 @@ interface NativeBinding {
   ): string;
   embeddingContractVersion(): number;
   rerankContractVersion(): number;
+  transcriptionContractVersion(): number;
   embed(settingsJson: string, requestJson: string): Promise<string>;
   fallbackEmbed(settingsJson: string, requestJson: string): Promise<string>;
   rerank(settingsJson: string, requestJson: string): Promise<string>;
   fallbackRerank(settingsJson: string, requestJson: string): Promise<string>;
+  transcribeEphemeral(
+    settingsJson: string,
+    requestJson: string,
+  ): Promise<string>;
   chatContractVersion(): number;
   chatAssembleTurn(settingsJson: string, eventsJson: string): string;
   chatPrepareContent(
@@ -2355,6 +2414,24 @@ export async function fallbackRerank(
       JSON.stringify(request),
     ),
   ) as RerankResponse;
+}
+
+/** Version of the shared Rust batch transcription contract. */
+export const transcriptionContractVersion = (): number =>
+  native.transcriptionContractVersion();
+
+/** Transcribe a temporary asset using the consumer-owned asset map. */
+export async function transcribeEphemeral(
+  settings: TranscriptionSettings,
+  request: TranscriptionRequest,
+  mediaContext?: MediaExecutionContext,
+): Promise<TranscriptionResponse> {
+  return JSON.parse(
+    await native.transcribeEphemeral(
+      encodeMediaSettings(settings, mediaContext),
+      JSON.stringify(request),
+    ),
+  ) as TranscriptionResponse;
 }
 
 /** Version of the canonical Rust chat contract. */

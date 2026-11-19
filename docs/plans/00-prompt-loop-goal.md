@@ -13,6 +13,11 @@ e [`docs/analyses/00-analise-e-referencias-de-desenvolvimento.md`](../analyses/0
 Para a próxima capability incompleta, leia também sua spec, plano, checklist e
 análise específicos, indexados em [`docs/README.md`](../README.md) e
 [`docs/goal-loop/README.md`](../goal-loop/README.md).
+Para Harness, identidade do host, tools, sandbox, memória, subagentes e
+navegação, use também [`docs/specs/21-harness-tools-identidade-e-isolamento.md`](../specs/21-harness-tools-identidade-e-isolamento.md),
+[`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](09-plano-runtime-tools-identidade-e-isolamento.md),
+[`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](../checklists/09-runtime-tools-identidade-e-isolamento.md)
+e [`docs/analyses/09-runtime-tools-vectora.md`](../analyses/09-runtime-tools-vectora.md).
 
 No início de cada sessão, confirme checkout, branch, alterações locais e
 remote. Preserve mudanças locais alheias ao escopo. Ao entregar cada etapa,

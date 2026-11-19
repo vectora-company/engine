@@ -32,6 +32,10 @@ cronológica de PRs.
 - Storage e ledger: [`docs/specs/02-storage-memoria-contexto-rag.md`](specs/02-storage-memoria-contexto-rag.md),
   [`docs/plans/04-plano-storage-ledger.md`](plans/04-plano-storage-ledger.md)
   e [`docs/analyses/05-auditoria-storage-s0-s5.md`](analyses/05-auditoria-storage-s0-s5.md).
+- Harness, tools e isolamento: [`docs/specs/21-harness-tools-identidade-e-isolamento.md`](specs/21-harness-tools-identidade-e-isolamento.md),
+  [`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](plans/09-plano-runtime-tools-identidade-e-isolamento.md),
+  [`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](checklists/09-runtime-tools-identidade-e-isolamento.md)
+  e [`docs/analyses/09-runtime-tools-vectora.md`](analyses/09-runtime-tools-vectora.md).
 
 ## Operação de desenvolvimento
 
@@ -92,6 +96,7 @@ cronológica de PRs.
 - [Loop de desenvolvimento](plans/05-loop-de-desenvolvimento.md)
 - [`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md): plano ativo de providers e modalidades com referência llama.cpp v1.0.0.
 - [`docs/plans/07-plano-storage-grafos-falkordb.md`](plans/07-plano-storage-grafos-falkordb.md): plano da capability graph, conformidade observada e limites de TLS/cancelamento.
+- [`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](plans/09-plano-runtime-tools-identidade-e-isolamento.md): sequência de durabilidade, identidade host, tools, sandbox, plano, memória, subagentes e navegação.
 
 ## Documentação pública
 

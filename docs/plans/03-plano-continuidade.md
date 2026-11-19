@@ -24,6 +24,12 @@ para o charter 1.0 é cobrir uma jornada de agente utilizável de ponta a ponta:
   híbrida e rerank;
 - APIs Rust, Python e TypeScript com fixtures de conformidade, distribuição
   suportada, compatibilidade/versionamento e documentação operacional;
+- tools reutilizáveis de filesystem, Git, shell, planejamento e navegação, com
+  capabilities concedidas pelo host, sandbox efetivo reportado, execução
+  persistida, memória com proveniência e delegação segura a subagentes;
+- identidade configurável pelos consumidores: a Engine aceita contexto e
+  descriptor versionados, mas não possui Souls, contas, credenciais, catálogo
+  de produto ou UX;
 - testes de falha, reinício, concorrência, segurança e adoção reversível em
   consumidores reais.
 
@@ -41,28 +47,40 @@ trabalho independente.
 
 ## Estado verificado
 
-| Capability                                                                                        | Estado                                                                                                                                                                                                                                                                                       | Evidência                                                                                                             |
-| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Chat OpenAI-compatible, OpenAI Responses, Anthropic, Gemini, Cohere, Ollama, OpenRouter, fallback | Implementada (experimental), bindings Python e TypeScript                                                                                                                                                                                                                                    | `chat/openai_compatible.rs`, `chat/native_providers.rs`, `chat/fallback.rs`; fixtures e bindings                      |
-| Embeddings e rerank com fallback por quota                                                        | Implementada (experimental)                                                                                                                                                                                                                                                                  | `llm/embeddings.rs`, `llm/rerank.rs`; testes Python                                                                   |
-| Run lifecycle, dispatch, policy/aprovação, loop modelo/tool, gates de verificação                 | Implementada no core e nos bindings                                                                                                                                                                                                                                                          | `harness/*.rs`, `harness/model_tool_loop.rs`, `harness/policy.rs`, `harness/verification.rs`                          |
-| Stores SQLite de lifecycle, loop e policy                                                         | Implementada                                                                                                                                                                                                                                                                                 | `storage/sqlite_run.rs`, `sqlite_loop.rs`, `sqlite_policy.rs`                                                         |
-| Ledger SQLite: idempotência, conflito de versão, multiprocesso, restart                           | Implementada                                                                                                                                                                                                                                                                                 | `storage/sqlite.rs` (`multiprocess_child_writer`, `concurrent_appends_with_same_expected_version_commit_exactly_one`) |
-| Backup/restore SQLite online e offline coordenado                                                 | Implementada                                                                                                                                                                                                                                                                                 | `storage/sqlite/backup.rs` (`backup_online`, `backup_offline`, `verify_backup`, `restore`)                            |
-| Projeção PostgreSQL com SQLite como autoridade                                                    | Parcial: projeção de eventos/checkpoints/reservas/admissions, rebuild idempotente e rejeição de divergências estão integrados; concorrência entre dois projetores no mesmo processo também foi verificada. Migrations versionadas com rollback e concorrência multiprocesso seguem pendentes | `storage/resilient_ledger.rs`, `storage/sqlite*.rs`, `storage/postgres.rs`; testes de projeção e restart no ledger    |
-| Vetorial: cosseno, dimensões 1–65536, filtro de metadados, coleção ausente e dimensão divergente  | Implementada                                                                                                                                                                                                                                                                                 | `storage/vector.rs`; filtros equivalentes antes do top-k em LanceDB/Qdrant, contrato 3                                |
-| KV: TTL nativo no NATS (2.11+), CAS por revisão, incremento, prefixo, watch                       | Implementada                                                                                                                                                                                                                                                                                 | `storage/messaging.rs` (`allow_message_ttl`, `compare_and_set`, `increment`, `list_keys`, `watch`)                    |
-| Filas: retenção finita (100000), 5 tentativas, DLQ consumível                                     | Implementada                                                                                                                                                                                                                                                                                 | `storage/messaging.rs` (`max_messages`, `max_attempts`, `receive_dead_letter`)                                        |
-| Graph FalkorDB: API portátil e extensão Cypher                                                    | Implementada em Rust/Python/TypeScript; testes reais 6.0.3/TLS/AOF; cancelamento remoto não garantido                                                                                                                                                                                        | `storage/graph.rs`, spec 19 e análise 07                                                                              |
-| Relatório estático de capabilities por backend                                                    | Implementada                                                                                                                                                                                                                                                                                 | `storage/capabilities.rs`                                                                                             |
-| Snapshot de contratos para hosts TypeScript                                                       | Implementada                                                                                                                                                                                                                                                                                 | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                         |
-| Providers/modalidades: chat, Decision Model, embeddings, rerank, áudio, bindings                  | Implementado parcialmente; Decision Model é categoria, Jev é modelo, SystemOne é API e Laya é runtime independente; Responses aceita WAV/MP3 e faz fallback textual seguro para outros MIME; faltam APIs/modelos reais e operações como geração de imagem/batch STT                          | spec 18, plano 06, checklist 05                                                                                       |
-| Mídia no chat: tipos, preparação, contexto e serialização por protocolo                           | Implementada parcialmente nos três níveis; requests persistíveis/efêmeros, asset map, limites por asset/agregados, retry multimodal e input audio WAV/MP3 no OpenAI Responses; catálogo e limites de duração/resolução pendentes                                                             | `chat/media.rs`, adapters OpenAI/native/fallback; checklist `docs/checklists/04-midia-no-chat.md`                     |
+| Capability                                                                                        | Estado                                                                                                                                                                                                                                                                                                                              | Evidência                                                                                                             |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Chat OpenAI-compatible, OpenAI Responses, Anthropic, Gemini, Cohere, Ollama, OpenRouter, fallback | Implementada (experimental), bindings Python e TypeScript                                                                                                                                                                                                                                                                           | `chat/openai_compatible.rs`, `chat/native_providers.rs`, `chat/fallback.rs`; fixtures e bindings                      |
+| Embeddings e rerank com fallback por quota                                                        | Implementada (experimental)                                                                                                                                                                                                                                                                                                         | `llm/embeddings.rs`, `llm/rerank.rs`; testes Python                                                                   |
+| Run lifecycle, dispatch, policy/aprovação, loop modelo/tool, gates de verificação                 | Implementada no core e nos bindings                                                                                                                                                                                                                                                                                                 | `harness/*.rs`, `harness/model_tool_loop.rs`, `harness/policy.rs`, `harness/verification.rs`                          |
+| Stores SQLite de lifecycle, loop e policy                                                         | Implementada                                                                                                                                                                                                                                                                                                                        | `storage/sqlite_run.rs`, `sqlite_loop.rs`, `sqlite_policy.rs`                                                         |
+| Ledger SQLite: idempotência, conflito de versão, multiprocesso, restart                           | Implementada                                                                                                                                                                                                                                                                                                                        | `storage/sqlite.rs` (`multiprocess_child_writer`, `concurrent_appends_with_same_expected_version_commit_exactly_one`) |
+| Backup/restore SQLite online e offline coordenado                                                 | Implementada                                                                                                                                                                                                                                                                                                                        | `storage/sqlite/backup.rs` (`backup_online`, `backup_offline`, `verify_backup`, `restore`)                            |
+| Projeção PostgreSQL com SQLite como autoridade                                                    | Parcial: projeção de eventos/checkpoints/reservas/admissions, rebuild idempotente e rejeição de divergências estão integrados; concorrência entre dois projetores no mesmo processo também foi verificada. Migrations versionadas com rollback e concorrência multiprocesso seguem pendentes                                        | `storage/resilient_ledger.rs`, `storage/sqlite*.rs`, `storage/postgres.rs`; testes de projeção e restart no ledger    |
+| Vetorial: cosseno, dimensões 1–65536, filtro de metadados, coleção ausente e dimensão divergente  | Implementada                                                                                                                                                                                                                                                                                                                        | `storage/vector.rs`; filtros equivalentes antes do top-k em LanceDB/Qdrant, contrato 3                                |
+| KV: TTL nativo no NATS (2.11+), CAS por revisão, incremento, prefixo, watch                       | Implementada                                                                                                                                                                                                                                                                                                                        | `storage/messaging.rs` (`allow_message_ttl`, `compare_and_set`, `increment`, `list_keys`, `watch`)                    |
+| Filas: retenção finita (100000), 5 tentativas, DLQ consumível                                     | Implementada                                                                                                                                                                                                                                                                                                                        | `storage/messaging.rs` (`max_messages`, `max_attempts`, `receive_dead_letter`)                                        |
+| Graph FalkorDB: API portátil e extensão Cypher                                                    | Implementada em Rust/Python/TypeScript; testes reais 6.0.3/TLS/AOF; cancelamento remoto não garantido                                                                                                                                                                                                                               | `storage/graph.rs`, spec 19 e análise 07                                                                              |
+| Relatório estático de capabilities por backend                                                    | Implementada                                                                                                                                                                                                                                                                                                                        | `storage/capabilities.rs`                                                                                             |
+| Snapshot de contratos para hosts TypeScript                                                       | Implementada                                                                                                                                                                                                                                                                                                                        | `bindings/typescript/src/index.ts` (`engineContractSnapshot`)                                                         |
+| Providers/modalidades: chat, Decision Model, embeddings, rerank, áudio, bindings                  | Implementado parcialmente; Decision Model é categoria, Jev é modelo, SystemOne é API e Laya é runtime independente; Responses aceita WAV/MP3 e faz fallback textual seguro; batch STT OpenAI-compatible está no core e bindings com fixtures locais, sem smoke de provider real; geração de imagem e APIs dedicadas de vídeo faltam | spec 18, plano 06, checklist 05                                                                                       |
+| Mídia no chat: tipos, preparação, contexto e serialização por protocolo                           | Implementada parcialmente nos três níveis; requests persistíveis/efêmeros, asset map, limites por asset/agregados, retry multimodal e input audio WAV/MP3 no OpenAI Responses; catálogo e limites de duração/resolução pendentes                                                                                                    | `chat/media.rs`, adapters OpenAI/native/fallback; checklist `docs/checklists/04-midia-no-chat.md`                     |
+| Harness de tools/identidade/isolamento                                                            | Parcial em contratos: tool loop, schemas, policy snapshots, approvals e stores SQLite existem; filesystem/Git/shell broker, identidade host versionada, sandbox executável, planos de alto nível, memória portável, subagentes e deep search não existem como capabilities comuns                                                   | specs 01/10/12/13/16; auditoria Vectora `docs/analyses/09-runtime-tools-vectora.md`                                   |
 
 Os testes service-real (Redis, NATS, Qdrant, PostgreSQL) são condicionais às
 variáveis `VECTORA_TEST_*`; sem elas contam como não executados. Evidências e
 contagens por execução estão na
 [auditoria de storage](../analyses/05-auditoria-storage-s0-s5.md).
+
+No domínio multimodal, transcrição batch via OpenAI-compatible
+`/v1/audio/transcriptions` está implementada no core e bindings: asset map
+efêmero, validação de tamanho/digest/MIME, multipart, formatos JSON/texto/
+subtítulo, classificação de rate limit sem expor corpo do provider e limite
+configurável da resposta. As fixtures Rust/Python/Node e os gates locais
+registrados na análise passaram. Falta smoke real com endpoint/modelo
+configurado; a operação não faz retry automático. Sua spec está em
+[`docs/specs/18-providers-e-modalidades-llama-cpp-v1.md`](../specs/18-providers-e-modalidades-llama-cpp-v1.md)
+e o plano em
+[`docs/plans/06-plano-provedores-e-modalidades-llama-cpp-v1.md`](06-plano-provedores-e-modalidades-llama-cpp-v1.md).
 
 ## Decisões vigentes
 
@@ -221,16 +239,31 @@ Origem: [spec 01](../specs/01-runtime-agentico-e-harness.md) e
 4. Ligação automática lifecycle, loop e policy (revalidação antes de cada
    efeito).
 5. Hooks pre-tool, post-tool e pre-final; Plan Mode; subagentes com escopo e
-   orçamento derivados; contrato de isolamento/sandbox. **[D]** segurança.
+   orçamento derivados; contrato de isolamento/sandbox.
 6. Decision Models. **[D]**.
 7. Redaction e fixtures de dois perfis de consumidor.
+8. Implementar tools portáveis filesystem/Git/shell, plano persistente,
+   “remember” com proveniência e execução de subagentes com parent ID; usar
+   grants derivados da policy e APIs do host para efeitos.
+9. Implementar pesquisa/navegação profunda bounded, com adapter de busca/fetch,
+   proveniência e validação SSRF em cada URL/redirect/link.
+10. Aceitar descriptor de identidade/Soul configurado pelo host, versionado e
+    escopado, sem manter conteúdo, contas ou credenciais de produto na Engine.
+
+O contrato, o plano ordenado, checklist e análise da expansão estão em
+[`docs/specs/21-harness-tools-identidade-e-isolamento.md`](../specs/21-harness-tools-identidade-e-isolamento.md),
+[`docs/plans/09-plano-runtime-tools-identidade-e-isolamento.md`](09-plano-runtime-tools-identidade-e-isolamento.md),
+[`docs/checklists/09-runtime-tools-identidade-e-isolamento.md`](../checklists/09-runtime-tools-identidade-e-isolamento.md)
+e [`docs/analyses/09-runtime-tools-vectora.md`](../analyses/09-runtime-tools-vectora.md).
 
 ### Fase 5 — memória, contexto e RAG
 
 Origem: spec 02 (fase S5 do plano de storage). Contratos de memória,
 documento, chunk e proveniência; Context Planner determinístico; compactação
 que preserva unidades; indexação com falha visível e RAG opt-in (lexical,
-híbrido, rerank). **[D]** dados e segurança. Depende das fases 2 e 3.
+híbrido, rerank). Memória episódica/semântica precisa de proveniência, escopo,
+sensibilidade, validade, revisão e deleção, conforme spec 21. Depende das fases
+2 e 3.
 
 ### Storage de grafos FalkorDB
 
@@ -265,7 +298,11 @@ por capacidade estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../spec
    **[D]** política de versão.
 5. Medições reproduzíveis por SHA (latência, memória, throughput, custo,
    recuperação).
-6. Completar operações ainda ausentes do [plano de providers](06-plano-provedores-e-modalidades-llama-cpp-v1.md), como geração de imagem, batch STT e vídeo, após contrato e evidência de endpoint/modelo.
+6. Batch STT OpenAI-compatible `/v1/audio/transcriptions`: core e bindings
+   implementados; fixtures Rust/Python/Node, limites de resposta e classificação
+   de erro cobertos. Resta smoke real e sincronização contínua dos registros.
+   Geração de imagem e vídeo dedicado
+   permanecem pendentes até haver contrato e evidência de endpoint.
 
 ## Gates de adoção e release
 
