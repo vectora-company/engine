@@ -3,7 +3,7 @@
 **Atualizada em:** 2026-11-17
 **Plano:** [`docs/plans/conversation-events.md`](../plans/conversation-events.md)
 **Spec:** [`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md)
-**Checkout examinado:** `/home/brunosrz/Área de trabalho/engine`, branch `feat/versioned-conversation-events`, antes do commit
+**Checkout examinado:** `/home/brunosrz/Área de trabalho/engine`, branch `feat/conversation-event-bindings`, sobre `feat/versioned-conversation-events` (PR #158)
 
 ## Pergunta
 
@@ -41,7 +41,12 @@ replay e não são necessárias para o envelope em memória.
 
 ## Limites
 
-Os testes unitários estão no código, mas não foram executados localmente por
-solicitação do mantenedor. A validação não prova serialização cross-language,
-persistência, ordenação real, redaction ou replay. A entrega deve permanecer
-marcada parcial até bindings e integração com ledger terem checks verdes.
+O binding Python e o binding TypeScript/Node encaminham a validação ao mesmo
+core Rust; uma fixture compartilhada cobre eventos válidos e inválidos nos
+testes Rust, Python e Node. Os testes estão escritos, mas não foram executados
+localmente por solicitação do mantenedor. Os checks remotos desta nova etapa
+precisam ser consultados no SHA publicado antes de declarar conformidade.
+
+A validação não prova persistência, ordenação atribuída pela store, redaction
+ou replay. A etapa permanece parcial até os checks publicados passarem e a
+integração durável com admission/ledger ser implementada.

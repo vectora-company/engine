@@ -545,6 +545,18 @@ def validate_host_identity_context(
     )
 
 
+def conversation_event_contract_version() -> int:
+    """Return the version of the canonical conversation event contract."""
+    return _native.conversation_event_contract_version()
+
+
+def validate_conversation_event(event: JsonObject) -> dict[str, Any]:
+    """Validate a transport-independent event using the canonical Rust core."""
+    return json.loads(
+        _native.validate_conversation_event(json.dumps(event, separators=(",", ":")))
+    )
+
+
 async def sqlite_run_load_latest(
     path: str, scope: str, run_id: str
 ) -> dict[str, Any] | None:

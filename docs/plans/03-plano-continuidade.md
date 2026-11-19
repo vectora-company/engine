@@ -226,10 +226,12 @@ e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
 1. **Parcial:** envelope Rust v1 (`ConversationEvent`) com event/conversation/
    turn/run/step IDs, sequência, timestamp, origem e payloads tipados; validação
-   estrutural e testes unitários adicionados. Os testes não foram executados
-   localmente nesta etapa por solicitação do mantenedor. Faltam exposição pelos
-   bindings, sequência atribuída pela store, persistência e fixtures entre
-   linguagens. Evidência: `crates/vectora-engine/src/harness/events.rs`.
+   estrutural; bindings Python e TypeScript encaminham ao mesmo validador Rust;
+   fixture comum cobre casos válidos e inválidos nos três níveis. Os testes
+   foram adicionados, mas não executados localmente por solicitação do
+   mantenedor; CI remoto pendente. Faltam sequência atribuída pela store,
+   persistência e replay. Evidência: `crates/vectora-engine/src/harness/events.rs`
+   e `tests/fixtures/conversation-events-v1.json`.
 2. Gaps representáveis e replay por cursor com reconexão sem duplicação.
 3. API de conversa/sessão, histórico paginado e projeções; admissão com
    `queued`, `blocked` e `rejected` e concorrência por conversa. **[D]**.

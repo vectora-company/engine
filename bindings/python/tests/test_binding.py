@@ -26,6 +26,7 @@ from vectora_engine import (
     chat_complete_ephemeral,
     chat_contract_version,
     chat_stream,
+    conversation_event_contract_version,
     create_run,
     embed,
     embedding_contract_version,
@@ -122,6 +123,7 @@ from vectora_engine import (
     transcribe_ephemeral,
     transcription_contract_version,
     transition_run,
+    validate_conversation_event,
     validate_host_identity_context,
     validate_storage_selection,
     validate_tool_result_output,
@@ -3991,3 +3993,17 @@ def test_host_identity_context_binding_validates_version_and_scope() -> None:
     context["grants"][0]["scope_id"] = "other"
     with pytest.raises(RuntimeError, match="capability grant is invalid"):
         validate_host_identity_context(context, now_ms=50)
+
+
+def test_conversation_event_binding_uses_versioned_rust_contract() -> None:
+    assert conversation_event_contract_version() == 1
+    fixture_path = (
+        Path(__file__).parents[3] / "tests/fixtures/conversation-events-v1.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+    for case in fixture["cases"]:
+        if case["valid"]:
+            assert validate_conversation_event(case["event"]) == case["event"]
+        else:
+            with pytest.raises(RuntimeError):
+                validate_conversation_event(case["event"])

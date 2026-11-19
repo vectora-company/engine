@@ -506,6 +506,56 @@ export interface HostIdentityContext {
   grants: CapabilityGrant[];
 }
 
+export type ConversationTerminalStatus =
+  | "completed"
+  | "degraded"
+  | "failed"
+  | "cancelled"
+  | "recovery_required";
+
+export type ConversationEventKind =
+  | { type: "turn_queued" | "turn_accepted"; data: { turn_id: string } }
+  | { type: "run_started"; data: { run_id: string } }
+  | { type: "step_started"; data: { step_id: string; capability: string } }
+  | { type: "progress"; data: { code: string } }
+  | {
+      type: "tool_call_started";
+      data: { step_id: string; tool_call_id: string; tool_name: string };
+    }
+  | {
+      type: "tool_call_finished";
+      data: { step_id: string; tool_call_id: string; succeeded: boolean };
+    }
+  | { type: "approval_requested"; data: { approval_id: string } }
+  | {
+      type: "approval_resolved";
+      data: { approval_id: string; approved: boolean };
+    }
+  | { type: "message_delta"; data: { text: string } }
+  | {
+      type: "usage_updated";
+      data: {
+        input_tokens: number;
+        output_tokens: number;
+        cost_micros?: number | null;
+      };
+    }
+  | { type: "terminal"; data: { status: ConversationTerminalStatus } };
+
+/** Versioned transport-independent conversation event; validation is structural only. */
+export interface ConversationEvent {
+  contract_version: number;
+  event_id: string;
+  conversation_id: string;
+  turn_id?: string | null;
+  run_id?: string | null;
+  step_id?: string | null;
+  sequence: number;
+  timestamp_ms: number;
+  source: string;
+  kind: ConversationEventKind;
+}
+
 export interface RunLifecycle {
   contract_version: number;
   identity: RunIdentity;
@@ -1060,6 +1110,8 @@ interface NativeBinding {
   runCreate(identityJson: string): string;
   hostIdentityContractVersion(): number;
   validateHostIdentityContext(contextJson: string, nowMs: number): string;
+  conversationEventContractVersion(): number;
+  validateConversationEvent(eventJson: string): string;
   runTransition(lifecycleJson: string, nextStatus: string): string;
   sqliteRunAdmit(
     path: string,
@@ -2285,6 +2337,38 @@ export function validateHostIdentityContext(
   return JSON.parse(
     native.validateHostIdentityContext(JSON.stringify(context), nowMs),
   ) as HostIdentityContext;
+}
+
+export function conversationEventContractVersion(): number {
+  return native.conversationEventContractVersion();
+}
+
+/** Validate a conversation event through the canonical Rust contract. */
+export function validateConversationEvent(
+  event: ConversationEvent,
+): ConversationEvent {
+  for (const [field, value] of [
+    ["sequence", event.sequence],
+    ["timestamp_ms", event.timestamp_ms],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new RangeError(`${field} must be a non-negative safe integer`);
+    }
+  }
+  if (event.kind.type === "usage_updated") {
+    for (const [field, value] of [
+      ["input_tokens", event.kind.data.input_tokens],
+      ["output_tokens", event.kind.data.output_tokens],
+      ["cost_micros", event.kind.data.cost_micros ?? 0],
+    ] as const) {
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new RangeError(`${field} must be a non-negative safe integer`);
+      }
+    }
+  }
+  return JSON.parse(
+    native.validateConversationEvent(JSON.stringify(event)),
+  ) as ConversationEvent;
 }
 
 /** Apply a deterministic lifecycle transition to the supplied snapshot. */

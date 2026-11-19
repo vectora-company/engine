@@ -443,6 +443,10 @@ export declare function validateHostIdentityContext(
   nowMs: number,
 ): string;
 
+export declare function conversationEventContractVersion(): number;
+
+export declare function validateConversationEvent(eventJson: string): string;
+
 export declare function runTransition(
   lifecycleJson: string,
   nextStatus: string,

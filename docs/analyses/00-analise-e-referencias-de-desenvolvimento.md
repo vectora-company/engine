@@ -161,9 +161,10 @@ títulos e bases de PR no estado dinâmico do GitHub.
 - [Eventos de conversa, streaming e replay](../specs/04-conversas-streaming-e-threads.md),
   [plano](../plans/conversation-events.md),
   [checklist](../checklists/conversation-events.md) e
-  [análise](conversation-events.md). O envelope Rust v1 existe; bindings,
-  persistência, admission, replay e verificação entre linguagens permanecem
-  pendentes.
+  [análise](conversation-events.md). O envelope Rust v1 e validadores nos dois
+  bindings usam uma fixture compartilhada; os testes ainda não foram executados
+  nesta etapa. Persistência, admission, replay e confirmação de conformidade
+  permanecem pendentes.
 
 ## Estado da revisão documental
 

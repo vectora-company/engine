@@ -51,7 +51,8 @@ nas respostas são tolerados. Veja o [contrato HTTP upstream](https://github.com
 
 Além do chat, o binding expõe o mesmo núcleo Rust para: fallback de chat,
 montagem de turno, embeddings e rerank com fallback; run lifecycle, dispatch e
-policy de tools, loop modelo/tool e gates de verificação; stores SQLite de
+policy de tools, loop modelo/tool, eventos versionados de conversa e gates de
+verificação; stores SQLite de
 lifecycle, loop e policy; ledger SQLite com backup e restore e projeção
 PostgreSQL; seleção de storage e `capabilities`; vetores (LanceDB e Qdrant), KV,
 filas com DLQ e pub/sub (Redis e NATS). Todas são experimentais; o estado de
