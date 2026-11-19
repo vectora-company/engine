@@ -197,8 +197,9 @@ SQLite permanece a cópia local obrigatória e a autoridade de recuperação par
 o ledger e estados críticos. PostgreSQL recebe projeção; backup PostgreSQL é
 gerenciado pelo operador (`pg_dump` ou serviço equivalente), e a Engine verifica
 e reconstrói a projeção a partir da cópia SQLite. PostgreSQL ainda não oferece
-stores equivalentes de lifecycle/loop/policy, migrations versionadas com
-rollback nem concorrência multiprocesso validada para projetores/admissions.
+stores equivalentes de lifecycle/loop/policy nem migrations versionadas com
+rollback documentado. A concorrência multiprocesso de projetores, incluindo
+outage, admission e reservations, foi validada contra PostgreSQL real.
 
 A configuração pública aceita somente os backends concretos definidos nesta
 spec; implementações em memória são doubles internos de teste. A matriz de
@@ -230,7 +231,7 @@ persistente.
 - Payload grande fica fora do ledger com referência, hash, tamanho, classificação, expiração e política de acesso.
 - Checkpoints são versionados e restauráveis; checkpoint incompatível falha com erro explícito, não inicia estado novo silenciosamente.
 - SQLite permite append de evento e checkpoint na mesma transação por `sqlite_ledger_append_checkpointed`; o snapshot e o evento devem representar o mesmo sequence.
-- O ledger resiliente mantém append local e outbox na mesma transação SQLite. As bindings expõem `resilient_ledger_flush_outbox`/`resilientLedgerFlushOutbox` (lote limitado a 1–1000) e `resilient_ledger_pending_count`/`resilientLedgerPendingCount`. Sem PostgreSQL, flush válido retorna zero e preserva pendências; SQLite continua autoridade local. A projeção abrange eventos, checkpoints dos stores lifecycle/loop/policy, admissions e reservations, com backfill ao ativar e rebuild idempotente. A decisão de `brunosrz` combina backup PostgreSQL gerenciado pelo operador (`pg_dump`) com verify/rebuild da projeção a partir do SQLite, sem formato próprio de backup. A verificação compara agregados e versões por scope, exige writers pausados e rejeita linhas extras ou conteúdo divergente. Concorrência multiprocesso, admissions disputadas e migrations com rollback seguem pendentes.
+- O ledger resiliente mantém append local e outbox na mesma transação SQLite. As bindings expõem `resilient_ledger_flush_outbox`/`resilientLedgerFlushOutbox` (lote limitado a 1–1000) e `resilient_ledger_pending_count`/`resilientLedgerPendingCount`. Sem PostgreSQL, flush válido retorna zero e preserva pendências; SQLite continua autoridade local. A projeção abrange eventos, checkpoints dos stores lifecycle/loop/policy, admissions e reservations, com backfill ao ativar e rebuild idempotente. A decisão de `brunosrz` combina backup PostgreSQL gerenciado pelo operador (`pg_dump`) com verify/rebuild da projeção a partir do SQLite, sem formato próprio de backup. A verificação compara agregados e versões por scope, exige writers pausados e rejeita linhas extras ou conteúdo divergente. Testes reais cobrem projetores em processos independentes, outage com outbox preservada e concorrência com admissions/reservations; migrations com rollback ainda faltam.
 - Antes de entregar uma tool com efeito externo ao adapter, persista um evento/checkpoint `effect_started`; após o resultado, persista o resultado e novo checkpoint. Uma execução interrompida nesse intervalo é incerta e requer reconciliação explícita.
 
 ## Memória, contexto e RAG

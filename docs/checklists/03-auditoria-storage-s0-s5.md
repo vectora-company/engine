@@ -41,7 +41,7 @@ evidência local registrada; não implica prontidão de produção.
 - [x] Expor `flush_outbox` e `pending_count` do ledger resiliente em Python e TypeScript; cobertura offline confirma flush sem PostgreSQL, preservação da fila e validação 1–1000.
 - [x] Enfileirar eventos e checkpoints dos stores SQLite run/loop/policy atomicamente e projetá-los numa transação PostgreSQL; verificação de serviço 73/73 com imagens registradas na auditoria.
 - [x] Projeção consultável de reservations/admissions e APIs de leitura; testes locais reais passaram.
-- [ ] Implementar backup/verify PostgreSQL e concorrência entre projetores.
+- [x] Definir backup PostgreSQL como responsabilidade operacional (`pg_dump` ou equivalente); a Engine verifica e reconstrói a projeção a partir da autoridade SQLite.
 - [ ] Health/readiness dos backends com os estados da spec 02.
 
 ## Encerramento desta etapa
@@ -104,5 +104,5 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 ## Concorrência dos projetores PostgreSQL
 
 - [x] Em 16 rodadas contra PostgreSQL real, dois `ResilientLedger` independentes drenaram a mesma outbox com dois eventos sequenciais. Ambos terminaram sem erro, só houve uma cópia de cada evento e a outbox ficou vazia.
-- [ ] Expandir para processos independentes, admission/reservation concorrentes e erro/retry durante a corrida.
+- [x] Testar processos independentes contra PostgreSQL real: projetores concorrentes drenam eventos ordenados, admission e reservations; indisponibilidade isolada mantém a outbox, e a corrida concorrente termina sem perda nem duplicação.
 - [ ] Implementar migrations PostgreSQL versionadas com rollback documentado.
