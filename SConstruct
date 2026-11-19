@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.request
 import zipfile
 
@@ -21,6 +22,13 @@ AddOption(
     dest="simulate_update",
     default=False,
     help="Show dependency updates without changing manifests or lockfiles",
+)
+AddOption(
+    "--latest",
+    action="store_true",
+    dest="latest_update",
+    default=False,
+    help="Upgrade dependencies to the latest stable releases, including major versions",
 )
 DEV_SERVICE_IMAGES = (
     "docker.io/library/postgres:18.6-alpine",
@@ -349,19 +357,105 @@ def _tests(target, source, env):
 
 def _update(target, source, env):
     if GetOption("simulate_update"):
-        _simulate_update()
+        _simulate_update(latest=GetOption("latest_update"))
+        return
+    if GetOption("latest_update"):
+        _upgrade_latest()
         return
     _run("cargo", "update")
     _run("uv", "lock", "--upgrade")
     _pnpm("update", "--latest", cwd=os.path.join(ROOT, "bindings", "typescript"))
 
 
-def _simulate_update() -> None:
+def _cargo_upgrade_command(*args: str) -> list[str]:
+    """Return cargo-edit's command, installing its stable release if needed."""
+    if shutil.which("cargo-upgrade"):
+        return ["cargo", "upgrade", *args]
+    print("Installing cargo-edit (cargo upgrade) at its latest stable release.")
+    _run("cargo", "install", "cargo-edit", "--locked")
+    if not shutil.which("cargo-upgrade"):
+        raise SystemExit("cargo-edit installed, but cargo-upgrade is not on PATH")
+    return ["cargo", "upgrade", *args]
+
+
+def _upgrade_python_requirements(root: str) -> None:
+    """Upgrade uv's lock, direct Python lower bounds and the lock again."""
+    _run("uv", "lock", "--upgrade", cwd=root)
+    _run(
+        sys.executable,
+        os.path.join(root, "utils", "update_dependency_constraints.py"),
+        cwd=root,
+    )
+    _run("uv", "lock", "--upgrade", cwd=root)
+
+
+def _upgrade_latest() -> None:
+    """Raise direct manifest requirements, then resolve all stable dependencies."""
+    cargo_upgrade = _cargo_upgrade_command(
+        "--incompatible",
+        "allow",
+        "--pinned",
+        "allow",
+        "--exclude",
+        "arrow-array",
+        "--exclude",
+        "arrow-schema",
+        "--exclude",
+        "lance-arrow",
+        "--exclude",
+        "rusqlite",
+    )
+    _run(*cargo_upgrade)
+    _run("cargo", "update")
+
+    _upgrade_python_requirements(ROOT)
+
+    _pnpm("update", "--latest", cwd=os.path.join(ROOT, "bindings", "typescript"))
+
+
+def _simulate_update(*, latest: bool = False) -> None:
     """Report available dependency updates without changing repository files."""
-    print("Simulating Rust dependency updates (Cargo.lock is not written).")
-    _run("cargo", "update", "--dry-run")
-    print("Simulating Python dependency updates (uv.lock is not written).")
-    _run("uv", "lock", "--upgrade", "--dry-run")
+    if latest:
+        print("Simulating latest stable Rust requirement upgrades (including major versions).")
+        if shutil.which("cargo-upgrade"):
+            _run(
+                "cargo",
+                "upgrade",
+                "--incompatible",
+                "allow",
+                "--pinned",
+                "allow",
+                "--exclude",
+                "arrow-array",
+                "--exclude",
+                "arrow-schema",
+                "--exclude",
+                "lance-arrow",
+                "--exclude",
+                "rusqlite",
+                "--dry-run",
+            )
+        else:
+            print("cargo-edit is not installed; the real command installs its latest stable release.")
+        print("Simulating latest stable Python manifest upgrades in a temporary project.")
+        with tempfile.TemporaryDirectory(prefix="engine-uv-latest-") as temporary:
+            shutil.copy2(os.path.join(ROOT, "pyproject.toml"), temporary)
+            shutil.copytree(
+                os.path.join(ROOT, "utils"),
+                os.path.join(temporary, "utils"),
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
+            shutil.copytree(
+                os.path.join(ROOT, "bindings", "python"),
+                os.path.join(temporary, "bindings", "python"),
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".venv"),
+            )
+            _upgrade_python_requirements(temporary)
+    else:
+        print("Simulating Rust dependency updates (Cargo.lock is not written).")
+        _run("cargo", "update", "--dry-run")
+        print("Simulating Python dependency updates (uv.lock is not written).")
+        _run("uv", "lock", "--upgrade", "--dry-run")
     print(
         "Checking TypeScript dependency updates (read-only; latest column "
         "includes major updates)."
@@ -419,14 +513,22 @@ Qualidade
 
 Manutenção
   scons update     atualiza Cargo.lock, uv.lock e pnpm-lock.yaml; revise os lockfiles
-  scons update --simulate  mostra atualizações disponíveis sem alterar manifests ou lockfiles
+  scons update --latest  eleva requirements a releases stable mais recentes, inclusive major
+  scons update --latest --simulate  simula a elevação de versões sem alterar o checkout
+  scons update --simulate  mostra atualizações nas faixas atuais sem alterar lockfiles
   scons clean      remove target/ e logs do SCons
 
-O alvo update segue as faixas declaradas nos manifests Rust/Python e usa
-pnpm update --latest (inclusive major) no binding TypeScript. Versões de
-serviços e do sidecar NATS são pins explícitos em SConstruct e devem ser
-atualizados ali após revisar as notas de compatibilidade. Use
-`scons update --simulate` para listar candidatos sem gravar manifests ou lockfiles.
+`scons update` segue as faixas declaradas nos manifests Rust/Python. `--latest`
+eleva requisitos diretos do workspace Cargo (cargo-edit), dependências do uv e
+pacotes pnpm para as releases stable mais novas, incluindo major; depois resolve
+transitivas e mantém o requisito PEP 517 do binding Python alinhado ao maturin.
+O primeiro uso instala cargo-edit no toolchain do usuário. Revise manifests e
+lockfiles, rode `scons lint` e `scons tests`, e recue individualmente qualquer
+dependência incompatível. `arrow-array`, `arrow-schema` e `lance-arrow` ficam
+alinhados à versão consumida pelo LanceDB; `rusqlite` fica alinhado ao
+`libsqlite3-sys` exigido pelo SQLx SQLite. `--simulate` mostra o plano sem editar
+manifests ou lockfiles. Pins de imagens de serviços e NATS sidecar continuam
+gerenciados no SConstruct e não são alterados pelo alvo update.
 
 """.strip()
     )

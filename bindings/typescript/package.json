@@ -20,7 +20,7 @@
   "devDependencies": {
     "@napi-rs/cli": "3.10.12",
     "@types/node": "26.6.6",
-    "oxlint": "1.93.0",
+    "oxlint": "1.94.0",
     "typescript": "7.0.2"
   },
   "engines": {

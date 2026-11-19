@@ -32,11 +32,22 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
+    env:
+      PYO3_PYTHON: python
+      # The Windows hosted runner has less memory than the Linux/macOS runners.
+      # Building the full workspace with debug symbols in parallel exhausted
+      # rustc/LLVM memory while linking the native binding test harnesses.
+      CARGO_BUILD_JOBS: ${{ matrix.os == 'windows-2025' && '1' || '4' }}
+      CARGO_PROFILE_DEV_DEBUG: ${{ matrix.os == 'windows-2025' && '0' || '2' }}
+      CARGO_PROFILE_TEST_DEBUG: ${{ matrix.os == 'windows-2025' && '0' || '2' }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
           persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.15"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -131,7 +142,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-uv
         with:
-          python-version: "3.13"
+          python-version: "3.15"
           sync: "false"
       - run: uv sync --locked --all-groups
       - uses: dtolnay/rust-toolchain@stable
