@@ -842,6 +842,14 @@ def tool_chat_definitions(contracts: Sequence[JsonObject]) -> list[dict[str, Any
     return json.loads(result)
 
 
+def validate_tool_result_output(contract: JsonObject, result: JsonObject) -> None:
+    """Validate output against its tool schema before persistence or model exposure."""
+    _native.validate_tool_result_output_json(
+        json.dumps(contract, separators=(",", ":")),
+        json.dumps(result, separators=(",", ":")),
+    )
+
+
 def model_tool_loop_contract_version() -> int:
     """Return the version of the in-memory model/tool loop contract."""
     return _native.model_tool_loop_contract_version()
@@ -1732,6 +1740,7 @@ __all__ = [
     "tool_result_to_chat_message",
     "transition_run",
     "validate_storage_selection",
+    "validate_tool_result_output",
     "vector_store_delete",
     "vector_store_search",
     "vector_store_search_filtered",

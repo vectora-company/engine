@@ -62,6 +62,7 @@ import {
   submitToolResult,
   hostIdentityContractVersion,
   validateHostIdentityContext,
+  validateToolResultOutput,
   validateStorageSelection,
   storageCapabilities,
   graphStoreOperation,
@@ -752,6 +753,10 @@ test("tool dispatch validates schemas and trusted capabilities in Rust", () => {
     timeout_ms: 5000,
     effect: "read_only",
     idempotency: "idempotent",
+    output_schema: {
+      type: "array",
+      items: { type: "object", properties: { text: { minLength: 1 } } },
+    },
   };
   const dispatch = prepareToolDispatch(run, completion, [contract]);
   assert.equal(dispatch.execution_mode, "concurrent_read_only");
@@ -760,6 +765,20 @@ test("tool dispatch validates schemas and trusted capabilities in Rust", () => {
   assert.deepEqual(toolChatDefinitions([contract]), [
     { name: "lookup", parameters: contract.input_schema },
   ]);
+  const toolResult = {
+    contract_version: 2,
+    run_id: "run-1",
+    turn_id: "turn-1",
+    call_id: "call-1",
+    tool_name: "lookup",
+    status: "succeeded",
+    effect_state: "not_applicable",
+    parts: [{ type: "text", text: "ok" }],
+  };
+  assert.doesNotThrow(() => validateToolResultOutput(contract, toolResult));
+  assert.throws(() =>
+    validateToolResultOutput(contract, { ...toolResult, parts: [{ type: "text", text: "" }] }),
+  );
 
   const denied = prepareToolDispatch(
     { ...run, identity: { ...run.identity, capabilities: [] } },

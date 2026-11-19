@@ -29,8 +29,10 @@ implementação e teste; planejar não equivale a implementar.
 - [parcial] `authorize_tool_dispatch_with_identity` nega capabilities sem grant
   e vincula actor/scope/policy digest; o host ainda precisa autenticar o issuer
   e revalidar imediatamente antes de cada adapter/efeito.
-- [ ] Tool tem schemas input/output, capability, risco, timeout, limite,
-      cancellation, retry/idempotência, redaction e evidence definidos.
+- [parcial] Tool tem schema de entrada e agora aceita schema de saída opcional;
+  `validate_tool_result_output` valida `ToolResult.parts` e exige chamada pelo
+  host antes de persistir/expor. Capability, risco, timeout, limites,
+  cancellation, retry/idempotência, redaction e evidence definidos.
 - [ ] Ledger confirma intenção/resultado antes de liberar ação/resultado; falha
       incerta fica reconciliável, sem retry cego.
 - [ ] Rust, Python e TypeScript compartilham fixtures e erros sem duplicar regra.

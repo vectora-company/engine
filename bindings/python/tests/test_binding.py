@@ -124,6 +124,7 @@ from vectora_engine import (
     transition_run,
     validate_host_identity_context,
     validate_storage_selection,
+    validate_tool_result_output,
     vector_store_search_filtered,
     vector_store_upsert,
 )
@@ -1973,6 +1974,10 @@ def test_tool_dispatch_uses_rust_core_and_denies_by_default() -> None:
         "timeout_ms": 5000,
         "effect": "read_only",
         "idempotency": "idempotent",
+        "output_schema": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"text": {"minLength": 1}}},
+        },
     }
 
     dispatch = prepare_tool_dispatch(run, completion, [contract])
@@ -1985,6 +1990,21 @@ def test_tool_dispatch_uses_rust_core_and_denies_by_default() -> None:
             "parameters": contract["input_schema"],
         }
     ]
+    tool_result = {
+        "contract_version": 2,
+        "run_id": "run-1",
+        "turn_id": "turn-1",
+        "call_id": "call-1",
+        "tool_name": "lookup",
+        "status": "succeeded",
+        "effect_state": "not_applicable",
+        "parts": [{"type": "text", "text": "ok"}],
+    }
+    validate_tool_result_output(contract, tool_result)
+    with pytest.raises(RuntimeError):
+        validate_tool_result_output(
+            contract, {**tool_result, "parts": [{"type": "text", "text": ""}]}
+        )
 
     denied = prepare_tool_dispatch(
         {**run, "identity": {**run["identity"], "capabilities": []}},

@@ -564,6 +564,7 @@ mod tests {
             name: "write_file".into(),
             description: None,
             input_schema: json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}),
+            output_schema: None,
             required_capability: "file.write".into(),
             timeout_ms: 5000,
             effect,

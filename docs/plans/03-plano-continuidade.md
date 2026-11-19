@@ -236,7 +236,9 @@ Origem: [spec 01](../specs/01-runtime-agentico-e-harness.md) e
 
 1. Tipos `Turn`, `Step`, `Artifact` e evento terminal versionado.
 2. Orçamento de tempo, tokens, custo e contexto no loop e no `PolicySnapshot`.
-3. Output schema de tool, validação de saída estruturada e dry-run declarado.
+3. [parcial] `ToolContract.output_schema` opcional valida `ToolResult.parts`
+   via `validate_tool_result_output`; o host ainda precisa invocar o gate antes
+   de persistir/expor a saída. Dry-run declarado segue pendente.
 4. Ligação automática lifecycle, loop e policy (revalidação antes de cada
    efeito).
 5. Hooks pre-tool, post-tool e pre-final; Plan Mode; subagentes com escopo e

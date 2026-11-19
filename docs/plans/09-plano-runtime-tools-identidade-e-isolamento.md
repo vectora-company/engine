@@ -34,8 +34,11 @@ adapters, sandbox e UX. Não se organiza por PR.
        explícitos. O conteúdo de Soul permanece do consumidor. Core e bindings
        validam shape, validade temporal, unicidade e aderência de scope/digest; a
        autenticação do issuer continua exclusivamente no host.
-2. Normalizar registro de tool: schemas, risco/efeito, capability, timeout,
-   idempotência, cancellation, output limits e evidence.
+2. [parcial] Normalizar registro de tool: schema de entrada, risco/efeito,
+   capability, timeout, idempotência, cancellation e output limits existem;
+   `ToolContract.output_schema` e `validate_tool_result_output` cobrem validação
+   opcional de `ToolResult.parts`. Falta integrar essa chamada ao dispatcher e
+   persistência do host, além de dry-run e evidence completos.
 3. [parcial] Há `authorize_tool_dispatch_with_identity`: vincula subject ao
    actor, scope ao run/snapshot e policy digest, deriva negações para grants
    ausentes e mantém o gate de aprovação existente. O host ainda deve chamar

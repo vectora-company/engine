@@ -32,7 +32,7 @@ use vectora_engine::harness::{
     ToolDispatchSettings, ToolResult, VerificationReport, advance_model_turn, advance_tool_result,
     authorize_tool_dispatch, authorize_tool_dispatch_with_identity, cancel_model_tool_loop,
     evaluate_verification, prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop,
-    tool_chat_definitions,
+    tool_chat_definitions, validate_tool_result_output,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -1983,6 +1983,16 @@ pub fn tool_chat_definitions_json(contracts_json: String) -> Result<String> {
     let definitions =
         tool_chat_definitions(&contracts).map_err(|error| Error::from_reason(error.to_string()))?;
     encode_json(&definitions)
+}
+
+#[napi]
+pub fn validate_tool_result_output_json(contract_json: String, result_json: String) -> Result<()> {
+    let contract: ToolContract = serde_json::from_str(&contract_json)
+        .map_err(|_| Error::from_reason("invalid tool contract"))?;
+    let result: ToolResult = serde_json::from_str(&result_json)
+        .map_err(|_| Error::from_reason("invalid tool result"))?;
+    validate_tool_result_output(&contract, &result)
+        .map_err(|error| Error::from_reason(error.to_string()))
 }
 
 #[napi]

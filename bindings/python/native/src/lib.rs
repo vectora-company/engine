@@ -32,6 +32,7 @@ use vectora_engine::harness::{
     VerificationReport, advance_model_turn, advance_tool_result, authorize_tool_dispatch,
     authorize_tool_dispatch_with_identity, cancel_model_tool_loop, evaluate_verification,
     prepare_tool_dispatch, reconcile_tool_result, recover_model_tool_loop, tool_chat_definitions,
+    validate_tool_result_output,
 };
 use vectora_engine::llm::{
     embeddings::{
@@ -2101,6 +2102,13 @@ fn tool_chat_definitions_json(contracts_json: String) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn validate_tool_result_output_json(contract_json: String, result_json: String) -> PyResult<()> {
+    let contract: ToolContract = serde_json::from_str(&contract_json).map_err(py_error)?;
+    let result: ToolResult = serde_json::from_str(&result_json).map_err(py_error)?;
+    validate_tool_result_output(&contract, &result).map_err(py_error)
+}
+
+#[pyfunction]
 fn model_tool_loop_contract_version() -> u16 {
     MODEL_TOOL_LOOP_CONTRACT_VERSION
 }
@@ -3276,6 +3284,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(prepare_tool_dispatch_json, module)?)?;
     module.add_function(wrap_pyfunction!(tool_chat_definitions_json, module)?)?;
+    module.add_function(wrap_pyfunction!(validate_tool_result_output_json, module)?)?;
     module.add_function(wrap_pyfunction!(model_tool_loop_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(tool_result_contract_version, module)?)?;
     module.add_function(wrap_pyfunction!(tool_result_to_chat_message, module)?)?;

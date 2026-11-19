@@ -83,6 +83,18 @@ autorização/revogação do host antes do efeito. O dispatch com identidade neg
 capabilities sem grant e foi testado nos três níveis. Os skips permanecem
 condicionais à disponibilidade/configuração de serviços externos.
 
+## Validação do schema de saída de tools
+
+Em 17/11/2026, `ToolContract` passou a aceitar `output_schema` JSON Schema
+opcional. `validate_tool_result_output` valida a identidade do nome da tool e
+os `ToolResult.parts`; testes cobrem saída válida, schema incompatível e tool
+incorreta no Rust, Python e Node. O host deve chamar o gate antes de persistir
+ou expor o conteúdo. O loop continua responsável pelo limite de bytes, e
+schemas ausentes não alteram o comportamento existente. `scons lint` passou;
+`scons tests` passou com 301 testes Rust da biblioteca, 3 fixtures, 8 testes
+CLI, 1 teste nativo Python, 107 testes Python (10 skips) e 64 testes Node (18
+skips). Os skips dependem de serviços externos configurados.
+
 ## Referências locais
 
 - [`docs/specs/21-harness-tools-identidade-e-isolamento.md`](../specs/21-harness-tools-identidade-e-isolamento.md)

@@ -95,6 +95,8 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
 - [parcial] `authorize_tool_dispatch_with_identity` vincula grants ao actor,
   scope e policy digest e produz deny quando falta capability. O host ainda
   controla autenticação, revogação e chamada imediatamente antes do adapter.
+- [parcial] Tool output schema opcional e validador existem no core Rust e nos
+  bindings; o host precisa chamar o validador antes de persistir/expor resultados.
 
 ## Contratos e desenho
 
