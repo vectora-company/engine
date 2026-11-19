@@ -1098,6 +1098,26 @@ interface NativeBinding {
     grantsJson: string,
     nowMs: number,
   ): string;
+  authorizeToolDispatchWithIdentityJson(
+    lifecycleJson: string,
+    completionJson: string,
+    contractsJson: string,
+    settingsJson: string,
+    snapshotJson: string,
+    approvalsJson: string,
+    identityJson: string,
+    nowMs: number,
+  ): string;
+  authorizeToolDispatchWithIdentityJson(
+    lifecycleJson: string,
+    completionJson: string,
+    contractsJson: string,
+    settingsJson: string,
+    snapshotJson: string,
+    approvalsJson: string,
+    identityJson: string,
+    nowMs: number,
+  ): string;
   prepareToolDispatchJson(
     lifecycleJson: string,
     completionJson: string,
@@ -2316,6 +2336,31 @@ export function authorizeToolDispatch(
       JSON.stringify({ max_calls_per_turn: settings.max_calls_per_turn ?? 32 }),
       JSON.stringify(snapshot),
       JSON.stringify(grants),
+      nowMs,
+    ),
+  ) as PolicyEvaluation;
+}
+
+/** Enforce explicit host grants and run/policy binding before tool dispatch. */
+export function authorizeToolDispatchWithIdentity(
+  lifecycle: RunLifecycle,
+  completion: ChatCompletion,
+  contracts: ToolContract[],
+  snapshot: PolicySnapshot,
+  identity: HostIdentityContext,
+  approvals: ApprovalGrant[] = [],
+  nowMs = Date.now(),
+  settings: ToolDispatchSettings = {},
+): PolicyEvaluation {
+  return JSON.parse(
+    native.authorizeToolDispatchWithIdentityJson(
+      JSON.stringify(lifecycle),
+      JSON.stringify(completion),
+      JSON.stringify(contracts),
+      JSON.stringify({ max_calls_per_turn: settings.max_calls_per_turn ?? 32 }),
+      JSON.stringify(snapshot),
+      JSON.stringify(approvals),
+      JSON.stringify(identity),
       nowMs,
     ),
   ) as PolicyEvaluation;

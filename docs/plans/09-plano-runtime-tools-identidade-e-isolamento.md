@@ -36,8 +36,11 @@ adapters, sandbox e UX. Não se organiza por PR.
        autenticação do issuer continua exclusivamente no host.
 2. Normalizar registro de tool: schemas, risco/efeito, capability, timeout,
    idempotência, cancellation, output limits e evidence.
-3. Conectar ledger, authorization e tool dispatch com revalidação imediatamente
-   anterior ao efeito e estado `recovery_required` para resultado incerto.
+3. [parcial] Há `authorize_tool_dispatch_with_identity`: vincula subject ao
+   actor, scope ao run/snapshot e policy digest, deriva negações para grants
+   ausentes e mantém o gate de aprovação existente. O host ainda deve chamar
+   essa validação junto ao adapter imediatamente antes do efeito, autenticar e
+   revogar o issuer; falta ligar persistência/reconciliação do ledger ao fluxo.
 
 ### C. Filesystem e Git
 

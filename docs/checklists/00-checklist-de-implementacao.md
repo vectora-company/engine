@@ -90,8 +90,11 @@ stack e prossiga sem aguardar CI dos PRs anteriores.
       caminhos; os smokes remotos seguem pendentes no checklist de providers.
 - [parcial] `HostIdentityContext`/`CapabilityGrant` versionados e validados no
   core e em Python/TypeScript: expiração, unicidade, scope e policy digest.
-  O host autentica o issuer; revogação e revalidação antes de efeitos ainda
-  não estão ligadas ao dispatcher.
+  O host autentica o issuer; revogação e chamada obrigatória antes do efeito
+  ainda não estão ligadas ao ciclo de execução.
+- [parcial] `authorize_tool_dispatch_with_identity` vincula grants ao actor,
+  scope e policy digest e produz deny quando falta capability. O host ainda
+  controla autenticação, revogação e chamada imediatamente antes do adapter.
 
 ## Contratos e desenho
 

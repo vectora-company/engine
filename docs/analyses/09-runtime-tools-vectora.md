@@ -31,16 +31,16 @@ ausência de fallback silencioso; #595/#593 tratam runtimes locais e instalaçã
 
 ## Comparação com a Engine
 
-| Domínio            | Engine agora                                                                                                         | Gap para release                                                                                |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Ledger             | SQLite authority, backup, loop/policy; projeção PostgreSQL parcial                                                   | migrations/rollback, concorrência multiprocesso e recuperação operacional integral              |
-| Runtime/policy     | contratos e stores experimentais; descriptor versionado de identidade e grants validado estruturalmente nos bindings | autenticação do issuer, revogação/revalidação policy→efeito, cancelamento de adapters e sandbox |
-| Tools              | schemas e dispatch do loop                                                                                           | ferramentas reutilizáveis filesystem/Git/shell/navegação com grants, limites e evidence         |
-| Plano              | estado de loop/checkpoint                                                                                            | plano multi-etapa editável/aprovável, digest-bound e retomável                                  |
-| Remember/memória   | embeddings, stores KV/vector e base de RAG                                                                           | record semântico versionado, proveniência, escopo, revisão/deleção e integração Context Planner |
-| Subagentes         | não há dispatcher comum executável                                                                                   | execução filha persistente com capabilities/budget derivados e cancelamento                     |
-| Pesquisa/navegação | transporte de provider e ferramenta não incluídos                                                                    | search/fetch adapter, deep traversal bounded, fontes e SSRF/egrss a cada hop                    |
-| Identidade/Soul    | produto fornece contexto confiável em forma parcial                                                                  | descriptor/configuração versionada sem Engine possuir prompt, conta ou catálogo de Souls        |
+| Domínio            | Engine agora                                                                                                     | Gap para release                                                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Ledger             | SQLite authority, backup, loop/policy; projeção PostgreSQL parcial                                               | migrations/rollback, concorrência multiprocesso e recuperação operacional integral              |
+| Runtime/policy     | contratos e stores experimentais; descriptor versionado; dispatch com identity grants nega capabilities ausentes | autenticação do issuer, revogação/revalidação dentro do adapter, cancelamento e sandbox         |
+| Tools              | schemas e dispatch do loop                                                                                       | ferramentas reutilizáveis filesystem/Git/shell/navegação com grants, limites e evidence         |
+| Plano              | estado de loop/checkpoint                                                                                        | plano multi-etapa editável/aprovável, digest-bound e retomável                                  |
+| Remember/memória   | embeddings, stores KV/vector e base de RAG                                                                       | record semântico versionado, proveniência, escopo, revisão/deleção e integração Context Planner |
+| Subagentes         | não há dispatcher comum executável                                                                               | execução filha persistente com capabilities/budget derivados e cancelamento                     |
+| Pesquisa/navegação | transporte de provider e ferramenta não incluídos                                                                | search/fetch adapter, deep traversal bounded, fontes e SSRF/egrss a cada hop                    |
+| Identidade/Soul    | produto fornece contexto confiável em forma parcial                                                              | descriptor/configuração versionada sem Engine possuir prompt, conta ou catálogo de Souls        |
 
 ## Decisões de arquitetura já sustentadas
 
@@ -49,6 +49,9 @@ ausência de fallback silencioso; #595/#593 tratam runtimes locais e instalaçã
 - `HostIdentityContext` e `CapabilityGrant` agora validam estrutura, validade
   temporal, unicidade e vínculo a scope/policy digest. Isso não autentica o
   host nem substitui revalidação e revogação antes do efeito.
+- O novo dispatch autenticado por contexto cruza actor/scope/policy digest e
+  transforma grants ausentes em deny. É um gate fornecido pela Engine, não um
+  broker de execução: o host ainda controla o tempo entre validação e efeito.
 - Engine deve fornecer tool contracts e implementações compartilháveis, mas o
   host concede filesystem/repos/processos, credenciais, busca externa e sandbox.
 - O ledger SQLite é autoridade local e o PostgreSQL é projeção recuperável.
@@ -71,12 +74,14 @@ ausência de fallback silencioso; #595/#593 tratam runtimes locais e instalaçã
 ## Verificação do descriptor de identidade
 
 No checkout local de 17/11/2026, `scons lint` passou. `scons tests` passou com
-299 testes da biblioteca Rust, 3 fixtures Rust, 8 testes CLI, 1 teste nativo
-Python, 106 testes Python (10 skips) e 63 testes Node (18 skips). Os testes
+300 testes da biblioteca Rust, 3 fixtures Rust, 8 testes CLI, 1 teste nativo
+Python, 107 testes Python (10 skips) e 64 testes Node (18 skips). Os testes
 específicos verificam validade, versão, scope/policy digest, grants duplicados,
-limite de 1024 grants, campos desconhecidos e serialização. O validador é estrutural: não atesta criptograficamente o
-issuer nem substitui autorização/revogação do host antes do efeito. Os skips
-permanecem condicionais à disponibilidade/configuração de serviços externos.
+limite de 1024 grants, campos desconhecidos e serialização. O validador é
+estrutural: não atesta criptograficamente o issuer nem substitui
+autorização/revogação do host antes do efeito. O dispatch com identidade nega
+capabilities sem grant e foi testado nos três níveis. Os skips permanecem
+condicionais à disponibilidade/configuração de serviços externos.
 
 ## Referências locais
 

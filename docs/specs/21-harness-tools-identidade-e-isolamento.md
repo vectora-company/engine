@@ -28,6 +28,15 @@ modelo.
 - O ledger SQLite é a autoridade local para execução e recuperação. PostgreSQL
   pode receber projeções; falha ou ausência dele não apaga estado confirmado.
 
+`authorize_tool_dispatch_with_identity` vincula o subject ao actor do run, o
+scope ao run e ao snapshot, e o policy digest ao contexto. Somente grants
+válidos habilitam a capability requerida; capability ausente vira decisão
+`deny` no próprio resultado de dispatch. O método não autentica issuer nem
+observa revogação posterior: o host autentica o contexto e chama a validação
+imediatamente antes de cada efeito no adapter. O caminho existente baseado em
+snapshot continua disponível para hosts que já compilam e autenticam esse
+snapshot fora da Engine.
+
 ## Contrato comum de tool
 
 Cada tool registra nome e versão, schemas de entrada/saída, capabilities

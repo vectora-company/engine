@@ -138,7 +138,10 @@ títulos e bases de PR no estado dinâmico do GitHub.
   contrato versionado e validação no core Rust e nos bindings Python/TypeScript.
   Ela verifica versão, timestamps, campos, grants duplicados e vínculo de scope
   e policy digest, mas não autentica o issuer. A próxima integração precisa
-  aplicar revogação/revalidação imediatamente antes de cada efeito.
+  aplicar revogação/revalidação imediatamente antes de cada efeito. O novo
+  dispatch com identidade valida subject, scope e digest e nega por padrão
+  qualquer capability sem grant; ainda cabe ao host invocá-lo antes de cada
+  efeito e controlar revogação.
 - [Graph storage FalkorDB](../specs/19-storage-de-grafos-falkordb.md),
   [plano](../plans/07-plano-storage-grafos-falkordb.md),
   [checklist](../checklists/06-storage-grafos-falkordb.md) e

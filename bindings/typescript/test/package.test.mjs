@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   authorizeToolDispatch,
+  authorizeToolDispatchWithIdentity,
   assembleTurn,
   acceptModelTurn,
   cancelModelToolLoop,
@@ -156,6 +157,36 @@ test("host identity binding validates freshness and grant scope", () => {
   assert.deepEqual(validateHostIdentityContext(context, 50), context);
   context.grants[0].scope_id = "other";
   assert.throws(() => validateHostIdentityContext(context, 50), /grant is invalid/);
+});
+
+test("host identity dispatch denies capabilities absent from its grants", async () => {
+  const fixtureUrl = new URL("../../../tests/fixtures/conformance-v1.json", import.meta.url);
+  const fixture = JSON.parse(await readFile(fixtureUrl, "utf8")).tool_policy;
+  const lifecycle = transitionRun(createRun(fixture.run), "running");
+  const identity = {
+    contract_version: hostIdentityContractVersion(),
+    issuer: "host:test",
+    subject: "host-user-1",
+    identity_id: "assistant-1",
+    identity_revision: "r1",
+    identity_digest: "sha256:identity",
+    scope_id: "workspace-1",
+    policy_digest: "conformance-policy-digest",
+    issued_at_ms: 500,
+    expires_at_ms: 4000,
+    grants: [],
+  };
+  const denied = authorizeToolDispatchWithIdentity(
+    lifecycle,
+    fixture.completion,
+    fixture.contracts,
+    fixture.snapshot,
+    identity,
+    [],
+    1000,
+  );
+  assert.equal(denied.decisions[0].decision, "deny");
+  assert.equal(denied.decisions[0].code, "policy_capability_denied");
 });
 
 test("shared JSON fixture conforms to run, verification, and storage contracts", async () => {

@@ -20,6 +20,7 @@ from vectora_engine import (
     accept_model_turn,
     assemble_turn,
     authorize_tool_dispatch,
+    authorize_tool_dispatch_with_identity,
     cancel_model_tool_loop,
     chat_complete,
     chat_complete_ephemeral,
@@ -2164,6 +2165,35 @@ def test_shared_conformance_fixture_covers_policy_loop_and_ledger(
         sqlite_ledger_append(str(tmp_path / "conformance.db"), ledger_fixture["draft"])
     )
     assert event["sequence"] == ledger_fixture["expected_sequence"]
+
+
+def test_host_identity_dispatch_denies_missing_capability_grant() -> None:
+    fixture_path = Path(__file__).parents[3] / "tests/fixtures/conformance-v1.json"
+    policy = json.loads(fixture_path.read_text())["tool_policy"]
+    run = transition_run(create_run(policy["run"]), "running")
+    identity = {
+        "contract_version": host_identity_contract_version(),
+        "issuer": "host:test",
+        "subject": "host-user-1",
+        "identity_id": "assistant-1",
+        "identity_revision": "r1",
+        "identity_digest": "sha256:identity",
+        "scope_id": "workspace-1",
+        "policy_digest": "conformance-policy-digest",
+        "issued_at_ms": 500,
+        "expires_at_ms": 4000,
+        "grants": [],
+    }
+    denied = authorize_tool_dispatch_with_identity(
+        run,
+        policy["completion"],
+        policy["contracts"],
+        policy["snapshot"],
+        identity,
+        now_ms=1000,
+    )
+    assert denied["decisions"][0]["decision"] == "deny"
+    assert denied["decisions"][0]["code"] == "policy_capability_denied"
 
 
 def test_sqlite_tool_policy_is_registered_and_survives_reopen(tmp_path: Any) -> None:

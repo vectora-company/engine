@@ -252,6 +252,16 @@ def authorize_tool_dispatch_json(
     grants_json: str,
     now_ms: int,
 ) -> str: ...
+def authorize_tool_dispatch_with_identity_json(
+    lifecycle_json: str,
+    completion_json: str,
+    contracts_json: str,
+    settings_json: str,
+    snapshot_json: str,
+    approvals_json: str,
+    identity_json: str,
+    now_ms: int,
+) -> str: ...
 def tool_chat_definitions_json(contracts_json: str) -> str: ...
 def model_tool_loop_contract_version() -> int: ...
 def tool_result_contract_version() -> int: ...
