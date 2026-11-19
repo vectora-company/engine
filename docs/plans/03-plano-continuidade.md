@@ -7,7 +7,45 @@ MVP. O escopo e os gates são decompostos neste plano e nos artefatos de cada
 capability. Isso não implica substituir o backend Python nem presumir paridade sem
 testes.
 
-## Proposta de escopo da primeira release
+## EPIC: visão, princípios e fronteiras
+
+Uma EPIC não é um MVP: ela reúne **todo** o escopo que a Engine deve ter, sem
+cortar por prazo; o ROADMAP abaixo decide a ordem. Nada de que um consumidor
+(GH Bot, Vectora App, CLI, futuros) dependa do runtime fica fora: se falta,
+entra aqui e é implementado na Engine, nunca num runtime substituto em
+TypeScript ou Python.
+
+**Visão:** a Engine é o runtime agêntico reutilizável, em Rust, com bindings
+Python e TypeScript (e outros no futuro), que qualquer produto usa para
+executar agentes com durabilidade, segurança, observabilidade e custo
+controlados, sem reescrever loop, providers, storage, eventos, tools, memória
+ou avaliação.
+
+**Princípios (valem para todas as fases):**
+
+1. Uma implementação, vários bindings: o núcleo Rust é a fonte; os bindings só
+   encaminham e são verificados por fixtures comuns.
+2. Storage por equivalência por par; especialização só para incompatibilidade
+   verificada, registrada em `capabilities()`.
+3. Default-deny, fail-closed em efeitos, redaction por construção, nenhum
+   segredo em `Debug`, log ou evento.
+4. Se dois métodos coexistem, implementar os dois com padrão recomendado
+   (regra 9 do [`AGENTS.md`](../../AGENTS.md)); se são incompatíveis, comparar
+   e perguntar no chat.
+5. Contratos versionados, migrações idempotentes com rollback, adoção
+   reversível e sem dual-write.
+6. Nada é declarado pronto, verificado, mergeado ou lançado sem evidência atual
+   (comando, SHA, ambiente, contagem); "não executado" não é evidência.
+7. Decisão vital **[D]** só no chat; o trabalho independente continua.
+8. O consumidor é o oráculo: cada capability é exercitada por um consumidor
+   real (GH Bot primeiro, depois Vectora) antes de ser generalizada.
+
+**Fronteira:** UI, workbenches, contas, billing, autenticação de pessoas,
+webhooks e escopo GitHub, catálogo de produto e infraestrutura pertencem aos
+hosts. A Engine oferece contratos, adapters e mecanismos; o host autentica,
+autoriza e opera. A Engine é cliente MCP, nunca servidor MCP.
+
+## Escopo da release 1.0 (trilha H1)
 
 O pedido de produto é uma primeira release completa, não um MVP. A proposta
 para o charter 1.0 é cobrir uma jornada de agente utilizável de ponta a ponta:
@@ -103,6 +141,16 @@ indicada. Não as reabra sem pedido dele.
   criar issue só a pedido; decisão vital perguntada no chat; CI remoto não é
   evidência: [loop de desenvolvimento](05-loop-de-desenvolvimento.md).
 
+## Decisões pendentes
+
+Todas se resolvem somente no chat: padrão e limites da admission; artifact fora
+do ledger; envelope de job; `capabilities()` estruturado; health, readiness e
+biblioteca de tracing; ANN, quantização, híbrida e mapeamento de índices; SQL
+genérico; migração de dados; Decision Models no harness; política de versão
+(crate `0.0.1` e bindings `0.1.0`); binding Go; edição de imagem e vídeo;
+política de licença; i18n e acessibilidade; integração com motor durável de
+workflow.
+
 ## Revisão documental transversal
 
 Em 17/11/2026, os planos de inferência e loop agêntico, a capability de
@@ -113,6 +161,90 @@ OpenAI Responses e filtros vetoriais. O inventário e os itens restantes estão
 em [`docs/checklists/07-checklist-completo-da-engine.md`](../checklists/07-checklist-completo-da-engine.md).
 Ainda falta revisar auditorias históricas, matriz de conformidade e documentos
 transversais restantes; números/títulos de PR não são índice do plano.
+
+## Pilares do escopo total
+
+`GB` = exigido pelo GH Bot, `VA` = Vectora App, `CLI` = engine-cli. O estado de
+cada item está no backlog por fases e nos artefatos de cada capability.
+
+| Pilar                              | Escopo total (implementado, parcial e não iniciado)                                                                                                                                                                                                                                                                                                                                                    | Consumidores |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| P1 Providers e modalidades         | Chat, embeddings, rerank, Decision Models, fala, imagem; smokes reais, paridade de erros e streaming, catálogo e limites por modelo, edição de imagem, vídeo, outros providers de fala e visão, routing e seleção de modelo por tarefa, custo por provider.                                                                                                                                            | GB VA CLI    |
+| P2 Runtime agêntico e harness      | Lifecycle, turno, loop, policy, verificação; `Turn`/`Step`/`Artifact`, orçamentos, gate de saída de tool, dry-run, revalidação antes do efeito, coordenador de execução, hooks, Plan Mode e HITL, plano persistido, subagentes e orquestração multiagente medida, recovery com reconciliação, stores PostgreSQL equivalentes, saída estruturada validada, cancelamento, timeout e retry ponta a ponta. | GB VA CLI    |
+| P3 Identidade, tools e isolamento  | Identidade e grants; persistência e revogação, registro dinâmico e catálogo por principal, versão de tool, filesystem confinado, Git, shell por argv, `SandboxBroker`, navegação profunda com SSRF por hop, cliente MCP, adapters externos.                                                                                                                                                            | GB VA        |
+| P4 Eventos, conversas e replay     | Envelope, log, histórico, espelho do run, leitura tolerante e retomada por `event_id`; retenção e cursor expirado, subscriber, admission, artifact fora do ledger **[D]**, projeção de timeline, channel adapter, redaction de eventos, métricas, `Usage.cost` para `cost_micros`.                                                                                                                     | GB VA        |
+| P5 Storage, ledger e mensageria    | Ledger, backup, PostgreSQL, vetores, KV, filas, pub/sub, grafos; restore ensaiado, migrations com down, ANN/quantização, busca lexical e híbrida, shutdown gracioso, DLQ atômica, reconexão pub/sub, fixtures comuns, locking e dedupe distribuídos, envelope de job **[D]**, `capabilities()` estruturado **[D]**, health e readiness **[D]**, SQL genérico **[D]**.                                  | GB VA        |
+| P6 Memória, contexto e RAG         | Contratos de memória, documento, chunk e proveniência; `MemoryRecord`, Context Planner determinístico, `ContextProjection` e compactação por unidades, indexação de documentos e código com falha visível, RAG (BM25, híbrido, rerank), memória episódica e semântica com retenção, jobs longos de indexação, oráculo de recuperação.                                                                  | GB VA        |
+| P7 Mídia no chat                   | Partes tipadas e assets (implementado); capability por modelo confiável, matriz de serialização por provider, limites de duração e resolução, mídia de saída no Responses.                                                                                                                                                                                                                             | VA CLI       |
+| P8 Extensibilidade                 | Hooks, Skills, plugins com manifesto assinado (código de terceiros tratado como hostil), prompt management, registro dinâmico, cliente MCP.                                                                                                                                                                                                                                                            | VA GB        |
+| P9 Orquestração e trabalho durável | Background tasks, DAG, fila e scheduler com leases, jobs com envelope, agendamento temporal, integração opcional com motor durável de workflow (sem "Temporal" próprio por padrão), retry e DLQ com reconciliação **[D]**.                                                                                                                                                                             | GB VA        |
+| P10 Avaliação, qualidade e replay  | Fixtures de conformidade (conversa e contratos hoje; faltam KV, filas, vetores, mídia), suíte de replay e de dois perfis, cassette de provider, avaliação de agente e de retrieval, benchmarks por SHA com oráculo auditado, casos de revisão de PR (utilidade e falsos positivos).                                                                                                                    | GB VA        |
+| P11 Observabilidade e custo        | Correlação conversa/turno/run/step/tool, telemetria sem segredo, métricas (fila e idade, latência, falhas, retries, cancelamento, health), custo e usage por run, biblioteca de tracing **[D]**.                                                                                                                                                                                                       | GB VA        |
+| P12 Segurança e privacidade        | Redaction (`Debug` de KV, filas e pub/sub pendente), SSRF por hop e em endpoints configuráveis, aprovação ligada a digest, sandbox efetivo, segredos por referência, export de configuração sem segredos, threat model, SBOM, assinatura e proveniência, política de licença **[D]**.                                                                                                                  | todos        |
+| P13 Bindings e distribuição        | Python e TypeScript (Node 22+ e Bun, ESM) em Linux, macOS e Windows; `engineContractSnapshot()` ampliado; npm, PyPI, crates.io; instalação limpa; workflow de release; política de versão **[D]**; binding Go **[D]**; períodos de compatibilidade com os consumidores.                                                                                                                                | GB VA        |
+| P14 CLI e experiência de dev       | `engine-cli`, `scons install` isolado, `doctor`, flag para execução sem serviços externos quando aplicável, documentação pública e templates.                                                                                                                                                                                                                                                          | CLI          |
+| P15 Operação dos hosts             | Shutdown propagado, stores embutidos que fecham e reabrem, snapshot e restauração consistentes, migração de schema, múltiplas réplicas com storage e locking compartilhados, health e readiness, ensaio de falhas parciais.                                                                                                                                                                            | GB           |
+| P16 Governança e longo prazo       | i18n e acessibilidade da CLI **[D]**, semver e depreciação, auditoria documental contínua, matriz de conformidade viva, baseline de performance por SHA, segurança coordenada.                                                                                                                                                                                                                         | todos        |
+
+## Dependências dos consumidores
+
+**GH Bot** consome somente o binding TypeScript local; capability ausente se
+implementa na Engine e se liga ao bot na mesma stack, sem runtime substituto.
+Detalhes e fontes: [`docs/engine-integration.md`](https://github.com/vectora-company/gh-bot/blob/main/docs/engine-integration.md)
+e demais documentos do repositório `gh-bot`.
+
+| Necessidade do GH Bot                                                                | Pilar      | Estado                                                |
+| ------------------------------------------------------------------------------------ | ---------- | ----------------------------------------------------- |
+| Streaming, cancelamento, erros, timeout, retry e saída estruturada pelo binding real | P1, P2     | parcial                                               |
+| Provider e modelo por tarefa, Decision Models, limites                               | P1, P2     | parcial                                               |
+| Contexto tipado e limitado de PR (diff, arquivos), chunking, índice do repositório   | P6         | não iniciado                                          |
+| Identidade, escopo, policy e capabilities por contexto confiável                     | P3         | implementado (v1); persistência e revogação pendentes |
+| Policy aplicada antes de cada efeito; tools separadas das permissões GitHub          | P2, P3     | parcial                                               |
+| Ledger, checkpoint, idempotência, replay e storage por capability                    | P4, P5     | parcial (subscriber e retenção pendentes)             |
+| Estado terminal recuperável, retry e DLQ                                             | P2, P5, P9 | parcial                                               |
+| Visibilidade de job: provider, modelo, versão de policy, custo, usage, etapa         | P4, P11    | não iniciado                                          |
+| Orçamento de tempo, tokens e custo por execução                                      | P2         | não iniciado                                          |
+| Redaction em logs, traces e erros; export de configuração sem segredos               | P12        | parcial                                               |
+| SSRF e validação de endpoints configuráveis                                          | P3, P12    | não iniciado                                          |
+| Shutdown gracioso propagado; stores que fecham e reabrem                             | P5, P15    | não iniciado                                          |
+| Múltiplas réplicas: storage e locking compartilhados, dedupe distribuída             | P5, P15    | não iniciado                                          |
+| Health e readiness com estados de capacidade                                         | P5, P11    | não iniciado **[D]**                                  |
+| Métricas de fila, idade, latência, falhas, retries e cancelamento                    | P11        | não iniciado                                          |
+| Backup, snapshot consistente, restauração e migração de schema                       | P5         | parcial                                               |
+| Snapshot de versões de contrato (o bot lê nove contratos)                            | P13        | parcial; ampliar                                      |
+| Binding em Node 22+ e Bun, ESM, três sistemas; npm                                   | P13        | parcial                                               |
+| Avaliação de revisão (utilidade e falsos positivos)                                  | P10        | não iniciado                                          |
+| Tools somente leitura de Git e arquivos; escrita só com policy                       | P3         | não iniciado                                          |
+| Jobs, agendamento e fila de revisão                                                  | P9         | não iniciado                                          |
+
+**Vectora App** absorve por capability, com rollback e sem dual-write, na ordem
+da [análise cruzada](../analyses/03-analise-cruzada-akita-engine-vectora-gh-bot.md):
+loop de conversa, registro de tools, `ContextProjection` e compactação, memória
+e RAG, Context Graph (por contrato), subagentes, scheduler, sandbox, hooks e
+plugins, prompt management, routing, evals e replay, MCP. UI, workbenches, tools
+de produto, contas, billing e sidecars permanecem no app.
+
+## ROADMAP
+
+As fases 0 a 6 são a trilha da release 1.0; as fases 7 a 12 completam a visão.
+O GH Bot exercita cada capability assim que ela existe, em stack própria no
+repositório dele; consumo real valida o contrato e não espera release npm.
+
+| Fase                                          | Pilares       | Horizonte      | Depende de | Estado       |
+| --------------------------------------------- | ------------- | -------------- | ---------- | ------------ |
+| 0 Correções imediatas e dívida de verificação | todos         | H0 agora       | n/a        | parcial      |
+| 1 Mídia e providers                           | P1, P7        | H0             | 0          | parcial      |
+| 2 Storage: base equivalente                   | P5            | H0             | 0          | parcial      |
+| 3 Eventos, conversas e replay                 | P4            | H0 (ativa)     | 0, 2       | parcial      |
+| 4 Runtime agêntico, tools e isolamento        | P2, P3        | H1 release 1.0 | 3          | não iniciado |
+| 5 Memória, contexto e RAG                     | P6            | H1             | 2, 3       | não iniciado |
+| 6 Observabilidade, avaliação e release        | P10, P11, P13 | H1             | 1 a 5      | não iniciado |
+| 7 Orquestração e trabalho durável             | P9            | H2             | 3, 4       | não iniciado |
+| 8 Extensibilidade                             | P8            | H2             | 4          | não iniciado |
+| 9 Escala e operação multi-réplica             | P5, P15       | H2             | 2, 7       | não iniciado |
+| 10 Absorção do Vectora App                    | P2 a P9       | H2             | 4 a 8      | não iniciado |
+| 11 Ecossistema                                | P1, P13       | H3 longo prazo | 6          | não iniciado |
+| 12 Governança e longo prazo                   | P12, P16      | contínuo       | todas      | parcial      |
 
 ## Backlog por fases
 
@@ -328,6 +460,56 @@ por capacidade estão em [`docs/specs/19-storage-de-grafos-falkordb.md`](../spec
    bindings, com bytes efêmeros por padrão e opção de gravar no asset map; as
    fixtures offline passaram. Falta smoke remoto por provider/modelo; edição e
    vídeo dedicado permanecem pendentes.
+
+### Fase 7 — orquestração e trabalho durável
+
+Pilar P9. Background tasks, DAG, fila e scheduler com leases e workers; jobs
+com envelope versionado; agendamento temporal; avaliar integração com motor
+durável de workflow (a Engine não implementa um "Temporal" próprio por
+padrão); retry e DLQ com reconciliação. Origem: `analyses/03` e `analyses/04`.
+**[D]** envelope de job e política de integração.
+
+### Fase 8 — extensibilidade
+
+Pilar P8. Hooks e plugins com manifesto assinado e verificado, Skills, prompt
+management (identidade, versão, composição, trust boundary, rollout e
+avaliação), cliente MCP, adapters externos uniformes e trust boundary para
+código de terceiros.
+
+### Fase 9 — escala e operação multi-réplica
+
+Pilares P5 e P15. Storage e locking compartilhados, dedupe distribuída,
+shutdown e upgrade sem perda, ensaio de falhas parciais, estratégia de entrega
+e contratos para Helm e HA, sem prometer alta disponibilidade antes de haver
+métricas e evidência.
+
+### Fase 10 — absorção do Vectora App
+
+Migração por capability, com rollback e sem dual-write, na ordem da análise
+cruzada. Cada capability só migra depois de contrato, fixtures e oráculo
+independentes.
+
+### Fase 11 — ecossistema
+
+Binding Go (issue #20, decisão ABI C/cgo ou IPC) **[D]**; outros providers,
+modalidades e backends de grafo só depois da base comum; novos bindings por
+demanda.
+
+### Fase 12 — governança e longo prazo
+
+Segurança contínua, política de licença e SBOM, i18n e acessibilidade **[D]**,
+semver e depreciação, auditoria documental viva, baselines de performance e
+matriz de conformidade viva.
+
+### Trilha transversal
+
+- Grafo FalkorDB: get/delete de relação, readiness, versão do contrato nos
+  bindings.
+- Inconsistências já identificadas: `ConversationEvent` ainda exige `sequence`
+  do produtor; conversão `Usage.cost` para `cost_micros` indefinida.
+- A flag para iniciar o Vectora sem o gateway de Workers da Cloudflare pertence
+  ao repositório do app `vectora` (`backend/api/server.py`,
+  `settings.gateway_enabled`); a Engine não tem ligação com o Services.
 
 ## Gates de adoção e release
 
