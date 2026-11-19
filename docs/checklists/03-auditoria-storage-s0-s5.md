@@ -105,4 +105,6 @@ Os itens marcados concluídos têm evidência em código, testes ou execução d
 
 - [x] Em 16 rodadas contra PostgreSQL real, dois `ResilientLedger` independentes drenaram a mesma outbox com dois eventos sequenciais. Ambos terminaram sem erro, só houve uma cópia de cada evento e a outbox ficou vazia.
 - [x] Testar processos independentes contra PostgreSQL real: projetores concorrentes drenam eventos ordenados, admission e reservations; indisponibilidade isolada mantém a outbox, e a corrida concorrente termina sem perda nem duplicação.
-- [ ] Implementar migrations PostgreSQL versionadas com rollback documentado.
+- [x] Aplicar schema PostgreSQL com versão explícita em transação e advisory lock; teste real migra schema vazio para v1 e confirma reabertura.
+- [x] Documentar rollback operacional com dump gerenciado pelo operador, restore e verify/rebuild usando SQLite.
+- [ ] Ensaiar `pg_dump`/restore e verify/rebuild ponta a ponta em banco descartável.

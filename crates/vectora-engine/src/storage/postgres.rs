@@ -13,6 +13,17 @@ use super::sqlite::{
     RunReservation,
 };
 
+const POSTGRES_SCHEMA_MIGRATIONS: &[(i32, &str)] = &[(
+    1,
+    r#"CREATE TABLE IF NOT EXISTS ve_ledger_versions (scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, version BIGINT NOT NULL, PRIMARY KEY(scope,aggregate_id));
+CREATE TABLE IF NOT EXISTS ve_ledger_events (scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, sequence BIGINT NOT NULL, event_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, event_type TEXT NOT NULL, payload JSONB NOT NULL, PRIMARY KEY(scope,aggregate_id,sequence), UNIQUE(scope,aggregate_id,idempotency_key), UNIQUE(scope,event_id));
+CREATE TABLE IF NOT EXISTS ve_run_reservations (scope TEXT NOT NULL, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, run_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, request JSONB NOT NULL, PRIMARY KEY(scope,thread_id,turn_id), UNIQUE(scope,idempotency_key), UNIQUE(scope,run_id));
+CREATE TABLE IF NOT EXISTS ve_ledger_checkpoints (scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, checkpoint_id TEXT NOT NULL, sequence BIGINT NOT NULL, contract_version INTEGER NOT NULL, state JSONB NOT NULL, PRIMARY KEY(scope,aggregate_id,checkpoint_id), UNIQUE(scope,aggregate_id,sequence));
+CREATE TABLE IF NOT EXISTS ve_run_admissions (scope TEXT NOT NULL, run_id TEXT NOT NULL, event_id TEXT NOT NULL, PRIMARY KEY(scope,run_id), UNIQUE(scope,event_id));"#,
+)];
+
+const POSTGRES_SCHEMA_VERSION: i32 = 1;
+
 #[derive(Debug, Error)]
 pub enum PostgresError {
     #[error("invalid PostgreSQL configuration")]
@@ -114,19 +125,36 @@ impl PostgresLedger {
             .bind(0x564543544f5241_i64)
             .execute(&mut *tx)
             .await?;
-        sqlx::raw_sql("CREATE TABLE IF NOT EXISTS ve_ledger_meta (id SMALLINT PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL);
-            INSERT INTO ve_ledger_meta(id,version) VALUES(1,1) ON CONFLICT(id) DO NOTHING;
-            CREATE TABLE IF NOT EXISTS ve_ledger_versions (scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, version BIGINT NOT NULL, PRIMARY KEY(scope,aggregate_id));
-            CREATE TABLE IF NOT EXISTS ve_ledger_events (scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, sequence BIGINT NOT NULL, event_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, event_type TEXT NOT NULL, payload JSONB NOT NULL, PRIMARY KEY(scope,aggregate_id,sequence), UNIQUE(scope,aggregate_id,idempotency_key), UNIQUE(scope,event_id));
-            CREATE TABLE IF NOT EXISTS ve_run_reservations (scope TEXT NOT NULL, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, run_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, request JSONB NOT NULL, PRIMARY KEY(scope,thread_id,turn_id), UNIQUE(scope,idempotency_key), UNIQUE(scope,run_id));
-            CREATE TABLE IF NOT EXISTS ve_ledger_checkpoints (scope TEXT NOT NULL, aggregate_id TEXT NOT NULL, checkpoint_id TEXT NOT NULL, sequence BIGINT NOT NULL, contract_version INTEGER NOT NULL, state JSONB NOT NULL, PRIMARY KEY(scope,aggregate_id,checkpoint_id), UNIQUE(scope,aggregate_id,sequence));
-            CREATE TABLE IF NOT EXISTS ve_run_admissions (scope TEXT NOT NULL, run_id TEXT NOT NULL, event_id TEXT NOT NULL, PRIMARY KEY(scope,run_id), UNIQUE(scope,event_id));")
+        sqlx::query("CREATE TABLE IF NOT EXISTS ve_ledger_meta (id SMALLINT PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL)")
             .execute(&mut *tx)
             .await?;
-        let version: i32 = sqlx::query_scalar("SELECT version FROM ve_ledger_meta WHERE id=1")
+        sqlx::query(
+            "INSERT INTO ve_ledger_meta(id,version) VALUES(1,0) ON CONFLICT(id) DO NOTHING",
+        )
+        .execute(&mut *tx)
+        .await?;
+        let mut version: i32 = sqlx::query_scalar("SELECT version FROM ve_ledger_meta WHERE id=1")
             .fetch_one(&mut *tx)
             .await?;
-        if version != 1 {
+        if version > POSTGRES_SCHEMA_VERSION {
+            return Err(PostgresError::SchemaVersion);
+        }
+        while version < POSTGRES_SCHEMA_VERSION {
+            let next = version + 1;
+            let Some((migration_version, sql)) = POSTGRES_SCHEMA_MIGRATIONS
+                .iter()
+                .find(|(migration_version, _)| *migration_version == next)
+            else {
+                return Err(PostgresError::SchemaVersion);
+            };
+            sqlx::raw_sql(*sql).execute(&mut *tx).await?;
+            sqlx::query("UPDATE ve_ledger_meta SET version=$1 WHERE id=1")
+                .bind(migration_version)
+                .execute(&mut *tx)
+                .await?;
+            version = *migration_version;
+        }
+        if version != POSTGRES_SCHEMA_VERSION {
             return Err(PostgresError::SchemaVersion);
         }
         tx.commit().await?;
@@ -559,6 +587,21 @@ async fn append_tx(
 mod tests {
     use super::*;
     use serde_json::json;
+    use sqlx::AssertSqlSafe;
+
+    #[test]
+    fn postgres_schema_migrations_are_contiguous_and_match_current_version() {
+        assert_eq!(POSTGRES_SCHEMA_MIGRATIONS.first().unwrap().0, 1);
+        assert_eq!(
+            POSTGRES_SCHEMA_MIGRATIONS.last().unwrap().0,
+            POSTGRES_SCHEMA_VERSION
+        );
+        assert!(
+            POSTGRES_SCHEMA_MIGRATIONS
+                .windows(2)
+                .all(|pair| pair[1].0 == pair[0].0 + 1)
+        );
+    }
 
     fn draft() -> EventDraft {
         EventDraft {
@@ -579,6 +622,12 @@ mod tests {
         };
         let ledger = PostgresLedger::connect(&url, 4).await.unwrap();
         ledger.ping().await.unwrap();
+        let version: i32 = sqlx::query_scalar("SELECT version FROM ve_ledger_meta WHERE id=1")
+            .fetch_one(&ledger.pool)
+            .await
+            .unwrap();
+        assert_eq!(version, POSTGRES_SCHEMA_VERSION);
+        PostgresLedger::connect(&url, 2).await.unwrap();
         let first = ledger.append(draft()).await.unwrap();
         assert_eq!(first.sequence, 1);
         assert_eq!(ledger.append(draft()).await.unwrap(), first);
@@ -592,6 +641,54 @@ mod tests {
             ledger.read("integration", "thread", 0, 10).await.unwrap(),
             vec![first]
         );
+    }
+
+    #[tokio::test]
+    async fn postgres_applies_initial_versioned_migration_to_an_empty_schema() {
+        let Ok(url) = std::env::var("VECTORA_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let schema = format!("ve_migration_test_{suffix}");
+        let admin = sqlx::PgPool::connect(&url).await.unwrap();
+        // `schema` is generated exclusively from a fixed prefix and a decimal timestamp.
+        sqlx::query(AssertSqlSafe(format!("CREATE SCHEMA {schema}")))
+            .execute(&admin)
+            .await
+            .unwrap();
+
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        sqlx::query(AssertSqlSafe(format!("SET search_path TO {schema}")))
+            .execute(&pool)
+            .await
+            .unwrap();
+        let ledger = PostgresLedger { pool };
+        ledger.migrate().await.unwrap();
+        let version: i32 = sqlx::query_scalar("SELECT version FROM ve_ledger_meta WHERE id=1")
+            .fetch_one(&ledger.pool)
+            .await
+            .unwrap();
+        assert_eq!(version, POSTGRES_SCHEMA_VERSION);
+        assert!(
+            sqlx::query_scalar::<_, bool>("SELECT to_regclass('ve_ledger_events') IS NOT NULL",)
+                .fetch_one(&ledger.pool)
+                .await
+                .unwrap()
+        );
+
+        ledger.pool.close().await;
+        sqlx::query(AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE")))
+            .execute(&admin)
+            .await
+            .unwrap();
+        admin.close().await;
     }
 
     #[tokio::test]
