@@ -1,6 +1,6 @@
 # Plano: eventos versionados, conversas e replay
 
-**Estado:** `em andamento`
+**Estado:** `aguardando decisão vital de contrato para admission`
 **Atualizado em:** 2026-11-17
 **Spec:** [`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md)
 **Análise:** [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md)
@@ -33,8 +33,10 @@ pode divulgar.
    comum Rust/Python/Node em `tests/fixtures/conversation-events-v1.json`.
    Testes de conformidade estão no código, mas não foram executados localmente;
    os checks remotos ainda precisam concluir.
-3. [ ] Associar admission idempotente a `conversation_id`/`turn_id`; definir
-   respostas accepted/queued/blocked/rejected e concorrência por conversation.
+3. [bloqueado por decisão] Associar admission idempotente a
+   `conversation_id`/`turn_id`; fechar estratégia de saturação, limites de fila,
+   significado de `blocked` e modo padrão. Comparativo em
+   [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 4. [ ] Persistir eventos ordenados no ledger SQLite, mantendo payloads grandes
    referenciados fora do ledger; conectar lifecycle sem duplicar evento ou
    efeito.
@@ -68,7 +70,10 @@ JSON/JavaScript para que os bindings mantenham o mesmo valor sem arredondamento.
 
 ## Próxima etapa
 
-Depois de publicar e observar os checks da etapa de bindings, avançar para
-admission idempotente por scope/conversation/turn. Antes de persistir eventos,
-revisar os contratos existentes de ledger, lifecycle e recuperação para manter
-SQLite como autoridade local e evitar duplicar efeitos ou estados.
+A etapa de bindings foi publicada no PR #159, filho do PR #158; seus checks
+remotos ainda precisam ser consultados no SHA corrente e não foram aguardados.
+O código independente seguinte é admission idempotente por
+scope/conversation/turn. A implementação está parada antes de alterar o schema
+persistido porque o modo de saturação e a semântica de `blocked` são decisões
+de contrato que dependem de brunosrz no chat. SQLite permanece a autoridade
+local; PostgreSQL recebe somente a projeção.

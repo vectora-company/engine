@@ -50,3 +50,27 @@ precisam ser consultados no SHA publicado antes de declarar conformidade.
 A validação não prova persistência, ordenação atribuída pela store, redaction
 ou replay. A etapa permanece parcial até os checks publicados passarem e a
 integração durável com admission/ledger ser implementada.
+
+## Decisão de contrato pendente: admission sob concorrência
+
+O store existente (`SqliteRunLifecycleStore::admit`) reserva thread/turn/run e
+persiste o evento de admission e o lifecycle inicial atomicamente no ledger
+SQLite. Repetições idênticas são idempotentes e conflitos de identidade ou
+payload são rejeitados. Ele não modela `conversation_id`, capacidade ativa por
+conversa, fila de turnos ou estado `blocked`. A projeção PostgreSQL não deve
+ser a autoridade para essa decisão; a cópia SQLite continua local e primária.
+
+Há duas estratégias de saturação que podem coexistir numa policy por consumer:
+
+| Estratégia | Resultado ao atingir limite | Vantagem | Custo/risco |
+| --- | --- | --- | --- |
+| Fila FIFO durável e limitada | `queued`, com promoção em ordem quando liberar capacidade; fila cheia retorna resultado explícito | Preserva submissões e permite ao consumer confirmar recebimento | Exige limite, política de expiração/cancelamento e recuperação da fila após restart |
+| Admission imediata | Não cria execução quando não há slot; retorna `rejected` ou mantém o pedido `blocked` conforme causa | Menos estados e o host controla retry/agendamento | O host precisa reter e reenviar; retry mal configurado pode perder ou duplicar intenção |
+
+Essas estratégias são compatíveis como modos configuráveis. `blocked` precisa
+ter semântica própria: a análise recomenda reservá-lo para suspensão explícita
+por policy/ação do host, persistida até liberação ou rejeição; saturação normal
+deve usar `queued` ou `rejected`, não `blocked`. A fila deve ter limites
+explícitos e uma decisão de default antes de publicar o contrato de admission.
+Essa escolha muda estados persistidos e o que consumidores podem confirmar ao
+usuário; por isso não será inferida apenas da implementação atual do run store.

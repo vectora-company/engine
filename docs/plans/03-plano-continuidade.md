@@ -234,7 +234,9 @@ e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
    e `tests/fixtures/conversation-events-v1.json`.
 2. Gaps representáveis e replay por cursor com reconexão sem duplicação.
 3. API de conversa/sessão, histórico paginado e projeções; admissão com
-   `queued`, `blocked` e `rejected` e concorrência por conversa. **[D]**.
+   `queued`, `blocked` e `rejected` e concorrência por conversa. **[D]** Modo
+   de saturação, limites e semântica de `blocked` aguardam decisão do mantenedor;
+   comparativo em [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 4. Buffer, coalescência e cancelamento do assinante.
 5. Referência de artifact fora do ledger (hash, tamanho, expiração, acesso).
    **[D]** dados e segurança.

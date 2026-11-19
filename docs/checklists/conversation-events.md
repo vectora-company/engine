@@ -25,7 +25,10 @@
 
 ## Estado, persistência e replay
 
-- [ ] Admission idempotente por scope/conversation/turn com estados explícitos.
+- [ ] Admission idempotente por scope/conversation/turn com estados explícitos;
+  implementação aguarda decisão sobre saturação, limite de fila, semântica de
+  `blocked` e comportamento padrão. Comparativo:
+  [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 - [ ] Concorrência configurável por conversation.
 - [ ] Ledger SQLite mantém eventos canônicos e índices para histórico; payloads
   grandes ficam fora do ledger por referência validada.
