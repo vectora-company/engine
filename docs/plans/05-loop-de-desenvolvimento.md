@@ -68,6 +68,11 @@ do repositório em [`docs/README.md`](../README.md), no prompt
 [`docs/plans/00-prompt-loop-goal.md`](00-prompt-loop-goal.md), no índice
 [`docs/goal-loop/README.md`](../goal-loop/README.md) e nos documentos gerais ou
 específicos que dependam dele.
+Para eventos versionados, conversas e replay, os artefatos específicos são
+[`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md),
+[`docs/plans/conversation-events.md`](conversation-events.md),
+[`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
+e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
 ## Equivalência de storage
 

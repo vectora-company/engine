@@ -4,6 +4,10 @@
 
 O core implementa eventos de streaming de provider, montagem de turno, IDs de
 run/thread, ledger/checkpoints SQLite e cancelamento/recovery do loop modelo/tool.
+Também há um envelope Rust `ConversationEvent` v1 com payloads tipados para
+eventos mínimos de turno, run, step, tool, aprovação, progresso, mensagem,
+uso e estado terminal, além de validação de correlação. Esse contrato ainda
+não está exposto nos bindings nem ligado ao ledger.
 Isso não implementa o contrato de Conversation/Session descrito nesta spec: não
 há API genérica de admission de turnos/conversas, histórico paginado por cursor,
 replay de stream após reconnect, channel adapter, projeção de timeline nem
@@ -11,6 +15,10 @@ contrato separado de cancelamento do assinante. A
 [`matriz de conformidade`](../analyses/02-matriz-conformidade-capabilities.md)
 registra os limites observados. Até essas APIs e testes existirem, o suporte é
 **parcial** e não se deve anunciar retomada de conversa ou replay de eventos.
+O plano incremental, checklist e análise desta capability estão em
+[`docs/plans/conversation-events.md`](../plans/conversation-events.md),
+[`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
+e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
 
 ## Objetivo
 
@@ -28,6 +36,22 @@ A engine fornece o modelo de estado e eventos. O consumer escolhe canal, UI, not
 - **Channel adapter:** tradução do consumer entre seus IDs/eventos de entrada e os contratos de Conversation/Turn/Event da engine.
 
 ## Contrato de eventos
+
+### Envelope Rust v1
+
+`harness::ConversationEvent` define `contract_version`, `event_id`,
+`conversation_id`, IDs opcionais de turn/run/step, sequência positiva,
+timestamp Unix em milissegundos, `source` e `ConversationEventKind` tipado.
+O produtor confiável fornece ID, ordem e timestamp; o tipo não gera IDs nem
+persiste eventos. A validação exige os IDs de correlação correspondentes ao
+tipo do evento e rejeita versão desconhecida, IDs vazios e sequência zero.
+`MessageDelta` representa somente texto destinado ao consumidor; raciocínio
+interno não é um tipo de evento.
+
+Esta é apenas a primeira camada do contrato: bindings, redaction, admission,
+armazenamento, cursor/replay, projeção e cancelamento de assinatura ainda não
+estão implementados. Os próximos critérios estão no
+[`plano da capability`](../plans/conversation-events.md).
 
 - Eventos têm schema versionado, `event_id`, conversation/turn/run IDs relevantes, sequência/cursor e timestamp do produtor.
 - Classes mínimas devem representar turn accepted/queued, run/step started, status/progress, tool call/result, approval requested/resolved, artifact/evidence available, message delta, usage update e terminal state.

@@ -158,6 +158,12 @@ títulos e bases de PR no estado dinâmico do GitHub.
   navegação](../specs/21-harness-tools-identidade-e-isolamento.md), [plano](../plans/09-plano-runtime-tools-identidade-e-isolamento.md),
   [checklist](../checklists/09-runtime-tools-identidade-e-isolamento.md) e
   [análise comparativa do Vectora](09-runtime-tools-vectora.md).
+- [Eventos de conversa, streaming e replay](../specs/04-conversas-streaming-e-threads.md),
+  [plano](../plans/conversation-events.md),
+  [checklist](../checklists/conversation-events.md) e
+  [análise](conversation-events.md). O envelope Rust v1 existe; bindings,
+  persistência, admission, replay e verificação entre linguagens permanecem
+  pendentes.
 
 ## Estado da revisão documental
 

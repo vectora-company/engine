@@ -24,6 +24,12 @@ que permitam revisar o que foi feito e o que permanece pendente.
    [critérios de encerramento](04-criterios-de-encerramento.md) antes de tocar
    no trabalho dependente.
 
+Para a etapa de eventos versionados, conversas e replay, os artefatos vigentes
+são [`docs/specs/04-conversas-streaming-e-threads.md`](../specs/04-conversas-streaming-e-threads.md),
+[`docs/plans/conversation-events.md`](../plans/conversation-events.md),
+[`docs/checklists/conversation-events.md`](../checklists/conversation-events.md)
+e [`docs/analyses/conversation-events.md`](../analyses/conversation-events.md).
+
 ## Execução de cada etapa
 
 1. Registre objetivo, escopo, exclusões, consumidores, dependências e critérios
